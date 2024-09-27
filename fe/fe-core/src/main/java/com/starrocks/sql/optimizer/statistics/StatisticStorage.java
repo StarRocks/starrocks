@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
-import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Collection;
 import java.util.List;
@@ -48,10 +47,7 @@ public interface StatisticStorage {
      */
     default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
                                                                                  List<String> columns) {
-        if (CollectionUtils.isEmpty(partitions)) {
-            return Maps.newHashMap();
-        }
-        return Map.of(partitions.get(0), getColumnStatistics(table, columns));
+        return null;
     }
 
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
