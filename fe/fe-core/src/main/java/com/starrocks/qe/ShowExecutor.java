@@ -86,6 +86,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
@@ -1204,7 +1205,10 @@ public class ShowExecutor {
 
             if (table instanceof OlapTable) {
                 OlapTable olapTbl = (OlapTable) table;
-                LOG.info("JSON metadata length: {}", GsonUtils.GSON.toJson(olapTbl).length());
+                try {
+                    LOG.info("JSON metadata length: {}", Text.getBufferSize(GsonUtils.GSON.toJson(olapTbl)));
+                } catch (Exception e) {
+                }
             }
 
             List<String> createTableStmt = Lists.newArrayList();

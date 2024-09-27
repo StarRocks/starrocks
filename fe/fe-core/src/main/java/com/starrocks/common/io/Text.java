@@ -435,6 +435,13 @@ public class Text implements Writable {
         return length;
     }
 
+    public static long getBufferSize(String s) throws IOException {
+        ByteBuffer byteBuffer = encode(s);
+        int length = byteBuffer.limit();
+        byte[] bytes = ByteBuffer.allocate(4).putInt(length).array();
+        return (long) bytes.length;
+    }
+
     private static void readAndCheckEof(CheckedInputStream in, byte[] bytes, int expectLength) throws IOException {
         int readRet = in.read(bytes, 0, expectLength);
         if (readRet != expectLength) {
