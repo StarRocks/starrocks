@@ -68,10 +68,9 @@ public class UniqueConstraint extends Constraint {
             Column column = targetTable.getColumn(columnId);
             if (column == null) {
                 LOG.warn("Can not find column by column id: {}, the column may have been dropped", columnId);
-                result.add(columnId.getId());
-            } else {
-                result.add(column.getName());
+                continue;
             }
+            result.add(column.getName());
         }
         return result;
     }
