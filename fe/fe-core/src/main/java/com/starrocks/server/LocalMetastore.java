@@ -5214,6 +5214,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         writer.close();
     }
 
+    /**
+     * When loading the LocalMetastore, the DB/Catalog that the materialized view depends
+     * on may not have been loaded yet, so you cannot reload the materialized view.
+     * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
+     */
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(Database.class, db -> {
             reader.readCollection(Table.class, db::registerTableUnlocked);
@@ -5221,7 +5226,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(tbl -> {
+            db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
                 try {
                     tbl.onReload();
                     if (tbl.isTemporaryTable()) {
