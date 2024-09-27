@@ -137,7 +137,7 @@ public class AggStateDesc {
     public TAggStateDesc toThrift() {
         // wrapper extra data type
         TAggStateDesc tAggStateDesc = new TAggStateDesc();
-        tAggStateDesc.setAgg_func_name(functionName);
+        tAggStateDesc.setAgg_func_name(Function.rectifyFunctionName(functionName));
         for (Type argType : argTypes) {
             TTypeDesc tTypeDesc = new TTypeDesc();
             tTypeDesc.setTypes(new ArrayList<TTypeNode>());
