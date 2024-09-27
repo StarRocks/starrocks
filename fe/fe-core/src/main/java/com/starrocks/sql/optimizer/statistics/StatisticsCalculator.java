@@ -382,6 +382,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                             Operator node,
                                             Map<ColumnRefOperator, Column> columnMap,
                                             Statistics.Builder statistics) {
+        if (optimizerContext != null &&
+                !optimizerContext.getSessionVariable().isEnablePartitionLevelCardinalityEstimation()) {
+            return;
+        }
         if (node.getPredicate() == null) {
             return;
         }
@@ -392,7 +396,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
         long totalPartitions = listPartitionInfo.getPartitionIds(false).size();
         double selectedRatio = 1.0 * partitions.size() / totalPartitions;
-        if (selectedRatio > 0.3) {
+        if (selectedRatio > 0.3 || partitions.size() > 128) {
             // if select most partitions, usually the table-level statistics is good enough
             return;
         }
