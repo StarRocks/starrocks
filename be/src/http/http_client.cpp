@@ -204,15 +204,14 @@ StatusOr<uint64_t> HttpClient::download(const std::string& local_path) {
     return output_file->size();
 }
 
-Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback) {
+Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback,
+                            int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps) {
     // set method to GET
     set_method(GET);
 
-    // TODO(zc) Move this download speed limit outside to limit download speed
-    // at system level
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, config::download_low_speed_limit_kbps * 1024);
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
-    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, min_speed_limit_kbps * 1024);
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, min_speed_time_sec);
+    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, max_speed_limit_kbps * 1024);
 
     Status status;
     auto download_cb = [&callback, &status](const void* data, size_t length) {
