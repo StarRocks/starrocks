@@ -124,7 +124,8 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
-    std::unique_ptr<ThreadPool> _thread_pool_replication;
+    std::unique_ptr<ThreadPool> _thread_pool_remote_snapshot;
+    std::unique_ptr<ThreadPool> _thread_pool_replicate_snapshot;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -242,8 +243,12 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, calc_max_replication_threads(config::replication_threads),
-                                       std::numeric_limits<int>::max(), _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("remote_snapshot", 0, calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_remote_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replicate_snapshot", 0,
+                                       calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -291,7 +296,8 @@ void AgentServer::Impl::stop() {
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
-        _thread_pool_replication->shutdown();
+        _thread_pool_remote_snapshot->shutdown();
+        _thread_pool_replicate_snapshot->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -573,8 +579,10 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         st = _thread_pool_clone->update_max_threads(new_val);
         break;
     case TTaskType::REMOTE_SNAPSHOT:
+        st = _thread_pool_remote_snapshot->update_max_threads(calc_max_replication_threads(new_val));
+        break;
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(calc_max_replication_threads(new_val));
+        st = _thread_pool_replicate_snapshot->update_max_threads(calc_max_replication_threads(new_val));
         break;
     default:
         break;
@@ -635,8 +643,10 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         ret = _thread_pool_drop_auto_increment_map.get();
         break;
     case TTaskType::REMOTE_SNAPSHOT:
+        ret = _thread_pool_remote_snapshot.get();
+        break;
     case TTaskType::REPLICATE_SNAPSHOT:
-        ret = _thread_pool_replication.get();
+        ret = _thread_pool_replicate_snapshot.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:
