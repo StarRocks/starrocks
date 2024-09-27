@@ -391,6 +391,9 @@ protected:
     // release resources in this api
     void do_close();
 
+    // Move this item to newest item in lru cache.
+    void warmup_lrucache();
+
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version) {}
 
