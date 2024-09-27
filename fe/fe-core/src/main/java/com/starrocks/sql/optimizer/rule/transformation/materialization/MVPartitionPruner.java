@@ -61,7 +61,9 @@ public class MVPartitionPruner {
                 .setSelectedPartitionId(null)
                 .setPrunedPartitionPredicates(Lists.newArrayList())
                 .setSelectedTabletId(Lists.newArrayList());
-        return mvScanBuilder.build();
+        LogicalOlapScanOperator result = mvScanBuilder.build();
+        Utils.resetOpAppliedRule(result, Operator.OP_PARTITION_PRUNE_BIT);
+        return result;
     }
 
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {

@@ -68,7 +68,6 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            // once mv's base table has updated, refresh the materialized view totally.
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
             // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
             if (mvBaseTableUpdateInfo != null &&

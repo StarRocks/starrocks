@@ -115,6 +115,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -122,6 +123,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1034,6 +1036,41 @@ public class MvUtils {
         return mergedRanges;
     }
 
+    public static List<Range<PartitionKey>> mergeRanges(List<Pair<Long, Range<PartitionKey>>> ranges,
+                                                        Map<Box<Range<PartitionKey>>, Set<Long>> queryMergeRangesToPartitionIds) {
+        ranges.sort(Comparator.comparing(k -> k.second.lowerEndpoint()));
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (Pair<Long, Range<PartitionKey>> currentRangePair : ranges) {
+            boolean merged = false;
+            Range<PartitionKey> currentRange = currentRangePair.second;
+            long partitionId = currentRangePair.first;
+            for (int j = 0; j < mergedRanges.size(); j++) {
+                // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
+                Range<PartitionKey> mergedRange = mergedRanges.get(j);
+                if (currentRange.isConnected(mergedRange)) {
+                    // for partition range, the intersection must be empty
+                    Preconditions.checkState(currentRange.intersection(mergedRange).isEmpty());
+                    Range<PartitionKey> newRange = mergedRange.span(currentRange);
+                    mergedRanges.set(j, newRange);
+
+                    Box<Range<PartitionKey>> mergedRangeBox = Box.of(mergedRange);
+                    Set<Long> mergePartitionIds = queryMergeRangesToPartitionIds.get(mergedRangeBox);
+                    queryMergeRangesToPartitionIds.remove(mergedRangeBox);
+                    mergePartitionIds.add(partitionId);
+                    queryMergeRangesToPartitionIds.put(Box.of(newRange), mergePartitionIds);
+
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) {
+                mergedRanges.add(currentRange);
+                queryMergeRangesToPartitionIds.put(Box.of(currentRange), Sets.newHashSet(partitionId));
+            }
+        }
+        return mergedRanges;
+    }
+
     public static boolean isDateRange(Range<PartitionKey> range) {
         if (range.hasUpperBound()) {
             PartitionKey partitionKey = range.upperEndpoint();
@@ -1082,7 +1119,6 @@ public class MvUtils {
         return o.toString();
     }
 
-
     /**
      * Return the max refresh timestamp of all partition infos.
      */
@@ -1129,13 +1165,6 @@ public class MvUtils {
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
-    }
-
-    public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        paritionExpr.collect(SlotRef.class, slotRefs);
-        Preconditions.checkState(slotRefs.size() == 1);
-        return slotRefs.get(0);
     }
 
     /**
@@ -1372,7 +1401,7 @@ public class MvUtils {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
         final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
-                mvContext, queryColumnRefFactory, queryExpression);
+                mvContext, rule, queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
                     "predicates from pruned partitions failed.");
@@ -1543,7 +1572,7 @@ public class MvUtils {
         return optimizedViewPlan;
     }
 
-    /*
+    /**
      * Trim the input string if its length is larger than maxLength.
      * @param input the input string
      * @param maxLength the max length

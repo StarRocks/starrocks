@@ -39,7 +39,15 @@ public interface IRewriteEquivalent {
      */
     enum RewriteEquivalentType {
         PREDICATE,
-        AGGREGATE
+        AGGREGATE;
+
+        public boolean isPredicate() {
+            return this == PREDICATE;
+        }
+
+        public boolean isAggregate() {
+            return this == AGGREGATE;
+        }
     }
 
     class RewriteEquivalentContext {
