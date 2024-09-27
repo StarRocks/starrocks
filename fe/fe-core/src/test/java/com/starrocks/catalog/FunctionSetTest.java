@@ -265,7 +265,7 @@ public class FunctionSetTest {
         argTypes = new Type[] {Type.ARRAY_BIGINT, Type.ARRAY_TINYINT };
         desc = new Function(new FunctionName("arrays_overlap"), argTypes, Type.BOOLEAN, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
-        Assert.assertNotNull(fn);;
+        Assert.assertNotNull(fn);
         Assert.assertEquals(fn.functionId, 150216L);
     }
 
