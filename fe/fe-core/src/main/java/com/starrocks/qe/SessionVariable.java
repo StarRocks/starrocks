@@ -1263,7 +1263,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean joinLateMaterialization = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_HASH_JOIN)
-    private boolean enablePartitionHashJoin = false;
+    private boolean enablePartitionHashJoin = true;
 
     @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enablePruneColumnAfterIndexFilter = true;
