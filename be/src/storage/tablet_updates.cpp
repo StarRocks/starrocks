@@ -680,8 +680,6 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 if (!skip_schema) {
                     rowset->rowset_meta()->set_skip_tablet_schema(false);
                 }
-                // TODO(zhangqiang)
-                // check rowset meta schema id equal to latest tablet schema
                 VLOG(2) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
                         << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
             }
@@ -770,8 +768,6 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     if (!skip_schema) {
         rowset->rowset_meta()->set_skip_tablet_schema(false);
     }
-    // TODO(zhangqiang)
-    // check rowset meta schema id equal to latest tablet schema
     // apply in-memory state after commit success
     _next_log_id++;
     _next_rowset_id += rowsetid_add;

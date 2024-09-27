@@ -1840,8 +1840,6 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
-        // TODO(zhangqiang)
-        // get rowset which need to rewrite rowset_meta
         std::vector<RowsetSharedPtr> rewrite_meta_rs;
         _get_rewrite_meta_rs(rewrite_meta_rs);
         _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
