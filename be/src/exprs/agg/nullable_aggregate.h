@@ -26,6 +26,7 @@
 #include "column/nullable_column.h"
 #include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/maxmin.h"
+#include "exprs/agg/maxmin_by.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "simd/simd.h"
@@ -43,6 +44,9 @@ inline constexpr bool IsUnresizableWindowFunctionState<MinAggregateData<TYPE_VAR
 
 template <LogicalType LT>
 inline constexpr bool IsUnresizableWindowFunctionState<ApproxTopKState<LT>> = true;
+
+template <LogicalType LT>
+inline constexpr bool IsUnresizableWindowFunctionState<MaxByAggregateData<LT>> = true;
 
 template <typename T>
 constexpr bool IsNeverNullFunctionState = false;
@@ -249,15 +253,20 @@ public:
             (!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
             nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
                                         start, end);
+            std::cout << "F1: " << end << ":" << start << std::endl;
             if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
+                std::cout << "F2: " << end << ":" << start << std::endl;
                 NullData& null_data = nullable_column->null_column_data();
                 null_data.insert(null_data.end(), end - start, 0);
             }
         } else {
             NullData& null_data = nullable_column->null_column_data();
+            std::cout << "F3: " << end << ":" << start << std::endl;
             if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
+                std::cout << "F4: " << end << ":" << start << std::endl;
                 nullable_column->append_nulls(end - start);
             } else {
+                std::cout << "F5: " << end << ":" << start << std::endl;
                 for (size_t i = start; i < end; ++i) {
                     null_data[i] = 1;
                 }
