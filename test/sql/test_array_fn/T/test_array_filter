@@ -1,0 +1,26 @@
+-- name: test_array_filter
+CREATE TABLE `t` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `arr_0` array<bigint(20)> NOT NULL COMMENT "",
+  `arr_1` array<bigint(20)> NULL COMMENT "",
+  `arr_2` array<bigint(20)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t values (1,[1,2],[1,2],[0,1]),(2,[1,2],null,[1,1]),(3,[1,2],[1,2],null),(4,[1,2],[null,null],[null,null]),(5,[1],[1,2],[0,0,1]);
+
+select array_filter(arr_0, arr_2) from t order by k;
+select array_filter(arr_1, arr_2) from t order by k;
+select array_filter(arr_0,[0,0,0,1]) from t order by k;
+select array_filter(arr_0,[1,0,1]) from t order by k;
+select array_filter(arr_0,null) from t order by k;
+select array_filter(arr_1,null) from t order by k;
+select array_filter([1,2,3,4],arr_2) from t order by k;
+select array_filter(null, arr_2) from t order by k;
+select array_filter([1,2,3,4],[0,0,1,1]) from t;
+select array_filter(null, null) from t;
+select array_filter([1,2,3,4],null) from t;
+select array_filter(null, [1,0,1,null]) from t;
