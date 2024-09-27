@@ -128,6 +128,24 @@ public class ComputeNode implements IComputable, Writable {
     private volatile long lastUpdateResourceUsageMs = 0;
     private final AtomicReference<Map<Long, ResourceGroupUsage>> groupIdToUsage = new AtomicReference<>(new HashMap<>());
 
+<<<<<<< HEAD
+=======
+    /**
+     * Other similar status might be confusing with this one.
+     * - HeartbeatResponse.HbStatus: {OK, BAD}
+     * - HeartbeatResponse.AliveStatus: {ALIVE, NOT_ALIVE}
+     * - Backend.BackendState: {using, offline, free}
+     * NOTE: The status will be serialized along with the ComputeNode object,
+     * so be cautious changing the enum name.
+     */
+    public enum Status {
+        CONNECTING,         // New added node, no heartbeat probing yet
+        OK,                 // Heartbeat OK
+        SHUTDOWN,           // Heartbeat response code indicating shutdown in progress
+        DISCONNECTED,       // Heartbeat failed consecutively for `n` times
+    }
+
+>>>>>>> f43f2f9d78 ([Enhancement] Enhance the information display and error messaging for resource group (#51386))
     public ComputeNode() {
         this.host = "";
         this.version = "";
