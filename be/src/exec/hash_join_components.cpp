@@ -627,7 +627,7 @@ int64_t AdaptivePartitionHashJoinBuilder::ht_mem_usage() const {
 
 Status AdaptivePartitionHashJoinBuilder::_convert_to_single_partition() {
     // merge all partition data to the first partition
-    for (size_t i = 1; i < _partition_num; ++i) {
+    for (size_t i = 1; i < _builders.size(); ++i) {
         _builders[0]->hash_table().merge_ht(_builders[i]->hash_table());
     }
     _builders.resize(1);
