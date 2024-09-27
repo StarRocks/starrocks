@@ -994,12 +994,15 @@ private:
     static ColumnPtr _array_match(const Columns& columns) {
         DCHECK(columns.size() == 1);
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        size_t chunk_size = columns[0]->size();
-        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        bool is_const = columns[0]->is_constant();
 
-        auto dest_null_column = NullColumn::create(chunk_size, 0);
-        auto dest_data_column = BooleanColumn::create(chunk_size);
-        dest_null_column->get_data().resize(chunk_size, 0);
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr bool_column = is_const ? FunctionHelper::get_data_column_of_const(columns[0]) : columns[0];
+
+        size_t dest_num_rows = is_const ? 1 : chunk_size;
+        auto dest_null_column = NullColumn::create(dest_num_rows, 0);
+        auto dest_data_column = BooleanColumn::create(dest_num_rows);
+        dest_null_column->get_data().resize(dest_num_rows, 0);
 
         ArrayColumn* bool_array;
         NullColumn* array_null_map = nullptr;
@@ -1015,7 +1018,7 @@ private:
 
         ColumnViewer<TYPE_BOOLEAN> bool_elements(bool_array->elements_column());
 
-        for (size_t i = 0; i < chunk_size; ++i) {
+        for (size_t i = 0; i < dest_num_rows; ++i) {
             if (array_null_map == nullptr || !array_null_map->get_data()[i]) { // array_null_map[i] is not null
                 bool has_null = false;
                 bool res = !isAny;
@@ -1037,7 +1040,11 @@ private:
             }
         }
 
-        return NullableColumn::create(dest_data_column, dest_null_column);
+        ColumnPtr dest_column = NullableColumn::create(dest_data_column, dest_null_column);
+        if (is_const) {
+            dest_column = ConstColumn::create(std::move(dest_column), chunk_size);
+        }
+        return dest_column;
     }
 };
 
