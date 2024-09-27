@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
@@ -52,6 +53,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+import java.util.Optional;
+import java.util.Vector;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
 
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
@@ -546,6 +555,33 @@ public class Function implements Writable {
             // Neither has var args and the lengths don't match
             return false;
         }
+    }
+
+    private static final Map<String, String> ACTUAL_NAMES = ImmutableMap.<String, String>builder()
+            .put(FunctionSet.MAX_BY, FunctionSet.MAX_BY_V2)
+            .put(FunctionSet.MIN_BY, FunctionSet.MIN_BY_V2)
+            .build();
+
+    public static String rectifyFunctionName(String s) {
+        return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElseGet(() -> {
+            Optional<String> optSuffix = Optional.empty();
+            if (s.endsWith(FunctionSet.AGG_STATE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_MERGE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_UNION_SUFFIX);
+            }
+            if (optSuffix.isEmpty()) {
+                return s;
+            } else {
+                String suffix = optSuffix.get();
+                String prefix = s.substring(0, s.length() - suffix.length());
+                return Optional.ofNullable(ACTUAL_NAMES.get(prefix))
+                        .map(actualName -> actualName + suffix)
+                        .orElse(s);
+            }
+        });
     }
 
     public TFunction toThrift() {

@@ -74,8 +74,22 @@ struct MaxByDispatcherInner {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(lt_is_aggregate<ret_type> ||
                                                                             lt_is_json<ret_type>)) {
+<<<<<<< HEAD
             resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+=======
+            if constexpr (is_max_by) {
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type, false>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "max_by_v2", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type, true>());
+            } else {
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type, false>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "min_by_v2", true, AggregateFactory::MakeMinByAggregateFunction<arg_type, true>());
+            }
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
         }
     }
 };
