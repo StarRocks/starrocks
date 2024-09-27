@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
@@ -875,7 +876,7 @@ public class ResourceGroupStmtTest {
                     "   'concurrency_limit' = '11'," +
                     "   'type' = 'normal'" +
                     "   );";
-            Assert.assertThrows(NumberFormatException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assert.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }
 
         {
@@ -910,7 +911,7 @@ public class ResourceGroupStmtTest {
                     "WITH (\n" +
                     "   'max_cpu_cores'='invalid-format'\n" +
                     ")";
-            Assert.assertThrows(NumberFormatException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+            Assert.assertThrows(SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
         }
 
         {
@@ -1827,6 +1828,82 @@ public class ResourceGroupStmtTest {
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
             assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
                     "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)");
+        }
+    }
+
+    @Test
+    public void testInvalidNumberFormat() {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = 'a'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `exclusive_cpu_cores` must be a valid numeric type, but it is set to `a`");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = ''" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `exclusive_cpu_cores` must be a valid numeric type, but it is set to ``");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%%%'," +
+                    "   'exclusive_cpu_cores' = '1'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The value type of the property `mem_limit` must be a valid numeric type, but it is set to `20%%%`");
+        }
+    }
+
+    @Test
+    public void testValidBigQueryCpuSecondLimit() throws Exception {
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '1'," +
+                    "   'big_query_cpu_second_limit' = '9223372037'" +
+                    ");";
+            assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                    .isInstanceOf(SemanticException.class)
+                    .hasMessageContaining(
+                            "The range of `big_query_cpu_second_limit` should be (0, 9223372036]");
+        }
+
+        {
+            String sql = "CREATE RESOURCE GROUP rg1\n" +
+                    "TO (user='rg1_user')\n" +
+                    "WITH (" +
+                    "   'mem_limit' = '20%'," +
+                    "   'exclusive_cpu_cores' = '1'," +
+                    "   'big_query_cpu_second_limit' = '9223372036'" +
+                    ");";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+            assertThat(rowsToString(rows)).isEqualTo("default_mv_wg|1|0|80.0%|0|0|0|null|80%|(weight=0.0)\n" +
+                    "default_wg|32|0|100.0%|0|0|0|null|100%|(weight=0.0)\n" +
+                    "rg1|0|1|20.0%|9223372036|0|0|null|100%|(weight=1.0, user=rg1_user)");
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
         }
     }
 

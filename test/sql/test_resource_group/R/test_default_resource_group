@@ -1,0 +1,5 @@
+-- name: test_default_resource_group
+SHOW RESOURCE GROUP default_wg;
+-- result:
+[REGEX].*default_wg	2	([2-9]\d*|\d\d+).*$
+-- !result

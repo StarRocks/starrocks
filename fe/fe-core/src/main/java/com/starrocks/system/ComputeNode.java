@@ -139,7 +139,7 @@ public class ComputeNode implements IComputable, Writable {
      * - HeartbeatResponse.AliveStatus: {ALIVE, NOT_ALIVE}
      * - Backend.BackendState: {using, offline, free}
      * NOTE: The status will be serialized along with the ComputeNode object,
-     *   so be cautious changing the enum name.
+     * so be cautious changing the enum name.
      */
     public enum Status {
         CONNECTING,         // New added node, no heartbeat probing yet
