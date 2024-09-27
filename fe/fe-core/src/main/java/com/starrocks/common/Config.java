@@ -2423,6 +2423,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    public static String query_detail_explain_level = "COSTS";
+
     /**
      * StarRocks-manager pull queries every 1 second
      * metrics calculate query latency every 15 second

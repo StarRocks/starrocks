@@ -294,7 +294,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
             } else {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
             }
