@@ -34,6 +34,12 @@ and lo_quantity between 26 and 35;
 set automv_card_rowcount_ratio_hwm = 1.0;
 -- result:
 -- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
+-- result:
+-- !result
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 -- result:
 None
@@ -74,9 +80,15 @@ and lo_quantity between 26 and 35;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 -- result:
 0
-id#100001,id#2,id#1
+id#2,id#3,id#1
 -- !result
 set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
+-- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 -- result:
 -- !result
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
@@ -163,6 +175,12 @@ alter tunespace ts0 populate from database ${db[0]};
 set automv_card_rowcount_ratio_hwm = 1.0;
 -- result:
 -- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
+-- result:
+-- !result
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d35811884752afda5734ac8024e")
 -- result:
 None
@@ -200,6 +218,12 @@ and lo_quantity between 26 and 35;
 -- result:
 -- !result
 set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
+-- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 -- result:
 -- !result
 function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.part.2")
@@ -241,6 +265,12 @@ and lo_quantity between 26 and 35;
 set automv_card_rowcount_ratio_hwm = 1.0;
 -- result:
 -- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
+-- result:
+-- !result
 select assert_true(cast(traits->'name' as string) not like '%.part.%') from ts0;
 -- result:
 1
@@ -250,9 +280,15 @@ select assert_true(cast(traits->'name' as string) not like '%.part.%') from ts0;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 -- result:
 0
-id#1,id#2,id#3
+id#2,id#3,id#1
 -- !result
 set automv_card_rowcount_ratio_hwm = 1.0;
+-- result:
+-- !result
+set automv_card_rowcount_ratio_lwm = 1.0;
+-- result:
+-- !result
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 -- result:
 -- !result
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")

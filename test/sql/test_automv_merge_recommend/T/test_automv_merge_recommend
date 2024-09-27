@@ -27,6 +27,8 @@ and lo_quantity between 26 and 35;
 
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 
 -- name: test_automv_merge_recommend_with_default_names
@@ -60,6 +62,8 @@ and lo_quantity between 26 and 35;
 
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 
 -- name: test_automv_merge_recommend_with_legacy_mv
@@ -133,6 +137,8 @@ and lo_quantity between 26 and 35;
 alter tunespace ts0 populate from database ${db[0]};
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d35811884752afda5734ac8024e")
 
 -- name: test_automv_merge_recommend_extract_multi_parts
@@ -162,6 +168,8 @@ and lo_discount between 5 and 7
 and lo_quantity between 26 and 35;
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.part.2")
 
 -- name: test_automv_merge_recommend_extract_multi_parts_with_default_names
@@ -191,8 +199,12 @@ and lo_discount between 5 and 7
 and lo_quantity between 26 and 35;
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 select assert_true(cast(traits->'name' as string) not like '%.part.%') from ts0;
 [UC]shell: expect_names=${mysql_cmd} -D${db[0]} -N -e 'select group_concat(concat("id#",id)) as name from ts0';
 
 set automv_card_rowcount_ratio_hwm = 1.0;
+set automv_card_rowcount_ratio_lwm = 1.0;
+set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
