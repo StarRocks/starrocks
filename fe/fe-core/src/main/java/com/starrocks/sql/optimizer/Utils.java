@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
@@ -904,6 +905,18 @@ public class Utils {
             }
         }
         return false;
+    }
+
+
+    public static void setOptScanOpsBit(OptExpression input,
+                                        int bit) {
+        List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
+        scanOps.stream().forEach(op -> op.setOpRuleMask(op.getOpRuleMask() | bit));
+    }
+
+    public static void setOpBit(OptExpression input,
+                                int bit) {
+        input.getOp().setOpRuleMask(input.getOp().getOpRuleMask() | bit);
     }
 
     @SuppressWarnings("unchecked")

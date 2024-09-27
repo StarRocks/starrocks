@@ -48,6 +48,9 @@ public class EquationRewriter {
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean underAggFunctionRewriteContext;
 
+    private final EquivalentShuttle defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
+            false, true));
+
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
         this.rewriteEquivalents = Maps.newHashMap();
@@ -56,7 +59,6 @@ public class EquationRewriter {
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         this.columnMapping = columnMapping;
     }
-
 
     public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
@@ -109,7 +111,7 @@ public class EquationRewriter {
                 return tmp.get();
             }
 
-            // rewrite by equivalent
+            // rewrite by equivalent which only can be predicate type here.
             ScalarOperator rewritten = rewriteByEquivalent(predicate, IRewriteEquivalent.RewriteEquivalentType.PREDICATE);
             if (rewritten != null) {
                 shuttleContext.setRewrittenByEquivalent(true);
@@ -213,14 +215,19 @@ public class EquationRewriter {
         }
     }
 
-    private final EquivalentShuttle shuttle = new EquivalentShuttle(new EquivalentShuttleContext(null, false, true));
-
-    protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
-        return expr.accept(shuttle, null);
+    /**
+     * Replace expr with target column with default shuttle by using expr's equivalent.
+     */
+    public ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
+        return expr.accept(defaultShuttle, null);
     }
 
-    protected Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(RewriteContext rewriteContext,
-                                                                                   ScalarOperator expr) {
+    /**
+     * Rewrite expr with equivalent shuttle which can be more robust/powerful than `replaceExprWithTarget`.
+     * NOTE: This method is mainly used in Aggregate's rewrite since there are more equivalences defined in Aggregate.
+     */
+    public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithRollup(RewriteContext rewriteContext,
+                                                                                ScalarOperator expr) {
         final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(rewriteContext,
                 true, true);
         final EquivalentShuttle shuttle = new EquivalentShuttle(shuttleContext);

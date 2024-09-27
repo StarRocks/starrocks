@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.BaseCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
@@ -352,6 +353,7 @@ public class MvPartitionCompensator {
      *      however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
      */
     public static ScalarOperator compensateQueryPartitionPredicate(MaterializationContext mvContext,
+                                                                   Rule rule,
                                                                    ColumnRefFactory columnRefFactory,
                                                                    OptExpression queryExpression) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
@@ -397,7 +399,7 @@ public class MvPartitionCompensator {
         }
         ScalarOperator compensatePredicate = partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
                 Utils.compoundAnd(partitionPredicates);
-        logMVRewrite(mvContext.getMv().getName(), "Query Compensate partition predicate:{}", compensatePredicate);
+        logMVRewrite(mvContext.getOptimizerContext(), rule, "Query Compensate partition predicate:{}", compensatePredicate);
         return compensatePredicate;
     }
 

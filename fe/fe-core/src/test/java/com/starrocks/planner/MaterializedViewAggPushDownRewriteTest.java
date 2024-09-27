@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -36,8 +35,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase.getAggFunction;
 
 public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTestBase {
     @BeforeClass
@@ -129,21 +129,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     "   group by LO_ORDERDATE having sum(%s + 1) > 10", queryAggArg, queryAggArg);
             sql(query).contains("mv0");
         });
-    }
-
-    private String getAggFunction(String funcName, String aggArg) {
-        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
-            funcName = String.format("array_agg(distinct %s)", aggArg);
-        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
-            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
-            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
-            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
-        } else {
-            funcName = String.format("%s(%s)", funcName, aggArg);
-        }
-        return funcName;
     }
 
     @Test
@@ -678,7 +663,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             {
                 String query = "select sum(LO_REVENUE) as revenue_sum\n" +
                         "   from lineorder l join supplier s on l.lo_suppkey = s.s_suppkey";
-                // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
+                // TODO: It's safe to push down count(distinct) to mv only when join keys are unique constraint in this case.
                 // TODO: support this if group by keys are equals to join keys
                 sql(query).match("mv0");
             }

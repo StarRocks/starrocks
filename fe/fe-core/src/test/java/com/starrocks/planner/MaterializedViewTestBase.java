@@ -239,6 +239,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
             return this;
         }
+
+        public String getExecPlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {
