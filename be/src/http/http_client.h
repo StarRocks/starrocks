@@ -115,7 +115,8 @@ public:
     // a file to local_path
     StatusOr<uint64_t> download(const std::string& local_path);
 
-    Status download(const std::function<Status(const void* data, size_t length)>& callback);
+    Status download(const std::function<Status(const void* data, size_t length)>& callback,
+                    int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps);
 
     Status execute_post_request(const std::string& payload, std::string* response);
 

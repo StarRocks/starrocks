@@ -118,7 +118,10 @@ static Status download_remote_file(
 
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); }));
+        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); },
+                                         config::replication_min_speed_limit_kbps,
+                                         config::replication_min_speed_time_seconds,
+                                         config::replication_max_speed_limit_kbps));
         RETURN_IF_ERROR(converter->close());
         return Status::OK();
     };
@@ -277,9 +280,10 @@ Status ReplicationUtils::download_remote_snapshot(
         }
 
         total_file_size += file_size;
-        uint64_t estimate_timeout_sec = file_size / config::download_low_speed_limit_kbps / 1024;
-        if (estimate_timeout_sec < config::download_low_speed_time) {
-            estimate_timeout_sec = config::download_low_speed_time;
+        int32_t min_speed_kbps = std::max(config::replication_min_speed_limit_kbps, 1);
+        uint64_t estimate_timeout_sec = file_size / min_speed_kbps / 1024;
+        if (estimate_timeout_sec < config::replication_min_speed_time_seconds) {
+            estimate_timeout_sec = config::replication_min_speed_time_seconds;
         }
 
         VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
