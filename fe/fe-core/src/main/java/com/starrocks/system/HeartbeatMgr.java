@@ -188,6 +188,8 @@ public class HeartbeatMgr extends FrontendDaemon {
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
 
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
+
         // set sleep time to (heartbeat_timeout - timeUsed),
         // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
         setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
