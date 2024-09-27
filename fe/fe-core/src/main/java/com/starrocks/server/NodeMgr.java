@@ -165,6 +165,13 @@ public class NodeMgr {
         this.brokerMgr = new BrokerMgr();
     }
 
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
+    }
+
     public void initialize(String[] args) throws Exception {
         getCheckedSelfHostPort();
         getHelperNodes(args);
