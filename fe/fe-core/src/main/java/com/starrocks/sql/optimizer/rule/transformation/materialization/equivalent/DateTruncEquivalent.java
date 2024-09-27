@@ -15,6 +15,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -93,20 +94,44 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
                                   EquivalentShuttleContext shuttleContext,
                                   ColumnRefOperator replace,
                                   ScalarOperator newInput) {
-        if (!(newInput instanceof BinaryPredicateOperator)) {
-            return null;
-        }
-        ScalarOperator left = newInput.getChild(0);
-        ScalarOperator right = newInput.getChild(1);
+        if (newInput instanceof BinaryPredicateOperator) {
+            ScalarOperator left = newInput.getChild(0);
+            ScalarOperator right = newInput.getChild(1);
 
-        if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
-            return null;
+            if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
+                return null;
+            }
+            if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
+                return null;
+            }
+            BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+            predicate.setChild(0, replace);
+            return predicate;
+        } else if (newInput instanceof CallOperator) {
+            // only in rollup aggregate, `date_trunc('day', dt) as dt` can be rewritten to `date_trunc('month', dt)`
+            if (!shuttleContext.isRollup()) {
+                return null;
+            }
+            CallOperator newCall = (CallOperator) newInput;
+            if (!checkDateTrucFunc(newCall)) {
+                return null;
+            }
+            CallOperator oldCall = (CallOperator) eqContext.getInput();
+            ConstantOperator oldChild0 = (ConstantOperator) oldCall.getChild(0);
+            // ensure col ref is the same in date_trunc
+            if (!newCall.getChild(1).equals(oldCall.getChild(1))) {
+                return null;
+            }
+            TimestampArithmeticExpr.TimeUnit oldTimeUnit = TimestampArithmeticExpr.TimeUnit.fromName(oldChild0.getVarchar());
+            ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
+            TimestampArithmeticExpr.TimeUnit newTimeUnit = TimestampArithmeticExpr.TimeUnit.fromName(newChild0.getVarchar());
+            if (oldTimeUnit.ordinal() <= newTimeUnit.ordinal()) {
+                return null;
+            }
+            CallOperator rewritten = (CallOperator) newCall.clone();
+            rewritten.setChild(1, replace);
+            return rewritten;
         }
-        if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
-            return null;
-        }
-        BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
-        predicate.setChild(0, replace);
-        return predicate;
+        return null;
     }
 }
