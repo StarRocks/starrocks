@@ -151,6 +151,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         // query and mv's agg function is not the same, cannot rewrite.
         String mvAggArg = "LO_REVENUE";
         String queryAggArg = "(LO_REVENUE + 1) * 2";
+        Set<String> supportedPushDownAggregateFunctions = Sets.newHashSet("min", "max");
         for (Map.Entry<String, String> e : SAFE_REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
             String funcName = e.getKey();
             String mvAggFunc = getAggFunction(funcName, mvAggArg);
@@ -162,7 +163,11 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 String query = String.format("select LO_ORDERDATE, %s as revenue_sum\n" +
                         "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
                         "   group by LO_ORDERDATE", queryAggFunc);
-                sql(query).nonMatch("mv0");
+                if (supportedPushDownAggregateFunctions.contains(funcName)) {
+                    sql(query).match("mv0");
+                } else {
+                    sql(query).nonMatch("mv0");
+                }
             });
         }
     }

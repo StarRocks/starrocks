@@ -63,6 +63,19 @@ public class AggregateFunctionRollupUtils {
             .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_UNIQUE_AGG)
             .build();
 
+    // Functions that can be pushed down to mv union rewrite.
+    // eg:
+    // sum(fn(col)) = fn(sum(col))
+    // min(fn(col)) = fn(min(col))
+    // max(fn(col)) = fn(max(col))
+    // if fn is a scalar function, it can be pushed down to mv union rewrite.
+    public static final Map<String, String> MV_REWRITE_PUSH_DOWN_FUNCTION_MAP = ImmutableMap.<String, String>builder()
+            // Functions and rollup functions are the same.
+            .put(FunctionSet.SUM, FunctionSet.SUM)
+            .put(FunctionSet.MAX, FunctionSet.MAX)
+            .put(FunctionSet.MIN, FunctionSet.MIN)
+            .build();
+
     public static final Set<String> NON_CUMULATIVE_ROLLUP_FUNCTION_MAP = ImmutableSet.<String>builder()
             .add(FunctionSet.MAX)
             .add(FunctionSet.MIN)
