@@ -566,6 +566,9 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
+    if (st.is_mem_limit_exceeded()) {
+        return Status::OK();
+    }
     return st;
 }
 
