@@ -20,6 +20,7 @@ Currently, StarRocks' spilling feature supports the following operators:
 - Aggregate operators
 - Sort operators
 - Hash join (LEFT JOIN, RIGHT JOIN, FULL JOIN, OUTER JOIN, SEMI JOIN, and INNER JOIN) operators
+- CTE operators (Supported from v3.3.4 onwards)
 
 ## Enable intermediate result spilling
 
