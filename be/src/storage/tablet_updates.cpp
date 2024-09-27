@@ -1546,7 +1546,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
-
     // NOTE:
     // If the apply fails at the following stages, an intolerable error must be returned right now.
     // Because the metadata may have already been persisted.
