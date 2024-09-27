@@ -35,6 +35,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,6 +124,10 @@ public abstract class StatisticsCollectJob {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public boolean isAnalyzeTable() {
+        return CollectionUtils.isEmpty(columnNames);
     }
 
     protected void setDefaultSessionVariable(ConnectContext context) {
