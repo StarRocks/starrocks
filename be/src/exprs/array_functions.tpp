@@ -19,6 +19,7 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
@@ -49,6 +50,7 @@ private:
 
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+
         ColumnPtr dest_column = src_column->clone_empty();
 
         HashSet hash_set;
@@ -1044,65 +1046,107 @@ private:
 class ArrayFilter {
 public:
     static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
-        return _array_filter(columns);
+        const auto& src_column = columns[0];
+        const auto& filter_column = columns[1];
+        return _array_filter(src_column, filter_column);
     }
 
 private:
-    static ColumnPtr _array_filter(const Columns& columns) {
-        if (columns[0]->only_null()) {
-            return columns[0];
+    static ColumnPtr _array_filter(const ColumnPtr& src_column, const ColumnPtr& filter_column) {
+        if (src_column->only_null()) {
+            return src_column;
         }
+        bool is_src_const = src_column->is_constant();
+        bool is_filter_const = filter_column->is_constant();
 
-        size_t chunk_size = columns[0]->size();
-        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-        ColumnPtr dest_column = src_column->clone_empty();
-        if (columns[1]->only_null()) { // return empty array for non-null array by design, keep the same null with src.
-            auto data_column = dest_column;
-            if (dest_column->is_nullable()) {
-                // set null from src
-                auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
-                dest_nullable_column->mutable_null_column()->get_data().assign(
-                        src_nullable_column->null_column()->get_data().begin(),
-                        src_nullable_column->null_column()->get_data().end());
-                dest_nullable_column->set_has_null(src_nullable_column->has_null());
-
-                data_column = dest_nullable_column->data_column();
+        size_t chunk_size = src_column->size();
+        if (filter_column->only_null()) {
+            if (is_src_const) {
+                // return a const column with empty array
+                auto data_column = FunctionHelper::get_data_column_of_const(src_column);
+                auto dest_data_column = data_column->clone_empty();
+                dest_data_column->append_default();
+                return ConstColumn::create(std::move(dest_data_column), chunk_size);
+            } else {
+                // return a nullable column with only empty arrays, the null column shoule be same with src column.
+                ColumnPtr dest_column = src_column->clone_empty();
+                ColumnPtr data_column = dest_column;
+                if (src_column->is_nullable()) {
+                    const auto src_null_column = down_cast<const NullableColumn*>(src_column.get())->null_column();
+                    auto dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+                    auto dest_null_column = dest_nullable_column->mutable_null_column();
+                    dest_null_column->get_data().assign(src_null_column->get_data().begin(),
+                                                        src_null_column->get_data().end());
+                    dest_nullable_column->set_has_null(src_column->has_null());
+                    data_column = dest_nullable_column->data_column();
+                }
+                data_column->append_default(chunk_size);
+                return dest_column;
             }
-            data_column->append_default(chunk_size);
-            return dest_column;
         }
 
-        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]);
+        ColumnPtr dest_column = is_src_const ? FunctionHelper::get_data_column_of_const(src_column)->clone_empty()
+                                             : src_column->clone_empty();
 
+        NullColumn* dest_null_column = nullptr;
         if (src_column->is_nullable()) {
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
-            const auto& src_data_column = src_nullable_column->data_column();
             const auto& src_null_column = src_nullable_column->null_column();
-
             auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
-            auto* dest_null_column = dest_nullable_column->mutable_null_column();
-            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+            dest_null_column = dest_nullable_column->mutable_null_column();
 
-            if (src_column->has_null()) {
-                dest_null_column->get_data().assign(src_null_column->get_data().begin(),
-                                                    src_null_column->get_data().end());
-            } else {
-                dest_null_column->get_data().resize(chunk_size, 0);
-            }
+            dest_null_column->get_data().assign(src_null_column->get_data().begin(), src_null_column->get_data().end());
             dest_nullable_column->set_has_null(src_nullable_column->has_null());
-
-            _filter_array_items(down_cast<ArrayColumn*>(src_data_column.get()), bool_column,
-                                down_cast<ArrayColumn*>(dest_data_column), dest_null_column);
-        } else {
-            _filter_array_items(down_cast<ArrayColumn*>(src_column.get()), bool_column,
-                                down_cast<ArrayColumn*>(dest_column.get()), nullptr);
         }
-        return dest_column;
+
+        ColumnPtr src_data_column = src_column;
+        ColumnPtr dest_data_column = dest_column;
+        if (is_src_const) {
+            src_data_column = FunctionHelper::get_data_column_of_const(src_column);
+            src_data_column = FunctionHelper::get_data_column_of_nullable(src_data_column);
+            dest_data_column = FunctionHelper::get_data_column_of_const(dest_column);
+            dest_data_column = FunctionHelper::get_data_column_of_nullable(dest_data_column);
+        } else {
+            src_data_column = FunctionHelper::get_data_column_of_nullable(src_data_column);
+            dest_data_column = FunctionHelper::get_data_column_of_nullable(dest_data_column);
+        }
+
+        ColumnPtr filter_data_column =
+                is_filter_const ? FunctionHelper::get_data_column_of_const(filter_column) : filter_column;
+        size_t num_rows = (is_src_const && is_filter_const) ? 1 : chunk_size;
+        if (is_src_const && is_filter_const) {
+            _filter_array_items<true, true>(down_cast<ArrayColumn*>(src_data_column.get()), filter_data_column,
+                                            down_cast<ArrayColumn*>(dest_data_column.get()), dest_null_column,
+                                            num_rows);
+        } else if (is_src_const && !is_filter_const) {
+            _filter_array_items<true, false>(down_cast<ArrayColumn*>(src_data_column.get()), filter_data_column,
+                                             down_cast<ArrayColumn*>(dest_data_column.get()), dest_null_column,
+                                             num_rows);
+        } else if (!is_src_const && is_filter_const) {
+            _filter_array_items<false, true>(down_cast<ArrayColumn*>(src_data_column.get()), filter_data_column,
+                                             down_cast<ArrayColumn*>(dest_data_column.get()), dest_null_column,
+                                             num_rows);
+        } else {
+            _filter_array_items<false, false>(down_cast<ArrayColumn*>(src_data_column.get()), filter_data_column,
+                                              down_cast<ArrayColumn*>(dest_data_column.get()), dest_null_column,
+                                              num_rows);
+        }
+        dest_column->check_or_die();
+        if (is_src_const && is_filter_const) {
+            auto const_column = ConstColumn::create(std::move(dest_column), chunk_size);
+            const_column->check_or_die();
+            return const_column;
+        } else {
+            return dest_column;
+        }
     }
 
+    template <bool ConstSrc, bool ConstFilter>
     static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr& raw_filter,
-                                    ArrayColumn* dest_column, NullColumn* dest_null_map) {
+                                    ArrayColumn* dest_column, NullColumn* dest_null_map, size_t src_rows) {
+        if constexpr (!ConstSrc) {
+            DCHECK_EQ(src_column->size(), src_rows);
+        }
         ArrayColumn* filter;
         NullColumn* filter_null_map = nullptr;
         auto& dest_offsets = dest_column->offsets_column()->get_data();
@@ -1114,28 +1158,41 @@ private:
         } else {
             filter = down_cast<ArrayColumn*>(raw_filter.get());
         }
+
         std::vector<uint32_t> indexes;
-        // only keep the elements whose filter is not null and not 0.
-        for (size_t i = 0; i < src_column->size(); ++i) {
-            if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null
-                if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) { // filter_null_map[i] is not null
-                    size_t elem_size = 0;
-                    size_t filter_elem_id = filter->offsets().get_data()[i];
-                    size_t filter_elem_limit = filter->offsets().get_data()[i + 1];
-                    for (size_t src_elem_id = src_column->offsets().get_data()[i];
-                         src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
-                        // only keep the valid elements
-                        if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
-                            filter->elements().get(filter_elem_id).get_int8() != 0) {
-                            indexes.emplace_back(src_elem_id);
-                            ++elem_size;
+        size_t num_rows = ConstSrc ? src_rows : src_column->size();
+        for (size_t i = 0; i < num_rows; i++) {
+            if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) {
+                bool filter_is_not_null =
+                        (filter_null_map == nullptr ||
+                         (ConstFilter ? !filter_null_map->get_data()[0] : !filter_null_map->get_data()[i]));
+                if (filter_is_not_null) {
+                    // if filter is not null, we should filter each elements in array
+                    const auto& src_offsets = src_column->offsets().get_data();
+                    size_t src_start = ConstSrc ? src_offsets[0] : src_offsets[i];
+                    size_t src_end = ConstSrc ? src_offsets[1] : src_offsets[i + 1];
+                    size_t src_elements_num = src_end - src_start;
+
+                    const auto& filter_offsets = filter->offsets().get_data();
+                    size_t filter_start = ConstFilter ? filter_offsets[0] : filter_offsets[i];
+                    size_t filter_end = ConstFilter ? filter_offsets[1] : filter_offsets[i + 1];
+                    size_t filter_elements_num = filter_end - filter_start;
+
+                    const auto& filter_elements = filter->elements();
+                    size_t valid_elements_num = 0;
+
+                    for (size_t idx = 0; idx < src_elements_num; idx++) {
+                        if (idx < filter_elements_num && !filter_elements.is_null(filter_start + idx) &&
+                            filter_elements.get(filter_start + idx).get_int8() != 0) {
+                            indexes.emplace_back(src_start + idx);
+                            valid_elements_num++;
                         }
                     }
-                    dest_offsets.emplace_back(dest_offsets.back() + elem_size);
-                } else { // filter_null_map[i] is null, empty the array by design[, alternatively keep all elements]
+                    dest_offsets.emplace_back(dest_offsets.back() + valid_elements_num);
+                } else {
                     dest_offsets.emplace_back(dest_offsets.back());
                 }
-            } else { // dest_null_map[i] is null
+            } else {
                 dest_offsets.emplace_back(dest_offsets.back());
             }
         }
