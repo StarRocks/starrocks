@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.sql.optimizer.rule.transformation.materialization.common;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.RewriteEquivalent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,7 +59,7 @@ public class AggregateFunctionRollupUtils {
             .put(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION)
             .put(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION)
             .put(FunctionSet.ANY_VALUE, FunctionSet.ANY_VALUE)
-            // Functions and rollup functions are not the same.
+            // Functions and rollup functions are different.
             .put(FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION)
             .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_UNIQUE_AGG)
             .build();
@@ -86,7 +87,7 @@ public class AggregateFunctionRollupUtils {
 
     /**
      * There is some difference between whether it's a mv union rewrite or not.
-     * eg: count(distinct) is not supported to rollup in mv union rewrite, but it's safe for mv union rewrite.
+     * eg: count(distinct) is not supported to rollup in mv rewrite, but it's safe for mv union rewrite.
      * @param aggFunc: original aggregate function to get the associated rollup function
      * @param isUnionRewrite: whether it's a mv union rewrite
      * @return: the associated rollup function name
@@ -123,6 +124,24 @@ public class AggregateFunctionRollupUtils {
             return true;
         }
         if (FunctionSet.COUNT.equals(aggCall.getFnName()) && aggCall.isDistinct()) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check whether the agg function is supported to push down.
+     * @param call input agg function
+     */
+    public static boolean isSupportedAggFunctionPushDown(CallOperator call) {
+        String funcName = call.getFnName();
+        // case1: rollup map functions
+        if (REWRITE_ROLLUP_FUNCTION_MAP.containsKey(funcName)) {
+            return true;
+        }
+
+        // case2: equivalent supported functions
+        if (RewriteEquivalent.AGGREGATE_EQUIVALENTS.stream().anyMatch(x -> x.isSupportPushDownRewrite(call))) {
             return true;
         }
         return false;

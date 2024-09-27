@@ -59,11 +59,12 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
  * Rewrite it by:
  * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from
- *  (select id, dt, col, array_agg_unique(count_distinct_im_uv) from mv0 group by id,dt,col) as a join b on a.id = b.id
+ *  ( select id, dt, col, array_agg_unique(count_distinct_im_uv) as count_distinct_im_uv from mv0 group by id, dt, col
+ *  ) as a join b on a.id = b.id
  * group by a.dt, a.cal;
  *
  * Rewrite result:
- * select a.dt, a.col, cardinility(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+ * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from mv0 as a join b on a.id = b.id group by a.dt, a.cal;
  */
 public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
@@ -168,6 +169,6 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     @Override
     public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
                                                     MvRewriteContext mvContext) {
-        return new AggregatedMaterializedViewPushDownRewriter(mvContext, optimizerContext, this);
+        return new AggregatedMaterializedViewPushDownRewriter(mvContext, this);
     }
 }

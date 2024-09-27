@@ -2036,7 +2036,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     private OptExpression pushdownPredicatesForJoin(OptExpression optExpression, ScalarOperator predicate) {
         if (!(optExpression.getOp() instanceof LogicalJoinOperator)) {
             if (predicate != null) {
-                // predicate can not be pushdown, we should add it it optExpression
+                // predicate cannot be pushdown, we should add it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
                 PredicateSplit predicateSplit = PredicateSplit.splitPredicate(
