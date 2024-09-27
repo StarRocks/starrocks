@@ -249,13 +249,18 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
 
     return [this]() -> StatusOr<ChunkPtr> {
         if (_hash_table_build_chunk_slice.empty()) {
-            if (_hash_table_iterate_idx + 1 >= _hash_tables.size()) {
+            _hash_table_iterate_idx++;
+            for (; _hash_table_iterate_idx < _hash_tables.size(); _hash_table_iterate_idx++) {
+                auto build_chunk = _hash_tables[_hash_table_iterate_idx]->get_build_chunk();
+                if (build_chunk->num_rows() > 0) {
+                    _hash_table_build_chunk_slice.reset(build_chunk);
+                    _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
+                    break;
+                }
+            }
+            if (_hash_table_build_chunk_slice.empty()) {
                 _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
                 return Status::EndOfFile("eos");
-            } else {
-                _hash_table_iterate_idx++;
-                _hash_table_build_chunk_slice.reset(_hash_tables[_hash_table_iterate_idx]->get_build_chunk());
-                _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
             }
         }
 
