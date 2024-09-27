@@ -1308,6 +1308,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
 - 引入版本：v3.1.6
 
+##### enable_active_materialized_view_schema_strict_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
+- 引入版本：v3.3.4
+
 <!--
 ##### mv_active_checker_interval_seconds
 
