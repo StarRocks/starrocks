@@ -15,12 +15,6 @@
 #pragma once
 
 #include "common/status.h"
-<<<<<<< HEAD
-=======
-#include "common/statusor.h"
-#include "fmt/format.h"
-#include "gen_cpp/lake_types.pb.h"
->>>>>>> 17e9d4cc69 ([Enhancement] Improve return filename from delta column group by index (#50596))
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"
 
@@ -71,10 +65,8 @@ public:
         return column_files;
     }
 
-<<<<<<< HEAD
     std::vector<std::vector<uint32_t>>& column_ids() { return _column_ids; }
     const std::vector<std::vector<uint32_t>>& column_ids() const { return _column_ids; }
-=======
     StatusOr<std::string> column_file_by_idx(const std::string& dir_path, uint32_t idx) const {
         if (idx >= _column_files.size()) {
             return Status::InvalidArgument(fmt::format("column_file_by_idx fail, path: {} column file cnt: {} idx: {}",
@@ -82,12 +74,6 @@ public:
         }
         return dir_path + "/" + _column_files[idx];
     }
-
-    // TODO: rename
-    std::vector<std::vector<ColumnUID>>& column_ids() { return _column_uids; }
-    // TODO: rename
-    const std::vector<std::vector<ColumnUID>>& column_ids() const { return _column_uids; }
->>>>>>> 17e9d4cc69 ([Enhancement] Improve return filename from delta column group by index (#50596))
     int64_t version() const { return _version; }
 
     std::string debug_string() {
