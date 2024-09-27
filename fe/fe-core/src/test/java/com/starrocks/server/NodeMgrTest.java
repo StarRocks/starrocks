@@ -20,7 +20,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
