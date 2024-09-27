@@ -15,13 +15,14 @@
 package com.starrocks.http.rest.v2.vo;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.http.rest.v2.vo.ColumnView.IdView;
 import com.starrocks.sql.ast.IndexDef;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class IndexView {
 
@@ -35,7 +36,7 @@ public class IndexView {
     private String indexType;
 
     @SerializedName("columns")
-    private List<ColumnId> columns;
+    private List<IdView> columns;
 
     @SerializedName("comment")
     private String comment;
@@ -53,10 +54,15 @@ public class IndexView {
         IndexView ivo = new IndexView();
         ivo.setIndexId(index.getIndexId());
         ivo.setIndexName(index.getIndexName());
+
         Optional.ofNullable(index.getIndexType())
                 .map(IndexDef.IndexType::getDisplayName)
                 .ifPresent(ivo::setIndexType);
-        ivo.setColumns(index.getColumns());
+
+        Optional.ofNullable(index.getColumns())
+                .map(cols -> cols.stream().map(IdView::createFrom).collect(Collectors.toList()))
+                .ifPresent(ivo::setColumns);
+
         ivo.setComment(index.getComment());
         ivo.setProperties(index.getProperties());
         return ivo;
@@ -86,11 +92,11 @@ public class IndexView {
         this.indexType = indexType;
     }
 
-    public List<ColumnId> getColumns() {
+    public List<IdView> getColumns() {
         return columns;
     }
 
-    public void setColumns(List<ColumnId> columns) {
+    public void setColumns(List<IdView> columns) {
         this.columns = columns;
     }
 
