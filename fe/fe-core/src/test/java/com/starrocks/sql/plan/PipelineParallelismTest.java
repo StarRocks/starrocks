@@ -91,7 +91,7 @@ public class PipelineParallelismTest extends PlanTestBase {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
-        System.out.println(plan.getExplainString(StatementBase.ExplainLevel.COST));
+        System.out.println(plan.getExplainString(StatementBase.ExplainLevel.COSTS));
         PlanFragment fragment0 = plan.getFragments().get(0);
         assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
         Assert.assertEquals(1, fragment0.getParallelExecNum());
