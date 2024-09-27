@@ -78,6 +78,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -921,6 +922,9 @@ public final class MetricRepo {
         //collect connections for per user
         collectUserConnMetrics(visitor);
 
+        // collect runnning txns of per db
+        collectDbRunningTxnMetrics(visitor);
+
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);
 
@@ -1004,6 +1008,23 @@ public final class MetricRepo {
             metricConnect.setValue(connValue.get());
             visitor.visit(metricConnect);
         });
+    }
+
+    // collect runnning txns of per db
+    private static void collectDbRunningTxnMetrics(MetricVisitor visitor) {
+        Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getAllDatabaseTransactionMgrs();
+        for (DatabaseTransactionMgr mgr : dbIdToDatabaseTransactionMgrs.values()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mgr.getDbId());
+            if (null == db) {
+                continue;
+            }
+            GaugeMetricImpl<Integer> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
+                        "number of running transactions");
+            txnNum.addLabel(new MetricLabel("db", db.getFullName()));
+            txnNum.setValue(mgr.getRunningTxnNums());
+            visitor.visit(txnNum);
+        }
     }
 
     public static synchronized List<Metric> getMetricsByName(String name) {
