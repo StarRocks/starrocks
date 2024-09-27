@@ -3599,7 +3599,6 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
-
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
