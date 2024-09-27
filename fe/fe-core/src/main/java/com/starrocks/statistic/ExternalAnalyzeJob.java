@@ -184,14 +184,18 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     @Override
-    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+    public List<StatisticsCollectJob> instantiateJobs() {
+        return StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(this);
+    }
+
+    @Override
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor,
+                    List<StatisticsCollectJob> jobs) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
-        List<StatisticsCollectJob> statisticsCollectJobList =
-                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(this);
 
         boolean hasFailedCollectJob = false;
-        for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+        for (StatisticsCollectJob statsJob : jobs) {
             AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getCatalogName(), statsJob.getDb().getFullName(), statsJob.getTable().getName(),
                     statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getType(), statsJob.getScheduleType(),
