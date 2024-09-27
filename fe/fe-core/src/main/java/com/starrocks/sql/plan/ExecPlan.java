@@ -241,7 +241,7 @@ public class ExecPlan {
             case VERBOSE:
                 tlevel = TExplainLevel.VERBOSE;
                 break;
-            case COST:
+            case COSTS:
                 tlevel = TExplainLevel.COSTS;
                 break;
         }
