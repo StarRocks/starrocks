@@ -88,6 +88,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select concat_ws('.', 5,6,'s',8,9,10)";
         assertPlanContains(sql, "'5.6.s.8.9.10'");
+
+        sql = "select array_agg(v1) from t0";
+        assertPlanContains(sql, "array_agg(1: v1)");
+
+        sql = "select array_agg(distinct v1) from t0";
+        assertPlanContains(sql, "array_agg_distinct(1: v1)");
+
+        sql = "select array_agg(distinct v1 order by v2) from t0";
+        assertPlanContains(sql, "array_agg(1: v1, 2: v2)");
     }
 
     @Test
