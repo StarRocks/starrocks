@@ -171,15 +171,11 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newTable(String name) {
-<<<<<<< HEAD
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
-=======
         return newTable(name, 1024000L);
     }
 
     public static OlapTable newTable(String name, long replicaDataSize) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
->>>>>>> baa27ff35f ([Enhancement] Show_meta_info api supports cloud native table (#30033))
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         List<Column> columns = new ArrayList<>();
