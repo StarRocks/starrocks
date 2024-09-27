@@ -72,7 +72,7 @@ void ScanExecutor::worker_thread() {
         if (current_thread != nullptr) {
             current_thread->inc_finished_tasks();
         }
-        _task_queue->update_statistics(task.workgroup, time_spent_ns);
+        _task_queue->update_statistics(task.workgroup.get(), time_spent_ns);
     }
 }
 
