@@ -11,15 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.http;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
@@ -36,7 +37,6 @@ import static org.junit.Assert.assertTrue;
 
 public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
-    private static final long DB_ID = 1000 + testDbId;
     private static final String DB_NAME = "TEST_DB";
     private static final String TABLE_NAME = "TEST_TABLE";
     private static final long EXPECTED_SINGLE_REPLICA_SIZE = 1024L;
@@ -44,17 +44,28 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
     @Override
     public void doSetUp() {
-        Database db = new Database(DB_ID, DB_NAME);
+        Database db = new Database(1000 + testDbId, DB_NAME);
         OlapTable table = newTable(TABLE_NAME, EXPECTED_SINGLE_REPLICA_SIZE);
         db.registerTableUnlocked(table);
 
-        // inject our test db
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
         fullNameToDb.put(DB_NAME, db);
 
-        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
-        idToDb.put(DB_ID, db);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList(DB_NAME);
+
+                GlobalStateMgr.getCurrentState().getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
+
+                db.getTables();
+                minTimes = 0;
+                result = Lists.newArrayList(table);
+            }
+        };
     }
 
     @After
