@@ -99,10 +99,20 @@ public:
     template <PrimitiveType PT>
     static auto MakeMaxAggregateFunction();
 
+<<<<<<< HEAD
     template <PrimitiveType PT>
     static auto MakeMaxByAggregateFunction();
 
     template <PrimitiveType PT>
+=======
+    template <LogicalType LT, bool not_filter_nulls>
+    static auto MakeMaxByAggregateFunction();
+
+    template <LogicalType LT, bool not_filter_nulls>
+    static auto MakeMinByAggregateFunction();
+
+    template <LogicalType LT>
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
     static auto MakeMinAggregateFunction();
 
     template <PrimitiveType PT>
@@ -236,6 +246,7 @@ auto AggregateFactory::MakeMaxAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MaxAggregateData<PT>, MaxElement<PT, MaxAggregateData<PT>>>>();
 }
 
+<<<<<<< HEAD
 template <PrimitiveType PT>
 auto AggregateFactory::MakeMaxByAggregateFunction() {
     return std::make_shared<
@@ -243,6 +254,21 @@ auto AggregateFactory::MakeMaxByAggregateFunction() {
 }
 
 template <PrimitiveType PT>
+=======
+template <LogicalType LT, bool not_filter_nulls>
+auto AggregateFactory::MakeMaxByAggregateFunction() {
+    using AggData = MaxByAggregateData<LT, not_filter_nulls>;
+    return std::make_shared<MaxMinByAggregateFunction<LT, AggData, MaxByElement<LT, AggData>>>();
+}
+
+template <LogicalType LT, bool not_filter_nulls>
+auto AggregateFactory::MakeMinByAggregateFunction() {
+    using AggData = MinByAggregateData<LT, not_filter_nulls>;
+    return std::make_shared<MaxMinByAggregateFunction<LT, AggData, MinByElement<LT, AggData>>>();
+}
+
+template <LogicalType LT>
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
 auto AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MinAggregateData<PT>, MinElement<PT, MinAggregateData<PT>>>>();
 }

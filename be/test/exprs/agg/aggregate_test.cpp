@@ -639,8 +639,8 @@ TEST_F(AggregateTest, test_stddev_samp) {
     }
 }
 
-TEST_F(AggregateTest, test_maxby) {
-    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, false);
+void test_max_by_helper(FunctionContext* ctx, const char* max_by_name) {
+    const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, false);
     auto result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
     auto int_column = Int32Column::create();
@@ -663,7 +663,7 @@ TEST_F(AggregateTest, test_maxby) {
     ASSERT_EQ(2, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, false);
+    func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
     auto data_column1 = DoubleColumn::create();
     auto null_column1 = NullColumn::create();
@@ -695,8 +695,85 @@ TEST_F(AggregateTest, test_maxby) {
     ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
+<<<<<<< HEAD
 TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+=======
+TEST_F(AggregateTest, test_max_by) {
+    test_max_by_helper(ctx, "max_by");
+}
+
+TEST_F(AggregateTest, test_max_by_v2) {
+    test_max_by_helper(ctx, "max_by_v2");
+}
+
+void test_min_by_helper(FunctionContext* ctx, const char* min_by_name) {
+    const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, false);
+    auto result_column = Int32Column::create();
+    auto aggr_state = ManagedAggrState::create(ctx, func);
+    auto int_column = Int32Column::create();
+    for (int i = 0; i < 10; i++) {
+        int_column->append(i);
+    }
+    auto varchar_column = BinaryColumn::create();
+    std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
+    varchar_column->append_strings(strings.data(), strings.size());
+    Columns columns;
+    columns.emplace_back(int_column);
+    columns.emplace_back(varchar_column);
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(columns.size());
+    for (int i = 0; i < columns.size(); ++i) {
+        raw_columns[i] = columns[i].get();
+    }
+    func->update_batch_single_state(ctx, int_column->size(), raw_columns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
+    ASSERT_EQ(1, result_column->get_data()[0]);
+
+    //test nullable column
+    func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
+    aggr_state = ManagedAggrState::create(ctx, func);
+    auto data_column1 = DoubleColumn::create();
+    auto null_column1 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column1->append(i + 0.11);
+        null_column1->append(i % 13 ? false : true);
+    }
+    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    auto data_column2 = DecimalColumn::create();
+    auto null_column2 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column2->append(DecimalV2Value(i));
+        null_column2->append(i % 11 ? false : true);
+    }
+    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    auto data_column3 = DoubleColumn::create();
+    auto null_column3 = NullColumn::create();
+    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    Columns nullColumns;
+    nullColumns.emplace_back(doubleColumn);
+    nullColumns.emplace_back(decimalColumn);
+    std::vector<const Column*> raw_nullColumns;
+    raw_nullColumns.resize(nullColumns.size());
+    for (int i = 0; i < nullColumns.size(); ++i) {
+        raw_nullColumns[i] = nullColumns[i].get();
+    }
+    func->update_batch_single_state(ctx, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), nullable_result_column.get());
+    ASSERT_EQ(1.11, nullable_result_column->data_column()->get(0).get<double>());
+}
+
+TEST_F(AggregateTest, test_min_by) {
+    test_min_by_helper(ctx, "min_by");
+}
+
+TEST_F(AggregateTest, test_min_by_v2) {
+    test_min_by_helper(ctx, "min_by_v2");
+}
+
+void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* max_by_name) {
+    const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, true);
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
     auto* ctx_with_args0 = FunctionContext::create_test_context(
             {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
             FunctionContext::TypeDesc{.type = TYPE_INT});
@@ -724,7 +801,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     ASSERT_EQ(2, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
             {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
              FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
@@ -761,7 +838,87 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     func->finalize_to_column(ctx_with_args1, aggr_state->state(), nullable_result_column.get());
     ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
+TEST_F(AggregateTest, test_max_by_with_nullable_aggregator) {
+    test_max_by_with_nullable_aggregator_helper(ctx, "max_by");
+}
+TEST_F(AggregateTest, test_max_by_v2_with_nullable_aggregator) {
+    test_max_by_with_nullable_aggregator_helper(ctx, "max_by_v2");
+}
 
+<<<<<<< HEAD
+=======
+void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* min_by_name) {
+    const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, true);
+    auto* ctx_with_args0 = FunctionContext::create_test_context(
+            {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
+    std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
+
+    auto result_column = Int32Column::create();
+    auto aggr_state = ManagedAggrState::create(ctx_with_args0, func);
+    auto int_column = Int32Column::create();
+    for (int i = 0; i < 10; i++) {
+        int_column->append(i);
+    }
+    auto varchar_column = BinaryColumn::create();
+    std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
+    varchar_column->append_strings(strings.data(), strings.size());
+    Columns columns;
+    columns.emplace_back(int_column);
+    columns.emplace_back(varchar_column);
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(columns.size());
+    for (int i = 0; i < columns.size(); ++i) {
+        raw_columns[i] = columns[i].get();
+    }
+    func->update_batch_single_state(ctx_with_args0, int_column->size(), raw_columns.data(), aggr_state->state());
+    func->finalize_to_column(ctx_with_args0, aggr_state->state(), result_column.get());
+    ASSERT_EQ(1, result_column->get_data()[0]);
+
+    //test nullable column
+    func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    auto* ctx_with_args1 = FunctionContext::create_test_context(
+            {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            UTRawType{.type = TYPE_DOUBLE});
+    std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
+
+    aggr_state = ManagedAggrState::create(ctx_with_args1, func);
+    auto data_column1 = DoubleColumn::create();
+    auto null_column1 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column1->append(i + 0.11);
+        null_column1->append(i % 13 ? false : true);
+    }
+    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    auto data_column2 = DecimalColumn::create();
+    auto null_column2 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column2->append(DecimalV2Value(i));
+        null_column2->append(i % 11 ? false : true);
+    }
+    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    auto data_column3 = DoubleColumn::create();
+    auto null_column3 = NullColumn::create();
+    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    Columns nullColumns;
+    nullColumns.emplace_back(doubleColumn);
+    nullColumns.emplace_back(decimalColumn);
+    std::vector<const Column*> raw_nullColumns;
+    raw_nullColumns.resize(nullColumns.size());
+    for (int i = 0; i < nullColumns.size(); ++i) {
+        raw_nullColumns[i] = nullColumns[i].get();
+    }
+    func->update_batch_single_state(ctx_with_args1, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
+    func->finalize_to_column(ctx_with_args1, aggr_state->state(), nullable_result_column.get());
+    ASSERT_EQ(1.11, nullable_result_column->data_column()->get(0).get<double>());
+}
+
+TEST_F(AggregateTest, test_min_by_with_nullable_aggregator) {
+    test_min_by_with_nullable_aggregator_helper(ctx, "min_by");
+}
+TEST_F(AggregateTest, test_min_by_v2_with_nullable_aggregator) {
+    test_min_by_with_nullable_aggregator_helper(ctx, "min_by_v2");
+}
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
 TEST_F(AggregateTest, test_max) {
     const AggregateFunction* func = get_aggregate_function("max", TYPE_SMALLINT, TYPE_SMALLINT, false);
     test_agg_function<int16_t, int16_t>(ctx, func, 1023, 2999, 2999);

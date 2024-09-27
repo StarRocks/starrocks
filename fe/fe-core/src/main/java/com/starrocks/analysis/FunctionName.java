@@ -18,8 +18,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Function;
+>>>>>>> 9398edd4af ([BugFix] MaxBy/MinBy not filter nulls (#51354))
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
@@ -149,7 +153,7 @@ public class FunctionName implements Writable {
     public TFunctionName toThrift() {
         TFunctionName name = new TFunctionName(fn_);
         name.setDb_name(db_);
-        name.setFunction_name(fn_);
+        name.setFunction_name(Function.rectifyFunctionName(fn_));
         return name;
     }
 
