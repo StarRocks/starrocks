@@ -356,7 +356,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    return check_number_overflow<Type, ResultType>(value);
+    return check_signed_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
