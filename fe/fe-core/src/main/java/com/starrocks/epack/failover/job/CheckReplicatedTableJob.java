@@ -229,8 +229,17 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return false;
         }
 
-        if (localTable.getDefaultDistributionInfo().getBucketNum() != remoteTable.getDefaultDistributionInfo()
-                .getBucketNum()) {
+        DistributionInfo localDistributionInfo = localTable.getDefaultDistributionInfo();
+        DistributionInfo remoteDistributionInfo = remoteTable.getDefaultDistributionInfo();
+        if (localDistributionInfo.getType() != remoteDistributionInfo.getType()) {
+            LOG.warn("Local table {}.{} has different distribution type {} with remote table distribution type {}",
+                    localDatabase.getFullName(), localTable.getName(),
+                    localDistributionInfo.getType(), remoteDistributionInfo.getType());
+            return false;
+        }
+
+        if (localTable.getPartitionInfo().isPartitioned()
+                && localDistributionInfo.getBucketNum() != remoteDistributionInfo.getBucketNum()) {
             LOG.warn(
                     "Local table {}.{} has different default bucket number {} with remote table default bucket number {}",
                     localDatabase.getFullName(), localTable.getName(),
