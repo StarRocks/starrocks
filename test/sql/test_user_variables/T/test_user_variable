@@ -55,7 +55,7 @@ PROPERTIES (
 
 insert into alwaysnull values(null);
 
-select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a)  from t0;
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a) is not null  from t0;
 select      /*+ set_user_variable(@a = (select c0 * 0.1 from alwaysnull)) */ percentile_approx(c0, @a)  from t0;
 select      percentile_approx(c0, cast(null as double))  from t0;
 

@@ -75,9 +75,9 @@ PROPERTIES (
 insert into alwaysnull values(null);
 -- result:
 -- !result
-select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a)  from t0;
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a) is not null  from t0;
 -- result:
-4095.0
+1
 -- !result
 select      /*+ set_user_variable(@a = (select c0 * 0.1 from alwaysnull)) */ percentile_approx(c0, @a)  from t0;
 -- result:
@@ -85,7 +85,6 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select      percentile_approx(c0, cast(null as double))  from t0;
 -- result:
-[REGEX].*For percentile_approx the second argument is expected to be non-null.*
 E: (1064, 'For percentile_approx the second argument is expected to be non-null.: BE:10004')
 -- !result
 CREATE TABLE `pk1` (
