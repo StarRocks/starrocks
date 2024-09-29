@@ -173,6 +173,13 @@ public class NodeMgr {
         this.brokerMgr = new BrokerMgr();
     }
 
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
+    }
+
     public void initialize(String[] args) throws Exception {
         getCheckedSelfHostPort();
         getHelperNodes(args);
@@ -672,7 +679,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.bdbje_reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group) {
             return;
         }
 
@@ -1253,6 +1260,19 @@ public class NodeMgr {
 
     public ConcurrentHashMap<String, Frontend> getFrontends() {
         return frontends;
+    }
+
+    public void resetFrontends() {
+        frontends.clear();
+        Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        frontends.put(self.getNodeName(), self);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
+    }
+
+    public void replayResetFrontends(Frontend frontend) {
+        frontends.clear();
+        frontends.put(frontend.getNodeName(), frontend);
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
