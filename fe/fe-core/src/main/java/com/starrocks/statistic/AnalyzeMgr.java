@@ -211,6 +211,11 @@ public class AnalyzeMgr implements Writable {
         statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
+    public void dropExternalBasicStatsData(String catalogName, String dbName, String tableName) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName);
+    }
+
     public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
         List<AnalyzeJob> expireList = Lists.newArrayList();
         try {
@@ -255,6 +260,17 @@ public class AnalyzeMgr implements Writable {
         if (externalBasicStatsMetaMap.containsKey(key)) {
             ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.remove(key);
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(basicStatsMeta);
+        }
+    }
+
+    public void removeExternalHistogramStatsMeta(String catalogName, String dbName, String tableName, List<String> columns) {
+        for (String column : columns) {
+            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(catalogName, dbName, tableName, column);
+            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logRemoveExternalHistogramStatsMeta(externalHistogramStatsMetaMap.get(histogramKey));
+                externalHistogramStatsMetaMap.remove(histogramKey);
+            }
         }
     }
 
@@ -391,6 +407,11 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void clearStatisticFromDroppedTable() {
+        clearStatisticFromNativeDroppedTable();
+        clearStatisticFromExternalDroppedTable();
+    }
+
+    public void clearStatisticFromNativeDroppedTable() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
@@ -421,6 +442,34 @@ public class AnalyzeMgr implements Writable {
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
+
+    public void clearStatisticFromExternalDroppedTable() {
+        List<StatsMetaKey> droppedTables = new ArrayList<>();
+        for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
+            StatsMetaKey tableKey = entry.getKey();
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName());
+                if (table == null) {
+                    LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
+                            tableKey.getDbName(), tableKey.getTableName());
+                    droppedTables.add(tableKey);
+                }
+            } catch (Exception e) {
+                LOG.warn("Table {}.{}.{} throw exception, clear it's statistics", tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName(), e);
+                droppedTables.add(tableKey);
+            }
+        }
+
+        for (StatsMetaKey droppedTable : droppedTables) {
+            dropExternalBasicStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+            dropExternalHistogramStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+        }
+    }
+
     public void recordDropPartition(long partitionId) {
         dropPartitionIds.add(partitionId);
     }
@@ -630,21 +679,39 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        List<String> columns = Lists.newArrayList();
+        StatsMetaKey tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+        for (StatsMetaColumnKey histogramKey : externalHistogramStatsMetaMap.keySet()) {
+            if (histogramKey.getTableKey().equals(tableKey)) {
+                columns.add(histogramKey.getColumnName());
+            }
+        }
+
+        dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName, columns);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName,
+                columns);
+
+        removeExternalHistogramStatsMeta(catalogName, dbName, tableName, columns);
+    }
+
     public void dropExternalHistogramStatsMetaAndData(ConnectContext statsConnectCtx,
                                                       TableName tableName, Table table,
                                                       List<String> columns) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropExternalHistogram(statsConnectCtx, table.getUUID(), columns);
 
-        for (String histogramColumn : columns) {
-            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(tableName.getCatalog(),
-                    tableName.getDb(), tableName.getTbl(), histogramColumn);
-            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveExternalHistogramStatsMeta(externalHistogramStatsMetaMap.get(histogramKey));
-                externalHistogramStatsMetaMap.remove(histogramKey);
-            }
-        }
+        removeExternalHistogramStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columns);
     }
 
     public void registerConnection(long analyzeID, ConnectContext ctx) {
@@ -848,13 +915,26 @@ public class AnalyzeMgr implements Writable {
     }
 
     public static class StatsMetaKey {
-        String catalogName;
-        String dbName;
-        String tableName;
+        private final String catalogName;
+        private final String dbName;
+        private final String tableName;
+
         public StatsMetaKey(String catalogName, String dbName, String tableName) {
             this.catalogName = catalogName;
             this.dbName = dbName;
             this.tableName = tableName;
+        }
+
+        public String getCatalogName() {
+            return catalogName;
+        }
+
+        public String getDbName() {
+            return dbName;
+        }
+
+        public String getTableName() {
+            return tableName;
         }
 
         @Override
@@ -878,11 +958,19 @@ public class AnalyzeMgr implements Writable {
     }
 
     public static class StatsMetaColumnKey {
-        StatsMetaKey tableKey;
-        String columnName;
+        private final StatsMetaKey tableKey;
+        private final String columnName;
         public StatsMetaColumnKey(String catalogName, String dbName, String tableName, String columnName) {
             this.tableKey = new StatsMetaKey(catalogName, dbName, tableName);
             this.columnName = columnName;
+        }
+
+        public StatsMetaKey getTableKey() {
+            return tableKey;
+        }
+
+        public String getColumnName() {
+            return columnName;
         }
 
         @Override

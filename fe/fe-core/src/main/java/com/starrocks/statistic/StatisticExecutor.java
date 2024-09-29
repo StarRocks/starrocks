@@ -182,6 +182,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(catalogName, dbName, tableName);
+        LOG.debug("Expire external statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -219,6 +229,15 @@ public class StatisticExecutor {
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute external histogram statistic table expire fail.");
+        }
+    }
+
+    public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName,
+                                      List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(catalogName, dbName, tableName, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
             LOG.warn("Execute external histogram statistic table expire fail.");

@@ -36,8 +36,29 @@ public class AnalyzeManagerTest extends PlanTestBase {
                 1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
         Assert.assertNotNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromNativeDroppedTable();
         Assert.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+    }
+
+    @Test
+    public void testClearStatisticFromExternalDroppedTable() {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
+                "catalogName", "dbName", "tableName", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(new ExternalBasicStatsMeta(
+                "catalogName", "dbName", "tableName", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(
+                "catalogName", "dbName", "tableName", "column", StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.MIN, Maps.newHashMap()));
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedTable();
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
     }
 
     @Test
