@@ -37,18 +37,21 @@ package com.starrocks.system;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.common.io.JsonWriter;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 public class Frontend implements Writable {
+=======
+public class Frontend extends JsonWriter {
+>>>>>>> 437544de98 ([Enhancement] Support recovery FE metadata from meta dir (#51040))
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -211,6 +214,7 @@ public class Frontend implements Writable {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, role.name());
         Text.writeString(out, host);
@@ -232,6 +236,8 @@ public class Frontend implements Writable {
     }
 
     @Override
+=======
+>>>>>>> 437544de98 ([Enhancement] Support recovery FE metadata from meta dir (#51040))
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());
