@@ -3030,4 +3030,35 @@ public class Config extends ConfigBase {
     // backuped table is colocated
     @ConfField(mutable = true)
     public static boolean enable_colocate_restore = false;
+<<<<<<< HEAD
+=======
+
+    @ConfField
+    public static boolean enable_alter_struct_column = true;
+
+    // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
+    // large bytes to being deserialized successfully. So we give a 1G default value here.
+    @ConfField(mutable = true)
+    public static int thrift_max_message_size = 1024 * 1024 * 1024;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_frame_size = 16384000;
+
+    @ConfField(mutable = true)
+    public static int thrift_max_recursion_depth = 64;
+
+    @ConfField(mutable = true)
+    public static double partition_hash_join_min_cardinality_rate = 0.3;
+
+    /**
+     * Analyze query which time cost exceeds *slow_query_analyze_threshold*
+     * unit ms. default value 5000 ms
+     */
+    @ConfField(mutable = true)
+    public static long slow_query_analyze_threshold = 5000;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
+>>>>>>> 5dd17dcdec ([Enhancement] Add some logs to help online businesses quickly find the queries that cause FE oom (#51528))
 }
