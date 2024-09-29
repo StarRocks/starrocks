@@ -65,6 +65,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+>>>>>>> dcd238e5e2 ([BugFix] Fix duplicate list partition when partition name exceed (#51503))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.privilege.PrivilegeType;
@@ -1011,8 +1016,9 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 50) {
-                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
+                if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
+                    partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
+                            + "_" + partitionName.hashCode();
                 }
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
