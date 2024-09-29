@@ -601,8 +601,8 @@ Status CompactionManager::update_max_threads(int max_threads) {
             }
             return Status::OK();
         }
-        if (max_threads >= 20) {
-            max_threads = 20;
+        if (max_threads >= _max_task_num) {
+            max_threads = _max_task_num;
         }
         return _compaction_pool->update_max_threads(max_threads);
     } else {
