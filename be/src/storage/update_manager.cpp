@@ -27,6 +27,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -498,6 +499,7 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(on_rowset_finished_failed_due_to_mem);
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), config::enable_pk_strict_memcheck);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
@@ -566,6 +568,14 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
+
+    FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
+                               { st = Status::MemoryLimitExceeded("on_rowset_finished failed"); });
+    // if failed due to memory limit which is not a critical issue. we don't need to abort the ingestion
+    // and we can still commit the txn.
+    if (st.is_mem_limit_exceeded()) {
+        return Status::OK();
+    }
     return st;
 }
 

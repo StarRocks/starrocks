@@ -31,6 +31,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/assert.h"
+#include "util/failpoint/fail_point.h"
 
 using namespace std;
 
@@ -210,6 +211,26 @@ TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
     ASSERT_TRUE(dcgs.empty());
     _update_manager->get_delta_column_group(_tablet->data_dir()->get_meta(), tsid, 1, &dcgs);
     ASSERT_TRUE(dcgs.empty());
+}
+
+TEST_F(UpdateManagerTest, test_on_rowset_finished) {
+    srand(time(nullptr));
+    create_tablet(rand(), rand());
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(keys);
+    ASSERT_TRUE(_update_manager->on_rowset_finished(_tablet.get(), rs0.get()).ok());
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("on_rowset_finished_failed_due_to_mem");
+    fp->setMode(trigger_mode);
+    auto rs1 = create_rowset(keys);
+    ASSERT_TRUE(_update_manager->on_rowset_finished(_tablet.get(), rs1.get()).ok());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 } // namespace starrocks
