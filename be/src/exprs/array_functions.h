@@ -29,33 +29,33 @@ public:
 
     DEFINE_VECTORIZED_FN(array_remove);
 
-    DEFINE_VECTORIZED_FN(array_contains);
+    DEFINE_VECTORIZED_FN(array_contains_generic);
 
     template <LogicalType LT>
-    static StatusOr<ColumnPtr> array_contains_v2(FunctionContext* context, const Columns& columns) {
+    static StatusOr<ColumnPtr> array_contains_specific(FunctionContext* context, const Columns& columns) {
         return ArrayContains<LT, false, UInt8Column>::process(context, columns);
     }
     template <LogicalType LT>
-    static Status array_contains_v2_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
         return ArrayContains<LT, false, UInt8Column>::prepare(context, scope);
     }
     template <LogicalType LT>
-    static Status array_contains_v2_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
         return ArrayContains<LT, false, UInt8Column>::close(context, scope);
     }
 
-    DEFINE_VECTORIZED_FN(array_position);
+    DEFINE_VECTORIZED_FN(array_position_generic);
 
     template <LogicalType LT>
-    static StatusOr<ColumnPtr> array_position_v2(FunctionContext* context, const Columns& columns) {
+    static StatusOr<ColumnPtr> array_position_specific(FunctionContext* context, const Columns& columns) {
         return ArrayContains<LT, true, Int32Column>::process(context, columns);
     }
     template <LogicalType LT>
-    static Status array_position_v2_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_position_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
         return ArrayContains<LT, true, Int32Column>::prepare(context, scope);
     }
     template <LogicalType LT>
-    static Status array_position_v2_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_position_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
         return ArrayContains<LT, true, Int32Column>::close(context, scope);
     }
 

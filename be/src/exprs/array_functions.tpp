@@ -1708,7 +1708,6 @@ public:
     };
 
     static Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-        LOG(INFO) << "array_contains prepare, type: " << LT;
         if (scope != FunctionContext::FRAGMENT_LOCAL) {
             return Status::OK();
         }
@@ -1738,7 +1737,7 @@ public:
 
     static StatusOr<ColumnPtr> process(FunctionContext* context, const Columns& columns) {
         if constexpr (!is_supported(LT)) {
-            return Status::NotSupported("not support type ");
+            return Status::NotSupported(fmt::format("not support type {}", LT));
         }
         if (columns[0]->only_null()) {
             return columns[0];
@@ -1756,7 +1755,6 @@ public:
             array_null_column = down_cast<NullableColumn*>(array_data_column.get())->null_column();
             array_null_data = down_cast<NullableColumn*>(array_data_column.get())->null_column_data().data();
             array_data_column = down_cast<NullableColumn*>(array_data_column.get())->data_column();
-            LOG(INFO) << "is_nullable_array: " << is_nullable_array << ", has_null: " << array_null_column->has_null();
         }
 
         bool is_const_target = target_column->is_constant();
@@ -1819,8 +1817,6 @@ private:
 
     static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {
         DCHECK(!column->is_constant() && !column->is_nullable());
-        LOG(INFO) << "_build_hash_table type: " << LT;
-        // column is array column
         const ArrayColumn* array_column = down_cast<ArrayColumn*>(column.get());
 
         const auto& elements_column = down_cast<NullableColumn*>(array_column->elements_column().get())->data_column();
@@ -1936,10 +1932,10 @@ private:
                     continue;
                 }
             }
-            // linear check non-null value
+
+            // check non-null value one by one
             size_t target_idx = is_const_target ? 0 : i;
             for (size_t j = 0; j < array_size; j++) {
-                // @TODO complex type?
                 if (elements_data[offset + j] == targets_data[target_idx]) {
                     position = j + 1;
                     break;

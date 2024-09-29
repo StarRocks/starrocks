@@ -136,7 +136,7 @@ select sum(array_contains(@arr, 100)) from t;
 -- !result
 select sum(array_position(@arr, pk)) from t;
 -- result:
-50015000
+50005000
 -- !result
 select sum(array_position(@arr, 100)) from t;
 -- result:
