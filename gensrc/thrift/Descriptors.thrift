@@ -52,6 +52,7 @@ struct TSlotDescriptor {
   11: optional bool isOutputColumn // Deprecated
   12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
   13: optional i32 col_unique_id = -1
+  14: optional string col_physical_name
 }
 
 struct TTupleDescriptor {
@@ -487,24 +488,6 @@ struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
 }
 
-struct TPhysicalSchemaField {
-    // id-mode : set field_id and logical_name
-    // name-mode : set physical_name and logical_name
-    
-    // field id in parquet schema
-    1: optional i64 field_id
-    // logical field name
-    2: optional string logical_name
-    // physical field name
-    3: optional string physical_name
-    // Children fields for struct, map and list(array)
-    10: optional list<TPhysicalSchemaField> children
-}
-
-struct TPhysicalSchema {
-  1: optional list<TPhysicalSchemaField> fields
-}
-
 struct TPartitionMap {
     1: optional map<i64, THdfsPartition> partitions
 }
@@ -650,8 +633,6 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
-
-  60: optional TPhysicalSchema physicalSchema
 }
 
 struct TDescriptorTable {

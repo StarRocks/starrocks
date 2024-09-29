@@ -86,6 +86,7 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _null_indicator_offset(tdesc.nullIndicatorByte, tdesc.nullIndicatorBit),
           _col_name(tdesc.colName),
           _col_unique_id(tdesc.col_unique_id),
+          _col_physical_name(tdesc.col_physical_name),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
@@ -123,8 +124,8 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
 
 std::string SlotDescriptor::debug_string() const {
     std::stringstream out;
-    out << "Slot(id=" << _id << " type=" << _type << " name=" << _col_name
-        << " null=" << _null_indicator_offset.debug_string() << ")";
+    out << "Slot(id=" << _id << " type=" << _type << " name=" << _col_name << " col_unique_id=" << _col_unique_id
+        << " col_physical_name=" << _col_physical_name << " null=" << _null_indicator_offset.debug_string() << ")";
     return out.str();
 }
 
@@ -279,7 +280,6 @@ DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc
     _table_location = tdesc.deltaLakeTable.location;
     _columns = tdesc.deltaLakeTable.columns;
     _partition_columns = tdesc.deltaLakeTable.partition_columns;
-    _physical_schema = tdesc.physicalSchema;
     for (const auto& entry : tdesc.deltaLakeTable.partitions) {
         auto* partition = pool->add(new HdfsPartitionDescriptor(entry.second));
         _partition_id_to_desc_map[entry.first] = partition;

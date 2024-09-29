@@ -109,6 +109,7 @@ public:
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
+    const std::string& col_physical_name() const { return _col_physical_name; }
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
 
@@ -125,6 +126,7 @@ private:
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
+    const std::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -204,12 +206,15 @@ public:
                                                        ObjectPool* pool);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                const THdfsPartition& thrift_partition);
 =======
     const TPhysicalSchema* get_physical_schema() const { return &_physical_schema; }
 >>>>>>> 307e09b8a0 ([Feature] Support column mapping for delta lake)
 
+=======
+>>>>>>> 8e1a676c72 (use slot desc)
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
@@ -217,8 +222,6 @@ protected:
     mutable std::shared_mutex _map_mutex;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
-
-    TPhysicalSchema _physical_schema;
 };
 
 class HdfsTableDescriptor : public HiveTableDescriptor {

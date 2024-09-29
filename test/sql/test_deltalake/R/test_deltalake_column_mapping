@@ -84,17 +84,17 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_drop_subfield_c
 1	{"name":"Alice","sex":"female"}
 1	{"name":"Bob","sex":"male"}
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_drop_subfield_column_mapping_id order by col_tinyint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_drop_subfield_column_mapping_id order by col_struct.name;
 -- result:
-1	{"name":"Bob","sex":"male"}
 1	{"name":"Alice","sex":"female"}
+1	{"name":"Bob","sex":"male"}
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_rename_subfield_column_mapping_name order by col_tinyint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_rename_subfield_column_mapping_name order by col_struct.age;
 -- result:
 1	{"Name":"Bob","sex":"male","age":25}
 1	{"Name":"Alice","sex":"female","age":30}
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_rename_subfield_column_mapping_id order by col_tinyint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_rename_subfield_column_mapping_id order by col_struct.age;
 -- result:
 1	{"Name":"Bob","sex":"male","age":25}
 1	{"Name":"Alice","sex":"female","age":30}
@@ -108,6 +108,18 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_complex_type_column_ma
 -- result:
 1	{1:{"name":"Alice","sex":"female","age":null},2:{"name":"Bob","sex":"male","age":null}}	[{"Name":"Alice","sex":"female","age":null},{"Name":"Bob","sex":"male","age":null}]
 2	{1:{"name":"Alice","sex":"female","age":30},2:{"name":"Bob","sex":"male","age":25}}	[{"Name":"Alice","sex":"female","age":30},{"Name":"Bob","sex":"male","age":25}]
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_nested_struct_column_mapping_name order by col_tinyint;
+-- result:
+1	{"name":{"first_name":"Charlie","last_name":"C"},"sex":"male","age":35}
+2	{"name":{"first_name":"Alice","last_name":"A"},"sex":"female","age":30}
+3	{"name":{"first_name":"Bob","last_name":"B"},"sex":"male","age":25}
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_nested_struct_column_mapping_id order by col_tinyint;
+-- result:
+1	{"name":{"first_name":"Charlie","last_name":"C"},"sex":"male","age":35}
+2	{"name":{"first_name":"Alice","last_name":"A"},"sex":"female","age":30}
+3	{"name":{"first_name":"Bob","last_name":"B"},"sex":"male","age":25}
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:

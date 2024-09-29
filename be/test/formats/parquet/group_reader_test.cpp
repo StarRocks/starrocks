@@ -448,8 +448,7 @@ TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
     col_type.type = LogicalType::TYPE_VARCHAR;
 
     ColumnReaderOptions options;
-    const TPhysicalSchemaField* physical_schema_field = nullptr;
-    Status st = ColumnReader::create(options, &field, col_type, physical_schema_field, nullptr);
+    Status st = ColumnReader::create(options, &field, col_type, nullptr);
     ASSERT_FALSE(st.ok()) << st;
     std::cout << st.message() << "\n";
 }

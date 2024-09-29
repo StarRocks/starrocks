@@ -89,17 +89,15 @@ public:
     // TODO(zc): review this,
     // create a column reader
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         const TPhysicalSchemaField* physicalSchemaField, std::unique_ptr<ColumnReader>* output);
+                         std::unique_ptr<ColumnReader>* output);
 
     // Create with iceberg schema
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output);
 
     // for struct type without schema change
-    static void get_subfield_pos_with_pruned_type(
-            const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
-            const TPhysicalSchemaField* physical_schema_field, std::vector<int32_t>& pos,
-            std::vector<const TPhysicalSchemaField*>& physical_schema_subfield_vec);
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
 
     // for schema changed
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,

@@ -33,6 +33,10 @@ select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type whe
 {"name":"Fiona","sex":"female","age":33}
 {"name":null,"sex":null,"age":null}
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_null_subfield where col_struct is not null;
+-- result:
+1	{"name":null,"sex":"male","age":30}
+-- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
 -- result:
 1	1	1

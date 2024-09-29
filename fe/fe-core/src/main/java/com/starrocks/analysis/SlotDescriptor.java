@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -282,6 +283,11 @@ public class SlotDescriptor {
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
         tSlotDescriptor.setIsNullable(isNullable);
+
+        if (parent.getTable() != null && column != null && parent.getTable().isDeltalakeTable()) {
+            DeltaLakeTable table = (DeltaLakeTable) parent.getTable();
+            table.doColumnMapping(tSlotDescriptor, column);
+        }
         return tSlotDescriptor;
     }
 

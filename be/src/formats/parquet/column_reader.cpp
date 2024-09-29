@@ -135,87 +135,53 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
-void ColumnReader::get_subfield_pos_with_pruned_type(
-        const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
-        const TPhysicalSchemaField* physical_schema_field,
-        std::vector<int32_t>& pos,
-        std::vector<const TPhysicalSchemaField*>& physical_schema_subfield_vec) {
+void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                     bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
-    if (physical_schema_field != nullptr) {
-        std::unordered_map<std::string, const TPhysicalSchemaField*> logical_name_2_physical_field;
-        for (const auto& child : physical_schema_field->children) {
-            logical_name_2_physical_field.emplace(Utils::format_name(child.logical_name, case_sensitive), &child);
-        }
-
+    if (!col_type.field_ids.empty()) {
         std::unordered_map<int32_t, size_t> field_id_2_pos;
-        std::unordered_map<std::string, size_t> physical_name_2_pos;
-        if (physical_schema_field->__isset.field_id) {
-            for (size_t i = 0; i < field.children.size(); i++) {
-                field_id_2_pos.emplace(field.children[i].field_id, i);
-            }
-        } else if (physical_schema_field->__isset.physical_name) {
-            for (size_t i = 0; i < field.children.size(); i++) {
-                physical_name_2_pos.emplace(field.children[i].name, i);
-            }
-        }
-
-        for (size_t i = 0; i < col_type.children.size(); i++) {
-            auto physical_field_it =
-                    logical_name_2_physical_field.find(Utils::format_name(col_type.field_names[i], case_sensitive));
-            if (physical_field_it == logical_name_2_physical_field.end()) {
-                // This situation should not be happened, means table's struct subfield not existed in physical schema
-                // Below code is defensive
-                DCHECK(false) << "Struct subfield name: " + col_type.field_names[i] + " not found in iceberg schema.";
-                pos[i] = -1;
-                physical_schema_subfield_vec[i] = nullptr;
-                continue;
-            }
-
-            if (physical_field_it->second->__isset.field_id) {
-                auto parquet_field_it = field_id_2_pos.find(physical_field_it->second->field_id);
-                if (parquet_field_it == field_id_2_pos.end()) {
-                    // Means newly added struct subfield not existed in original parquet file, we put nullptr
-                    // column reader in children_reader, we will append default value for this subfield later.
-                    pos[i] = -1;
-                    physical_schema_subfield_vec[i] = nullptr;
-                    continue;
-                }
-
-                pos[i] = parquet_field_it->second;
-                physical_schema_subfield_vec[i] = physical_field_it->second;
-            } else if (physical_field_it->second->__isset.physical_name) {
-                auto parquet_field_it = physical_name_2_pos.find(physical_field_it->second->physical_name);
-                if (parquet_field_it == physical_name_2_pos.end()) {
-                    // Means newly added struct subfield not existed in original parquet file, we put nullptr
-                    // column reader in children_reader, we will append default value for this subfield later.
-                    pos[i] = -1;
-                    physical_schema_subfield_vec[i] = nullptr;
-                    continue;
-                }
-
-                pos[i] = parquet_field_it->second;
-                physical_schema_subfield_vec[i] = physical_field_it->second;
-            }
-        }
-    } else {
-        // build tmp mapping for ParquetField
-        std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field.children.size(); i++) {
-            const std::string format_field_name =
-                    case_sensitive ? field.children[i].name : boost::algorithm::to_lower_copy(field.children[i].name);
-            field_name_2_pos.emplace(format_field_name, i);
+            field_id_2_pos.emplace(field.children[i].field_id, i);
         }
 
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            const std::string formatted_subfield_name =
-                    case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
-
-            auto it = field_name_2_pos.find(formatted_subfield_name);
-            if (it == field_name_2_pos.end()) {
+            auto it = field_id_2_pos.find(col_type.field_ids[i]);
+            if (it == field_id_2_pos.end()) {
                 pos[i] = -1;
                 continue;
             }
             pos[i] = it->second;
+        }
+    } else {
+        std::unordered_map<std::string, size_t> field_name_2_pos;
+        for (size_t i = 0; i < field.children.size(); i++) {
+            const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
+            field_name_2_pos.emplace(format_field_name, i);
+        }
+
+        if (!col_type.field_physical_names.empty()) {
+            for (size_t i = 0; i < col_type.children.size(); i++) {
+                const std::string& formatted_physical_name =
+                        Utils::format_name(col_type.field_physical_names[i], case_sensitive);
+
+                auto it = field_name_2_pos.find(formatted_physical_name);
+                if (it == field_name_2_pos.end()) {
+                    pos[i] = -1;
+                    continue;
+                }
+                pos[i] = it->second;
+            }
+        } else {
+            for (size_t i = 0; i < col_type.children.size(); i++) {
+                const std::string formatted_subfield_name = Utils::format_name(col_type.field_names[i], case_sensitive);
+
+                auto it = field_name_2_pos.find(formatted_subfield_name);
+                if (it == field_name_2_pos.end()) {
+                    pos[i] = -1;
+                    continue;
+                }
+                pos[i] = it->second;
+            }
         }
     }
 }
@@ -278,7 +244,7 @@ bool ColumnReader::_has_valid_subfield_column_reader(
 }
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                            const TPhysicalSchemaField* physical_schema_field, std::unique_ptr<ColumnReader>* output) {
+                            std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
         return Status::InternalError(
@@ -287,10 +253,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        const TPhysicalSchemaField* child_physical_schema_field =
-                physical_schema_field == nullptr ? nullptr : &physical_schema_field->children[0];
-        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0],
-                                             child_physical_schema_field, &child_reader));
+        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         if (child_reader != nullptr) {
             std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
             RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
@@ -302,18 +265,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
-        const TPhysicalSchemaField* key_physical_schema_field =
-                physical_schema_field == nullptr ? nullptr : &physical_schema_field->children[0];
-        const TPhysicalSchemaField* value_physical_schema_field =
-                physical_schema_field == nullptr ? nullptr : &physical_schema_field->children[1];
-
         if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0],
-                                                 key_physical_schema_field, &key_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1],
-                                                 value_physical_schema_field, &value_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
         }
 
         if (key_reader != nullptr || value_reader != nullptr) {
@@ -325,9 +281,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         }
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
-        std::vector<const TPhysicalSchemaField*> physical_schema_subfield_vec(col_type.children.size(), nullptr);
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, physical_schema_field, subfield_pos,
-                                          physical_schema_subfield_vec);
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
@@ -338,8 +292,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             }
             std::unique_ptr<ColumnReader> child_reader;
 
-            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
-                                                 physical_schema_subfield_vec[i], &child_reader));
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
