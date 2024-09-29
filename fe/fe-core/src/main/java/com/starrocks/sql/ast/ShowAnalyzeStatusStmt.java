@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,11 +31,14 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
+    private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
     public ShowAnalyzeStatusStmt(Predicate predicate) {
         this(predicate, NodePosition.ZERO);
@@ -81,7 +83,8 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             }
             Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
-        } catch (AccessDeniedException | SemanticException e) {
+        } catch (Exception e) {
+            LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;
         }
 
