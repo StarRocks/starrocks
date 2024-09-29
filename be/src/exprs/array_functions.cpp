@@ -24,6 +24,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "simd/simd.h"
 #include "util/phmap/phmap.h"
@@ -551,7 +552,7 @@ private:
                 if (is_target_null) {
                     if constexpr (NullableElement) {
                         // first null position
-                        result_ptr[i] = PositionEnabled ? first_null_position : (first_null_position != array_size);
+                        result_ptr[i] = PositionEnabled ? first_null_position : (first_null_position != 0);
                     } else {
                         result_ptr[i] = PositionEnabled ? array_size : 0;
                     }
@@ -561,7 +562,7 @@ private:
                     if (iter != values_map.end()) {
                         result_ptr[i] = PositionEnabled ? iter->second : 1;
                     } else {
-                        result_ptr[i] = PositionEnabled ? array_size : 0;
+                        result_ptr[i] = 0;
                     }
                 }
             }
