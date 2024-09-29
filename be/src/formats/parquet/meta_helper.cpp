@@ -25,10 +25,10 @@ namespace starrocks::parquet {
 void ParquetMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
         const std::vector<SlotDescriptor*>& slots) const {
-    if (!_logical_name_2_pysical_field.empty()) {
+    if (!_logical_name_2_physical_field.empty()) {
         for (const auto& slot : slots) {
-            auto it = _logical_name_2_pysical_field.find(Utils::format_name(slot->col_name(), _case_sensitive));
-            if (it == _logical_name_2_pysical_field.end()) {
+            auto it = _logical_name_2_physical_field.find(Utils::format_name(slot->col_name(), _case_sensitive));
+            if (it == _logical_name_2_physical_field.end()) {
                 continue;
             }
             auto& schema = _file_metadata->schema();
@@ -67,11 +67,10 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
-    if (!_logical_name_2_pysical_field.empty()) {
+    if (!_logical_name_2_physical_field.empty()) {
         for (auto& materialized_column : materialized_columns) {
-            auto physical_field_it =
-                    _logical_name_2_pysical_field.find(Utils::format_name(materialized_column.name(), _case_sensitive));
-            if (physical_field_it == _logical_name_2_pysical_field.end()) {
+            auto physical_field_it = _logical_name_2_physical_field.find(Utils::format_name(materialized_column.name(), _case_sensitive));
+            if (physical_field_it == _logical_name_2_physical_field.end()) {
                 continue;
             }
             const TPhysicalSchemaField* physical_schema_field = physical_field_it->second;
@@ -247,9 +246,9 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field,
 }
 
 const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_name) const {
-    if (!_logical_name_2_pysical_field.empty()) {
-        auto it = _logical_name_2_pysical_field.find(Utils::format_name(col_name, _case_sensitive));
-        if (it == _logical_name_2_pysical_field.end()) {
+    if (!_logical_name_2_physical_field.empty()) {
+        auto it = _logical_name_2_physical_field.find(Utils::format_name(col_name, _case_sensitive));
+        if (it == _logical_name_2_physical_field.end()) {
             return nullptr;
         }
 
@@ -268,7 +267,7 @@ void ParquetMetaHelper::_init_field_mapping() {
         return;
     }
     for (const auto& filed : _t_physical_schema->fields) {
-        _logical_name_2_pysical_field.emplace(Utils::format_name(filed.logical_name, _case_sensitive), &filed);
+        _logical_name_2_physical_field.emplace(Utils::format_name(filed.logical_name, _case_sensitive), &filed);
     }
 }
 

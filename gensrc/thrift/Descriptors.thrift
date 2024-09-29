@@ -488,6 +488,9 @@ struct TIcebergSchema {
 }
 
 struct TPhysicalSchemaField {
+    // id-mode : set field_id and logical_name
+    // name-mode : set physical_name and logical_name
+    
     // field id in parquet schema
     1: optional i64 field_id
     // logical field name
