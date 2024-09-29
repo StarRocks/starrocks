@@ -571,7 +571,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // and we can still commit the txn.
     if (st.is_mem_limit_exceeded()) {
         return Status::OK();
-    }       
+    }
     return st;
 }
 
