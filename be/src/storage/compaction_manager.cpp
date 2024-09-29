@@ -574,10 +574,10 @@ int32_t CompactionManager::compute_max_compaction_concurrency() const {
     }
 
     {
-            std::lock_guard lg(_compact_threads_mutex);
-            if (_max_compaction_concurrency > 0 && _max_compaction_concurrency < max_task_num) {
-                max_task_num = _max_compaction_concurrency;
-            }
+        std::lock_guard lg(_compact_threads_mutex);
+        if (_max_compaction_concurrency > 0 && _max_compaction_concurrency < max_task_num) {
+            max_task_num = _max_compaction_concurrency;
+        }
     }
 
     return max_task_num;

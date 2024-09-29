@@ -119,7 +119,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
         _config_callback.emplace("max_compaction_concurrency", [&]() {
             StorageEngine::instance()->compaction_manager()->set_max_compaction_concurrency(
-                                config::max_compaction_concurrency);
+                    config::max_compaction_concurrency);
             (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
         });
