@@ -208,6 +208,39 @@ public class ShowCreateMaterializedViewStmtTest {
         Assertions.assertTrue(createTableStmt.get(0).contains(select), createTableStmt.get(0));
     }
 
+    @Test
+    public void testMvUniqueConstraintsTableNotExist() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.tbl_constraint_test\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String createMvSql = "create materialized view mv_constraint_test " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "properties(\"unique_constraints\" = \"tbl_constraint_test.k1\", " +
+                "\"foreign_key_constraints\" = \"tbl1(k1) REFERENCES tbl_constraint_test(k1)\") " +
+                "as select tbl1.k1, tbl_constraint_test.k2 " +
+                "from tbl1 join tbl_constraint_test on tbl1.k1 = tbl_constraint_test.k1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv_constraint_test");
+        Assertions.assertEquals("k1", table.getUniqueConstraints().get(0).getUniqueColumnNames(table).get(0));
+
+        starRocksAssert.dropTable("tbl_constraint_test");
+        Assert.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
+    }
+
     public static Stream<Arguments> genTestArguments() {
         List<String> refreshArgumentsList = Lists.newArrayList(
                 "REFRESH MANUAL",
