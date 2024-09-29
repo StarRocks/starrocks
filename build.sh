@@ -103,6 +103,8 @@ Usage: $0 <options>
                         build without vector index tenann library
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -138,6 +140,7 @@ OPTS=$(getopt \
   -l 'output-compile-time' \
   -l 'without-tenann' \
   -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
   -l 'help' \
   -- "$@")
 
@@ -163,6 +166,7 @@ USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
+WITH_RELATIVE_SRC_PATH=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -263,6 +267,7 @@ else
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -317,6 +322,7 @@ echo "Get params:
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
     WITH_TENANN                 -- $WITH_TENANN
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
 "
 
 check_tool()
@@ -425,12 +431,13 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..                 \
                   -DBUILD_BE=${BUILD_BE}                                \
                   -DWITH_TENANN=${WITH_TENANN}                          \
                   -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..                \
-                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
+                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
