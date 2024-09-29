@@ -2280,8 +2280,8 @@ public class ShowExecutor {
                     if (result != null) {
                         rows.add(result);
                     }
-                } catch (MetaNotFoundException e) {
-                    // pass
+                } catch (Exception e) {
+                    // The catalog(HMS/Glue...) may can not connected, so the meta can not be found. Just ignore it.
                 }
             }
 
