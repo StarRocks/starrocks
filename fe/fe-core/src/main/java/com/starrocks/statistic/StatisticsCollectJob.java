@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -146,7 +147,11 @@ public abstract class StatisticsCollectJob {
         int count = 0;
         int maxRetryTimes = 5;
         do {
+            context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
+            if (Config.enable_print_sql) {
+                LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
 
@@ -154,7 +159,6 @@ public abstract class StatisticsCollectJob {
             setDefaultSessionVariable(context);
 
             context.setExecutor(executor);
-            context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
             executor.execute();
 
@@ -168,6 +172,8 @@ public abstract class StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
+                AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                        DebugUtil.printId(context.getQueryId()), sql);
                 return;
             }
         } while (count < maxRetryTimes);
