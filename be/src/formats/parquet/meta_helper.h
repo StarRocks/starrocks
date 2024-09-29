@@ -120,7 +120,7 @@ private:
                         const TypeDescriptor* type_descriptor) const;
 
     const TPhysicalSchema* _t_physical_schema = nullptr;
-    std::unordered_map<std::string, const TPhysicalSchemaField*> _logical_name_2_pysical_field;
+    std::unordered_map<std::string, const TPhysicalSchemaField*> _logical_name_2_physical_field;
 };
 
 class IcebergMetaHelper : public MetaHelper {

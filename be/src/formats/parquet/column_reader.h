@@ -97,8 +97,8 @@ public:
 
     // for struct type without schema change
     static void get_subfield_pos_with_pruned_type(
-            const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive, std::vector<int32_t>& pos,
-            const TPhysicalSchemaField* physical_schema_field,
+            const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
+            const TPhysicalSchemaField* physical_schema_field, std::vector<int32_t>& pos,
             std::vector<const TPhysicalSchemaField*>& physical_schema_subfield_vec);
 
     // for schema changed

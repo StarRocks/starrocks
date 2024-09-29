@@ -136,8 +136,9 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
 }
 
 void ColumnReader::get_subfield_pos_with_pruned_type(
-        const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive, std::vector<int32_t>& pos,
+        const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
         const TPhysicalSchemaField* physical_schema_field,
+        std::vector<int32_t>& pos,
         std::vector<const TPhysicalSchemaField*>& physical_schema_subfield_vec) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
     if (physical_schema_field != nullptr) {
@@ -325,7 +326,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TPhysicalSchemaField*> physical_schema_subfield_vec(col_type.children.size(), nullptr);
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos, physical_schema_field,
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, physical_schema_field, subfield_pos,
                                           physical_schema_subfield_vec);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
