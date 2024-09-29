@@ -98,6 +98,18 @@ select * from t3;
 -- result:
 2022-04-01	1	1.00	hangzhou	1
 -- !result
+
+
+
+
+
+
+
+
+
+
+
+
 -- name: test_automatic_partition_list_limit
 CREATE TABLE list_auto_single (
     id bigint  ,
@@ -141,4 +153,36 @@ ALTER TABLE list_normal_single ADD PARTITION psingle VALUES IN ("2023-04-01");
 -- !result
 ALTER TABLE list_normal_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");
 -- result:
+-- !result
+
+
+
+
+
+
+
+
+
+
+
+-- name: test_list_partition_name_exceed
+create table t(k string, v int)partition by (k) distributed by hash(v) buckets 1000;
+-- result:
+-- !result
+insert into t values('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1),('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 2);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX]^[^\n]*$
+-- !result
+create table t1 like t;
+-- result:
+-- !result
+insert into t1 select * from t;
+-- result:
+-- !result
+show partitions from t1;
+-- result:
+[REGEX]^[^\n]*$
 -- !result
