@@ -912,6 +912,18 @@ public class ConnectContext {
         }
     }
 
+    public int getExecTimeout() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
+    }
+
     public void checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
@@ -921,27 +933,35 @@ public class ConnectContext {
         long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
+        String errMsg = "";
         if (command == MysqlCommand.COM_SLEEP) {
-            if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS());
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout);
 
                 killFlag = true;
                 killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
             }
         } else {
-            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
+                LOG.warn("kill {} timeout, remote: {}, query timeout: {}", getExecType(),
+                        getMysqlChannel().getRemoteHostPortString(), timeoutSecond);
 
                 // Only kill
                 killFlag = true;
+
+                String suggestedMsg = String.format("please increase the '%s' session variable",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
             }
         }
         if (killFlag) {
-            kill(killConnection, "query timeout");
+            kill(killConnection, errMsg);
         }
     }
 

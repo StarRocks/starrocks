@@ -1134,8 +1134,7 @@ public class NodeMgr {
         setFrontendConfig(stmt.getConfig().getMap());
 
         List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {

@@ -106,6 +106,7 @@ public class JobSpec {
                                             TQueryType queryType) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
+            queryOptions.setQuery_timeout(context.getExecTimeout());
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());

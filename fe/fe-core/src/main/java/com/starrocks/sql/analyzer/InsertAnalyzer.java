@@ -308,15 +308,16 @@ public class InsertAnalyzer {
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
         Map<String, String> properties = insertStmt.getProperties();
-        // use session variable if not set max_filter_ratio property
+        // use session variable if not set max_filter_ratio, strict_mode, timeout property
         if (!properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
             properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                     String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         }
-        // use session variable if not set strict_mode property
-        if (!properties.containsKey(LoadStmt.STRICT_MODE) &&
-                session.getSessionVariable().getEnableInsertStrict()) {
-            properties.put(LoadStmt.STRICT_MODE, "true");
+        if (!properties.containsKey(LoadStmt.STRICT_MODE)) {
+            properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        }
+        if (!properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+            properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
         }
 
         try {

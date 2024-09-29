@@ -76,7 +76,7 @@ public class DataCacheSelectExecutor {
         DataCacheSelectMetrics metrics = null;
         Coordinator coordinator = stmtExecutor.getCoordinator();
         Preconditions.checkNotNull(coordinator, "Coordinator can't be null");
-        coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
+        coordinator.join(stmtExecutor.getExecTimeout());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
         }

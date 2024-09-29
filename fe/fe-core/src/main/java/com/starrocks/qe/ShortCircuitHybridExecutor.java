@@ -113,8 +113,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 if (null == future) {
                     return;
                 }
-                PExecShortCircuitResult shortCircuitResult = future.get(
-                        context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
+                PExecShortCircuitResult shortCircuitResult = future.get(context.getExecTimeout(), TimeUnit.SECONDS);
                 watch.stop();
                 long t = watch.elapsed().toMillis();
                 MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);

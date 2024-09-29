@@ -267,7 +267,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
             long dbId = getView().getDbId();
-            long timeout = context.getSessionVariable().getQueryTimeoutS();
+            long timeout = context.getExecTimeout();
             dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
             dataSink.complete();
         }
