@@ -180,6 +180,7 @@ Status StorageEngine::start_bg_threads() {
             }
         }
     } else {
+        _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
         int32_t max_task_num = _compaction_manager->compute_max_compaction_concurrency();
 
         (void)Compaction::init(max_task_num);

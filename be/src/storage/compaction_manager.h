@@ -112,7 +112,9 @@ public:
 
     Status update_max_threads(int max_threads);
 
-    int32_t compute_max_compaction_concurrency() const;
+    int32_t compute_max_compaction_concurrency();
+
+    void set_max_compaction_concurrency(int threads_num);
 
     double max_score();
 
@@ -176,6 +178,9 @@ private:
 
     std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
     std::thread _scheduler_thread;
+
+    std::mutex _compact_threads_mutex;
+    int32_t _max_compaction_concurrency = 0;
 };
 
 } // namespace starrocks
