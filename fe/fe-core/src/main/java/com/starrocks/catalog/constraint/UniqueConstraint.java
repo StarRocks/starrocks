@@ -41,11 +41,9 @@ public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     private final List<ColumnId> uniqueColumns;
 
-    private String catalogName;
-    private String dbName;
+    private final String catalogName;
+    private final String dbName;
     private String tableName;
-
-    private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
         super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
@@ -55,23 +53,25 @@ public class UniqueConstraint extends Constraint {
         this.uniqueColumns = uniqueColumns;
     }
 
-    // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
-    public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
-        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
-        this.referencedTable = referencedTable;
-        this.uniqueColumns = uniqueColumns;
-    }
-
     public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
+<<<<<<< HEAD
         if (referencedTable != null) {
             targetTable = referencedTable;
         // The dbName and tableName may be null if upgraded from older version.
         } else if (!Strings.isNullOrEmpty(dbName) && !Strings.isNullOrEmpty(tableName)) {
             targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+=======
+        if (selfTable.isMaterializedView()) {
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (targetTable == null) {
+                throw new SemanticException("Table %s.%s.%s is not found", catalogName, dbName, tableName);
+            }
+>>>>>>> 2fec06649e ([Refactor] Refactor UniqueConstraint.getUniqueColumnNames (#51457))
         } else {
             targetTable = selfTable;
         }
+
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
             Column column = targetTable.getColumn(columnId);
