@@ -3251,4 +3251,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long slow_query_analyze_threshold = 5000;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }

@@ -448,19 +448,22 @@ public class StatisticExecutor {
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+        context.setQueryId(UUIDUtil.genUUID());
+        if (Config.enable_print_sql) {
+            LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+        }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                DebugUtil.printId(context.getQueryId()), sql);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
+            AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
     }
@@ -472,9 +475,9 @@ public class StatisticExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            executor.execute();
             AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-            executor.execute();
             return true;
         } catch (Exception e) {
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);

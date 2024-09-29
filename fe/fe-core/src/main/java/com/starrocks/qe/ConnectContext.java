@@ -921,11 +921,15 @@ public class ConnectContext {
         long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
+        String sql = "";
+        if (executor != null) {
+            sql = executor.getOriginStmtInString();
+        }
         if (command == MysqlCommand.COM_SLEEP) {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
-                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS());
+                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
 
                 killFlag = true;
                 killConnection = true;
@@ -933,8 +937,8 @@ public class ConnectContext {
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
+                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
 
                 // Only kill
                 killFlag = true;

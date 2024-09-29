@@ -130,6 +130,9 @@ public class ExecuteSqlAction extends RestBaseAction {
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
+                if (Config.enable_print_sql) {
+                    LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", context.getQueryId(), requestBody.query);
+                }
                 // parse the sql here, for the convenience of verification of http request
                 parsedStmt = parse(requestBody.query, context.getSessionVariable());
                 context.setStatement(parsedStmt);
