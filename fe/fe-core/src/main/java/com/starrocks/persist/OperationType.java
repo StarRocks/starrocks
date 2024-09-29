@@ -257,6 +257,9 @@ public class OperationType {
 
     public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
+    // manage system node info 10101 ~ 10120
+    // manage compute node 10201 ~ 10220
+
     @IgnorableOnReplayFailed
     public static final short OP_ADD_COMPUTE_NODE = 10201;
 
@@ -509,6 +512,9 @@ public class OperationType {
     public static final short OP_TIMESTAMP_V2 = 13040;
 
     public static final short OP_LEADER_INFO_CHANGE_V2 = 13041;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_RESET_FRONTENDS = 13042;
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_FUNCTION_V2 = 13050;
