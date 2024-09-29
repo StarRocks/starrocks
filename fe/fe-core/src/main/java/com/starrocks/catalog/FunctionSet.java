@@ -921,12 +921,17 @@ public class FunctionSet {
         return null;
     }
 
-    private Function matchPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
+    private Function matchPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns,
+                                              List<Function> standFns) {
         Function fn = matchFuncCandidates(desc, mode, fns);
         if (fn != null) {
             fn = PolymorphicFunctionAnalyzer.generatePolymorphicFunction(fn, desc.getArgs());
         }
         if (fn != null) {
+            Function newFn = matchStrictFunction(fn, mode, standFns);
+            if (newFn != null) {
+                return newFn;
+            }
             // check generate function is right
             return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
@@ -952,7 +957,7 @@ public class FunctionSet {
         }
 
         List<Function> polyFns = fns.stream().filter(Function::isPolymorphic).collect(Collectors.toList());
-        func = matchPolymorphicFunction(desc, mode, polyFns);
+        func = matchPolymorphicFunction(desc, mode, polyFns, standFns);
         if (func != null) {
             return func;
         }
