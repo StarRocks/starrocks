@@ -55,19 +55,8 @@ public class UniqueConstraint extends Constraint {
 
     public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
-<<<<<<< HEAD
-        if (referencedTable != null) {
-            targetTable = referencedTable;
-        // The dbName and tableName may be null if upgraded from older version.
-        } else if (!Strings.isNullOrEmpty(dbName) && !Strings.isNullOrEmpty(tableName)) {
-            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
-=======
         if (selfTable.isMaterializedView()) {
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-            if (targetTable == null) {
-                throw new SemanticException("Table %s.%s.%s is not found", catalogName, dbName, tableName);
-            }
->>>>>>> 2fec06649e ([Refactor] Refactor UniqueConstraint.getUniqueColumnNames (#51457))
+            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
         } else {
             targetTable = selfTable;
         }
