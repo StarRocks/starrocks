@@ -1936,7 +1936,7 @@ private:
             // check non-null value one by one
             size_t target_idx = is_const_target ? 0 : i;
             for (size_t j = 0; j < array_size; j++) {
-                if (elements_data[offset + j] == targets_data[target_idx]) {
+                if (!elements_null_data[offset + j] && elements_data[offset + j] == targets_data[target_idx]) {
                     position = j + 1;
                     break;
                 }
