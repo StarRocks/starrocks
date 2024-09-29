@@ -97,6 +97,8 @@ Usage: $0 <options>
      -j                 build Backend parallel
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
@@ -128,6 +130,7 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
   -l 'help' \
   -- "$@")
 
@@ -150,6 +153,12 @@ WITH_COMPRESS=ON
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
+<<<<<<< HEAD
+=======
+OUTPUT_COMPILE_TIME=OFF
+WITH_TENANN=ON
+WITH_RELATIVE_SRC_PATH=ON
+>>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -233,6 +242,7 @@ else
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -265,6 +275,7 @@ echo "Get params:
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+<<<<<<< HEAD
     WITH_STARCACHE      -- $WITH_STARCACHE
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
@@ -275,6 +286,22 @@ echo "Get params:
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+=======
+    WITH_STARCACHE              -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA          -- $USE_STAROS
+    USE_AVX2                    -- $USE_AVX2
+    USE_AVX512                  -- $USE_AVX512
+    USE_SSE4_2                  -- $USE_SSE4_2
+    USE_BMI_2                   -- $USE_BMI_2
+    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
+    PARALLEL                    -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN                 -- $WITH_TENANN
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
+>>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
 "
 
 check_tool()
@@ -367,7 +394,17 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+<<<<<<< HEAD
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+=======
+                  -DBUILD_BE=${BUILD_BE}                                \
+                  -DWITH_TENANN=${WITH_TENANN}                          \
+                  -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
+                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ..
+>>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then

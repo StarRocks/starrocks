@@ -96,6 +96,22 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
+<<<<<<< HEAD
+=======
+option(WITH_TENANN "Build with TENANN" OFF)
+
+option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
+
+# Only support tenann on x86
+if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    add_definitions(-DWITH_TENANN)
+else()
+    set(WITH_TENANN "OFF")
+endif()
+
+message(STATUS "WITH TENANN is: ${WITH_TENANN}")
+
+>>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -606,7 +622,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
+if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
+endif()
 # disable link delete(void*, long)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
@@ -754,8 +772,10 @@ endif()
 
 # Add flags that are common across build types
 SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
-# apply -ffile-prefix-map option to .c source files as well
-SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
+if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
+    # apply -ffile-prefix-map option to .c source files as well
+    SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
+endif()
 
 message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 
