@@ -472,6 +472,11 @@ public class EditLog {
                     globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
                     break;
                 }
+                case OperationType.OP_RESET_FRONTENDS: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayResetFrontends(fe);
+                    break;
+                }
                 case OperationType.OP_TIMESTAMP_V2: {
                     Timestamp stamp = (Timestamp) journal.getData();
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
@@ -1389,6 +1394,10 @@ public class EditLog {
 
     public void logLeaderInfo(LeaderInfo info) {
         logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
+    }
+
+    public void logResetFrontends(Frontend frontend) {
+        logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {

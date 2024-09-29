@@ -377,7 +377,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ADD_FRONTEND_V2:
             case OperationType.OP_ADD_FIRST_FRONTEND_V2:
             case OperationType.OP_UPDATE_FRONTEND_V2:
-            case OperationType.OP_REMOVE_FRONTEND_V2: {
+            case OperationType.OP_REMOVE_FRONTEND_V2:
+            case OperationType.OP_RESET_FRONTENDS: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Frontend.class);
                 break;
             }
