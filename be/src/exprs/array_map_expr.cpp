@@ -66,7 +66,7 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
 template <bool all_const_input, bool independent_lambda_expr>
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
                                                        const std::vector<ColumnPtr>& input_elements,
-                                                       NullColumnPtr result_null_column) {
+                                                       const NullColumnPtr& result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
     // 1. evaluate outer common expressions
