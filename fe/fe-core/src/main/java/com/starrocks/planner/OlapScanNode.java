@@ -106,6 +106,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -188,6 +189,11 @@ public class OlapScanNode extends ScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    private boolean calcaulatedScanRange = false;
+
+    private long totalScanRangeBytes = 0;
+
+    // Constructs node to scan given data files of table 'tbl'.
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -641,6 +647,11 @@ public class OlapScanNode extends ScanNode {
             scanRangeLocations.setScan_range(scanRange);
 
             bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
+            if (!calcaulatedScanRange) {
+                long scanRangeSize = SizeEstimator.estimate(scanRangeLocations);
+                checkIfScanRangeNumSafe(scanRangeSize);
+                calcaulatedScanRange = true;
+            }
 
             result.add(scanRangeLocations);
         }
@@ -729,6 +740,32 @@ public class OlapScanNode extends ScanNode {
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
             }
         }
+    }
+
+    public void checkIfScanRangeNumSafe(long scanRangeSize) {
+        long totalPartitionNum = 0;
+        long totalTabletsNum = 0;
+        for (long partitionId : selectedPartitionIds) {
+            final Partition partition = olapTable.getPartition(partitionId);
+            List<PhysicalPartition> physicalPartitions = (List<PhysicalPartition>) partition.getSubPartitions();
+            totalPartitionNum += physicalPartitions.size();
+            for (PhysicalPartition physicalPartition : physicalPartitions) {
+                final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+                totalTabletsNum += selectedTable.getTablets().size();
+            }
+        }
+
+        totalScanRangeBytes = scanRangeSize * totalTabletsNum;
+        if (totalScanRangeBytes > 1024 * 1024) {
+            Runtime runtime = Runtime.getRuntime();
+            long freeMemory = runtime.freeMemory();
+            if (totalScanRangeBytes > freeMemory / 2) {
+                LOG.warn(
+                        "Try to allocate too many scan ranges for table {}, which may cause FE OOM, Partition Num:{}, tablet Num:{}, Scan Range Total Bytes:{}",
+                        olapTable.getName(), totalPartitionNum, totalTabletsNum, totalScanRangeBytes);
+            }
+        }
+
     }
 
     /**
