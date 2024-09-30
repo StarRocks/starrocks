@@ -55,7 +55,7 @@ void CompactionManager::schedule() {
     Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
 
     st = ThreadPoolBuilder("compact_pool")
-                 .set_max_threads(std::max(1, max_task_num()))
+                 .set_max_threads(std::max(1, _max_task_num))
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
