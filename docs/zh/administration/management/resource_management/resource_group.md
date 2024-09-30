@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
 # 资源隔离
