@@ -1694,4 +1694,257 @@ public:
     }
 };
 
+template <LogicalType LT, bool PositionEnabled, typename ReturnType>
+class ArrayContains {
+public:
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
+    using HashMap = phmap::flat_hash_map<CppType, size_t, HashFunc>;
+
+    struct ArrayContainsState {
+        size_t first_null_position = 0;
+        HashMap hash_map;
+    };
+
+    static Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope != FunctionContext::FRAGMENT_LOCAL) {
+            return Status::OK();
+        }
+        if (!context->is_notnull_constant_column(0)) {
+            return Status::OK();
+        }
+        auto* state = new ArrayContainsState();
+        context->set_function_state(scope, state);
+        if constexpr (!HashFunc::is_supported()) {
+            return Status::OK();
+        }
+        ColumnPtr column = context->get_constant_column(0);
+        ColumnPtr array_column = FunctionHelper::get_data_column_of_const(column);
+        _build_hash_table(array_column, state);
+
+        return Status::OK();
+    }
+
+    static Status close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            auto* state =
+                    reinterpret_cast<ArrayContainsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+            delete state;
+        }
+        return Status::OK();
+    }
+
+    static StatusOr<ColumnPtr> process(FunctionContext* context, const Columns& columns) {
+        if constexpr (!is_supported(LT)) {
+            return Status::NotSupported(fmt::format("not support type {}", LT));
+        }
+        if (columns[0]->only_null()) {
+            return columns[0];
+        }
+
+        const ColumnPtr& array_column = columns[0];
+        const ColumnPtr& target_column = columns[1];
+
+        bool is_const_array = array_column->is_constant();
+        ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
+        bool is_nullable_array = array_data_column->is_nullable();
+        NullColumnPtr array_null_column;
+        const NullColumn::ValueType* array_null_data = nullptr;
+        if (is_nullable_array) {
+            array_null_column = down_cast<NullableColumn*>(array_data_column.get())->null_column();
+            array_null_data = down_cast<NullableColumn*>(array_data_column.get())->null_column_data().data();
+            array_data_column = down_cast<NullableColumn*>(array_data_column.get())->data_column();
+        }
+
+        bool is_const_target = target_column->is_constant();
+        ColumnPtr target_data_column = FunctionHelper::get_data_column_of_const(target_column);
+        const NullColumn::ValueType* target_null_data = nullptr;
+        bool is_nullable_target = target_data_column->is_nullable();
+        if (is_nullable_target) {
+            target_null_data = down_cast<NullableColumn*>(target_data_column.get())->null_column_data().data();
+            target_data_column = down_cast<NullableColumn*>(target_data_column.get())->data_column();
+        }
+
+        auto process_func = [&]() -> StatusOr<ColumnPtr> {
+            if constexpr (HashFunc::is_supported()) {
+                if (is_const_array) {
+                    auto* state = reinterpret_cast<ArrayContainsState*>(
+                            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+                    if (UNLIKELY(state == nullptr)) {
+                        return Status::InternalError("array_contains get state failed");
+                    }
+                    return is_nullable_target ? _process_with_hash_table<true>(state, target_data_column,
+                                                                               target_null_data, is_const_target)
+                                              : _process_with_hash_table<false>(state, target_data_column,
+                                                                                target_null_data, is_const_target);
+                }
+            }
+
+            if (is_nullable_array && is_nullable_target) {
+                return _process_generic<true, true>(array_data_column, target_data_column, array_null_data,
+                                                    target_null_data, is_const_array, is_const_target);
+            } else if (is_nullable_array && !is_nullable_target) {
+                return _process_generic<true, false>(array_data_column, target_data_column, array_null_data,
+                                                     target_null_data, is_const_array, is_const_target);
+            } else if (!is_nullable_array && is_nullable_target) {
+                return _process_generic<false, true>(array_data_column, target_data_column, array_null_data,
+                                                     target_null_data, is_const_array, is_const_target);
+            } else {
+                return _process_generic<false, false>(array_data_column, target_data_column, array_null_data,
+                                                      target_null_data, is_const_array, is_const_target);
+            }
+        };
+
+        ASSIGN_OR_RETURN(ColumnPtr result_column, process_func());
+
+        // wrap nullable and const column for result
+        if (is_nullable_array) {
+            result_column = NullableColumn::create(std::move(result_column), array_null_column);
+            result_column->check_or_die();
+        }
+        if (is_const_array && is_const_target) {
+            result_column = ConstColumn::create(std::move(result_column), array_column->size());
+            result_column->check_or_die();
+        }
+        return result_column;
+    }
+
+private:
+    static constexpr bool is_supported(LogicalType type) {
+        return is_scalar_logical_type(type) || type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT;
+    }
+
+    static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {
+        DCHECK(!column->is_constant() && !column->is_nullable());
+        const ArrayColumn* array_column = down_cast<ArrayColumn*>(column.get());
+
+        const auto& elements_column = down_cast<NullableColumn*>(array_column->elements_column().get())->data_column();
+        const auto& null_column = down_cast<NullableColumn*>(array_column->elements_column().get())->null_column();
+        const auto& offsets_column = array_column->offsets_column();
+
+        const CppType* elements_data = reinterpret_cast<const CppType*>(elements_column->raw_data());
+        const NullColumn::ValueType* null_data = null_column->raw_data();
+        const UInt32Column::ValueType* offsets_data = offsets_column->get_data().data();
+        // column may be null
+        size_t offset = offsets_data[0];
+        size_t array_size = offsets_data[1] - offset;
+
+        for (size_t i = 0; i < array_size; i++) {
+            if (null_data[offset + i]) {
+                if (state->first_null_position == 0) {
+                    state->first_null_position = i + 1;
+                }
+                continue;
+            }
+            const auto& value = elements_data[offset + i];
+            if (!state->hash_map.contains(value)) {
+                state->hash_map[value] = i + 1;
+            }
+        }
+    }
+
+    template <bool NullableTarget>
+    static ColumnPtr _process_with_hash_table(ArrayContainsState* state, const ColumnPtr& targets,
+                                              const NullColumn::ValueType* targets_null_data, bool is_const_target) {
+        DCHECK(!targets->is_constant() && !targets->is_nullable()) << "targets should be real data column";
+
+        size_t num_rows = targets->size();
+        auto result_column = ReturnType::create();
+        // if target is const column, we only compute once
+        result_column->resize(is_const_target ? 1 : num_rows);
+        size_t result_size = result_column->size();
+
+        const CppType* target_data = reinterpret_cast<const CppType*>(targets->raw_data());
+        auto* result_data = result_column->get_data().data();
+
+        for (size_t i = 0; i < result_size; i++) {
+            if constexpr (NullableTarget) {
+                if (targets_null_data[i]) {
+                    result_data[i] = PositionEnabled ? state->first_null_position : (state->first_null_position != 0);
+                    continue;
+                }
+            }
+            const CppType& value = target_data[i];
+            auto iter = state->hash_map.find(value);
+            if (iter != state->hash_map.end()) {
+                result_data[i] = PositionEnabled ? iter->second : 1;
+            } else {
+                result_data[i] = 0;
+            }
+        }
+        return result_column;
+    }
+
+    template <bool NullableArray, bool NullableTarget>
+    static ColumnPtr _process_generic(const ColumnPtr& arrays, const ColumnPtr& targets,
+                                      const NullColumn::ValueType* arrays_null_data,
+                                      const NullColumn::ValueType* targets_null_data, bool is_const_array,
+                                      bool is_const_target) {
+        DCHECK(!arrays->is_constant() && !arrays->is_nullable() && arrays->is_array());
+        DCHECK(!targets->is_nullable() && !targets->is_constant());
+        if (!is_const_array && !is_const_target) {
+            DCHECK_EQ(arrays->size(), targets->size());
+        }
+
+        const auto& elements_column = down_cast<ArrayColumn*>(arrays.get())->elements_column();
+        const auto& elements = down_cast<NullableColumn*>(elements_column.get())->data_column();
+        const CppType* elements_data = reinterpret_cast<const CppType*>(elements->raw_data());
+        const NullColumn::ValueType* elements_null_data =
+                down_cast<NullableColumn*>(elements_column.get())->null_column()->get_data().data();
+
+        const auto& offsets_column = down_cast<ArrayColumn*>(arrays.get())->offsets_column();
+        const auto& offsets_data = offsets_column->get_data();
+
+        const CppType* targets_data = reinterpret_cast<const CppType*>(targets->raw_data());
+
+        // if both two columns are constant, we only compute the first row once
+        size_t num_rows = (is_const_array && is_const_target) ? 1 : std::max(arrays->size(), targets->size());
+        auto result_column = ReturnType::create();
+        result_column->resize(num_rows);
+        auto* result_data = result_column->get_data().data();
+
+        for (size_t i = 0; i < num_rows; i++) {
+            if constexpr (NullableArray) {
+                bool is_array_null = is_const_array ? arrays_null_data[0] : arrays_null_data[i];
+                if (is_array_null) {
+                    // if array is null, result will be null
+                    result_data[i] = 0;
+                    continue;
+                }
+            }
+            size_t offset = is_const_array ? offsets_data[0] : offsets_data[i];
+            size_t array_size =
+                    is_const_array ? offsets_data[1] - offsets_data[0] : offsets_data[i + 1] - offsets_data[i];
+
+            size_t position = 0;
+            if constexpr (NullableTarget) {
+                bool is_target_null = is_const_target ? targets_null_data[0] : targets_null_data[i];
+                if (is_target_null) {
+                    // if target is null, we should try to find null in array
+                    for (size_t j = 0; j < array_size; j++) {
+                        if (elements_null_data[offset + j]) {
+                            position = j + 1;
+                            break;
+                        }
+                    }
+                    result_data[i] = PositionEnabled ? position : (position != 0);
+                    continue;
+                }
+            }
+
+            // check non-null value one by one
+            size_t target_idx = is_const_target ? 0 : i;
+            for (size_t j = 0; j < array_size; j++) {
+                if (!elements_null_data[offset + j] && elements_data[offset + j] == targets_data[target_idx]) {
+                    position = j + 1;
+                    break;
+                }
+            }
+            result_data[i] = PositionEnabled ? position : (position != 0);
+        }
+        return result_column;
+    }
+};
+
 } // namespace starrocks
