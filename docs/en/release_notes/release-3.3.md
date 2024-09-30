@@ -10,6 +10,49 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.4
+
+Release date: September 30, 2024
+
+### New Features
+
+- Supports creating asynchronous materialized views on List Partition tables. [#46680](https://github.com/StarRocks/starrocks/pull/46680) [#46808](https://github.com/StarRocks/starrocks/pull/46808/files)
+- List Partition tables now support Nullable partition columns. [#47797](https://github.com/StarRocks/starrocks/pull/47797)
+- Supports viewing external file schema information using `DESC FILES()`. [#50527](https://github.com/StarRocks/starrocks/pull/50527)
+- Supports viewing replication task metrics via `SHOW PROC '/replications'`. [#50483](https://github.com/StarRocks/starrocks/pull/50483)
+
+### Improvements
+
+- Optimized data recycling performance for `TRUNCATE TABLE` in shared-data clusters. [#49975](https://github.com/StarRocks/starrocks/pull/49975)
+- Supports intermediate result spilling for CTE operators. [#47982](https://github.com/StarRocks/starrocks/pull/47982)
+- Supports adaptive phased scheduling to alleviate OOM issues caused by complex queries. [#47868](https://github.com/StarRocks/starrocks/pull/47868)
+- Supports predicate pushdown for STRING-type date or datatime columns in specific scenarios. [#50643](https://github.com/StarRocks/starrocks/pull/50643)
+- Supports COUNT DISTINCT computation on constant semi-structured data. [#48273](https://github.com/StarRocks/starrocks/pull/48273)
+- Added a new FE parameter `lake_enable_balance_tablets_between_workers` to enable tablet balancing for tables in shared-date clusters. [#50843](https://github.com/StarRocks/starrocks/pull/50843)
+- Enhanced query rewrite capabilities for generated columns. [#50398](https://github.com/StarRocks/starrocks/pull/50398)
+- Partial Update now supports automatically populating columns with default values of `CURRENT_TIMESTAMP`. [#50287](https://github.com/StarRocks/starrocks/pull/50287)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The error "version has been compacted" caused by an infinite loop on the FE side during Tablet Clone. [#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- ISO- formatted DATETIME types cannot be pushed down. [#49358](https://github.com/StarRocks/starrocks/pull/49358)
+- In concurrent scenarios, data still existed after the tablet was deleted. [#50382](https://github.com/StarRocks/starrocks/pull/50382)
+- Incorrect results returned by the `yearweek` function. [#51065](https://github.com/StarRocks/starrocks/pull/51065)
+- An issue with low cardinality dictionaries in ARRAY during CTE queries. [#51148](https://github.com/StarRocks/starrocks/pull/51148)
+- After FE restarts, partition TTL-related parameters were lost for materialized views. [#51028](https://github.com/StarRocks/starrocks/pull/51028)
+- Data loss in columns defined with `CURRENT_TIMESTAMP` after upgrading. [#50911](https://github.com/StarRocks/starrocks/pull/50911)
+- A stack overflow caused by the `array_distinct` function. [#51017](https://github.com/StarRocks/starrocks/pull/51017)
+- Activation failures for materialized views after upgrading due to changes in default field lengths. You can avoid such issues by setting `enable_active_materialized_view_schema_strict_check` to `false`. [#50869](https://github.com/StarRocks/starrocks/pull/50869)
+- Resource group property `cpu_weight` can be set to a negative value. [#51005](https://github.com/StarRocks/starrocks/pull/51005)
+- Incorrect statistics for disk capacity information. [#50669](https://github.com/StarRocks/starrocks/pull/50669)
+- Constant fold in the `replace` function. [#50828](https://github.com/StarRocks/starrocks/pull/50828)
+
+### Behavior Changes
+
+- Changed the default replica number for external catalog-based materialized views from `1` to the value of the FE parameter `default_replication_num` (Default value: `3`). [#50931](https://github.com/StarRocks/starrocks/pull/50931)
+
 ## 3.3.3
 
 Release date: September 5, 2024
@@ -89,6 +132,8 @@ Release date: August 8, 2024
 - Supports persisting PIPE metadata to prevent metadata loss due to FE restarts. [#48852](https://github.com/StarRocks/starrocks/pull/48852)
 
 ### Bug Fixes
+
+Fixed the following issues:
 
 - The process could not end when creating a dictionary from an FE Follower. [#47802](https://github.com/StarRocks/starrocks/pull/47802)
 - Inconsistent information returned by the SHOW PARTITIONS command in shared-data clusters and shared-nothing clusters. [#48647](https://github.com/StarRocks/starrocks/pull/48647)
