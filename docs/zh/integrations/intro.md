@@ -26,7 +26,7 @@ displayed_sidebar: docs
 
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
-[Apache Kafka](https://docs.starrocks.io/en-us/main/loading/RoutineLoad.md)
+[Apache Kafka](../loading/RoutineLoad.md)
 
 ## 集群管理
 
