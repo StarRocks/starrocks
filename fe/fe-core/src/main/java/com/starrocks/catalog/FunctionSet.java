@@ -739,6 +739,8 @@ public class FunctionSet {
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
+            .add(ARRAY_CONTAINS)
+            .add(ARRAY_POSITION)
             .build();
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()

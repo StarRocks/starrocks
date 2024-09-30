@@ -1,0 +1,47 @@
+-- name: test_array_contains_with_const
+CREATE TABLE t ( 
+pk bigint not null ,
+str string,
+arr_bigint array<bigint>,
+arr_str array<string>,
+arr_decimal array<decimal(38,5)>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t select generate_series, md5sum(generate_series), array_repeat(generate_series, 1000),array_repeat(md5sum(generate_series), 100), array_repeat(generate_series, 1000) from table(generate_series(0, 9999));
+insert into t values (10000, md5sum(10000), array_append(array_generate(1000), null), array_append(array_repeat(md5sum(10000),100), null),array_append(array_generate(1000),null));
+
+select array_contains([1,2,3,4], 1) from t order by pk limit 10;
+select array_position([1,2,3,4], 1) from t order by pk limit 10;
+select array_contains([1,2,3,4], null) from t order by pk limit 10;
+select array_position([1,2,3,4], null) from t order by pk limit 10;
+select array_contains([1,2,3,null], null) from t order by pk limit 10;
+select array_position([1,2,3,null], null) from t order by pk limit 10;
+select array_contains(null, null) from t order by pk limit 10;
+select array_position(null, null) from t order by pk limit 10;
+
+set @arr = array_generate(10000);
+select sum(array_contains(@arr, pk)) from t;
+select sum(array_contains(@arr, 100)) from t;
+select sum(array_position(@arr, pk)) from t;
+select sum(array_position(@arr, 100)) from t;
+select sum(array_contains(array_append(@arr, null), pk)) from t;
+select sum(array_contains(array_append(@arr, null), null)) from t;
+select sum(array_contains(arr_bigint, 100)) from t;
+select sum(array_position(arr_bigint, 100)) from t;
+select sum(array_contains(arr_str, md5sum(100))) from t;
+select sum(array_position(arr_str, md5sum(100))) from t;
+select sum(array_contains(arr_decimal, pk)) from t;
+select sum(array_position(arr_decimal, pk)) from t;
+select sum(array_contains(arr_decimal, 100)) from t;
+select sum(array_position(arr_decimal, 100)) from t;
+
+
+set @arr = array_repeat("abcdefg", 1000000);
+select sum(array_contains(@arr, "abcdefg")) from t;
+select sum(array_contains(@arr, str)) from t;
+
