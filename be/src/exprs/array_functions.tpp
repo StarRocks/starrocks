@@ -367,22 +367,6 @@ private:
 
         DCHECK(src_data_column->elements_column()->is_nullable());
 
-<<<<<<< HEAD
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
-                is_nullable = true;
-                has_null = (columns[i]->has_null() || has_null);
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
-                src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
-                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
-            } else {
-                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
-            }
-        }
-
-        HashSet hash_set;
-=======
->>>>>>> 20d8075551 ([Enhancement] Optimize performance of arrays_overlaping (#49668))
         for (size_t i = 0; i < chunk_size; i++) {
             result_data[i] = _check_column_overlap_nullable(*state.hash_set, *src_data_column, i, state.has_null);
         }
