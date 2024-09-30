@@ -61,13 +61,15 @@ protected:
     TypeDescriptor TYPE_ARRAY_DATE = array_type(TYPE_DATE);
     TypeDescriptor TYPE_ARRAY_DATETIME = array_type(TYPE_DATETIME);
 
-private:
+protected:
     template <typename CppType>
     void _check_array(const Buffer<CppType>& check_values, const DatumArray& value);
 
     template <typename CppType>
     void _check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
                                const DatumArray& value);
+
+    FunctionContext _ctx;
 };
 
 template <typename CppType>
@@ -3924,7 +3926,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint_with_nullable) {
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -3956,7 +3960,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint) {
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -3986,7 +3992,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint_with_nullable) {
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_BIGINT> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4018,7 +4026,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint) {
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_BIGINT> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4048,7 +4058,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_double_with_nullable) {
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_DOUBLE> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4080,7 +4092,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_double) {
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
     ArrayOverlap<LogicalType::TYPE_DOUBLE> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4110,7 +4124,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar_with_nullable) {
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
     ArrayOverlap<LogicalType::TYPE_VARCHAR> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4142,7 +4158,9 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
     ArrayOverlap<LogicalType::TYPE_VARCHAR> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2}).value();
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     ASSERT_TRUE(!dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
@@ -4163,9 +4181,11 @@ TEST_F(ArrayFunctionsTest, array_overlap_with_onlynull) {
     auto src_column2 = ColumnHelper::create_const_null_column(1);
 
     ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
-    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+    ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    auto dest_column = overlap.process(&_ctx, {src_column, src_column2});
+    ASSERT_TRUE(overlap.close(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-    ASSERT_TRUE(dest_column->only_null());
+    ASSERT_TRUE(dest_column->get()->only_null());
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_int) {

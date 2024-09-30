@@ -49,6 +49,16 @@ public:
     }
 
     template <LogicalType type>
+    static Status array_overlap_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayOverlap<type>::prepare(context, scope);
+    }
+
+    template <LogicalType type>
+    static Status array_overlap_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayOverlap<type>::close(context, scope);
+    }
+
+    template <LogicalType type>
     static StatusOr<ColumnPtr> array_intersect(FunctionContext* context, const Columns& columns) {
         return ArrayIntersect<type>::process(context, columns);
     }
