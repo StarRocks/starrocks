@@ -97,22 +97,8 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
-<<<<<<< HEAD
-=======
-option(WITH_TENANN "Build with TENANN" OFF)
-
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
-# Only support tenann on x86
-if (${WITH_TENANN} STREQUAL "ON" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    add_definitions(-DWITH_TENANN)
-else()
-    set(WITH_TENANN "OFF")
-endif()
-
-message(STATUS "WITH TENANN is: ${WITH_TENANN}")
-
->>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")

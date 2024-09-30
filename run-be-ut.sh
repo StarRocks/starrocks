@@ -179,12 +179,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
-<<<<<<< HEAD
-=======
-            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
-            -DSTARROCKS_JIT_ENABLE=ON \
             -DWITH_RELATIVE_SRC_PATH=OFF \
->>>>>>> a3c317bd77 ([Enhancement] Add option to choose relative path of BE's debug symbol (#51389))
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
