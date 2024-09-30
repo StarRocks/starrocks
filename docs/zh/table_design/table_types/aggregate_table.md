@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+keywords: ['juhe']
 ---
 
 # 聚合表

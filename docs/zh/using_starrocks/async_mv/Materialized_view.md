@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
-keywords: ['wuhua', 'Wuhuashitu']
+keywords: ['wuhua', 'Wuhuashitu', 'yibu']
 ---
 
 # 异步物化视图
