@@ -22,16 +22,28 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "column_ref.h"
 #include "exec/exec_node.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "lambda_function.h"
 
 namespace starrocks {
 
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx) {
+    std::unordered_set<SlotId> cur_arguments;
+    if (expr->is_lambda_function()) {
+        auto lambda_function = static_cast<LambdaFunction*>(expr);
+        RETURN_IF_ERROR(lambda_function->collect_lambda_argument_ids());
+        for (auto argument_id : lambda_function->get_lambda_arguments_ids()) {
+            cur_arguments.insert(argument_id);
+            ctx->lambda_arguments.insert(argument_id);
+        }
+    }
+
     int child_num = expr->get_num_children();
     std::vector<SlotId> slot_ids;
 
@@ -39,10 +51,11 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         auto child = expr->get_child(i);
 
         RETURN_IF_ERROR(extract_outer_common_exprs(state, child, ctx));
-        // if child is a slotref or a lambda function, we can't replace it.
-        if (child->is_slotref() || child->is_lambda_function()) {
+        // if child is a slotref or a lambda function or a literal, we can't replace it.
+        if (child->is_slotref() || child->is_lambda_function() || child->is_literal()) {
             continue;
         }
+
         slot_ids.clear();
         child->get_slot_ids(&slot_ids);
         bool is_independent = std::all_of(slot_ids.begin(), slot_ids.end(), [ctx](const SlotId& id) {
@@ -58,17 +71,17 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
             ctx->outer_common_exprs.insert({slot_id, child});
         }
     }
+    if (!cur_arguments.empty()) {
+        for (const auto id : cur_arguments) {
+            ctx->lambda_arguments.erase(id);
+        }
+    }
+
     return Status::OK();
 }
 
 Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExtractContext* ctx) {
-    RETURN_IF_ERROR(collect_lambda_argument_ids());
-    for (auto argument_id : _arguments_ids) {
-        ctx->lambda_arguments.insert(argument_id);
-    }
-
-    auto lambda_expr = _children[0];
-    RETURN_IF_ERROR(extract_outer_common_exprs(state, lambda_expr, ctx));
+    RETURN_IF_ERROR(extract_outer_common_exprs(state, this, ctx));
     return Status::OK();
 }
 
@@ -184,12 +197,22 @@ StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk
     return get_child(0)->evaluate_checked(context, chunk);
 }
 
+int LambdaFunction::get_slot_ids(std::vector<SlotId>* slot_ids) const {
+    if (_is_prepared) {
+        slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
+        slot_ids->insert(slot_ids->end(), _arguments_ids.begin(), _arguments_ids.end());
+        return _captured_slot_ids.size() + _arguments_ids.size();
+    } else {
+        return Expr::get_slot_ids(slot_ids);
+    }
+}
+
 std::string LambdaFunction::debug_string() const {
     std::stringstream out;
     auto expr_debug_string = Expr::debug_string();
     out << "LambaFunction (";
     for (int i = 0; i < _children.size(); i++) {
-        out << (i == 0 ? "lambda expr, " : "input argument, ") << _children[i]->debug_string();
+        out << (i == 0 ? "lambda expr: " : " input argument: ") << _children[i]->debug_string();
     }
     out << ")";
     return out.str();

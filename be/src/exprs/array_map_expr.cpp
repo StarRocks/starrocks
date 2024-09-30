@@ -54,7 +54,6 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
-
     for (auto [_, expr] : _outer_common_exprs) {
         RETURN_IF_ERROR(expr->prepare(state, context));
     }
@@ -77,7 +76,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     std::vector<SlotId> capture_slot_ids;
-    lambda_func->get_slot_ids(&capture_slot_ids);
+    lambda_func->get_captured_slot_ids(&capture_slot_ids);
 
     // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
@@ -370,6 +369,15 @@ std::string ArrayMapExpr::debug_string() const {
     }
     out << ")";
     return out.str();
+}
+
+int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
+    int num = Expr::get_slot_ids(slot_ids);
+    for (const auto& [slot_id, _] : _outer_common_exprs) {
+        slot_ids->push_back(slot_id);
+        num++;
+    }
+    return num;
 }
 
 } // namespace starrocks

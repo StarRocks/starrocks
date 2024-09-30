@@ -69,7 +69,7 @@ insert into t values (1, [1,2], [1,2],[2,3]), (2, [1,2], null, [2,3]), (3, [1,2]
 -- !result
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t;
 -- result:
-E: (1064, "Input array element's size is not equal in array_map().")
+[REGEX].*Input array element's size is not equal in array_map().*
 -- !result
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t where k != 5 order by k;
 -- result:
@@ -97,7 +97,7 @@ None
 -- !result
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1]) from t order by k;
 -- result:
-E: (1064, "Input array element's size is not equal in array_map().")
+[REGEX].*Input array element's size is not equal in array_map().*
 -- !result
 select array_map(x->x, arr_0) from t order by k;
 -- result:

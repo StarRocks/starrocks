@@ -45,17 +45,21 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    // the slot ids of lambda expression may be originally from the arguments of this lambda function
-    // or its parent lambda functions, or captured columns, remove the first one.
-    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
+
+    int get_captured_slot_ids(std::vector<SlotId>* slot_ids) const {
+        DCHECK(_is_prepared);
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
     }
 
-    int get_lambda_arguments_ids(std::vector<SlotId>* ids) {
+    int get_lambda_arguments_ids(std::vector<SlotId>* ids) const {
+        DCHECK(_is_prepared);
         ids->assign(_arguments_ids.begin(), _arguments_ids.end());
         return _arguments_ids.size();
     }
+
+    const std::vector<SlotId>& get_lambda_arguments_ids() const { return _arguments_ids; }
 
     bool is_lambda_function() const override { return true; }
     bool is_lambda_expr_independent() const { return _is_lambda_expr_independent; }

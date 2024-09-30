@@ -41,6 +41,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
     std::string debug_string() const override;
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
 
 private:
     template <bool all_const_input, bool independent_lambda_expr>
