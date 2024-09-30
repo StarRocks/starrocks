@@ -325,7 +325,8 @@ public:
             num_rows = std::max(num_rows, _ht_row_counts[i]);
         }
 
-        can_merge_in_filters = can_merge_in_filters && (num_rows <= 1024) && k >= 0;
+        can_merge_in_filters =
+                can_merge_in_filters && (num_rows <= config::max_pushdown_conditions_per_column) && k >= 0;
         if (!can_merge_in_filters) {
             _partial_in_filters[0].clear();
             return Status::OK();
