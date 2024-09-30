@@ -69,7 +69,7 @@ public:
      * if v1 is NullableColumn and v2 is NullableColumn, union
      * if v1 is NullableColumn and v2 is not NullableColumn, return v1.nullColumn
      * if v1 is not NullableColumn and v2 is NullableColumn, return v2.nullColumn
-     * if v1 is not NullableColumn and v2 is not NullableColumn, impossible
+     * if v1 is not NullableColumn and v2 is not NullableColumn, return nullptr
      * 
      * @param v1 
      * @param v2 
