@@ -38,7 +38,6 @@ NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const C
     } else if (v2->is_nullable()) {
         result = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone();
     } else {
-        DCHECK(false);
         return nullptr;
     }
 
