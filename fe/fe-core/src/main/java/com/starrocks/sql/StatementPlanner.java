@@ -142,6 +142,9 @@ public class StatementPlanner {
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
+        } catch (OutOfMemoryError e) {
+            LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
+            throw e;
         } catch (Throwable e) {
             if (stmt instanceof DmlStmt) {
                 abortTransaction((DmlStmt) stmt, session, e.getMessage());

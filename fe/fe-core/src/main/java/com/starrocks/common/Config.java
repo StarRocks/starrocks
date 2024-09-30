@@ -3189,4 +3189,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int thrift_max_recursion_depth = 64;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }
