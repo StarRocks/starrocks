@@ -22,6 +22,21 @@ namespace starrocks {
 class DataCacheUtils {
 public:
     static void set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics);
+
+    static Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit,
+                                                size_t* mem_size);
+
+    static int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
+                                                  int64_t disk_limit);
+
+    static Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
+                                                  bool ignore_broken_disk);
+
+    static Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path,
+                                                   const std::string& config_disk_size, bool ignore_broken_disk,
+                                                   std::vector<DirSpace>* disk_spaces);
+
+    static void clean_residual_datacache(const std::string& disk_path);
 };
 
 } // namespace starrocks
