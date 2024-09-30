@@ -3030,4 +3030,8 @@ public class Config extends ConfigBase {
     // backuped table is colocated
     @ConfField(mutable = true)
     public static boolean enable_colocate_restore = false;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }
