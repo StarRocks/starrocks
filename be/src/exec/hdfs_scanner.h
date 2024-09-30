@@ -122,6 +122,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
     RuntimeProfile::Counter* datacache_write_counter = nullptr;
