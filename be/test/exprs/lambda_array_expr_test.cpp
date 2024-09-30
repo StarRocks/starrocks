@@ -255,7 +255,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -331,7 +331,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
@@ -401,7 +401,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
-            lambda->get_slot_ids(&ids);
+            lambda->get_captured_slot_ids(&ids);
             lambda->get_lambda_arguments_ids(&arguments);
 
             ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
