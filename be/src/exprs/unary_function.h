@@ -101,7 +101,7 @@ public:
         result->resize(size);
         auto* r3 = result->get_data().data();
 
-        const auto& data_array = GetContainer<Type>().get_data(v1);
+        const auto& data_array = GetContainer<Type>::get_data(v1);
 
         if constexpr (lt_is_string<Type> || lt_is_binary<Type>) {
             for (int i = 0; i < size; ++i) {
