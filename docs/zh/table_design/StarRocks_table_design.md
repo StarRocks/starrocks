@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+keywords: ['linshi'] 
 ---
 
 # 表概览

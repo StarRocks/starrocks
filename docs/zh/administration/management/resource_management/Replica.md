@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['Fuben']
+keywords: ['Fuben', 'fuzai']
 ---
 
 # 管理副本
