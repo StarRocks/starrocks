@@ -475,6 +475,28 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
+    public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        LocalDate ld;
+        String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
+        try {
+            ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+        } catch (DateTimeParseException e) {
+            DatetimeContent dtContent = new DatetimeContent();
+            boolean parseSuccess = uncommonFormatStr(dateStr, fmtLiteral.getVarchar(), dtContent);
+            if (!parseSuccess) {
+                throw e;
+            }
+            builder = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d", false);
+            ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                    String.format("%04d", dtContent.getYear())
+                    + "-" + String.format("%02d", dtContent.getMonth())
+                    + "-" + String.format("%02d", dtContent.getDay())));
+        }
+        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+    }
+
     private static ConstantOperator strToDateFromDateTimeFormat(String dateStr, String fmt) {
         DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmt, false);
         LocalDateTime ldt;
@@ -1010,14 +1032,6 @@ public class ScalarOperatorFunctions {
             }
         }
         return pos;
-    }
-
-    @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
-    public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
-                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
-        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
