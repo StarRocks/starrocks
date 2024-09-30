@@ -22,27 +22,40 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "column_ref.h"
 #include "exec/exec_node.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "lambda_function.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx) {
-    std::unordered_set<SlotId> cur_arguments;
     if (expr->is_lambda_function()) {
         auto lambda_function = static_cast<LambdaFunction*>(expr);
         RETURN_IF_ERROR(lambda_function->collect_lambda_argument_ids());
         for (auto argument_id : lambda_function->get_lambda_arguments_ids()) {
-            cur_arguments.insert(argument_id);
             ctx->lambda_arguments.insert(argument_id);
         }
+        RETURN_IF_ERROR(lambda_function->collect_common_sub_exprs());
+        for (auto slot_id : lambda_function->get_common_sub_expr_ids()) {
+            ctx->common_sub_expr_ids.insert(slot_id);
+        }
     }
+
+    DeferOp defer([&]() {
+        if (expr->is_lambda_function()) {
+            auto lambda_function = static_cast<LambdaFunction*>(expr);
+            for (auto argument_id : lambda_function->get_lambda_arguments_ids()) {
+                ctx->lambda_arguments.erase(argument_id);
+            }
+            for (auto slot_id : lambda_function->get_common_sub_expr_ids()) {
+                ctx->common_sub_expr_ids.erase(slot_id);
+            }
+        }
+    });
 
     int child_num = expr->get_num_children();
     std::vector<SlotId> slot_ids;
@@ -59,7 +72,8 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         slot_ids.clear();
         child->get_slot_ids(&slot_ids);
         bool is_independent = std::all_of(slot_ids.begin(), slot_ids.end(), [ctx](const SlotId& id) {
-            return ctx->lambda_arguments.find(id) == ctx->lambda_arguments.end();
+            return ctx->lambda_arguments.find(id) == ctx->lambda_arguments.end() &&
+                   ctx->common_sub_expr_ids.find(id) == ctx->common_sub_expr_ids.end();
         });
 
         if (is_independent) {
@@ -69,11 +83,6 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
                     << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
             ctx->outer_common_exprs.insert({slot_id, child});
-        }
-    }
-    if (!cur_arguments.empty()) {
-        for (const auto id : cur_arguments) {
-            ctx->lambda_arguments.erase(id);
         }
     }
 
@@ -109,16 +118,13 @@ SlotId LambdaFunction::max_used_slot_id() const {
     return *std::max_element(ids.begin(), ids.end());
 }
 
-Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, context));
-    if (_is_prepared) {
+Status LambdaFunction::collect_common_sub_exprs() {
+    if (!_common_sub_expr_ids.empty()) {
         return Status::OK();
     }
-    _is_prepared = true;
 
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
-    RETURN_IF_ERROR(collect_lambda_argument_ids());
 
     // sorted common sub expressions so that the later expressions can reference the previous ones.
     for (auto i = child_num; i < child_num + _common_sub_expr_num; ++i) {
@@ -139,6 +145,18 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
                                                  _common_sub_expr.size(), _common_sub_expr_num));
     }
 
+    return Status::OK();
+}
+
+Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
+
+    RETURN_IF_ERROR(collect_lambda_argument_ids());
+    RETURN_IF_ERROR(collect_common_sub_exprs());
     // get slot ids from the lambda expression
     get_child(0)->get_slot_ids(&_captured_slot_ids);
 

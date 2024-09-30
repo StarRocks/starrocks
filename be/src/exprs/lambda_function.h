@@ -60,6 +60,7 @@ public:
     }
 
     const std::vector<SlotId>& get_lambda_arguments_ids() const { return _arguments_ids; }
+    const std::vector<SlotId>& get_common_sub_expr_ids() const { return _common_sub_expr_ids; }
 
     bool is_lambda_function() const override { return true; }
     bool is_lambda_expr_independent() const { return _is_lambda_expr_independent; }
@@ -71,6 +72,8 @@ public:
 
     struct ExtractContext {
         std::unordered_set<SlotId> lambda_arguments;
+        // slot id of common sub expr inside lambda expr
+        std::unordered_set<SlotId> common_sub_expr_ids;
         SlotId next_slot_id;
         std::map<SlotId, Expr*> outer_common_exprs;
     };
@@ -89,6 +92,7 @@ public:
 private:
     Status collect_lambda_argument_ids();
     Status collect_capture_slot_ids();
+    Status collect_common_sub_exprs();
     Status extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx);
 
     std::vector<SlotId> _captured_slot_ids;
