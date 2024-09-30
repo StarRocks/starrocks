@@ -376,7 +376,7 @@ unload_data_param::=
 查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
 
 ```Plain
-MySQL > SELECT * FROM FILES(
+SELECT * FROM FILES(
      "path" = "s3://inserttest/parquet/par-dup.parquet",
      "format" = "parquet",
      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -397,7 +397,7 @@ MySQL > SELECT * FROM FILES(
 将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
 
 ```Plain
-MySQL > INSERT INTO insert_wiki_edit
+INSERT INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
@@ -414,7 +414,7 @@ Query OK, 2 rows affected (23.03 sec)
 基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
 
 ```Plain
-MySQL > CREATE TABLE ctas_wiki_edit AS
+CREATE TABLE ctas_wiki_edit AS
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
@@ -546,21 +546,21 @@ PROPERTIES (
 将 Parquet 文件替换为含有同样数据的 CSV 文件，以上结果依然成立：
 
 ```Plain
-mysql> CREATE TABLE test_ctas_csv AS
-    -> SELECT * FROM FILES(
-    ->     "path" = "s3://inserttest/csv/*",
-    ->     "format" = "csv",
-    ->     "csv.column_separator"=",",
-    ->     "csv.row_delimiter"="\n",
-    ->     "csv.enclose"='"',
-    ->     "csv.skip_header"="1",
-    ->     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    ->     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-    ->     "aws.s3.region" = "us-west-2"
-    -> );
+CREATE TABLE test_ctas_csv AS
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/csv/*",
+    "format" = "csv",
+    "csv.column_separator"=",",
+    "csv.row_delimiter"="\n",
+    "csv.enclose"='"',
+    "csv.skip_header"="1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
 Query OK, 0 rows affected (30.90 sec)
 
-mysql> SHOW CREATE TABLE test_ctas_csv\G
+SHOW CREATE TABLE test_ctas_csv\G
 *************************** 1. row ***************************
        Table: test_ctas_csv
 Create Table: CREATE TABLE `test_ctas_csv` (
@@ -577,4 +577,41 @@ PROPERTIES (
 "replication_num" = "3"
 );
 1 row in set (0.27 sec)
+```
+
+#### 示例七
+
+使用 DESC 查看 AWS S3 中 Parquet 文件 `lineorder` 的 Schema 信息。
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
 ```
