@@ -66,6 +66,7 @@ class JITContext;
 class JITExpr;
 struct JitScore;
 struct LLVMDatum;
+class LambdaFunction;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -119,6 +120,8 @@ public:
 
     bool is_monotonic() const { return _is_monotonic; }
     bool is_cast_expr() const { return _node_type == TExprNodeType::CAST_EXPR; }
+    virtual bool is_lambda_function() const { return false; }
+    virtual bool is_literal() const { return false; }
 
     // In most time, this field is passed from FE
     // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
@@ -197,6 +200,7 @@ public:
     static void close(const std::vector<Expr*>& exprs);
 
     virtual std::string debug_string() const;
+
     static std::string debug_string(const std::vector<Expr*>& exprs);
     static std::string debug_string(const std::vector<ExprContext*>& ctxs);
 
@@ -270,6 +274,8 @@ protected:
     friend class Literal;
     friend class ExprContext;
     friend class ColumnPredicateRewriter;
+    friend class LambdaFunction;
+    friend class ArrayMapExpr;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
