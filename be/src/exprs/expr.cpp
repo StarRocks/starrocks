@@ -73,6 +73,7 @@
 #include "exprs/match_expr.h"
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
