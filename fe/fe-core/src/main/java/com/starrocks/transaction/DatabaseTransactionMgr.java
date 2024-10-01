@@ -613,8 +613,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitPreparedTransaction(transactionState, db);
-            txnOperated = true;
+            txnOperated = unprotectedCommitPreparedTransaction(transactionState, db);
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -627,14 +626,16 @@ public class DatabaseTransactionMgr {
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
-        // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
-        try {
-            updateCatalogAfterCommitted(transactionState, db);
-        } finally {
-            updateCatalogAfterCommittedSpan.end();
+        if (txnOperated) {
+            // 6. update nextVersion because of the failure of persistent transaction resulting in error version
+            Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
+            try {
+                updateCatalogAfterCommitted(transactionState, db);
+            } finally {
+                updateCatalogAfterCommittedSpan.end();
+            }
+            LOG.info("transaction:[{}] successfully committed", transactionState);
         }
-        LOG.info("transaction:[{}] successfully committed", transactionState);
         return waiter;
     }
 
@@ -1155,10 +1156,10 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
+    protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
         // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
-            return;
+            return false;
         }
         // commit timestamps needs to be strictly monotonically increasing
         long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
@@ -1212,6 +1213,7 @@ public class DatabaseTransactionMgr {
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
+        return true;
     }
 
     // for add/update/delete TransactionState
