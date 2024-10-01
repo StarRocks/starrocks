@@ -16,7 +16,9 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
+#include "column/nullable_column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
@@ -34,8 +36,19 @@ public:
     // for tests
     explicit ArrayMapExpr(TypeDescriptor type);
 
+    Status prepare(RuntimeState* state, ExprContext* context) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    std::string debug_string() const override;
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
+
+private:
+    template <bool all_const_input, bool independent_lambda_expr>
+    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
+                                             const std::vector<ColumnPtr>& arguments, const NullColumnPtr& null_column);
+
+    // use map to make sure the order of execution
+    std::map<SlotId, Expr*> _outer_common_exprs;
 };
 } // namespace starrocks
