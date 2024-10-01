@@ -133,6 +133,7 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
 }
 
 void Chunk::append_column(ColumnPtr column, SlotId slot_id) {
+    DCHECK(!_slot_id_to_index.contains(slot_id));
     _slot_id_to_index[slot_id] = _columns.size();
     _columns.emplace_back(std::move(column));
     check_or_die();
