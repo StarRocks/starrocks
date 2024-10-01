@@ -177,6 +177,7 @@ public:
         }
         return dest;
     }
+
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 

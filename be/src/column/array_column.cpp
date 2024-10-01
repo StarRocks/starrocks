@@ -18,7 +18,9 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/function_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -615,5 +617,85 @@ Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type)
     _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
     return Status::OK();
 }
+
+size_t ArrayColumn::get_total_elements_num(const NullColumnPtr& null_column) const {
+    if (null_column == nullptr) {
+        return _elements->size();
+    }
+    DCHECK_LE(_offsets->size() - 1, null_column->size());
+    size_t elements_num = 0;
+    size_t num_rows = _offsets->size() - 1;
+    const auto& null_data = null_column->get_data();
+    for (size_t i = 0; i < num_rows; i++) {
+        if (!null_data[i]) {
+            elements_num += _offsets->get_data()[i + 1] - _offsets->get_data()[i];
+        }
+    }
+    return elements_num;
+}
+
+template <bool ConstV1, bool ConstV2, bool IgnoreNull>
+bool ArrayColumn::compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
+                                               const NullColumnPtr& null_column) {
+    [[maybe_unused]] uint8_t* null_data = nullptr;
+    if constexpr (!IgnoreNull) {
+        null_data = null_column->get_data().data();
+    }
+
+    size_t num_rows = v1.size() - 1;
+    if constexpr (ConstV1 && ConstV2) {
+        // if both are const column, we only compare the first row once
+        num_rows = 1;
+    }
+    bool result = true;
+    const auto& offsets_v1 = v1.get_data();
+    const auto& offsets_v2 = v2.get_data();
+
+    for (size_t i = 0; i < num_rows && result; i++) {
+        [[maybe_unused]] uint32_t len1 =
+                (ConstV1) ? (offsets_v1[1] - offsets_v1[0]) : (offsets_v1[i + 1] - offsets_v1[i]);
+        [[maybe_unused]] uint32_t len2 =
+                (ConstV2) ? (offsets_v2[1] - offsets_v2[0]) : (offsets_v2[i + 1] - offsets_v2[i]);
+        if constexpr (IgnoreNull) {
+            result &= (len1 == len2);
+        } else {
+            if (!null_data[i]) {
+                result &= (len1 == len2);
+            }
+        }
+    }
+    return result;
+}
+
+template <bool IgnoreNull>
+bool ArrayColumn::is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2,
+                                             const NullColumnPtr& null_column) {
+    DCHECK(v1->is_array() && v2->is_array());
+    DCHECK(!v1->is_nullable() && !v2->is_nullable());
+
+    if (v1->size() != v2->size()) {
+        return false;
+    }
+    auto data_v1 = FunctionHelper::get_data_column_of_const(v1);
+    auto data_v2 = FunctionHelper::get_data_column_of_const(v2);
+    auto* array_v1 = down_cast<ArrayColumn*>(data_v1.get());
+    auto* array_v2 = down_cast<ArrayColumn*>(data_v2.get());
+    const auto& offsets_v1 = array_v1->offsets();
+    const auto& offsets_v2 = array_v2->offsets();
+    if (v1->is_constant() && v2->is_constant()) {
+        return compare_lengths_from_offsets<true, true, IgnoreNull>(offsets_v1, offsets_v2, null_column);
+    } else if (v1->is_constant() && !v2->is_constant()) {
+        return compare_lengths_from_offsets<true, false, IgnoreNull>(offsets_v1, offsets_v2, null_column);
+    } else if (!v1->is_constant() && v2->is_constant()) {
+        return compare_lengths_from_offsets<false, true, IgnoreNull>(offsets_v1, offsets_v2, null_column);
+    }
+
+    return compare_lengths_from_offsets<false, false, IgnoreNull>(offsets_v1, offsets_v2, null_column);
+}
+
+template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                            const NullColumnPtr& null_data);
+template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                             const NullColumnPtr& null_data);
 
 } // namespace starrocks
