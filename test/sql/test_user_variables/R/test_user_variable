@@ -47,3 +47,66 @@ select /*+ SET_USER_VARIABLE(@var2 = (select count(*) from (select l.c0 from t0 
 -- result:
 40960
 -- !result
+CREATE TABLE `always1` (
+  `c0` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into always1 values(1);
+-- result:
+-- !result
+CREATE TABLE `alwaysnull` (
+  `c0` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into alwaysnull values(null);
+-- result:
+-- !result
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a) is not null  from t0;
+-- result:
+1
+-- !result
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from alwaysnull)) */ percentile_approx(c0, @a)  from t0;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the second parameter's type is numeric type.")
+-- !result
+select      percentile_approx(c0, cast(null as double))  from t0;
+-- result:
+[REGEX] .*percentile_approx the second argument is expected to be non-null.*
+-- !result
+CREATE TABLE `pk1` (
+  `c0` int(11) COMMENT "",
+  `dt` int(11) COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into pk1 values (1,1);
+-- result:
+-- !result
+with cte as (select* from pk1)
+update /*+ set_user_variable(@a = (select 2)) */ pk1 set dt = @a where c0 = 1;
+-- result:
+-- !result
+select * from pk1;
+-- result:
+1	2
+-- !result
