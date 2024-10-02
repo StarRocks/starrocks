@@ -37,12 +37,8 @@ public:
     std::string jit_func_name_impl(RuntimeState* state) const override;
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
-<<<<<<< HEAD
 
-=======
-#endif
     bool is_literal() const override { return true; }
->>>>>>> e9eedcdd0a ([Enhancement] refactor array_map's implementation (#51244))
     std::string debug_string() const override;
 
 private:
