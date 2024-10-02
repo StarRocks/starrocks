@@ -78,5 +78,3 @@ VALUES
     x -> CAST(x AS STRING), 
     ARRAY_GENERATE(1, 1000)
 ));
-
-
