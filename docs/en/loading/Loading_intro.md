@@ -5,7 +5,7 @@ toc_max_heading_level: 3
 
 # Overview of data loading
 
-import InsertPrivNote from '../../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 Data loading is the process of cleansing and transforming raw data from various data sources based on your business requirements and loading the resulting data into StarRocks to facilitate blazing-fast data analytics.
 
