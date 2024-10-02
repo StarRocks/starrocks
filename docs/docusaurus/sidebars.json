@@ -137,7 +137,7 @@
                         "id": "loading/loading_introduction/loading_overview"
                     },
                     "items": [
-                        "loading/loading_introduction/Loading_intro",
+                        "loading/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
                         "loading/loading_introduction/loading_considerations",
                         "loading/loading_introduction/feature-support-loading-and-unloading"
