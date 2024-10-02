@@ -19,11 +19,7 @@ StarRocks supports two communication protocols that can be used to submit load j
 
 ## Supported data types
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
-StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../../sql-reference/data-types/numeric/BIGINT.md).
-=======
-![Loading options overview](../_assets/loading_intro_overview.png)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
+StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../sql-reference/data-types/numeric/BIGINT.md).
 
 ## Loading modes
 
@@ -37,7 +33,7 @@ StarRocks supports two loading modes: synchronous loading mode and asynchronous 
 
 In synchronous loading mode, after you submit a load job, StarRocks synchronously runs the job to load data, and returns the result of the job after the job finishes. You can check whether the job is successful based on the job result.
 
-StarRocks provides two loading methods that support synchronous loading: [Stream Load](../../loading/StreamLoad.md) and [INSERT](../../loading/InsertInto.md).
+StarRocks provides two loading methods that support synchronous loading: [Stream Load](./StreamLoad.md) and [INSERT](./InsertInto.md).
 
 The process of synchronous loading is as follows:
 
@@ -55,7 +51,7 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 - If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information.
 
-StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
+StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 The process of asynchronous loading is as follows:
 
@@ -69,7 +65,7 @@ The process of asynchronous loading is as follows:
 
 The workflow of a Broker Load or Spark Load job consists of five stages, as shown in the following figure.
 
-![Broker Load or Spark Load overflow](../../_assets/4.1-1.png)
+![Broker Load or Spark Load overflow](../_assets/4.1-1.png)
 
 The workflow is described as follows:
 
@@ -110,11 +106,7 @@ The workflow of a Routine job is described as follows:
 
 ## Loading methods
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
-StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md).
-=======
-### [Insert](InsertInto.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
+StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
 
 | Loading method     | Data source                                        | Business scenario                                            | Data volume per load job                                     | Data file format                                | Loading mode | Protocol |
 | ------------------ | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------- | ------------ | -------- |
@@ -127,39 +119,31 @@ StarRocks provides five loading methods to help you load data in various busines
 
 You can determine the loading method of your choice based on your business scenario, data volume, data source, data file format, and loading frequency. Additionally, take note of the following points when you select a loading method:
 
-- When you load data from Kafka, we recommend that you use [Routine Load](../../loading/RoutineLoad.md). However, if the data requires multi-table joins and extract, transform and load (ETL) operations, you can use Apache Flink® to read and pre-process the data from Kafka and then use [flink-connector-starrocks](../../loading/Flink-connector-starrocks.md) to load the data into StarRocks.
+- When you load data from Kafka, we recommend that you use [Routine Load](./RoutineLoad.md). However, if the data requires multi-table joins and extract, transform and load (ETL) operations, you can use Apache Flink® to read and pre-process the data from Kafka and then use [flink-connector-starrocks](./Flink-connector-starrocks.md) to load the data into StarRocks.
 
-- When you load data from Hive, Iceberg, Hudi, or Delta Lake, we recommend that you create a [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../../data_source/catalog/hudi_catalog.md), or [Delta Lake Catalog](../../data_source/catalog/deltalake_catalog.md) and then use [INSERT](../../loading/InsertInto.md) to load the data.
+- When you load data from Hive, Iceberg, Hudi, or Delta Lake, we recommend that you create a [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../data_source/catalog/hudi_catalog.md), or [Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md) and then use [INSERT](./InsertInto.md) to load the data.
 
-- When you load data from another StarRocks cluster or from an Elasticsearch cluster, we recommend that you create a [StarRocks external table](../../data_source/External_table.md#starrocks-external-table) or an [Elasticsearch external table](../../data_source/External_table.md#deprecated-elasticsearch-external-table) and then use [INSERT](../../loading/InsertInto.md) to load the data.
+- When you load data from another StarRocks cluster or from an Elasticsearch cluster, we recommend that you create a [StarRocks external table](../data_source/External_table.md#starrocks-external-table) or an [Elasticsearch external table](../data_source/External_table.md#deprecated-elasticsearch-external-table) and then use [INSERT](./InsertInto.md) to load the data.
 
   > **NOTICE**
   >
   > StarRocks external tables only support data writes. They do not support data reads.
 
-- When you load data from MySQL databases, we recommend that you create a [MySQL external table](../../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT](../../loading/InsertInto.md) to load the data. If you want to load data in real time, we recommend that you load the data by following the instructions provided in [Realtime synchronization from MySQL](../../loading/Flink_cdc_load.md).
+- When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT](./InsertInto.md) to load the data. If you want to load data in real time, we recommend that you load the data by following the instructions provided in [Realtime synchronization from MySQL](./Flink_cdc_load.md).
 
-- When you load data from other data sources such as Oracle, PostgreSQL, and SQL Server, we recommend that you create a [JDBC external table](../../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT](../../loading/InsertInto.md) to load the data.
+- When you load data from other data sources such as Oracle, PostgreSQL, and SQL Server, we recommend that you create a [JDBC external table](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT](./InsertInto.md) to load the data.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
-=======
-### [Stream Load](StreamLoad.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
-![Data loading sources](../../_assets/4.1-3.png)
+![Data loading sources](../_assets/4.1-3.png)
 
 ## Memory limits
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
-The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
-=======
-### [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
+The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), and [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
 
-StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](../../loading/loading_introduction/Loading_intro.md#system-configurations)" section of this topic.
+StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](#system-configurations)" section of this topic.
 
 ## Usage notes
 
@@ -167,13 +151,9 @@ StarRocks also provides parameters for you to limit the total memory usage of al
 
 When you load data, you can choose not to load the data from a specific field of your data file:
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 - If you have specified the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills the specified default value into the destination column.
-=======
-### [Pipe](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
-  [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
+  [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
 
   > **NOTE**
   >
@@ -185,27 +165,19 @@ When you load data, you can choose not to load the data from a specific field of
   >
   > If the destination column is defined as `NOT NULL`, the load fails.
 
-  For [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
+  For [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
 
-For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
+For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 ### Set write quorum for data loading
-=======
-### [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
-If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md). This property is supported from v2.5.
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md). This property is supported from v2.5.
 
 ## System configurations
 
 This section describes some parameter configurations that are applicable to all of the loading methods provided by StarRocks.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 ### FE configurations
-=======
-### [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
 You can configure the following parameters in the configuration file **fe.conf** of each FE:
 
@@ -221,65 +193,41 @@ You can configure the following parameters in the configuration file **fe.conf**
   
   This parameter specifies the maximum number of ongoing load transactions that are allowed in each database of your StarRocks cluster. A load job can contain one or more transactions. The default value is **100**. When the number of load transactions running in a database reaches the maximum number that you specify, the subsequent load jobs that you submit are not scheduled. In this situation, if you submit a synchronous load job, the job is rejected. If you submit an asynchronous load job, the job is held waiting in queue.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
   > **NOTE**
   >
   > StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
-=======
-### [Kafka connector](Kafka-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
 - `label_keep_max_second`
   
   This parameter specifies the retention period of the history records for load jobs that have finished and are in the **FINISHED** or **CANCELLED** state. The default retention period spans 3 days. This parameter is valid for both synchronous load jobs and asynchronous load jobs.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 ### BE configurations
-=======
-### [Spark connector](Spark-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
 You can configure the following parameters in the configuration file **be.conf** of each BE:
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 - `write_buffer_size`
   
   This parameter specifies the maximum memory block size. The default size is 100 MB. The loaded data is first written to a memory block on the BE. When the amount of data that is loaded reaches the maximum memory block size that you specify, the data is flushed to disk. You must specify a proper maximum memory block size based on your business scenario.
-=======
-### [Flink connector](Flink-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
   - If the maximum memory block size is exceedingly small, a large number of small files may be generated on the BE. In this case, query performance degrades. You can increase the maximum memory block size to reduce the number of files generated.
   - If the maximum memory block size is exceedingly large, remote procedure calls (RPCs) may time out. In this case, you can adjust the value of this parameter based on your business needs.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 - `streaming_load_rpc_max_alive_time_sec`
   
   The waiting timeout period for each Writer process. The default value is 600 seconds. During the data loading process, StarRocks starts a Writer process to receive data from and write data to each tablet. If a Writer process does not receive any data within the waiting timeout period that you specify, StarRocks stops the Writer process. When your StarRocks cluster processes data at low speeds, a Writer process may not receive the next batch of data within a long period of time and therefore reports a "TabletWriter add batch with unknown id" error. In this case, you can increase the value of this parameter.
-=======
-### [SMT](../integrations/loading_tools/SMT.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
 - `load_process_max_memory_limit_bytes` and `load_process_max_memory_limit_percent`
   
   These parameters specify the maximum amount of memory that can be consumed for all load jobs on each individual BE. StarRocks identifies the smaller memory consumption among the values of the two parameters as the final memory consumption that is allowed.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
   - `load_process_max_memory_limit_bytes`: specifies the maximum memory size. The default maximum memory size is 100 GB.
   - `load_process_max_memory_limit_percent`: specifies the maximum memory usage. The default value is 30%. This parameter differs from the `mem_limit` parameter. The `mem_limit` parameter specifies the total maximum memory usage of your StarRocks cluster, and the default value is 90% x 90%.
-=======
-### [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
     If the memory capacity of the machine on which the BE resides is M, the maximum amount of memory that can be consumed for load jobs is calculated as follows: `M x 90% x 90% x 30%`.
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
 ### System variable configurations
-=======
-### [CloudCanal](../integrations/loading_tools/CloudCanal.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
 
-You can configure the following [system variable](../../sql-reference/System_variable.md):
+You can configure the following [system variable](../sql-reference/System_variable.md):
 
 - `query_timeout`
 
@@ -287,68 +235,4 @@ You can configure the following [system variable](../../sql-reference/System_var
 
 ## Troubleshooting
 
-<<<<<<< HEAD:docs/en/loading/loading_introduction/Loading_intro.md
-For more information, see [FAQ about data loading](../../faq/loading/Loading_faq.md).
-=======
-### [Stream Load transaction interface](Stream_Load_transaction_interface.md)
-
-**Business scenario:** Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
-
-**File format:** CSV and JSON
-
-**Data volume:** 10 GB or less
-
-## Choice of loading options
-
-This section lists the loading options available for common data sources, helping you choose the option that best suits your situation.
-
-### Object storage
-
-| **Data source**                       | **Available loading options**                                |
-| ------------------------------------- | ------------------------------------------------------------ |
-| AWS S3                                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.1)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from AWS S3](s3.md). |
-| Microsoft Azure Storage               | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from Microsoft Azure Storage](azure.md). |
-| Google GCS                            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from GCS](gcs.md). |
-| S3-compatible storage (such as MinIO) | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from MinIO](minio.md). |
-
-### Local file system (including NAS)
-
-| **Data source**                   | **Available loading options**                                |
-| --------------------------------- | ------------------------------------------------------------ |
-| Local file system (including NAS) | <ul><li>(Batch) Stream Load</li><li>(Batch) Broker Load</li></ul>See [Load data from a local file system](StreamLoad.md). |
-
-### HDFS
-
-| **Data source** | **Available loading options**                                |
-| --------------- | ------------------------------------------------------------ |
-| HDFS            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from HDFS](hdfs_load.md). |
-
-### Flink, Kafka, and Spark
-
-| **Data source** | **Available loading options**                                |
-| --------------- | ------------------------------------------------------------ |
-| Apache Flink®   | <ul><li>[Flink connector](Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](Stream_Load_transaction_interface.md)</li></ul> |
-| Apache Kafka®   | <ul><li>(Streaming) [Kafka connector](Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](RoutineLoad.md)</li><li>[Stream Load transaction interface](Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>If the source data requires multi-table joins and extract, transform and load (ETL) operations, you can use Flink to read and pre-process the data and then use [Flink connector](Flink-connector-starrocks.md) to load the data into StarRocks. |
-| Apache Spark™   | <ul><li>[Spark connector](Spark-connector-starrocks.md)</li><li>[Spark Load](SparkLoad.md)</li></ul> |
-
-### Data lakes
-
-| **Data source** | **Available loading options**                                |
-| --------------- | ------------------------------------------------------------ |
-| Apache Hive™    | <ul><li>(Batch) Create a [Hive catalog](../data_source/catalog/hive_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Batch) [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/).</li></ul> |
-| Apache Iceberg  | (Batch) Create an [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Apache Hudi     | (Batch) Create a [Hudi catalog](../data_source/catalog/hudi_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Delta Lake      | (Batch) Create a [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Elasticsearch   | (Batch) Create an [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Apache Paimon   | (Batch) Create a [Paimon catalog](../data_source/catalog/paimon_catalog.md) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-
-Note that StarRocks provides [unified catalogs](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/) from v3.2 onwards to help you handle tables from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source without ingestion.
-
-### Internal and external databases
-
-| **Data source**                                              | **Available loading options**                                |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| StarRocks                                                    | (Batch) Create a [StarRocks external table](../data_source/External_table.md#starrocks-external-table) and then use [INSERT INTO VALUES](InsertInto.md#insert-data-via-insert-into-values) to insert a few data records or [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) to insert the data of a table.<br/>**NOTE**<br/>StarRocks external tables only support data writes. They do not support data reads. |
-| MySQL                                                        | <ul><li>(Batch) Create a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) (recommended) or a [MySQL external table](../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](Flink_cdc_load.md).</li></ul> |
-| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | <ul><li>(Batch) Create a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) (recommended) or a [JDBC external table](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](loading_tools.md).</li></ul> |
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/en/loading/Loading_intro.md
+For more information, see [FAQ about data loading](../faq/loading/Loading_faq.md).

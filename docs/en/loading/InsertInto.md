@@ -119,11 +119,7 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
-<<<<<<< HEAD
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](../loading/loading_introduction/Loading_intro.md) for other options that suit your scenarios.
-=======
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583))
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](./Loading_intro.md) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -219,11 +215,7 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
-<<<<<<< HEAD
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](../loading/loading_introduction/Loading_intro.md) for other options that suit your scenarios.
-=======
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583))
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Ingestion Overview](./Loading_intro.md) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 

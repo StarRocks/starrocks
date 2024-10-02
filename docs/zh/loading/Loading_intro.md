@@ -16,17 +16,13 @@ StarRocks 提供两种访问协议用于提交导入作业：MySQL 协议和 HTT
 
 > **注意**
 >
-> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 支持的数据类型
 
-StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/data-types/numeric/BIGINT.md)。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../sql-reference/data-types/numeric/BIGINT.md)。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 ## 导入模式
-=======
-![Loading options overview](../_assets/loading_intro_overview.png)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
 StarRocks 支持两种导入模式：同步导入和异步导入。
 
@@ -70,7 +66,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![Broker Load 和 Spark Load 流程图](../../_assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](../_assets/4.1-1.png)
 
 每个阶段的描述如下：
 
@@ -112,11 +108,7 @@ Routine Load 导入作业的执行流程描述如下：
 
 ## 导入方式
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
-StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、 [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
-=======
-### [Insert](InsertInto.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
+StarRocks 提供 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、 [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)、[Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
 | 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
@@ -129,37 +121,29 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
-- 从 Kafka 导入数据时，推荐使用 [Routine Load](../../loading/RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
+- 从 Kafka 导入数据时，推荐使用 [Routine Load](./RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](./Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
 
-- 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。
+- 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。
 
-- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../../data_source/External_table.md#deprecated-elasticsearch-外部表)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
+- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../data_source/External_table.md#deprecated-elasticsearch-外部表)，然后使用 [INSERT](./InsertInto.md) 实现导入。或者，您也可以通过 [DataX](./DataX-starrocks-writer.md) 实现导入。
 
   > **注意**
   >
   > StarRocks 外表只支持数据写入，不支持数据读取。
 
-- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../../data_source/External_table.md#deprecated-mysql-外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../../loading/Flink_cdc_load.md) 实现导入。
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)、然后使用 [INSERT](./InsertInto.md) 实现导入。或者，您也可以通过 [DataX](./DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](./Flink_cdc_load.md) 实现导入。
 
-- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
+- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](./InsertInto.md) 实现导入。或者，您也可以通过 [DataX](./DataX-starrocks-writer.md) 实现导入。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
-=======
-### [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
-![数据源与导入方式关系图](../../_assets/4.1-3.png)
+![数据源与导入方式关系图](../_assets/4.1-3.png)
 
 ## 内存限制
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/hdfs_load.md)、[Routine Load](../../loading/RoutineLoad.md)、[Spark Load](../../loading/SparkLoad.md) 和 [INSERT](../../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
-=======
-### [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](./StreamLoad.md)、[Broker Load](./hdfs_load.md)、[Routine Load](./RoutineLoad.md)、[Spark Load](./SparkLoad.md) 和 [INSERT](./InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
 您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](#系统配置)”章节。
 
@@ -169,13 +153,9 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
 
 导入数据时，您可以指定不导入数据文件中某个字段的数据，这种情况下：
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 - 如果您在创建 StarRocks 表时使用 `DEFAULT` 关键字给该字段对应的目标列指定了默认值，则 StarRocks 在导入时该行数据时会自动往该列填充 `DEFAULT` 中指定的默认值。
-=======
-### [Pipe](../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
-  [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
+  [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
 
   > **说明**
   >
@@ -187,27 +167,19 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
   >
   > 如果该列在建表时定义该列为 `NOT NULL`，则导入会报错，作业失败。
 
-  对于 [Stream Load](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
+  对于 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
-有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 ### 设置数据导入安全等级
-=======
-### [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 ## 系统配置
 
 本节解释对所有导入方式均适用的参数配置。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 ### FE 配置
-=======
-### [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
 您可以通过修改每个 FE 的配置文件 **fe.conf** 来设置如下参数：
 
@@ -217,53 +189,29 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
 
 - `desired_max_waiting_jobs`
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
   等待队列可以容纳的导入作业的最大个数，默认值为 1024 (2.4 及之前版本默认值为 100；2.5 及以后版本默认值变为 1024)。如果 FE 中处于 **PENDING** 状态的导入作业数目达到最大个数限制时，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。
-=======
-### [Kafka connector](Kafka-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
 - `max_running_txn_num_per_db`
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
   StarRocks 集群每个数据库中正在进行的导入事务的最大个数（一个导入作业可能包含多个事务），默认值为 1000 （自 3.1 版本起，默认值由 100 变为 1000。）。当数据库中正在运行的导入事务达到最大个数限制时，后续提交的导入作业不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。
-=======
-### [Spark connector](Spark-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
   > **说明**
   >
   > 所有模式的作业均包含在内、统一计数。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 - `label_keep_max_second`
-=======
-### [Flink connector](Flink-connector-starrocks.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
   已经完成、且处于 **FINISHED** 或 **CANCELLED** 状态的导入作业记录在 StarRocks 系统的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 ### BE 配置
-=======
-### [SMT](../integrations/loading_tools/SMT.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
 您可以通过修改每个 BE 的配置文件 **be.conf** 来设置如下参数：
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 - `write_buffer_size`
-=======
-### [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
   BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候可以适当地调整该参数的取值。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
 - `streaming_load_rpc_max_alive_time_sec`
-=======
-### [CloudCanal](../integrations/loading_tools/CloudCanal.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
   指定了 Writer 进程的等待超时时间，默认为 600 秒。在导入过程中，StarRocks 会为每个 Tablet 开启一个 Writer 进程，用于接收和写入数据。如果在参数指定时间内 Writer 进程没有收到任何数据，StarRocks 系统会自动销毁这个 Writer 进程。当系统处理速度较慢时，Writer 进程可能长时间接收不到下一批次数据，导致上报 "TabletWriter add batch with unknown id" 错误。这时候可适当调大这个参数的取值。
 
@@ -274,15 +222,11 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
   - `load_process_max_memory_limit_bytes`：指定 BE 上最大内存使用量，默认为 100 GB。
   - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 90% x 90%。
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
     假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 90% x 90% x 30%`。
-=======
-### [Stream Load transaction interface](Stream_Load_transaction_interface.md)
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
 
 ### 会话变量
 
-您可以设置如下[会话变量](../../sql-reference/System_variable.md)：
+您可以设置如下[会话变量](../sql-reference/System_variable.md)：
 
 - `query_timeout`
 
@@ -290,59 +234,4 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/loading_unload
 
 ## 常见问题
 
-<<<<<<< HEAD:docs/zh/loading/loading_introduction/Loading_intro.md
-请参见[导入常见问题](../../faq/loading/Loading_faq.md)。
-=======
-### 对象存储
-
-| **数据源**                             | **支持的导入方案**                                           |
-| -------------------------------------- | ------------------------------------------------------------ |
-| AWS S3                                 | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.1 版本起支持）</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe（自 3.2 版本起支持）</li></ul>参见[从 AWS S3 导入数据](s3.md)。 |
-| Microsoft Azure Storage                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 Microsoft Azure Storage 导入数据](azure.md)。 |
-| Google GCS                             | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 GCS 导入数据](gcs.md)。 |
-| 其他兼容 S3 协议的对象存储（如 MinIO） | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 MinIO 导入数据](minio.md)。 |
-| Alibaba Cloud OSS                      | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
-| Tencent Cloud COS                      | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
-| Huawei Cloud OBS                       | (Batch) Broker Load <br/>参见[从云存储导入](cloud_storage_load.md)。                                          |
-
-### 本地文件系统（包括 NAS）
-
-| **数据源**                        | **支持的导入方案**                                           |
-| --------------------------------- | ------------------------------------------------------------ |
-| Local file system (including NAS) | <ul><li>(Batch) Stream Load</li><li>(Batch) Broker Load</li></ul>参见[从本地文件系统导入数据](StreamLoad.md)。 |
-
-### HDFS
-
-| **数据源** | **支持的导入方案**                                           |
-| ---------- | ------------------------------------------------------------ |
-| HDFS       | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe（自 3.2 版本起支持）</li></ul>参见[从 HDFS 导入数据](hdfs_load.md)。 |
-
-### Flink、Kafka、及 Spark
-
-| **数据源**    | **支持的导入方案**                                           |
-| ------------- | ------------------------------------------------------------ |
-| Apache Flink® | <ul><li>[Flink connector](Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](Stream_Load_transaction_interface.md)</li></ul> |
-| Apache Kafka® | <ul><li>(Streaming) [Kafka connector](Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](RoutineLoad.md)</li><li>[Stream Load transaction interface](Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Flink 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [Flink connector](Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。 |
-| Apache Spark™ | <ul><li>[Spark connector](Spark-connector-starrocks.md)</li><li>[Spark Load](SparkLoad.md)</li></ul> |
-
-### 数据湖
-
-| **数据源**     | **支持的导入方案**                                           |
-| -------------- | ------------------------------------------------------------ |
-| Apache Hive™   | <ul><li>(Batch) 创建 [Hive Catalog](../data_source/catalog/hive_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Batch) [Spark Load](SparkLoad.md).</li></ul> |
-| Apache Iceberg | (Batch) 创建 [Iceberg Catalog](../data_source/catalog/iceberg_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
-| Apache Hudi    | (Batch) 创建 [Hudi Catalog](../data_source/catalog/hudi_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
-| Delta Lake     | (Batch) 创建 [Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
-| Elasticsearch  | (Batch) 创建 [Elasticsearch Catalog](../data_source/catalog/elasticsearch_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
-| Apache Paimon  | (Batch) 创建 [Paimon Catalog](../data_source/catalog/paimon_catalog.md)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
-
-StarRocks 从 3.2 版本起支持 [Unified Catalog](../data_source/catalog/unified_catalog.md)。通过 Unified Catalog，您无需执行数据导入即可统一管理存储在 Hive、Iceberg、Hudi、Delta Lake 数据源里的表数据。
-
-### 内外部数据库
-
-| **数据源**                                                   | **支持的导入方案**                                           |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| StarRocks                                                    | (Batch) 创建 [StarRocks External Table](../data_source/External_table.md#starrocks-外部表)，然后通过 [INSERT INTO VALUES](InsertInto.md#通过-insert-into-values-语句导入数据) 写入少量数据、或通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 写入整张表的数据。<br/>**NOTE**<br/>StarRocks 外部表只支持数据写入，不支持数据读取。 |
-| MySQL                                                        | <ul><li>(Batch) 创建 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md)（推荐）或 [MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](Flink_cdc_load.md) 实现数据导入。</li></ul> |
-| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | <ul><li>(Batch) 创建 [JDBC Catalog](../data_source/catalog/iceberg_catalog.md)（推荐）或 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)，然后通过 [INSERT INTO SELECT FROM `<table_name>`](InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](../integrations/loading_tools/SMT.md) 实现数据导入。</li></ul> |
->>>>>>> 6552169e41 ([Doc] move loading intro up (#51583)):docs/zh/loading/Loading_intro.md
+请参见[导入常见问题](../faq/loading/Loading_faq.md)。
