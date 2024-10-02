@@ -49,7 +49,7 @@ ORDER BY (event_time, event_type);
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 > - 导入时，支持追加新数据，不支持修改历史数据。
 > - 如果导入两行完全相同的数据，则明细表会将这两行数据视为两行，而不是一行。

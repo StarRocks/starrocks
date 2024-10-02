@@ -53,7 +53,7 @@ ORDER BY (event_time, event_type);
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/loading_introduction/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Loading options](../../loading/Loading_intro.md).
 
 :::note
 

@@ -85,7 +85,7 @@ StarRocks 存算分离集群中表的 `Type` 为 `CLOUD_NATIVE`。`StoragePath` 
 
 ### 向 StarRocks 存算分离集群导入数据
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/loading_introduction/Loading_intro.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/Loading_intro.md)。
 
 ### 在 StarRocks 存算分离集群查询
 
