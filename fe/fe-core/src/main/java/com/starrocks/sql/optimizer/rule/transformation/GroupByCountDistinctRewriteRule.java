@@ -52,11 +52,17 @@ import java.util.stream.Collectors;
  *
  * Rewrite count(distinct xx) group by x when distinct columns satisfy scan distribution
  *
+ * 1. If xx is not primary key:
  * e.g.
  * select count(distinct xx) from t group by x
  * ->
  * select count(xx) from (select x, xx from t group by x, xx) tt group by x;
  *
+ * 2. If xx is primary key:
+ * e.g.
+ * select count(distinct xx) from t group by x
+ * ->
+ * select count(xx) from t group by x;
  */
 public class GroupByCountDistinctRewriteRule extends TransformationRule {
     // multi-stage distinct function mapping
