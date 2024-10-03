@@ -221,7 +221,11 @@ SSB 1TB dataset
 
 :::note
 
+<<<<<<< HEAD:docs/en/deployment/shared_data/competence_boundary-shared-data.md
 The dataset and queries used in this comparison are from the Star Schema Benchmark.
+=======
+The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements).
+>>>>>>> 00ece56371 ([Doc] fix link (#51590)):docs/en/deployment/shared_data/feature-support-shared-data.md
 
 :::
 
