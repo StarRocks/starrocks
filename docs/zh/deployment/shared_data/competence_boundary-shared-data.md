@@ -221,7 +221,11 @@ SSB 1TB 数据集
 
 :::note
 
+<<<<<<< HEAD:docs/zh/deployment/shared_data/competence_boundary-shared-data.md
 以下性能测试中使用的数据集和查询来自于 Star Schema Benchmark。
+=======
+以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements)。
+>>>>>>> 48ce169c25 ([Doc] Update feature-support-shared-data.md (#51596)):docs/zh/deployment/shared_data/feature-support-shared-data.md
 
 :::
 
