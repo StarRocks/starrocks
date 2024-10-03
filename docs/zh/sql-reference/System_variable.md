@@ -1050,8 +1050,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
   * `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
   * `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
 
-  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
-
 * 默认值：`command`
 * 类型：String
 * 引入版本：v3.2.0
