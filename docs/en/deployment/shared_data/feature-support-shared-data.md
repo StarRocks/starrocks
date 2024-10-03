@@ -221,7 +221,7 @@ SSB 1TB dataset
 
 :::note
 
-The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements).
+The dataset and queries used in this comparison are from the [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements).
 
 :::
 
