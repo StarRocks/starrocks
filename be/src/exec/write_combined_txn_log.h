@@ -20,4 +20,4 @@ namespace starrocks {
 class CombinedTxnLogPB;
 Status write_combined_txn_log(const CombinedTxnLogPB& logs);
 
-}
+} // namespace starrocks

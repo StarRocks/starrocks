@@ -28,6 +28,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
