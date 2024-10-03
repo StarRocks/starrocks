@@ -221,7 +221,7 @@ SSB 1TB 数据集
 
 :::note
 
-以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements)。
+以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements)。
 
 :::
 
