@@ -614,13 +614,15 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 }
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    /*
     if (rowset->rowset_meta()->tablet_schema() != nullptr &&
         rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
         rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
         _committed_rs_map[rowset->rowset_id()] = rowset;
         return true;
     }
-    return false;
+    return false;*/
+    return true;
 }
 
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
