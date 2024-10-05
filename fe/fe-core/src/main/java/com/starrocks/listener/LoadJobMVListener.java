@@ -141,6 +141,11 @@ public class LoadJobMVListener implements LoadJobListener {
         while (mvIdIterator.hasNext()) {
             MvId mvId = mvIdIterator.next();
             Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            if (mvDb == null) {
+                LOG.warn("materialized view's {} database does not exists.", mvId);
+                mvIdIterator.remove();
+                continue;
+            }
             MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
             if (materializedView == null) {
                 LOG.warn("materialized view {} does not exists.", mvId.getId());

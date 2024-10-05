@@ -24,6 +24,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -127,7 +128,8 @@ public class CachingMvPlanContextBuilder {
         try {
             return MvPlanContextBuilder.getPlanContext(mv);
         } catch (Throwable e) {
-            LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
+            LOG.warn("load mv plan cache failed: id:{}, name:{}, exception: {}",
+                    mv.getId(), mv.getName(), DebugUtil.getStackTrace(e));
             return Lists.newArrayList();
         }
     }
