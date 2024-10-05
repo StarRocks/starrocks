@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['profile', 'query profile']
 ---
 
 # Query Profile Overview
