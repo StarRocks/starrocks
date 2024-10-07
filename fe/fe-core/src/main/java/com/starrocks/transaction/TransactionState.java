@@ -79,6 +79,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -338,6 +339,8 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
+    private List<String> createdPartitionNames = Lists.newArrayList();
 
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
@@ -1055,7 +1058,12 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
+    public List<String> getCreatedPartitionNames() {
+        return createdPartitionNames;
+    }
+
     public void clearAutomaticPartitionSnapshot() {
+        createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }

@@ -344,6 +344,9 @@ public class InsertPlanner {
                 if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isDynamicOverwrite()) {
+                    Preconditions.checkState(CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 } else if (insertStmt.isSpecifyPartitionNames()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = false;
@@ -383,6 +386,9 @@ public class InsertPlanner {
                 }
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
+                }
+                if (insertStmt.isDynamicOverwrite()) {
+                    ((OlapTableSink) dataSink).setDynamicOverwrite(true);
                 }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
