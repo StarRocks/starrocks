@@ -1309,13 +1309,15 @@ public class AnalyzerUtils {
     }
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-                                                                              List<List<String>> partitionValues)
+                                                                              List<List<String>> partitionValues,
+                                                                              boolean isTemp,
+                                                                              String partitionNamePrefix)
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             PartitionMeasure measure = checkAndGetPartitionMeasure(olapTable.getIdToColumn(),
                     (ExpressionRangePartitionInfo) partitionInfo);
-            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure,
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
@@ -1323,7 +1325,9 @@ public class AnalyzerUtils {
                     .toDistributionDesc(olapTable.getIdToColumn());
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
-            String partitionPrefix = "p";
+            if (partitionNamePrefix == null) {
+                partitionNamePrefix = "p";
+            }
 
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
@@ -1333,7 +1337,7 @@ public class AnalyzerUtils {
                     String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
-                String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
+                String partitionName = partitionNamePrefix + Joiner.on("_").join(formattedPartitionValue);
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
                             + "_" + partitionName.hashCode();
@@ -1349,7 +1353,7 @@ public class AnalyzerUtils {
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
-                    partitionProperties, false);
+                    partitionProperties, isTemp);
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
@@ -1380,13 +1384,17 @@ public class AnalyzerUtils {
     private static AddPartitionClause getAddPartitionClauseForRangePartition(
             OlapTable olapTable,
             List<List<String>> partitionValues,
+            boolean isTemp,
+            String partitionPrefix,
             PartitionMeasure measure,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
-        String partitionPrefix = "p";
+        if (partitionPrefix == null) {
+            partitionPrefix = "p";
+        }
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
                 .toDistributionDesc(olapTable.getIdToColumn());
@@ -1451,7 +1459,7 @@ public class AnalyzerUtils {
         }
         RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
         rangePartitionDesc.setSystem(true);
-        return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, false);
+        return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,

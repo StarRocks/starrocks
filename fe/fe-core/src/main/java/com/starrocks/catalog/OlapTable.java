@@ -2718,6 +2718,32 @@ public class OlapTable extends Table {
         }
     }
 
+    public void replaceMatchPartitions(List<String> tempPartitionNames) {
+        for (String partitionName : tempPartitionNames) {
+            Partition partition = tempPartitions.getPartition(partitionName);
+            if (partition != null) {
+                String oldPartitionName = "p" + partitionName.substring(partitionName.indexOf("_") + 1);
+                Partition oldPartition = nameToPartition.get(oldPartitionName);
+                if (oldPartition != null) {
+                    // drop old partition
+                    dropPartition(-1, oldPartitionName, true);
+                }
+                // add new partition
+                addPartition(partition);
+                // drop temp partition
+                tempPartitions.dropPartition(partitionName, false);
+                // move the range from idToTempRange to idToRange
+                partitionInfo.moveRangeFromTempToFormal(partition.getId());
+                // rename partition
+                renamePartition(partitionName, oldPartitionName);
+            }
+        }
+
+        for (Column column : getColumns()) {
+            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+        }
+    }
+
     /*
      * replace partitions in 'partitionNames' with partitions in
      * 'tempPartitionNames'.
