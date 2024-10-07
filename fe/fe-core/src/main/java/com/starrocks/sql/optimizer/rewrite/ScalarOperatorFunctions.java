@@ -396,7 +396,8 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
+        DateTimeFormatter builder =
+                DateUtils.unixDatetimeFormatBuilderWithDefault(fmtLiteral.getVarchar(), false).toFormatter();
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
@@ -418,7 +419,8 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        DateTimeFormatterBuilder builder =
+                DateUtils.unixDatetimeFormatBuilderWithDefault(fmtLiteral.getVarchar(), false);
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);

@@ -131,6 +131,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select date_parse('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');";
         assertPlanContains(sql, "2014-12-21 12:34:56");
 
+        sql = "select date_parse('202408', '%Y%m');";
+        assertPlanContains(sql, "2024-08-01");
+
+        sql = "select date_parse('2024-08', '%Y-%m');";
+        assertPlanContains(sql, "2024-08-01");
+
+        sql = "select date_parse('2024', '%Y');";
+        assertPlanContains(sql, "2024-01-01");
+
         sql = "select day_of_week(timestamp '2022-03-06 01:02:03');";
         assertPlanContains(sql, "dayofweek_iso('2022-03-06 01:02:03')");
 
