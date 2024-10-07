@@ -138,6 +138,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
     }
 
+    if (table_sink.__isset.dynamic_overwrite) {
+        _dynamic_overwrite = table_sink.dynamic_overwrite;
+    }
     if (table_sink.__isset.ignore_out_of_partition) {
         _ignore_out_of_partition = table_sink.ignore_out_of_partition;
     }
@@ -175,6 +178,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+    _profile->add_info_string("DynamicOverwrite", fmt::format("{}", _dynamic_overwrite));
 
     _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
     _ts_profile->runtime_profile = _profile;
@@ -410,6 +414,9 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_db_id(_vectorized_partition->db_id());
     request.__set_table_id(_vectorized_partition->table_id());
     request.__set_partition_values(_partition_not_exist_row_values);
+    if (_dynamic_overwrite) {
+        request.__set_is_temp(true);
+    }
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
               << "automatic partition rpc begin request " << request;
