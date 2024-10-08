@@ -695,7 +695,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testDistinctCountOnPrimaryKey() throws Exception {
+    void testDistinctCountOnPrimaryKey() throws Exception {
         String insertData = "INSERT INTO t0 VALUES (1,0),(2,1),(3,0),(4,1);";
         starRocksAssert.query(insertData);
         String sql = "SELECT CASE WHEN(value = 1) THEN 'A' ELSE 'B' END as flag, COUNT(DISTINCT user_id) " +
