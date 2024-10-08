@@ -14,19 +14,16 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,13 +33,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -310,48 +306,16 @@ public class StatisticsCollectJobFactory {
                                                    Database db, Table table, List<String> columnNames,
                                                    List<Type> columnTypes) {
         // get updated partitions
-        List<String> updatedPartitions = Lists.newArrayList();
-        if (table.isHiveTable()) {
-            HiveTable hiveTable = (HiveTable) table;
-            if (!hiveTable.isUnPartitioned()) {
-                List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                        hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
-                List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
-
-                Preconditions.checkState(partitions.size() == partitionNames.size());
-                for (int index = 0; index < partitions.size(); index++) {
-                    // for external table, we get last modified time from other system, there may be a time inconsistency
-                    // between the two systems, so we add 60 seconds to make sure table update time is later than
-                    // statistics update time
-                    LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()).plusSeconds(60),
-                            Clock.systemDefaultZone().getZone());
-                    if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
-                        updatedPartitions.add(partitionNames.get(index));
-                    }
-                }
-            }
-        } else if (table.isIcebergTable()) {
-            if (statisticsUpdateTime != LocalDateTime.MIN) {
-                ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo().
-                        forEach((partitionName, partitionInfo) -> {
-                            // for external table, we get last modified time from other system, there may be a time
-                            // inconsistency between the two systems, so we add 60 seconds to make sure table update
-                            // time is later than statistics update time
-                            LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                                    Instant.ofEpochMilli(partitionInfo.getModifiedTime() / 1000).plusSeconds(60),
-                                    Clock.systemDefaultZone().getZone());
-                            if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
-                                updatedPartitions.add(partitionName);
-                            }
-                        });
-            }
+        Set<String> updatedPartitions = null;
+        try {
+            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(statisticsUpdateTime, 60);
+        } catch (Exception e) {
+            // ConnectorPartitionTraits do not support all type of table, ignore exception
         }
         LOG.info("create external full statistics job for table: {}, partitions: {}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
-                updatedPartitions.isEmpty() ? null : updatedPartitions,
+                updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
                 columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
     }
 
