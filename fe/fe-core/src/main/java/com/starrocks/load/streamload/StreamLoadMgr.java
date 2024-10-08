@@ -644,18 +644,16 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long currentMs = System.currentTimeMillis();
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
+        reader.readCollection(StreamLoadTask.class, loadTask -> {
             loadTask.init();
             // discard expired task right away
             if (loadTask.checkNeedRemove(currentMs, false)) {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
-                continue;
+                return;
             }
 
             addLoadTask(loadTask);
-        }
+        });
     }
 
     @Override

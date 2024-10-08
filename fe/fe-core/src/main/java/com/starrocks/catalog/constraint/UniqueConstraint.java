@@ -41,11 +41,9 @@ public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     private final List<ColumnId> uniqueColumns;
 
-    private String catalogName;
-    private String dbName;
+    private final String catalogName;
+    private final String dbName;
     private String tableName;
-
-    private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
         super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
@@ -72,6 +70,7 @@ public class UniqueConstraint extends Constraint {
         } else {
             targetTable = selfTable;
         }
+
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
             Column column = targetTable.getColumn(columnId);
@@ -100,7 +99,8 @@ public class UniqueConstraint extends Constraint {
                 return false;
             }
         }
-        Set<String> uniqueColumnSet = getUniqueColumnNames(parentTable).stream().map(String::toLowerCase)
+        Set<String> uniqueColumnSet = 
+          (parentTable).stream().map(String::toLowerCase)
                 .collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }

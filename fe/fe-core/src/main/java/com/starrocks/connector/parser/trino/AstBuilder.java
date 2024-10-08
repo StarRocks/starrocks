@@ -290,7 +290,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COST);
+                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
             } else {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
             }
@@ -730,7 +730,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }  else if (FunctionSet.INFORMATION_FUNCTIONS.contains(node.getName().toString())) {
             callExpr = new InformationFunction(node.getName().toString().toUpperCase());
         } else {
-            callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
+            List<OrderByElement> orderByElements = new ArrayList<>();
+            if (node.getOrderBy().isPresent()) {
+                orderByElements = visit(node.getOrderBy().get(), context, OrderByElement.class);
+                orderByElements.forEach(e -> arguments.add(e.getExpr()));
+            }
+            callExpr = new FunctionCallExpr(node.getName().toString(),
+                    new FunctionParams(node.isDistinct(),  arguments, orderByElements));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);

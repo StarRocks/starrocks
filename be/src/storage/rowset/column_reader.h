@@ -67,6 +67,7 @@ class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
 
+class BloomFilter;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
@@ -188,6 +189,9 @@ public:
     bool has_remain_json() const { return _has_remain; }
 
 private:
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
+                                                                 const TabletColumn* column = nullptr);
+
     const std::string& file_name() const { return _segment->file_name(); }
     template <bool is_original_bf>
     Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
@@ -288,6 +292,7 @@ private:
     std::string _name;
     bool _is_flat_json = false;
     bool _has_remain = false;
+    std::unique_ptr<BloomFilter> _remain_filter;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

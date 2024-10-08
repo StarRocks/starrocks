@@ -122,7 +122,6 @@ insert into tsr values ("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3), ("AbCd
 -- !result
 SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 0);
 -- result:
-[]
 -- !result
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 0) from tsr;
 -- result:
@@ -161,7 +160,6 @@ SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", pos) from tsr;
 -- !result
 SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
 -- result:
-[]
 -- !result
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 -- result:

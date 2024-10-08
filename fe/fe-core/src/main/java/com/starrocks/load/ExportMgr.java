@@ -464,17 +464,16 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
         long currentTimeMs = System.currentTimeMillis();
-        for (int i = 0; i < size; i++) {
-            ExportJob job = reader.readJson(ExportJob.class);
+
+        reader.readCollection(ExportJob.class, job -> {
             // discard expired job right away
             if (isJobExpired(job, currentTimeMs)) {
                 LOG.info("discard expired job: {}", job);
-                continue;
+                return;
             }
             unprotectAddJob(job);
-        }
+        });
     }
 
     @Override

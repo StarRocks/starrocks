@@ -45,6 +45,7 @@ public class MultiCastPlanFragment extends PlanFragment {
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
+        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
     }
 
     public List<PlanFragment> getDestFragmentList() {

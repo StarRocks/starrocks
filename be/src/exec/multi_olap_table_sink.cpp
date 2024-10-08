@@ -38,6 +38,13 @@ Status MultiOlapTableSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status MultiOlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+    for (auto& sink : _sinks) {
+        RETURN_IF_ERROR(sink->send_chunk(state, chunk));
+    }
+    return Status::OK();
+}
+
 Status MultiOlapTableSink::open(RuntimeState* state) {
     for (auto& sink : _sinks) {
         RETURN_IF_ERROR(sink->open(state));

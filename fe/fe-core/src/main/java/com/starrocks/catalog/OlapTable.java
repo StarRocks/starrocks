@@ -827,6 +827,7 @@ public class OlapTable extends Table {
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
             indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
+            indexIdToMeta.get(newIdxId).setSchemaId(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
@@ -1593,6 +1594,16 @@ public class OlapTable extends Table {
     @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
+    }
+
+    /**
+     * Return all visible partitions except shadow partitions.
+     */
+    public List<Partition> getVisiblePartitions() {
+        return nameToPartition.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .map(e -> e.getValue())
+                .collect(Collectors.toList());
     }
 
     public List<Partition> getNonEmptyPartitions() {
@@ -2935,7 +2946,7 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
-                    new UniqueConstraint(this, getKeyColumns()
+                    new UniqueConstraint(null, null, null, getKeyColumns()
                             .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
@@ -3311,6 +3322,12 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
 
+        // partition ttl
+        if (tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            properties.put(
+                    PropertyAnalyzer.PROPERTIES_PARTITION_TTL, tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL));
+        }
+
         // compression type
         TCompressionType compressionType = getCompressionType();
         if (compressionType == TCompressionType.LZ4_FRAME) {
@@ -3368,11 +3385,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, WriteQuorum.writeQuorumToName(writeQuorumType));
         }
 
-        // fast schema evolution only when it is set true
+        // fast schema evolution
         boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
-        if (useFastSchemaEvolution) {
-            properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
-        }
+        properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, String.valueOf(useFastSchemaEvolution));
 
         // unique constraint
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);

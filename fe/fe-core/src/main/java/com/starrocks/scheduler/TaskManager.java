@@ -573,17 +573,9 @@ public class TaskManager implements MemoryTrackable {
 
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            Task task = reader.readJson(Task.class);
-            replayCreateTask(task);
-        }
+        reader.readCollection(Task.class, this::replayCreateTask);
 
-        size = reader.readInt();
-        while (size-- > 0) {
-            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
-            replayCreateTaskRun(status);
-        }
+        reader.readCollection(TaskRunStatus.class, this::replayCreateTaskRun);
     }
 
     public void saveTasksV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

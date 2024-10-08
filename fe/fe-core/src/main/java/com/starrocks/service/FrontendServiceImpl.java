@@ -135,7 +135,6 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowMaterializedViewStatus;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
@@ -280,6 +279,8 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
 import com.starrocks.thrift.TReportLakeCompactionRequest;
 import com.starrocks.thrift.TReportLakeCompactionResponse;
 import com.starrocks.thrift.TReportRequest;
@@ -1040,8 +1041,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         SetType setType = SetType.fromThrift(params.getVarType());
-        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
-                null);
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(setType,
+                ctx.getSessionVariable(), null);
         if (setType != SetType.VERBOSE) {
             for (List<String> row : rows) {
                 map.put(row.get(0), row.get(1));
@@ -2877,5 +2878,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
             throws TException {
         return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
+    }
+
+    @Override
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
+        return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
     }
 }

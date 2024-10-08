@@ -48,7 +48,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_REPLICA));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_BACKEND));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BACKEND_STATE_CHANGE));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_FRONTEND));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_SET_LOAD_ERROR_HUB));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_HEARTBEAT));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_NEW_DROP_USER));
@@ -207,15 +206,14 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_DICTIONARY_MGR));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLICATION_JOB));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_REPLICATION_JOB));
+        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RESET_FRONTENDS));
     }
 
     @Test
     public void testUnRecoverableOperations() {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_BACKEND));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_BACKEND_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_FIRST_FRONTEND));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_FIRST_FRONTEND_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_FRONTEND));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_FRONTEND_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_PARTITION));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_PARTITIONS));
@@ -278,7 +276,6 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_TRUNCATE_TABLE));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_TYPE_EOF));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_FRONTEND));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_FRONTEND_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_REPLICA));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_REPLICA_V2));

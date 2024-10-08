@@ -48,7 +48,7 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (_param->log_end_ts > 0) {
         end_ts = _param->log_end_ts;
     }
-    string level;
+    string level = "I";
     string pattern;
     if (_param->log_level != nullptr) {
         level = *_param->log_level;

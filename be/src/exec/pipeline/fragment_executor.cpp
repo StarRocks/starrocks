@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "common/config.h"
+#include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
@@ -103,6 +104,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
+    if (_query_ctx == nullptr) {
+        return Status::Cancelled("Query has been cancelled");
+    }
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -253,6 +257,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
+    _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
+                                          request.unique().params.report_when_finish);
 
     auto* obj_pool = runtime_state->obj_pool();
     // Set up desc tbl
@@ -505,6 +511,15 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
+    std::vector<ExecNode*> capture_version_nodes;
+    plan->collect_nodes(TPlanNodeType::CAPTURE_VERSION_NODE, &capture_version_nodes);
+    for (auto* node : capture_version_nodes) {
+        const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(node->id());
+        ASSIGN_OR_RETURN(auto morsel_queue_factory,
+                         down_cast<CaptureVersionNode*>(node)->scan_range_to_morsel_queue_factory(scan_ranges));
+        morsel_queue_factories.emplace(node->id(), std::move(morsel_queue_factory));
+    }
+
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
             _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
@@ -747,7 +762,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
                          << " fragment_instance_id=" << print_id(request.fragment_instance_id())
                          << " is_stream_pipeline=" << request.is_stream_pipeline()
-                         << " backend_num=" << request.backend_num() << " fragment= " << request.common().fragment;
+                         << " backend_num=" << request.backend_num();
+            VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
         }
     });
 

@@ -966,7 +966,8 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                         CaseSensibility.VARIABLES.getCaseSensibility());
             }
-            List<List<String>> rows = VariableMgr.dump(statement.getType(), context.getSessionVariable(), matcher);
+            List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(statement.getType(),
+                    context.getSessionVariable(), matcher);
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
@@ -2279,8 +2280,8 @@ public class ShowExecutor {
                     if (result != null) {
                         rows.add(result);
                     }
-                } catch (MetaNotFoundException e) {
-                    // pass
+                } catch (Exception e) {
+                    // The catalog(HMS/Glue...) may can not connected, so the meta can not be found. Just ignore it.
                 }
             }
 

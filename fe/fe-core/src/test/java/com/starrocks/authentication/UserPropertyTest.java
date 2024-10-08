@@ -22,7 +22,6 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -185,7 +184,9 @@ public class UserPropertyTest {
             userProperty = new UserProperty();
             userProperty.update("root", properties);
             Assert.assertEquals(UserProperty.MAX_CONN_DEFAULT_VALUE, userProperty.getMaxConn());
-            Assert.assertEquals(VariableMgr.getDefaultValue(SessionVariable.CATALOG), userProperty.getCatalog());
+            Assert.assertEquals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG),
+                    userProperty.getCatalog());
             Assert.assertEquals(0, userProperty.getSessionVariables().size());
         } catch (Exception e) {
             throw e;

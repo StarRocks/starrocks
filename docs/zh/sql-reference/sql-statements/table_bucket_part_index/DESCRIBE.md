@@ -8,13 +8,13 @@ displayed_sidebar: docs
 
 您可以使用该语句进行如下操作：
 
-- 查看 StarRocks 表结构、[排序键](../../../table_design/indexes/Prefix_index_sort_key.md) (Sort Key) 类型和[物化视图](../../../using_starrocks/Materialized_view.md)。
+- 查看 StarRocks 表结构、[排序键](../../../table_design/indexes/Prefix_index_sort_key.md) (Sort Key) 类型和[物化视图](../../../using_starrocks/async_mv/Materialized_view.md)。
 - 查看外部数据源（如 Apache Hive™）中的表结构。仅 StarRocks 2.4 及以上版本支持该操作。
 
 ## 语法
 
 ```SQL
-DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
+DESC[RIBE] { [[<catalog_name>.]<db_name>.]<table_name> [ALL] | FILES(files_loading_properties) }
 ```
 
 ## 参数说明
@@ -25,6 +25,7 @@ DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
 | db_name      | 否       | 数据库名称。                                                 |
 | table_name   | 是       | 表名称。                                                     |
 | ALL          | 否       | <ul><li>如要查看 StarRocks 表的排序键类型和物化视图，则指定该关键字；如只查看 StarRocks 表结构，则可以不指定。</li><li>如查看外部数据源表结构，不能指定该关键词。</li></ul> |
+| FILES        | 否           | FILES() 表函数。自 v3.3.4 起，您可以使用 DESC 和 FILES() 查看远端存储中文件的 Schema 信息。详细信息，参考 [Function reference - FILES()](../../sql-functions/table-functions/files.md)。 |
 
 ## 返回信息说明
 
@@ -107,6 +108,45 @@ DESC hive_catalog.hive_db.hive_table;
 | name  | VARCHAR(65533) | Yes  | false | NULL    |               | 
 | date  | DATE           | Yes  | false | NULL    | partition key | 
 +-------+----------------+------+-------+---------+---------------+
+```
+
+示例四：使用 DESC 查看 AWS S3 中 Parquet 文件 `lineorder` 的 Schema 信息。
+
+> **说明**
+>
+> 对于远端存储中的文件，DESC 仅返回以下三列：`Field`、`Type` 以及 `Null`。
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
 ```
 
 ## 相关文档

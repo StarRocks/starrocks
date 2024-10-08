@@ -390,6 +390,9 @@ protected:
     // release resources in this api
     void do_close();
 
+    // Move this item to newest item in lru cache.
+    void warmup_lrucache();
+
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version) {}
 
@@ -420,14 +423,56 @@ private:
     KeysType _keys_type;
 };
 
-class RowsetReleaseGuard {
+struct adopt_acquire_t {
+    explicit adopt_acquire_t() = default;
+};
+
+template <class T>
+class TReleaseGuard {
 public:
-    explicit RowsetReleaseGuard(std::shared_ptr<Rowset> rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
-    ~RowsetReleaseGuard() { _rowset->release(); }
+    explicit TReleaseGuard(T rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
+    explicit TReleaseGuard(T rowset, adopt_acquire_t) : _rowset(std::move(rowset)) {}
+    ~TReleaseGuard() {
+        if (_rowset) {
+            _rowset->release();
+        }
+    }
 
 private:
-    std::shared_ptr<Rowset> _rowset;
+    T _rowset;
 };
+
+template <class T>
+class TReleaseGuard<std::vector<std::vector<T>>> {
+public:
+    TReleaseGuard() = default;
+    explicit TReleaseGuard(std::vector<std::vector<T>>&& rowsets, adopt_acquire_t)
+            : _tablet_rowsets(std::move(rowsets)) {}
+
+    TReleaseGuard& operator=(TReleaseGuard&& other) noexcept {
+        std::swap(_tablet_rowsets, other._tablet_rowsets);
+        return *this;
+    }
+    ~TReleaseGuard() { reset(); }
+
+    void reset() {
+        for (auto& rowset_list : _tablet_rowsets) {
+            Rowset::release_readers(rowset_list);
+        }
+        _tablet_rowsets.clear();
+    }
+    const std::vector<std::vector<T>>& tablet_rowsets() const { return _tablet_rowsets; }
+
+    TReleaseGuard(TReleaseGuard&& other) = delete;
+    TReleaseGuard(const TReleaseGuard& other) = delete;
+    TReleaseGuard& operator=(const TReleaseGuard& other) = delete;
+
+private:
+    std::vector<std::vector<T>> _tablet_rowsets;
+};
+using RowsetReleaseGuard = TReleaseGuard<RowsetSharedPtr>;
+using MultiRowsetReleaseGuard = TReleaseGuard<std::vector<std::vector<RowsetSharedPtr>>>;
+
 using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
 
 } // namespace starrocks

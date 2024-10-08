@@ -38,14 +38,16 @@ namespace starrocks::workgroup {
 /// - shared_executors: when closing BE process.
 ///
 /// ExecutorsManager is owned by WorkGroupManager.
-/// All the methods need to be protected by the `WorkGroupManager::_mutex` outside by callers.
+///
+/// All the methods need to be protected by the `WorkGroupManager::_mutex` outside by callers, except the methods
+/// with `unlocked` suffix. And the methods with `unlocked`suffix should not call other protected methods.
 class ExecutorsManager {
 public:
     ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf);
 
     void close() const;
 
-    Status start_shared_executors();
+    Status start_shared_executors_unlocked() const;
     void update_shared_executors() const;
     PipelineExecutorSet* shared_executors() const { return _shared_executors.get(); }
 
@@ -53,7 +55,8 @@ public:
     void reclaim_cpuids_from_worgroup(WorkGroup* wg);
     const CpuUtil::CpuIds& get_cpuids_of_workgroup(WorkGroup* wg) const;
 
-    PipelineExecutorSet* create_and_assign_executors(WorkGroup* wg) const;
+    std::unique_ptr<PipelineExecutorSet> maybe_create_exclusive_executors_unlocked(WorkGroup* wg,
+                                                                                   const CpuUtil::CpuIds& cpuids) const;
 
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
@@ -71,7 +74,7 @@ private:
     WorkGroupManager* const _parent;
     PipelineExecutorSetConfig _conf;
     std::unordered_map<WorkGroup*, CpuUtil::CpuIds> _wg_to_cpuids;
-    std::unique_ptr<PipelineExecutorSet> _shared_executors;
+    const std::unique_ptr<PipelineExecutorSet> _shared_executors;
 
     struct CpuOwnerContext {
         std::shared_ptr<WorkGroup> wg;

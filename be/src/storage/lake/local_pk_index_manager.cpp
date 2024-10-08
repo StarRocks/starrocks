@@ -72,6 +72,9 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
     std::vector<int64_t> removed_dir_tablet_ids;
 
     auto pk_path = data_dir->get_persistent_index_path();
+    size_t gc_fail_because_ref = 0;
+    size_t gc_fail_because_delete_fail = 0;
+    size_t gc_fail_because_lock_fail = 0;
     LOG(INFO) << "start to gc local persistent index dir:" << pk_path;
     for (const auto& tablet_id : tablet_ids) {
         int64_t id = 0;
@@ -88,11 +91,14 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
             dir_changed_tablet_ids.push_back(id);
             if (clear_persistent_index(id).ok()) {
                 removed_dir_tablet_ids.push_back(id);
+            } else {
+                gc_fail_because_delete_fail++;
             }
         } else if (!tablet_manager->is_tablet_in_worker(id)) {
             // the shard may be scheduled to other nodes
             if (!update_manager->try_lock_pk_index_shard(id)) {
                 LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
+                gc_fail_because_lock_fail++;
                 continue;
             }
             not_in_worker_tablet_ids.emplace_back(id);
@@ -103,7 +109,11 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
                 if (update_manager->try_remove_primary_index_cache(id)) {
                     if (clear_persistent_index(id).ok()) {
                         removed_dir_tablet_ids.push_back(id);
+                    } else {
+                        gc_fail_because_delete_fail++;
                     }
+                } else {
+                    gc_fail_because_ref++;
                 }
             }
             update_manager->unlock_pk_index_shard(id);
@@ -114,7 +124,8 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
               << ", found tablet not in the worker, tablet_ids: " << JoinInts(not_in_worker_tablet_ids, ",")
               << ", data_dir changed tablet_ids: " << JoinInts(dir_changed_tablet_ids, ",")
               << ", and removed dir successfully, tablet_ids: " << JoinInts(removed_dir_tablet_ids, ",")
-              << ", cost:" << t_end - t_start << "ms";
+              << ", cost:" << t_end - t_start << "ms, fail reason(ref/delete fail/lock fail): " << gc_fail_because_ref
+              << "/" << gc_fail_because_delete_fail << "/" << gc_fail_because_lock_fail;
 }
 
 bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
@@ -166,6 +177,9 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
 
     std::vector<int64_t> tablet_ids_to_be_evicted;
     std::vector<int64_t> removed_dir_tablet_ids;
+    size_t evict_fail_because_ref = 0;
+    size_t evict_fail_because_delete_fail = 0;
+    size_t evict_fail_because_lock_fail = 0;
 
     for (const auto& tablet_id : tablet_ids) {
         int64_t id = 0;
@@ -183,12 +197,17 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
         tablet_ids_to_be_evicted.emplace_back(id);
         if (!update_manager->try_lock_pk_index_shard(id)) {
             LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
+            evict_fail_because_lock_fail++;
             continue;
         }
         if (update_manager->try_remove_primary_index_cache(id)) {
             if (clear_persistent_index(id).ok()) {
                 removed_dir_tablet_ids.push_back(id);
+            } else {
+                evict_fail_because_delete_fail++;
             }
+        } else {
+            evict_fail_because_ref++;
         }
         update_manager->unlock_pk_index_shard(id);
     }
@@ -197,7 +216,9 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
     LOG(INFO) << "finish evict local persistent index dir: " << pk_path
               << ", found tablet_ids to be evicted: " << JoinInts(tablet_ids_to_be_evicted, ",")
               << ", and removed dir successfully, tablet_ids: " << JoinInts(removed_dir_tablet_ids, ",")
-              << ", cost:" << t_end - t_start << "ms";
+              << ", cost:" << t_end - t_start
+              << "ms, fail reason(ref/delete fail/lock fail): " << evict_fail_because_ref << "/"
+              << evict_fail_because_delete_fail << "/" << evict_fail_because_lock_fail;
 }
 
 void LocalPkIndexManager::schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo) {

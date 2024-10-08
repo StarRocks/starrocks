@@ -165,6 +165,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -490,6 +491,8 @@ public class GlobalStateMgr {
     private final GtidGenerator gtidGenerator;
     private final GlobalConstraintManager globalConstraintManager;
 
+    private final VariableMgr variableMgr;
+
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
     private final Authorizer authorizer;
@@ -768,6 +771,8 @@ public class GlobalStateMgr {
 
         this.keyMgr = new KeyMgr();
         this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
+        this.variableMgr = new VariableMgr();
 
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
@@ -1246,6 +1251,10 @@ public class GlobalStateMgr {
                 editLog.logAddFirstFrontend(self);
             }
 
+            if (Config.bdbje_reset_election_group) {
+                nodeMgr.resetFrontends();
+            }
+
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -1277,7 +1286,7 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
-                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
                                         SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
@@ -1480,7 +1489,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
                     .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
                     .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
-                    .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                    .put(SRMetaBlockID.VARIABLE_MGR, variableMgr::load)
                     .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
                     .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
                     .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
@@ -1679,7 +1688,7 @@ public class GlobalStateMgr {
                 localMetastore.save(imageWriter);
                 alterJobMgr.save(imageWriter);
                 recycleBin.save(imageWriter);
-                VariableMgr.save(imageWriter);
+                variableMgr.save(imageWriter);
                 resourceMgr.saveResourcesV2(imageWriter);
                 exportMgr.saveExportJobV2(imageWriter);
                 backupHandler.saveBackupHandlerV2(imageWriter);
@@ -1995,11 +2004,13 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+        // 1. metadata_enable_recovery_mode = true will skip all kind of failure
         if (Config.metadata_enable_recovery_mode) {
             LOG.warn("skip journal load failure because cluster is in recovery mode");
             return true;
         }
 
+        // 2. metadata_journal_skip_bad_journal_ids will skip the failure of specified journal ids
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
@@ -2013,6 +2024,13 @@ public class GlobalStateMgr {
                         Config.metadata_journal_skip_bad_journal_ids, e);
         }
 
+        // 3. ignore_unknown_subtype = true will skip the subtype not found failure which happens on downgrading
+        if (t.getCause() != null && t.getCause() instanceof SubtypeNotFoundException) {
+            LOG.warn("ignore unknown subtype: {}", (((SubtypeNotFoundException) t.getCause()).getSubtype()));
+            return true;
+        }
+
+        // 4. metadata_journal_ignore_replay_failure = true will skip the failure of ignorable operations.
         short opCode = OperationType.OP_INVALID;
         if (t instanceof JournalException) {
             opCode = ((JournalException) t).getOpCode();
@@ -2614,5 +2632,9 @@ public class GlobalStateMgr {
 
     public MetaRecoveryDaemon getMetaRecoveryDaemon() {
         return metaRecoveryDaemon;
+    }
+
+    public VariableMgr getVariableMgr() {
+        return variableMgr;
     }
 }
