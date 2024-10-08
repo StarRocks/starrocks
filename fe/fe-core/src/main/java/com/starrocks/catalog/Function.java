@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
@@ -52,6 +53,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
@@ -522,6 +525,15 @@ public class Function implements Writable {
             // Neither has var args and the lengths don't match
             return false;
         }
+    }
+
+    private static final Map<String, String> ACTUAL_NAMES = ImmutableMap.<String, String>builder()
+            .put(FunctionSet.MAX_BY, FunctionSet.MAX_BY_V2)
+            .put(FunctionSet.MIN_BY, FunctionSet.MIN_BY_V2)
+            .build();
+
+    public static String rectifyFunctionName(String s) {
+        return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElse(s);
     }
 
     public TFunction toThrift() {

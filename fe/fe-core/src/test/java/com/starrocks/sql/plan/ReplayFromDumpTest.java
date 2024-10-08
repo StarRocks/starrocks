@@ -34,6 +34,8 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.util.stream.Stream;
+
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testForceRuleBasedRewrite() throws Exception {
@@ -332,9 +334,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("13:Decode\n" +
-                "  |  <dict id 42> : <string id 18>\n" +
-                "  |  <dict id 43> : <string id 23>"));
+        Assert.assertTrue(plan, plan.contains(" 11:Decode\n" +
+                "  |  <dict id 41> : <string id 18>\n" +
+                "  |  <dict id 42> : <string id 23>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
@@ -693,7 +695,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("38:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 396: substring = 361: date\n" +
+                "  |  equal join conjunct: 398: substring = 361: date\n" +
                 "  |  other join predicates: 209: zid = 298: zid"));
     }
 
@@ -907,17 +909,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
                 "  |  <slot 193> : 193: mock_081\n" +
                 "  |  <slot 194> : 194: mock_089\n" +
-                "  |  <slot 233> : 233: mock_065\n" +
-                "  |  <slot 391> : 379: case\n" +
-                "  |  <slot 395> : '1'\n" +
-                "  |  \n" +
-                "  22:Project"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
-                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "  |  <slot 391> : 391: case\n" +
+                "  |  <slot 396> : 396: rank()"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 20:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC," +
+                " <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
                 "<slot 233> 233: mock_065 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  24:EXCHANGE"));
+                "  19:EXCHANGE"));
     }
 
     @Test
@@ -940,5 +940,38 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testQueryTimeout() {
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getPlanFragment(getDumpInfoFromFile("query_dump/query_timeout"), null, TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testQueryCacheMisuseExogenousRuntimeFilter() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableQueryCache(true);
+            QueryDumpInfo dumpInfo =
+                    getDumpInfoFromJson(getDumpInfoFromFile("query_dump/query_cache_misuse_exogenous_runtime_filter"));
+            ExecPlan execPlan = UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dumpInfo);
+            Assert.assertTrue(execPlan.getFragments().stream().noneMatch(frag -> frag.getCacheParam() != null));
+            Assert.assertTrue(
+                    execPlan.getFragments().stream().anyMatch(frag -> !frag.getProbeRuntimeFilters().isEmpty()));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+
+    @Test
+    public void testPruneTableNPE() throws Exception {
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableCboTablePrune(true);
+            connectContext.getSessionVariable().setEnableRboTablePrune(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/prune_table_npe"),
+                            null, TExplainLevel.NORMAL);
+            long numHashJoins = Stream.of(replayPair.second.split("\n"))
+                    .filter(ln -> ln.contains("HASH JOIN")).count();
+            Assert.assertEquals(numHashJoins, 2);
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
     }
 }

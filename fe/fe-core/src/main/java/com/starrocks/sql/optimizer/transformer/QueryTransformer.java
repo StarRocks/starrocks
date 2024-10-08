@@ -84,15 +84,19 @@ public class QueryTransformer {
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
-        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
+        builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer,
+                builder.getColumnRefToConstOperators()));
 
         Map<Expr, SlotRef> generatedExprToColumnRef = queryBlock.getGeneratedExprToColumnRef();
-        ExpressionMapping expressionMapping = builder.getExpressionMapping();
+        Map<ScalarOperator, ColumnRefOperator> generatedColumnExprOpToColumnRef = new HashMap<>();
         for (Map.Entry<Expr, SlotRef> m : generatedExprToColumnRef.entrySet()) {
-            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(m.getValue(),
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(m.getKey(),
                     builder.getExpressionMapping(), columnRefFactory);
-            expressionMapping.put(m.getKey(), (ColumnRefOperator) scalarOperator);
+            ColumnRefOperator columnRefOp = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(m.getValue(),
+                    builder.getExpressionMapping(), columnRefFactory);
+            generatedColumnExprOpToColumnRef.put(scalarOperator, columnRefOp);
         }
+        builder.getExpressionMapping().addGeneratedColumnExprOpToColumnRef(generatedColumnExprOpToColumnRef);
 
         builder = filter(builder, queryBlock.getPredicate());
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
@@ -244,6 +248,9 @@ public class QueryTransformer {
         }
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+        outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
@@ -253,7 +260,8 @@ public class QueryTransformer {
     }
 
     private OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions, long limit) {
-        ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
+        ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings(),
+                subOpt.getColumnRefToConstOperators());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         for (Expr expression : expressions) {
@@ -268,9 +276,15 @@ public class QueryTransformer {
             ColumnRefOperator columnRefOperator = getOrCreateColumnRefOperator(expression, scalarOperator, projections);
             projections.put(columnRefOperator, scalarOperator);
             outputTranslations.put(expression, columnRefOperator);
+            if (scalarOperator.isConstant()) {
+                outputTranslations.putConstOperator(columnRefOperator, scalarOperator);
+            }
         }
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+        outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections, limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
@@ -436,7 +450,8 @@ public class QueryTransformer {
             subOpt = project(subOpt, inputs);
         }
         ExpressionMapping groupingTranslations =
-                new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
+                new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings(),
+                        subOpt.getColumnRefToConstOperators());
 
         List<ColumnRefOperator> groupByColumnRefs = new ArrayList<>();
 

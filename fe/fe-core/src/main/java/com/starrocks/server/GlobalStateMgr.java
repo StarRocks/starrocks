@@ -67,7 +67,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -100,6 +99,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -181,6 +182,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -571,7 +573,11 @@ public class GlobalStateMgr {
 
     private MemoryUsageTracker memoryUsageTracker;
 
+    private ProcProfileCollector procProfileCollector;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+
+    private final GlobalConstraintManager globalConstraintManager;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -811,6 +817,8 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
+        this.globalConstraintManager = new GlobalConstraintManager();
+
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
@@ -834,6 +842,9 @@ public class GlobalStateMgr {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
                     loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
+                if (Config.max_broker_load_job_concurrency != pendingLoadTaskScheduler.getCorePoolSize()) {
+                    pendingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
@@ -843,6 +854,7 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+        this.procProfileCollector = new ProcProfileCollector();
     }
 
     public static void destroyCheckpoint() {
@@ -1090,6 +1102,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public GlobalConstraintManager getGlobalConstraintManager() {
+        return globalConstraintManager;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1532,6 +1548,8 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        procProfileCollector.start();
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();

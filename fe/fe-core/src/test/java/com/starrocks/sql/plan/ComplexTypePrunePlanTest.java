@@ -312,4 +312,20 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testSemiTypeCountDistinct() throws Exception {
+        String sql = "select count(distinct row(1, 2))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(CAST(row(1, 2) IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct [1,2,3])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST([1,2,3] IS NOT NULL AS BIGINT))");
+
+        sql = "select count(distinct map{'a': 1})";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
 }

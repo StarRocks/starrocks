@@ -2511,8 +2511,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (formatPropsContext.booleanValue() != null) {
                 trimspace = Boolean.parseBoolean(formatPropsContext.booleanValue().getText());
             }
-            csvFormat = new CsvFormat(enclose == null ? 0 : (byte) enclose.charAt(0),
-                    escape == null ? 0 : (byte) escape.charAt(0),
+            csvFormat = new CsvFormat((enclose == null || enclose.isEmpty()) ? 0 : (byte) enclose.charAt(0),
+                    (escape == null || escape.isEmpty()) ? 0 : (byte) escape.charAt(0),
                     skipheader, trimspace);
         } else {
             csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
@@ -5768,6 +5768,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+            return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
         }
 
         if (functionName.equals(FunctionSet.MAP)) {

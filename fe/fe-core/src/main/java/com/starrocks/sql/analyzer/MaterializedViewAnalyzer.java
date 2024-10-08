@@ -59,6 +59,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -105,6 +106,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -987,17 +989,17 @@ public class MaterializedViewAnalyzer {
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
             // For replication_num, we select the maximum value of all tables replication_num
-            Short defaultReplicationNum = 1;
+            Optional<Short> maxReplicationFromTable = Optional.empty();
             for (Table table : tableNameTableMap.values()) {
                 if (table instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) table;
                     Short replicationNum = olapTable.getDefaultReplicationNum();
-                    if (replicationNum > defaultReplicationNum) {
-                        defaultReplicationNum = replicationNum;
+                    if (!maxReplicationFromTable.isPresent() || replicationNum > maxReplicationFromTable.get()) {
+                        maxReplicationFromTable = Optional.of(replicationNum);
                     }
                 }
             }
-            return defaultReplicationNum;
+            return maxReplicationFromTable.orElseGet(RunMode::defaultReplicationNum);
         }
 
         @Override

@@ -76,6 +76,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * sys_log_enable_compress:
+     *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
     public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -92,11 +95,14 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    @ConfField
+    public static boolean sys_log_enable_compress = false;
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
-    public static boolean sys_log_to_console = false;
+    public static boolean sys_log_to_console = ((System.getenv("SYS_LOG_TO_CONSOLE") != null)
+            ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false);
 
     @ConfField(comment = "Log4j layout format. Valid choices: plaintext, json")
     public static String sys_log_format = "plaintext";
@@ -134,6 +140,9 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * audit_log_enable_compress:
+     *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
     public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -151,6 +160,8 @@ public class Config extends ConfigBase {
     public static String audit_log_delete_age = "30d";
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField
+    public static boolean audit_log_enable_compress = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
@@ -1249,13 +1260,49 @@ public class Config extends ConfigBase {
      * If set to true, memory tracker feature will open
      */
     @ConfField(mutable = true)
-    public static boolean memory_tracker_enable = false;
+    public static boolean memory_tracker_enable = true;
 
     /**
      * Decide how often to track the memory usage of the FE process
      */
     @ConfField(mutable = true)
     public static long memory_tracker_interval_seconds = 60;
+
+    /**
+     * true to enable collect proc memory alloc profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc memory alloc profile")
+    public static boolean proc_profile_mem_enable = true;
+
+    /**
+     * true to enable collect proc cpu profile
+     */
+    @ConfField(mutable = true, comment = "true to enable collect proc cpu profile")
+    public static boolean proc_profile_cpu_enable = true;
+
+    /**
+     * The number of seconds between proc profile collections
+     */
+    @ConfField(mutable = true, comment = "The number of seconds between proc profile collections")
+    public static long proc_profile_collect_interval_s = 600;
+
+    /**
+     * The number of seconds it takes to collect single proc profile
+     */
+    @ConfField(mutable = true, comment = "The number of seconds it takes to collect single proc profile")
+    public static long proc_profile_collect_time_s = 300;
+
+    /**
+     * The number of days to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of days to retain profile files")
+    public static int proc_profile_file_retained_days = 2;
+
+    /**
+     * The number of bytes to retain profile files
+     */
+    @ConfField(mutable = true, comment = "The number of bytes to retain profile files")
+    public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2520,6 +2567,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = true, comment =
+            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
+    public static boolean lake_enable_balance_tablets_between_workers = false;
+
+    @ConfField(mutable = true, comment =
+            "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
+                    "calculated as f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets), " +
+                    "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
+    public static double lake_balance_tablets_threshold = 0.15;
+
     /**
      * Default lake compaction txn timeout
      */
@@ -2820,6 +2877,9 @@ public class Config extends ConfigBase {
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
 
+    @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
+    public static boolean enable_active_materialized_view_schema_strict_check = true;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
@@ -2970,4 +3030,8 @@ public class Config extends ConfigBase {
     // backuped table is colocated
     @ConfField(mutable = true)
     public static boolean enable_colocate_restore = false;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }

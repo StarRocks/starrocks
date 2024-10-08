@@ -15,9 +15,10 @@
 
 package com.starrocks.scheduler;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
@@ -29,6 +30,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -107,7 +109,7 @@ public class TaskRunManager implements MemoryTrackable {
         if (!tryTaskRunLock()) {
             return false;
         }
-        List<TaskRun> mergedTaskRuns = Lists.newArrayList();
+        List<TaskRun> mergedTaskRuns = new ArrayList<>();
         try {
             long taskId = taskRun.getTaskId();
             Set<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
@@ -266,6 +268,15 @@ public class TaskRunManager implements MemoryTrackable {
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
                 "RunningTaskRun", (long) taskRunScheduler.getRunningTaskCount(),
                 "HistoryTaskRun", taskRunHistory.getTaskRunCount());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> taskRunSamples = taskRunHistory.getSamplesForMemoryTracker();
+        long size = taskRunScheduler.getPendingQueueCount()
+                + taskRunScheduler.getRunningTaskCount()
+                + taskRunHistory.getTaskRunCount();
+        return Lists.newArrayList(Pair.create(taskRunSamples, size));
     }
 
     /**

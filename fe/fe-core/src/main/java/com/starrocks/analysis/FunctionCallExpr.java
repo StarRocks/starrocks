@@ -312,7 +312,6 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isDistinct() {
-        Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
     }
 

@@ -133,6 +133,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -278,7 +279,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
-public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
+public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
@@ -338,15 +339,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 OlapTable olapTable = (OlapTable) table;
                 long tableId = olapTable.getId();
                 for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long partitionId = partition.getId();
+                    long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
                     for (MaterializedIndex index : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = index.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                                table.isCloudNativeTableOrMaterializedView());
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partition.getParentId(), physicalPartitionId,
+                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -1798,9 +1799,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
-                            index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
-                            info.getPartitionId()).getStorageMedium());
+                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), info.getPartitionId(),
+                            physicalPartition.getId(), index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
+                            info.getPartitionId()).getStorageMedium(), false);
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
@@ -2319,15 +2320,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 long dbId = db.getId();
                 long tableId = table.getId();
                 for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long partitionId = partition.getId();
+                    long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
                     for (MaterializedIndex mIndex : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                                table.isCloudNativeTableOrMaterializedView());
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partition.getParentId(), physicalPartitionId,
+                                indexId, schemaHash, medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
@@ -2643,7 +2644,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 LOG.warn("replay add replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay add replica failed, partition is null, info: {}", info);
                 return;
@@ -2690,7 +2691,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 LOG.warn("replay update replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay update replica failed, partition is null, info: {}", info);
                 return;
@@ -2730,7 +2731,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
                 LOG.warn("replay delete replica failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            PhysicalPartition partition = getPhysicalPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay delete replica failed, partition is null, info: {}", info);
                 return;
@@ -2835,6 +2836,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         Partition partition = table.getPartition(partitionId);
         if (partition == null) {
             partition = recycleBin.getPartition(partitionId);
+        }
+        return partition;
+    }
+
+    public PhysicalPartition getPhysicalPartitionIncludeRecycleBin(OlapTable table, long physicalPartitionId) {
+        PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
+        if (partition == null) {
+            partition = recycleBin.getPhysicalPartition(physicalPartitionId);
         }
         return partition;
     }
@@ -5202,6 +5211,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
         writer.close();
     }
 
+    /**
+     * When loading the LocalMetastore, the DB/Catalog that the materialized view depends
+     * on may not have been loaded yet, so you cannot reload the materialized view.
+     * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
+     */
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int dbSize = reader.readJson(int.class);
         for (int i = 0; i < dbSize; ++i) {
@@ -5215,7 +5229,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(tbl -> {
+            db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
                 try {
                     tbl.onReload();
                 } catch (Throwable e) {
@@ -5263,5 +5277,45 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler {
     @Override
     public void handleMVRepair(Database db, Table table, List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, table, partitionRepairInfos);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        List<Object> samples = new ArrayList<>();
+        // get every olap table's first partition
+        for (Database database : idToDb.values()) {
+            database.readLock();
+            try {
+                samples.addAll(database.getPartitionSamples());
+            } finally {
+                database.readUnlock();
+            }
+        }
+        return Lists.newArrayList(Pair.create(samples, totalCount));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        return ImmutableMap.of("Partition", totalCount);
     }
 }

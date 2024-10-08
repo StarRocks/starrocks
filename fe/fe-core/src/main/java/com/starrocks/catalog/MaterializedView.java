@@ -37,6 +37,7 @@ import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -1413,9 +1414,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // once mv's base table has updated, refresh the materialized view totally.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(
                     table, true, isQueryRewrite, MaterializedView.getPartitionExpr(this));
-            if (CollectionUtils.isNotEmpty(partitionNames)) {
+            if (partitionNames != null && CollectionUtils.isNotEmpty(partitionNames)) {
                 toRefreshPartitions.addAll(getVisiblePartitionNames());
-                return true;
+                return false;
             }
         }
         return true;
@@ -1476,7 +1477,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite, partitionExpr);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 toRefreshedPartitioins.addAll(getVisiblePartitionNames());
-                return true;
+                return false;
             }
         }
 

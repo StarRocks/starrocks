@@ -253,6 +253,19 @@ Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version)
     return fs::delete_file(location);
 }
 
+Status TabletManager::tablet_metadata_exists(int64_t tablet_id, int64_t version) {
+    return tablet_metadata_exists(tablet_metadata_location(tablet_id, version));
+}
+
+Status TabletManager::tablet_metadata_exists(const std::string& path) {
+    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+        TRACE("got cached tablet metadata");
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->path_exists(path);
+}
+
 StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id, bool filter_tablet) {
     std::vector<std::string> objects{};
     // TODO: construct prefix in LocationProvider

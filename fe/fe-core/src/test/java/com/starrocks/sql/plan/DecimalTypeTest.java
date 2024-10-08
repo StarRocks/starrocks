@@ -267,4 +267,15 @@ public class DecimalTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "'12.56'");
     }
+
+    @Test
+    public void testSameValueDiffTypeDecimal() throws Exception {
+        String sql = "SELECT t1a,\n" +
+                "    sum(t1f * 1.00000000000) / NULLIF(sum(t1c), 0) AS aaaa,\n" +
+                "    sum(t1f * 1.000) / NULLIF(sum(t1d * 1.000), 0) * 1000 AS bbbb\n" +
+                " FROM test_all_type \n" +
+                " GROUP BY t1a;\n ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 11> : 6: t1f * 1.0\n");
+    }
 }

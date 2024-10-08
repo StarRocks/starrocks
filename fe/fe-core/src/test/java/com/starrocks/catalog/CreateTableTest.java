@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;

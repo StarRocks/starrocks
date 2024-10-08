@@ -142,7 +142,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
     _rowset_meta_pb->set_total_row_size(_total_row_size);
-    _rowset_meta_pb->set_total_disk_size(_total_data_size);
+    _rowset_meta_pb->set_total_disk_size(_total_data_size + _total_index_size);
     _rowset_meta_pb->set_data_disk_size(_total_data_size);
     _rowset_meta_pb->set_index_disk_size(_total_index_size);
     // TODO write zonemap to meta
@@ -195,6 +195,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             }
             // set partial update mode
             _rowset_txn_meta_pb->set_partial_update_mode(_context.partial_update_mode);
+            if (_context.column_to_expr_value != nullptr) {
+                for (auto& [name, value] : (*_context.column_to_expr_value)) {
+                    _rowset_txn_meta_pb->mutable_column_to_expr_value()->insert({name, value});
+                }
+            }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         } else if (!_context.merge_condition.empty()) {
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);

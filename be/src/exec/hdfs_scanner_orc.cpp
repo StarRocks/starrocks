@@ -532,6 +532,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.conjunct_ctxs) {
+            conjuncts.push_back(it->root());
+        }
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));

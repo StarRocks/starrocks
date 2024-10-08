@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
+import com.starrocks.sql.optimizer.rule.tree.InlineCteProjectPruneRule;
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -163,12 +164,6 @@ public class Optimizer {
         try {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
-
-            // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
-            try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
-                logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, mvTransformerContext)
-                        .transform(logicOperatorTree, context).get(0);
-            }
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
@@ -777,6 +772,7 @@ public class Optimizer {
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // Put before ScalarOperatorsReuseRule
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+        result = new InlineCteProjectPruneRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates

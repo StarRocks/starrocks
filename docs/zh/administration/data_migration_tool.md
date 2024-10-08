@@ -143,12 +143,14 @@ source_fe_host=
 source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
+source_cluster_password_secret_key=
 source_cluster_token=
 
 target_fe_host=
 target_fe_query_port=9030
 target_cluster_user=root
 target_cluster_password=
+target_cluster_password_secret_key=
 
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
@@ -159,6 +161,9 @@ exclude_data_list=
 # If there are no special requirements, please maintain the default values for the following configurations.
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
+target_cluster_max_disk_used_percent=80
+
+max_replication_data_size_per_job_in_gb=-1
 
 meta_job_interval_seconds=180
 meta_job_threads=4
@@ -167,8 +172,10 @@ ddl_job_batch_size=10
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_partition_target_only=true
 replication_job_interval_seconds=10
 replication_job_batch_size=10
+report_interval_seconds=300
 ```
 
 参数说明如下：
@@ -180,24 +187,30 @@ replication_job_batch_size=10
 | source_fe_query_port                      | 源集群 FE 的查询端口（`query_port`）。                       |
 | source_cluster_user                       | 用于登录源集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | source_cluster_password                   | 用于登录源集群的用户密码。                                   |
+| source_cluster_password_secret_key        | 用于对源集群登录用户密码加密的密钥。默认值为空，代表不对登录密码进行加密。如果需要对 `source_cluster_password` 加密，可以通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_secret_key>'))` 获得加密后的 `source_cluster_password`。 |
 | source_cluster_token                      | 源集群的 Token。关于如何获取集群 Token，见以下[获取集群 Token](#获取集群-token)部分。 |
 | target_fe_host                            | 目标集群 FE 的 IP 地址或 FQDN。                              |
 | target_fe_query_port                      | 目标集群 FE 的查询端口（`query_port`）。                     |
 | target_cluster_user                       | 用于登录目标集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | target_cluster_password                   | 用于登录目标集群的用户密码。                                 |
+| target_cluster_password_secret_key        | 用于对目标集群登录用户密码加密的密钥。默认值为空，代表不对登录密码进行加密。如果需要对 `target_cluster_password` 加密，可以通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_secret_key>'))` 获得加密后的 `target_cluster_password`。 |
 | include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | target_cluster_storage_volume             | 目标集群为存算分离集群时，建表使用的 Storage Volume。使用默认 Storage Volume 时无须配置该项。|
 | target_cluster_replication_num            | 目标集群建表使用的副本数（replication number）。默认值表示使用与源集群相同的副本数。|
+| target_cluster_max_disk_used_percent      | 目标集群为存算一体时，目标集群 BE 节点磁盘使用百分比阈值。当目标集群中有任意一个 BE 的磁盘使用量超过个该阈值则终止同步。默认值为 `80`，表示 80%。 |
 | meta_job_interval_seconds                 | 迁移工具获取源集群和目标集群元数据的周期，单位为秒。此项您可以使用默认值。 |
 | meta_job_threads                          | 迁移工具获取源集群和目标集群元数据使用的线程数。此项您可以使用默认值。 |
 | ddl_job_interval_seconds                  | 迁移工具在目标集群执行 DDL 的周期，单位为秒。此项您可以使用默认值。 |
 | ddl_job_batch_size                        | 迁移工具在目标集群执行 DDL 的批大小。此项您可以使用默认值。  |
-| ddl_job_allow_drop_target_only            | 迁移工具是否自动删除仅在目标集群存在而源集群不存在的数据库，表或分区。默认为 `false`，即不删除。此项您可以使用默认值。 |
+| ddl_job_allow_drop_target_only            | 迁移工具是否自动删除仅在目标集群存在而源集群不存在的数据库或表。默认为 `false`，即不删除。此项您可以使用默认值。 |
 | ddl_job_allow_drop_schema_change_table    | 迁移工具是否自动删除源集群和目标集群 Schema 不一致的表，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的表。 |
 | ddl_job_allow_drop_inconsistent_partition | 迁移工具是否自动删除源集群和目标集群数据分布方式不一致的分区，默认为 `true`，即删除。此项您可以使用默认值。迁移工具会在同步过程中自动同步删除的分区。 |
+| ddl_job_allow_drop_partition_target_only  | 迁移工具是否自动删除目标集群上在源集群中已删除的分区，保持目标集群与源集群上表的分区一致。默认为 `true`，即删除。此项您可以使用默认值。 |
 | replication_job_interval_seconds          | 迁移工具触发数据同步任务的周期，单位为秒。此项您可以使用默认值。 |
-| replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。     |
+| replication_job_batch_size                | 迁移工具触发数据同步任务的批大小。此项您可以使用默认值。 |
+| max_replication_data_size_per_job_in_gb   | 迁移工具触发数据同步任务的（分区）数据大小阈值。单位：GB。如果要迁移的数据大小超过此值，将触发多个数据同步任务。默认值为 `-1`，表示没有限制，即一个数据同步任务同步一个表的所有分区。如果要迁移的表的数据量较大，可以设置此参数来限制每个任务的数据大小。 |
+| report_interval_seconds                   | 迁移工具打印 Progress 信息的周期。单位：秒。默认值：`300`。此项您可以使用默认值。 |
 
 ### 获取集群 Token
 
@@ -279,13 +292,13 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 
 您可以通过迁移工具日志 **log/sync.INFO.log** 查看迁移进度。
 
-示例：
+示例 1：查看任务进度
 
 ![img](../_assets/data_migration_tool-1.png)
 
 主要指标如下：
 
-- `Sync progress`：数据迁移进度。由于迁移工具会周期性地检查目标集群的数据是否落后于源集群，所以当进度为 100% 时，仅代表当前检查周期内数据同步完成。如果源集群持续有新数据导入，该进度可能在下次检查周期内变小。
+- `Sync job progress`：数据迁移进度。由于迁移工具会周期性地检查目标集群的数据是否落后于源集群，所以当进度为 100% 时，仅代表当前检查周期内数据同步完成。如果源集群持续有新数据导入，该进度可能在下次检查周期内变小。
 - `total`：本次迁移操作的各类 Job 总数。
 - `ddlPending`：所有待执行的 DDL Job 数量。
 - `jobPending`：所有待执行的数据同步 Job 数量。
@@ -294,6 +307,18 @@ TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
 - `finished`：执行成功的数据同步 Job 数量。
 - `failed`：执行失败的数据同步 Job 数量。失败的数据同步 Job 将会重新发送。因此，通常情况下您可以忽略该指标。若出现该值较大的情况，请联系研发人员。
 - `unknown`：未知状态 Job 的数量。理论上该值恒常为 `0`。若出现该值不为 `0` 的情况，请联系研发人员。
+
+示例 2：查看表迁移进度
+
+![img](../_assets/data_migration_tool-2.png)
+
+- `Sync table progress`：表迁移进度。本次迁移任务中已经完成迁移的表在所有需要迁移的表的占比。
+- `finishedTableRatio`: 至少有一次同步任务执行成功过的数据表占比.
+- `expiredTableRatio`: 数据过期的数据表占比.
+- `total table`: 此次数据迁移涉及的数据表总数。
+- `finished table`: 至少有一次同步任务执行成功过的数据表数量。
+- `unfinished table`: 还未进行过数据同步的数据表数量。
+- `expired table`: 数据过期的数据表数量。
 
 ### 查看迁移事务状态
 
@@ -335,3 +360,26 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_TYPE = 'BASE TABLE' 
 ORDER BY TABLE_NAME;
 ```
+
+## 使用限制
+
+当前版本支持同步的对象列表如下，未包含的则表示不支持同步：
+
+- 数据库
+- 内表及其数据
+- 物化视图表结构及构建语句（物化视图中的数据不会被同步。并且如果物化视图对应的基表没有同步到目标集群，则物化视图后台刷新任务报错。）
+- 逻辑视图
+
+## Q&A
+
+### Q1：为什么只能同步表结构？
+
+如果您开启了防火墙，则需要开通以下端口：
+
+| **组件**     | **端口**       | **默认端口**  |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030 |
+| FE          | http_port      | 8030 |
+| FE          | rpc_port       | 9020 |
+| BE          | be_http_port   | 8040 |
+| BE          | be_port        | 9060 |

@@ -66,4 +66,8 @@ public class OriginStatement implements Writable {
                 ", idx=" + idx +
                 '}';
     }
+
+    public String getOrigStmt() {
+        return originStmt;
+    }
 }

@@ -115,9 +115,9 @@ public:
         return flag;
     }
 
-protected:
     virtual void on_shutdown() {}
 
+protected:
     void _gen_tablet_path();
 
     TabletState _state;

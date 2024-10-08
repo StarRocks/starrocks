@@ -1623,9 +1623,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // avoid use partition cols filter rows twice
     @VisibleForTesting
     public ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
-                                                    OptimizerContext optimizerContext) {
+                                                   OptimizerContext optimizerContext) {
         boolean isTableTypeSupported = operator instanceof LogicalIcebergScanOperator ||
-                        isOlapScanListPartitionTable(operator);
+                isOlapScanListPartitionTable(operator);
         if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
             LogicalScanOperator scanOperator = operator.cast();
             List<String> partitionColNames = scanOperator.getTable().getPartitionColumnNames();
@@ -1634,8 +1634,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
             List<ScalarOperator> newPredicates = Lists.newArrayList();
             for (ScalarOperator scalarOperator : conjuncts) {
-                boolean isPartitionCol = isPartitionCol(scalarOperator.getChild(0), partitionColNames);
-                if (isPartitionCol && ListPartitionPruner.canPruneWithConjunct(scalarOperator)) {
+                if (ListPartitionPruner.canPruneWithConjunct(scalarOperator) &&
+                        isPartitionCol(scalarOperator.getChild(0), partitionColNames)) {
                     // drop this predicate
                 } else {
                     newPredicates.add(scalarOperator);

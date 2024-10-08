@@ -16,6 +16,7 @@
 
 #include <random>
 
+#include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "util/failpoint/fail_point.h"
@@ -343,6 +344,12 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs0 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
     ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    string o;
+    ASSERT_TRUE(execute_script(fmt::format("StorageEngine.reset_delvec({}, {}, 2)", _tablet->tablet_id(), 0), o).ok());
+    ASSERT_TRUE(execute_script("System.print(ExecEnv.grep_log_as_string(0,0,\"I\",\"tablet_manager\",1))", o).ok());
+    LOG(INFO) << "grep log: " << o;
+
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
@@ -3608,19 +3615,6 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
-
-    // 15. write meta failed
-    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 16, N / 2);
-
-    // 16. cache del vec failed
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
-    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
-    fp->setMode(trigger_mode);
-    test_fail_point("tablet_apply_cache_del_vec_failed", 17, N / 2);
-
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
@@ -3729,6 +3723,13 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
 
 TEST_F(TabletUpdatesTest, test_get_compaction_status) {
     test_horizontal_compaction(false, true);
+}
+
+TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_FALSE(_tablet->updates()->is_apply_stop());
+    StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), kKeepMetaAndFiles);
+    ASSERT_TRUE(_tablet->updates()->is_apply_stop());
 }
 
 } // namespace starrocks

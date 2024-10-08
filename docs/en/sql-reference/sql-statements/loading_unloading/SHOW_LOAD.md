@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Description
 
-Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using [Broker Load](BROKER_LOAD.md), [INSERT](../data-mSPARK_LOAD.mdLoad](../loading_unloading/SPARK_LOAD.md). You can also view information of load jobs via the `curl` command. From v3.1 onwards, we recommend that you use the [SELECT](../table_bucket_part_index/SELECT.md) statement to query the results of Broker Load or Insert jobs from the [`loads`](../../information_schema/loads.md) table in the `information_schema` database. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md), [Load data from cloud storage](../../../loading/cloud_storage_load.md), [Load data using INSERT](../../../loading/InsertInto.md), and [Bulk load using Apache Spark™](../../../loading/SparkLoad.md).
+Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using Broker Load, INSERT, and SPARK_LOAD. You can also view load job information via the `curl` command. From v3.1 onwards, we recommend that you use the SELECT statement to query the results of Broker Load or Insert jobs from the `loads` table in the `information_schema` database. For more information, see [Loading](../../../loading/Loading_intro.md).
 
 In addition to the preceding loading methods, StarRocks supports using Stream Load and Routine Load to load data. Stream Load is a synchronous operation and will directly return information of Stream Load jobs. Routine Load is an asynchronous operation where you can use the [SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) statement to display information of Routine Load jobs.
 

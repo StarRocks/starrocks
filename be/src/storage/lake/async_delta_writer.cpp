@@ -313,6 +313,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_immutable_tablet_size(_immutable_tablet_size)
                                           .set_miss_auto_increment_column(_miss_auto_increment_column)
                                           .set_schema_id(_schema_id)
+                                          .set_column_to_expr_value(_column_to_expr_value)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

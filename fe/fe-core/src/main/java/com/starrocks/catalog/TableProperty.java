@@ -44,8 +44,11 @@ import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -373,6 +376,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPartitionTTL() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+            if (ttlDuration != null) {
+                partitionTTL = ttlDuration.second;
+            }
         }
         return this;
     }

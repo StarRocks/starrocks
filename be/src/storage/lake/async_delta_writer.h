@@ -174,6 +174,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -188,6 +193,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

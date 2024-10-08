@@ -75,6 +75,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS t1(\n" +
+                "    tenant_id BIGINT NOT NULL,\n" +
+                "    id BIGINT NOT NULL,\n" +
+                "    c1 STRING NULL,\n" +
+                "    c2 BIGINT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (tenant_id, id)\n" +
+                "DISTRIBUTED BY HASH (tenant_id)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Before
@@ -841,10 +852,59 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
                 "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 6:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+        assertContains(plan, " 7:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: expr = 5: expr\n" +
-                "  |  other join predicates: 6: expr[3: expr] = 1");
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:Project\n" +
+                "  |  <slot 2> : 'a'\n" +
+                "  |  <slot 3> : 'x'\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 5> : 'a'\n" +
+                "  |  <slot 6> : map{'x':1}\n" +
+                "  |  \n" +
+                "  4:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  3:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
+    }
+
+    @Test
+    public void testConstStructError() throws Exception {
+        String sql = "with buckets as (\n" +
+                "    SELECT named_struct(\n" +
+                "            'start_date',\n" +
+                "            str_to_date('2024-08-08T17:46:00', '%Y-%m-%dT%H:%i:%s'),\n" +
+                "            'end_date',\n" +
+                "            str_to_date('2024-08-14T17:46:58', '%Y-%m-%dT%H:%i:%s')\n" +
+                "        ) as bucket\n" +
+                ")\n" +
+                "select date(b.bucket.start_date) \n" +
+                "from buckets b\n" +
+                "left join t1 c on b.bucket.start_date = c.c1\n" +
+                "order by b.bucket.start_date;\n";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "equal join conjunct: 9: expr = 10: cast");
     }
 }

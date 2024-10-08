@@ -6,6 +6,7 @@ toc_max_heading_level: 4
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
 ## Description
 
@@ -13,7 +14,7 @@ Grants one or more privileges on specific objects to a user or a role.
 
 Grants roles to users or other roles.
 
-For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_privs/privilege_item.md).
+For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_privs/privilege_overview.md).
 
 After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
@@ -102,11 +103,16 @@ GRANT
 #### Table
 
 ```SQL
-GRANT
-    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
-    ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES} IN 
-           { { DATABASE <database_name> } | ALL DATABASES }
+-- Grant privileges on SPECIFIC TABLES.
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON TABLE <table_name> [, < table_name >,...]
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+-- Grant privileges on ALL TABLES in a specific database or all databases.
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -259,4 +265,5 @@ GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 
 <UserPrivilegeCase />
 
-For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_privs/User_privilege.md#multi-service-access-control).
+<MultiServiceAccess />
+

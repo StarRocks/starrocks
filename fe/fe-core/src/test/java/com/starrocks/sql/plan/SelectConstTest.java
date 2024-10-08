@@ -26,8 +26,8 @@ public class SelectConstTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select a from (select 1 as a, 2 as b) t", "  1:Project\n" +
-                "  |  <slot 2> : 1\n" +
+        assertPlanContains("select a from (select 1 as a, 2 as b) t", "1:Project\n" +
+                "  |  <slot 4> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -60,13 +60,21 @@ public class SelectConstTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", "  2:Project\n" +
-                "  |  <slot 6> : 2\n" +
-                "  |  <slot 7> : 1\n" +
+        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", " 5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 7> : 2\n" +
                 "  |  \n" +
-                "  1:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
+                "  4:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1");
     }
 
     @Test
