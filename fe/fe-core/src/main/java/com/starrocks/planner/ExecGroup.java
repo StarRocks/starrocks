@@ -63,7 +63,6 @@ public class ExecGroup {
         }
 
         root.getProbeRuntimeFilters().forEach(RuntimeFilterDescription::clearExecGroupInfo);
-
         if (root instanceof RuntimeFilterBuildNode) {
             RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
             rfBuildNode.getBuildRuntimeFilters().forEach(RuntimeFilterDescription::clearExecGroupInfo);
