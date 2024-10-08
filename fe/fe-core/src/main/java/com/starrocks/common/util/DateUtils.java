@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -127,7 +128,11 @@ public class DateUtils {
         if (str == null || str.length() < 5) {
             throw new IllegalArgumentException("Invalid datetime string: " + str);
         }
-        if (str.contains(":")) {
+        if (str.endsWith("Z") || str.endsWith("]")) {
+            return parseIsoZonedDateTimeString(str);
+        } else if (str.contains("+")) {
+            return parseOffsetDateTimeString(str);
+        } else if (str.contains(":")) {
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
             int withSec = str.split(":").length > 2 ? 1 : 0;
@@ -150,6 +155,18 @@ public class DateUtils {
             }
             return parseStringWithDefaultHSM(str, formatter);
         }
+    }
+
+    private static LocalDateTime parseIsoZonedDateTimeString(String datetime) {
+        ZonedDateTime zonedDateTime = ZonedDateTime.parse(datetime, DateTimeFormatter.ISO_ZONED_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = zonedDateTime.withZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
+    }
+
+    private static LocalDateTime parseOffsetDateTimeString(String datetime) {
+        OffsetDateTime offsetDateTime = OffsetDateTime.parse(datetime, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        ZonedDateTime localDateTimeWithZone = offsetDateTime.atZoneSameInstant(ZoneId.systemDefault());
+        return localDateTimeWithZone.toLocalDateTime();
     }
 
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
