@@ -495,15 +495,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
-                case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
-                case OperationType.OP_ADD_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayAddFrontend(fe);
                     break;
                 }
-                case OperationType.OP_REMOVE_FRONTEND:
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayDropFrontend(fe);
@@ -512,10 +509,14 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
+                    break;
+                }
+                case OperationType.OP_RESET_FRONTENDS: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayResetFrontends(fe);
                     break;
                 }
                 case OperationType.OP_TIMESTAMP:
@@ -1497,6 +1498,10 @@ public class EditLog {
 
     public void logLeaderInfo(LeaderInfo info) {
         logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
+    }
+
+    public void logResetFrontends(Frontend frontend) {
+        logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {

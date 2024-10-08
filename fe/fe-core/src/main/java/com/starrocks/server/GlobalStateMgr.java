@@ -1251,6 +1251,10 @@ public class GlobalStateMgr {
                 editLog.logAddFirstFrontend(self);
             }
 
+            if (Config.bdbje_reset_election_group) {
+                nodeMgr.resetFrontends();
+            }
+
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();

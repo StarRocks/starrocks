@@ -443,18 +443,11 @@ public class JournalEntity implements Writable {
                 data = DropComputeNodeLog.read(in);
                 break;
             }
-            case OperationType.OP_ADD_FRONTEND:
-            case OperationType.OP_ADD_FIRST_FRONTEND:
-            case OperationType.OP_UPDATE_FRONTEND:
-            case OperationType.OP_REMOVE_FRONTEND: {
-                data = new Frontend();
-                ((Frontend) data).readFields(in);
-                break;
-            }
             case OperationType.OP_ADD_FRONTEND_V2:
             case OperationType.OP_ADD_FIRST_FRONTEND_V2:
             case OperationType.OP_UPDATE_FRONTEND_V2:
-            case OperationType.OP_REMOVE_FRONTEND_V2: {
+            case OperationType.OP_REMOVE_FRONTEND_V2:
+            case OperationType.OP_RESET_FRONTENDS: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Frontend.class);
                 break;
             }
