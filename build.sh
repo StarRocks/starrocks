@@ -100,6 +100,8 @@ Usage: $0 <options>
                         Turning this option on automatically disables ccache.
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
      -h,--help          Show this help message
 
   Eg.
@@ -133,6 +135,7 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
   -l 'help' \
   -- "$@")
 
@@ -156,6 +159,7 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
+WITH_RELATIVE_SRC_PATH=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -240,6 +244,7 @@ else
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -283,6 +288,7 @@ echo "Get params:
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
 "
 
 check_tool()
@@ -382,6 +388,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}

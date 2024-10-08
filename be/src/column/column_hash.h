@@ -25,6 +25,8 @@
 #include <xmmintrin.h>
 #endif
 
+#include "column/type_traits.h"
+#include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -328,6 +330,28 @@ template <PhmapSeed seed>
 struct Hash128WithSeed {
     std::size_t operator()(int128_t value) const {
         return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
+    }
+};
+
+template <LogicalType LT, PhmapSeed seed>
+struct PhmapDefaultHashFunc {
+    std::size_t operator()(const RunTimeCppType<LT>& value) const {
+        static_assert(is_supported(), "unsupported logical type");
+
+        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
+            return Hash128WithSeed<seed>()(value);
+        } else if constexpr (lt_is_fixedlength<LT>) {
+            return StdHashWithSeed<RunTimeCppType<LT>, seed>()(value);
+        } else if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
+            return SliceHashWithSeed<seed>()(value);
+        } else {
+            assert(false);
+        }
+    }
+
+    constexpr static bool is_supported() {
+        return lt_is_largeint<LT> || lt_is_decimal128<LT> || lt_is_fixedlength<LT> || lt_is_string<LT> ||
+               lt_is_binary<LT>;
     }
 };
 

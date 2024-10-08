@@ -917,14 +917,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            long dbId = reader.readLong();
-            List<MultiDeleteInfo> multiDeleteInfos =
-                    (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
-                    }.getType());
-            dbToDeleteInfos.put(dbId, multiDeleteInfos);
-        }
+        reader.readMap(Long.class, new TypeToken<List<MultiDeleteInfo>>() {}.getType(),
+                dbToDeleteInfos::put);
     }
 
     @Override

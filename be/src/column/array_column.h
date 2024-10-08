@@ -147,7 +147,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    std::string get_name() const override { return "array"; }
+    std::string get_name() const override { return "array-" + _elements->get_name(); }
 
     Datum get(size_t idx) const override;
 
@@ -175,6 +175,7 @@ public:
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
+    UInt32Column::Ptr offsets_column() const { return _offsets; }
 
     bool is_nullable() const override { return false; }
 
@@ -196,7 +197,19 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
+    // get the number of all non-null elements
+    size_t get_total_elements_num(const NullColumnPtr& null_column) const;
+
+    // check if the length of each array in two columns is equal
+    // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
+    template <bool IgnoreNull>
+    static bool is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
+
 private:
+    template <bool ConstV1, bool ConstV2, bool IgnoreNull>
+    static bool compare_lengths_from_offsets(const UInt32Column& v1, const UInt32Column& v2,
+                                             const NullColumnPtr& null_data);
+
     // Elements must be NullableColumn to facilitate handling nested types.
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
@@ -205,5 +218,10 @@ private:
     // The two element array has three offsets(0, 3, 6)
     UInt32Column::Ptr _offsets;
 };
+
+extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                   const NullColumnPtr& null_data);
+extern template bool ArrayColumn::is_all_array_lengths_equal<false>(const ColumnPtr& v1, const ColumnPtr& v2,
+                                                                    const NullColumnPtr& null_data);
 
 } // namespace starrocks

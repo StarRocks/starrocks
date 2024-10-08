@@ -86,7 +86,7 @@ The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the
 
 ### Load data into a shared-data StarRocks cluster
 
-Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/loading_introduction/Loading_intro.md) for more information.
+Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/Loading_intro.md) for more information.
 
 ### Query in a shared-data StarRocks cluster
 

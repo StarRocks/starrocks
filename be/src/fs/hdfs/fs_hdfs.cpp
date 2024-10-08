@@ -25,6 +25,7 @@
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
+#include "service/backend_options.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
@@ -56,10 +57,12 @@ public:
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
                 if (errno == ENOENT) {
-                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, backend={}, file={}",
+                                                                  BackendOptions::get_localhost(), _path));
                 } else {
-                    return Status::InternalError(
-                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
+                    return Status::InternalError(fmt::format("hdfsOpenFile failed, backend={}, file={}. err_msg: {}",
+                                                             BackendOptions::get_localhost(), _path,
+                                                             get_hdfs_err_msg()));
                 }
             }
         }

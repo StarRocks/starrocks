@@ -38,6 +38,7 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
 
+    bool is_literal() const override { return true; }
     std::string debug_string() const override;
 
 private:

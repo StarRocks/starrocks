@@ -14,6 +14,7 @@
 
 #include "storage/meta_reader.h"
 
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -237,12 +238,45 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
 
+std::string append_read_name(const ColumnReader* col_reader) {
+    std::stringstream stream;
+    if (col_reader->column_type() == LogicalType::TYPE_JSON) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            stream << fmt::format("{}({}), ", sub_reader->name(), type_to_string(sub_reader->column_type()));
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    if (col_reader->column_type() == LogicalType::TYPE_ARRAY) {
+        auto child = append_read_name((*col_reader->sub_readers())[0].get());
+        if (!child.empty()) {
+            stream << "[" << child << "]";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_MAP) {
+        auto child = append_read_name((*col_reader->sub_readers())[1].get());
+        if (!child.empty()) {
+            stream << "{" << child << "}";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_STRUCT) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            auto child = append_read_name(sub_reader.get());
+            if (!child.empty()) {
+                stream << sub_reader->name() << "(" << child << "), ";
+            }
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    return stream.str();
+}
+
 Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
     const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr) {
         return Status::NotFound("don't found column");
     }
-    if (col_reader->column_type() != TYPE_JSON) {
+
+    if (!is_semi_type(col_reader->column_type())) {
         return Status::InternalError("column type mismatch");
     }
 
@@ -253,11 +287,11 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
 
     ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
     size_t size = array_column->offsets_column()->get_data().back();
-    for (const auto& sub_reader : *col_reader->sub_readers()) {
-        std::string str = fmt::format("{}({})", sub_reader->name(), type_to_string(sub_reader->column_type()));
-        array_column->elements_column()->append_datum(Slice(str));
+    auto res = append_read_name(col_reader);
+    if (!res.empty()) {
+        array_column->elements_column()->append_datum(Slice(res));
+        array_column->offsets_column()->append(size + 1);
     }
-    array_column->offsets_column()->append(size + col_reader->sub_readers()->size());
     return Status::OK();
 }
 
