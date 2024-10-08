@@ -33,58 +33,58 @@ INSERT INTO t1 VALUES ('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,3,4,5,
 -- !result
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY dt
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED MANUAL
 as 
 select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2);
 -- result:
 -- !result
 refresh materialized view test_mv1 with sync mode;
-set enable_materialized_view_rewrite = false;
+set enable_materialized_view_rewrite = true;
 -- result:
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('week', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('week', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('month', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('month', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('quarter', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('quarter', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('year', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('year', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) >= '2020-10-22' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) >= '2020-10-19' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) >= '2020-10-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) >= '2020-10-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) >= '2020-01-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) = '2020-10-22' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
 -- result:
@@ -195,47 +195,47 @@ INSERT INTO t1 VALUES ('2020-10-24','2020-10-24 12:12:12','k3','k4',0,1,2,3,4,5,
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('week', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('week', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('month', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('month', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('quarter', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('quarter', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, date_trunc('year', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('year', k2);", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) >= '2020-10-22' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) >= '2020-10-19' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('month', k2) >= '2020-10-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('quarter', k2) >= '2020-10-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('year', k2) >= '2020-01-01' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('day', k2) = '2020-10-22' group by k1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where date_trunc('week', k2) = '2020-10-19' group by k1;", "test_mv1")
 -- result:

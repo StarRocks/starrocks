@@ -32,13 +32,13 @@ INSERT INTO t1 VALUES ('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,3,4,5,
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
 PARTITION BY dt
-REFRESH DEFERRED ASYNC
+REFRESH DEFERRED MANUAL
 as 
 select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2);
 
 refresh materialized view test_mv1 with sync mode;
 
-set enable_materialized_view_rewrite = false;
+set enable_materialized_view_rewrite = true;
 
 function: print_hit_materialized_view("select k1, date_trunc('day', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('day', k2);", "test_mv1")
 function: print_hit_materialized_view("select k1, date_trunc('week', k2) as dt, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1 group by k1, date_trunc('week', k2);", "test_mv1")
