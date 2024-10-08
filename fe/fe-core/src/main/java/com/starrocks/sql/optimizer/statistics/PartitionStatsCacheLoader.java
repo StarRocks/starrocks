@@ -53,6 +53,7 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
                 List<String> columns = Lists.newArrayList();
                 for (ColumnStatsCacheKey statsCacheKey : cacheKey) {
                     columns.add(statsCacheKey.column);
+                    tableId = statsCacheKey.tableId;
                 }
                 List<TStatisticData> statisticData = statisticExecutor.queryPartitionLevelColumnNDV(connectContext,
                         tableId, Lists.newArrayList(), columns);

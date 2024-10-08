@@ -402,23 +402,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         ScalarOperator predicate = node.getPredicate();
-        List<String> scanColumns = columnMap.values().stream().map(Column::getName).collect(Collectors.toList());
         Map<Long, Statistics> partitionStatistics =
                 StatisticsCalcUtils.getPartitionStatistics(node, table, columnMap);
         if (MapUtils.isEmpty(partitionStatistics)) {
             return;
         }
         long tableRows = 0;
+        predicate = removePartitionPredicate(predicate, node, optimizerContext);
         for (var entry : partitionStatistics.entrySet()) {
             Statistics partitionStat = estimateStatistics(ImmutableList.of(predicate), entry.getValue());
             long partitionSelectedRows = (long) partitionStat.getOutputRowCount();
-            if (partitionStat.isTableRowCountMayInaccurate() || partitionSelectedRows == 1) {
+            if (partitionStat.isTableRowCountMayInaccurate()) {
                 return;
             }
             tableRows += partitionSelectedRows;
         }
         // adjust output rows
-        node.getPredicate().setNotEvalEstimate(true);
+        predicate.setNotEvalEstimate(true);
         statistics.setOutputRowCount(tableRows);
 
         // adjust output column statistics if possible
@@ -435,7 +435,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             double avgDistinctCount = partitionStats.stream()
                     .mapToDouble(ColumnStatistic::getDistinctValuesCount)
                     .average().getAsDouble();
-            ;
             boolean hasSimilarNDV = partitionStats.stream()
                     .allMatch(x -> withinDelta(x.getDistinctValuesCount(), avgDistinctCount, 0.1));
             if (hasSimilarNDV) {

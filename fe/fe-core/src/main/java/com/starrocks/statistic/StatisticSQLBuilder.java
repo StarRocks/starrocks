@@ -49,10 +49,10 @@ public class StatisticSQLBuilder {
 
     private static final String QUERY_PARTITION_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), " +
-                    " partition_id, column_name, hll_cardinality(hll_union(ndv)) as distinct_count"
+                    " `partition_id`, `column_name`, hll_cardinality(hll_union(`ndv`)) as distinct_count"
                     + " FROM " + FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
-                    + " GROUP BY partition_id, column_name";
+                    + " GROUP BY `partition_id`, `column_name`";
 
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
@@ -111,10 +111,10 @@ public class StatisticSQLBuilder {
         VelocityContext context = new VelocityContext();
         String tablePredicate = "table_id=" + tableId;
         String partitionPredicate = CollectionUtils.isEmpty(partitionIds) ? "" :
-                " AND partition_id in (" +
+                " AND `partition_id` in (" +
                         partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
         String columnPredicate = CollectionUtils.isEmpty(columns) ? "" :
-                " AND column_names in (" +
+                " AND `column_name` in (" +
                         columns.stream().map(Strings::quote).collect(Collectors.joining(",")) + ")";
         context.put("predicate", tablePredicate + partitionPredicate + columnPredicate);
 
