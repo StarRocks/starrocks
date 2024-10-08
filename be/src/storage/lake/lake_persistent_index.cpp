@@ -59,15 +59,22 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value, u
             // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
             //    in Rowset.
             //   | ------- ver1 --------- | + | -------- ver2 ----------|
-            //   | k1 k2 k3               |   | k3 k4                   |
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
             //
+            //   =
+            //   | ------- ver2 --------- |
+            //   | k1 k2 k3(2) k4         |
             //   k3 in ver2 will replace k3 in ver1, because it has a larger version.
             //
             // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
             //    decide their order.
             //   | ------- ver1 --------- | + | -------- ver1 ----------|
-            //   | k1 k2 k3               |   | k3 k4                   |
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
             //   | max_rss_rowid = 2      |   | max_rss_rowid = 4       |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2 k3(2) k4         |
+            //   | max_rss_rowid = 4      |
             //
             //   k3 with larger max_rss_rowid will replace previous one, because max_rss_rowid is incremental,
             //   larger max_rss_rowid means it was generated later.
@@ -77,6 +84,10 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value, u
             //   | ------- ver1 --------- | + | -------- ver1 ----------|
             //   | k1 k2 k3 k4(del)       |   | k3(del)      k4(del)    |
             //   | max_rss_rowid = MAX    |   | max_rss_rowid = MAX     |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2                  |
+            //   | max_rss_rowid = MAX    |
             //
             //   Because we use UINT32_TMAX as delete flag key's rowid, so two sst will have same
             //   max_rss_rowid, when the second one is only contains delete flag keys.
