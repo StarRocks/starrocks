@@ -495,15 +495,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
-                case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
-                case OperationType.OP_ADD_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayAddFrontend(fe);
                     break;
                 }
-                case OperationType.OP_REMOVE_FRONTEND:
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayDropFrontend(fe);
@@ -512,21 +509,17 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
                     break;
                 }
-<<<<<<< HEAD
-                case OperationType.OP_TIMESTAMP:
-=======
                 case OperationType.OP_RESET_FRONTENDS: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayResetFrontends(fe);
                     break;
                 }
->>>>>>> 437544de98 ([Enhancement] Support recovery FE metadata from meta dir (#51040))
+                case OperationType.OP_TIMESTAMP:
                 case OperationType.OP_TIMESTAMP_V2: {
                     Timestamp stamp = (Timestamp) journal.getData();
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());

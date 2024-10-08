@@ -237,16 +237,6 @@ public class OperationType {
     public static final short OP_FINISH_DECOMMISSION_BACKEND = 54;
 
     @Deprecated
-    public static final short OP_ADD_FRONTEND = 55;
-
-    @Deprecated
-    public static final short OP_ADD_FIRST_FRONTEND = 56;
-
-    @Deprecated
-    @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_FRONTEND = 57;
-
-    @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_SET_LOAD_ERROR_HUB = 58;
 
@@ -598,13 +588,6 @@ public class OperationType {
     public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
     public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
-    // manage system node info 10101 ~ 10120
-<<<<<<< HEAD
-    @Deprecated
-    public static final short OP_UPDATE_FRONTEND = 10101;
-
-=======
->>>>>>> 437544de98 ([Enhancement] Support recovery FE metadata from meta dir (#51040))
     // manage compute node 10201 ~ 10220
 
     @IgnorableOnReplayFailed
