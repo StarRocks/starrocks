@@ -43,10 +43,6 @@ public class ExecGroup {
         return this.disableColocateGroup;
     }
 
-    public void setDisableColocateGroup() {
-        this.disableColocateGroup = true;
-    }
-
     public void add(PlanNode node) {
         nodeIds.add(node.getId().asInt());
     }
@@ -56,9 +52,27 @@ public class ExecGroup {
         this.disableColocateGroup = this.disableColocateGroup || disableColocateGroup;
     }
 
+    public void disableColocateGroup(PlanNode root) {
+        clearRuntimeFilterExecGroupInfo(root);
+        this.disableColocateGroup = true;
+    }
+
+    private void clearRuntimeFilterExecGroupInfo(PlanNode root) {
+        if (!nodeIds.contains(root.getId().asInt())) {
+            return;
+        }
+
+        root.getProbeRuntimeFilters().forEach(RuntimeFilterDescription::clearExecGroupInfo);
+
+        if (root instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) root;
+            joinNode.buildRuntimeFilters.forEach(RuntimeFilterDescription::clearExecGroupInfo);
+        }
+
+        root.getChildren().forEach(this::clearRuntimeFilterExecGroupInfo);
+    }
+
     public void merge(ExecGroup other) {
-        Preconditions.checkState(isColocateExecGroup());
-        Preconditions.checkState(!other.disableColocateGroup);
         if (this != other) {
             this.nodeIds.addAll(other.nodeIds);
         }
