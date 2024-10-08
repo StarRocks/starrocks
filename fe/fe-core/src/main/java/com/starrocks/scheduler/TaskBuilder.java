@@ -16,12 +16,17 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -44,9 +49,11 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.scheduler.PartitionBasedCooldownProcessor.PARTITION_ID;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
@@ -296,13 +303,61 @@ public class TaskBuilder {
         task.setDbName(db.getOriginName());
         Map<String, String> taskProperties = getExternalCooldownTaskProperties(externalCooldownStmt, table);
 
-        task.setDefinition(String.format("INSERT INTO %s SELECT * FROM %s",
+        task.setDefinition(String.format("INSERT OVERWRITE %s SELECT * FROM %s",
                 TableName.fromString(olapTable.getExternalCoolDownTarget()).toSql(),
                 externalCooldownStmt.getTableName().toSql()));
         task.setProperties(taskProperties);
         task.setExpireTime(0L);
         handleSpecialTaskProperties(task);
         return task;
+    }
+
+    public static Task buildExternalCooldownTask(Database db, OlapTable olapTable, Partition partition) {
+        Task task = new Task(getExternalCooldownTaskName(olapTable.getId(), partition.getId())
+                + "-" + System.currentTimeMillis());
+        task.setSource(Constants.TaskSource.EXTERNAL_COOLDOWN);
+        task.setDbName(db.getOriginName());
+        Map<String, String> taskProperties = getExternalCooldownTaskProperties(olapTable, partition);
+        task.setDefinition(String.format("INSERT OVERWRITE %s SELECT * FROM %s",
+                olapTable.getExternalCoolDownTargetTableName().toSql(),
+                (new TableName(db.getOriginName(), olapTable.getName())).toSql()
+                ));
+        task.setProperties(taskProperties);
+        task.setExpireTime(0L);
+        handleSpecialTaskProperties(task);
+        return task;
+    }
+
+    @NotNull
+    private static Map<String, String> getExternalCooldownTaskProperties(OlapTable table, Partition partition) {
+        Map<String, String> taskProperties = Maps.newHashMap();
+        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Range<PartitionKey> range =  rangePartitionInfo.getRange(partition.getId());
+        taskProperties.put(PARTITION_ID, String.valueOf(partition.getId()));
+        taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_START,
+                String.valueOf(range.lowerEndpoint().getKeys().get(0).getStringValue()));
+        taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_END,
+                String.valueOf(range.upperEndpoint().getKeys().get(0).getStringValue()));
+        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        return taskProperties;
+    }
+
+    public static ExecuteOption getCooldownExecuteOption(OlapTable table, Partition partition) {
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Range<PartitionKey> range =  rangePartitionInfo.getRange(partition.getId());
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(PARTITION_ID, String.valueOf(partition.getId()));
+        taskRunProperties.put(TaskRun.PARTITION_START, range.lowerEndpoint().getKeys().get(0).getStringValue());
+        taskRunProperties.put(TaskRun.PARTITION_END, range.upperEndpoint().getKeys().get(0).getStringValue());
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        ExecuteOption executeOption = new ExecuteOption(
+                Constants.TaskRunPriority.HIGH.value(), false, taskRunProperties);
+        executeOption.setManual(true);
+        executeOption.setSync(false);
+        return executeOption;
     }
 
     @NotNull
@@ -315,7 +370,7 @@ public class TaskBuilder {
             taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_END,
                     String.valueOf(stmt.getPartitionRangeDesc().getPartitionEnd()));
         }
-        taskProperties.put(PartitionBasedCooldownProcessor.FORCE, String.valueOf(table.getId()));
+        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
         return taskProperties;
     }
 
@@ -325,5 +380,9 @@ public class TaskBuilder {
 
     public static String getExternalCooldownTaskName(Long tableId) {
         return "external-cooldown-" + tableId;
+    }
+
+    public static String getExternalCooldownTaskName(Long tableId, long partitionId) {
+        return "external-cooldown-" + tableId + "-" + partitionId;
     }
 }

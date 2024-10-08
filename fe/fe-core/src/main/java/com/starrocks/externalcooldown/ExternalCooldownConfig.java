@@ -26,7 +26,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ExternalCoolDownConfig implements Writable {
+public class ExternalCooldownConfig implements Writable {
     @SerializedName("target")
     private String target;
 
@@ -36,20 +36,38 @@ public class ExternalCoolDownConfig implements Writable {
     @SerializedName("waitSecond")
     private long waitSecond;
 
-    public ExternalCoolDownConfig(String target, String schedule, long waitSecond) {
+    public ExternalCooldownConfig(String target, String schedule, long waitSecond) {
         this.target = target;
         this.schedule = schedule;
         this.waitSecond = waitSecond;
     }
 
-    public ExternalCoolDownConfig(ExternalCoolDownConfig externalCoolDownConfig) {
-        this.target = externalCoolDownConfig.target;
-        this.schedule = externalCoolDownConfig.schedule;
-        this.waitSecond = externalCoolDownConfig.waitSecond;
+    public ExternalCooldownConfig(ExternalCooldownConfig externalCoolDownConfig) {
+        target = null;
+        schedule = null;
+        waitSecond = 0;
+        if (externalCoolDownConfig != null) {
+            target = externalCoolDownConfig.target;
+            schedule = externalCoolDownConfig.schedule;
+            waitSecond = externalCoolDownConfig.waitSecond;
+        }
     }
 
-    public ExternalCoolDownConfig() {
+    public ExternalCooldownConfig() {
         this(null, null, 0);
+    }
+
+    public boolean isReadyForAutoCooldown() {
+        if (target == null || target.isEmpty()) {
+            return false;
+        }
+        if (waitSecond <= 0) {
+            return false;
+        }
+        if (schedule == null || schedule.isEmpty()) {
+            return false;
+        }
+        return true;
     }
 
     public void buildFromProperties(Map<String, String> properties) {
@@ -91,7 +109,7 @@ public class ExternalCoolDownConfig implements Writable {
         this.waitSecond = waitSecond;
     }
 
-    public Map<String, String> toProperties() {
+    public Map<String, String> getProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, target);
         properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE, schedule);
@@ -104,8 +122,8 @@ public class ExternalCoolDownConfig implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static ExternalCoolDownConfig read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ExternalCoolDownConfig.class);
+    public static ExternalCooldownConfig read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), ExternalCooldownConfig.class);
     }
 
     @Override
