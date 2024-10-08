@@ -115,6 +115,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return databaseTransactionMgr;
     }
 
+    public Map<Long, DatabaseTransactionMgr> getAllDatabaseTransactionMgrs() {
+        return dbIdToDatabaseTransactionMgrs;
+    }
+
     public void addDatabaseTransactionMgr(Long dbId) {
         if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, globalStateMgr)) == null) {
             LOG.debug("add database transaction manager for db {}", dbId);
@@ -752,19 +756,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
         idGenerator = reader.readJson(TransactionIdGenerator.class);
-        int numTransactions = reader.readInt();
-        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
-        for (int i = 0; i < numTransactions; ++i) {
-            TransactionState transactionState = reader.readJson(TransactionState.class);
+
+        List<TransactionState> transactionStates = new ArrayList<>();
+        reader.readCollection(TransactionState.class, transactionState -> {
             if (transactionState.isExpired(now)) {
                 LOG.info("discard expired transaction state: {}", transactionState);
-                continue;
+                return;
             } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 LOG.info("discard unknown transaction state: {}", transactionState);
-                continue;
+                return;
             }
             transactionStates.add(transactionState);
-        }
+        });
+
         putTransactionStats(transactionStates);
     }
 

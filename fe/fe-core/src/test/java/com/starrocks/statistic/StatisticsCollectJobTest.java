@@ -59,6 +59,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -512,6 +513,53 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void createAnalyzeJobSimultaneously() throws Exception {
+        new MockUp<StatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        // case: sample table
+        {
+            starRocksAssert.ddl("create analyze sample table test.t0_stats");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            Optional<StatisticsCollectJob> tableJob = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats")).findFirst();
+            Assert.assertTrue(tableJob.isPresent());
+            Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, tableJob.get().getType());
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: column
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(2, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: overlapped columns
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v3)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2, v3)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(4, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+    }
+
+    @Test
     public void testExternalAnalyzeJob() {
         Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
@@ -886,7 +934,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
 
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
@@ -1259,7 +1308,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");

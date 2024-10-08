@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -35,6 +36,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,6 +127,10 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
+    public boolean isAnalyzeTable() {
+        return CollectionUtils.isEmpty(columnNames);
+    }
+
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();
         // Statistics collecting is not user-specific, which means response latency is not that important.
@@ -138,7 +144,11 @@ public abstract class StatisticsCollectJob {
         int count = 0;
         int maxRetryTimes = 5;
         do {
+            context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
+            if (Config.enable_print_sql) {
+                LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
 
@@ -146,7 +156,6 @@ public abstract class StatisticsCollectJob {
             setDefaultSessionVariable(context);
 
             context.setExecutor(executor);
-            context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
             executor.execute();
 
@@ -160,6 +169,8 @@ public abstract class StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
+                AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                        DebugUtil.printId(context.getQueryId()), sql);
                 return;
             }
         } while (count < maxRetryTimes);

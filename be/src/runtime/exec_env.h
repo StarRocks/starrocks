@@ -148,6 +148,8 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+    MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -167,6 +169,10 @@ private:
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
+
+    // Track usage of jemalloc
+    std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
+    std::shared_ptr<MemTracker> _jemalloc_fragmentation_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;

@@ -106,6 +106,7 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    std::string profile; // detailed execution info, such as io stats
 };
 
 class CompactionScheduler {
@@ -333,6 +334,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
                                                                std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    context->enqueue_time_sec = ::time(nullptr);
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -340,7 +342,9 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
         int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    int64_t now = ::time(nullptr);
     for (auto& context : contexts) {
+        context->enqueue_time_sec = now;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }

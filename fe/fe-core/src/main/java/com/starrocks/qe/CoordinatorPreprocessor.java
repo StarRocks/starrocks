@@ -74,6 +74,7 @@ public class CoordinatorPreprocessor {
     private final ConnectContext connectContext;
 
     private final JobSpec jobSpec;
+    private final boolean enablePhasedSchedule;
     private final ExecutionDAG executionDAG;
 
     private final WorkerProvider.Factory workerProviderFactory;
@@ -81,12 +82,13 @@ public class CoordinatorPreprocessor {
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
-    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
         workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
+        this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
@@ -106,6 +108,7 @@ public class CoordinatorPreprocessor {
 
         this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
+        this.enablePhasedSchedule = false;
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
@@ -252,6 +255,7 @@ public class CoordinatorPreprocessor {
 
         validateExecutionDAG();
 
+        executionDAG.prepareCaptureVersion(enablePhasedSchedule);
         executionDAG.finalizeDAG();
     }
 

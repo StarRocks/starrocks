@@ -389,6 +389,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
+"fast_schema_evolution" = "false",
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
@@ -460,7 +461,6 @@ insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
 -- !result
 alter table tab1 add column c1 bigint;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:

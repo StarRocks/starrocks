@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['fuzai', 'ziyuan'] 
 ---
 
 # 中间结果落盘
@@ -19,6 +20,7 @@ displayed_sidebar: docs
 - 聚合算子
 - 排序算子
 - Hash join（LEFT JOIN、RIGHT JOIN、FULL JOIN、OUTER JOIN、SEMI JOIN 以及 INNER JOIN）算子
+- CTE 算子（自 v3.3.4 起支持）
 
 ## 开启中间结果落盘
 

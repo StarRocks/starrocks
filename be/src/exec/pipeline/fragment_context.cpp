@@ -14,15 +14,20 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <memory>
+
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 
 namespace starrocks::pipeline {
@@ -84,6 +89,37 @@ void FragmentContext::count_down_execution_group(size_t val) {
     finish();
     auto status = final_status();
     _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+
+    if (_report_when_finish) {
+        /// TODO: report fragment finish to BE coordinator
+        TReportFragmentFinishResponse res;
+        TReportFragmentFinishParams params;
+        params.__set_query_id(query_id());
+        params.__set_fragment_instance_id(fragment_instance_id());
+        // params.query_id = query_id();
+        // params.fragment_instance_id = fragment_instance_id();
+        const auto& fe_addr = state->fragment_ctx()->fe_addr();
+
+        class RpcRunnable : public Runnable {
+        public:
+            RpcRunnable(const TNetworkAddress& fe_addr, const TReportFragmentFinishResponse& res,
+                        const TReportFragmentFinishParams& params)
+                    : fe_addr(fe_addr), res(res), params(params) {}
+            const TNetworkAddress fe_addr;
+            TReportFragmentFinishResponse res;
+            const TReportFragmentFinishParams params;
+
+            void run() override {
+                (void)ThriftRpcHelper::rpc<FrontendServiceClient>(
+                        fe_addr.hostname, fe_addr.port,
+                        [&](FrontendServiceConnection& client) { client->reportFragmentFinish(res, params); });
+            }
+        };
+        //
+        std::shared_ptr<Runnable> runnable;
+        runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
+        (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
+    }
 
     destroy_pass_through_chunk_buffer();
 

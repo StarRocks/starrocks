@@ -333,7 +333,6 @@ public:
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
-protected:
     void on_shutdown() override;
 
 private:

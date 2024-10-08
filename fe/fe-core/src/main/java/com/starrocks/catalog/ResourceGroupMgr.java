@@ -90,6 +90,7 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private int sumExclusiveCpuCores = 0;
+    private volatile boolean hasCreatedDefaultResourceGroups = false;
 
     private void readLock() {
         lock.readLock().lock();
@@ -531,6 +532,9 @@ public class ResourceGroupMgr implements Writable {
             shortQueryResourceGroup = wg;
         }
         sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+        if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
+            hasCreatedDefaultResourceGroups = true;
+        }
     }
 
     public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
@@ -648,6 +652,16 @@ public class ResourceGroupMgr implements Writable {
 
     public void createBuiltinResourceGroupsIfNotExist() {
         try {
+            if (hasCreatedDefaultResourceGroups) {
+                return;
+            }
+
+            // Create default resource groups only when there are BEs.
+            // Otherwise, we cannot get the number of cores of BE as `cpu_weight`.
+            if (BackendResourceStat.getInstance().getNumBes() <= 0) {
+                return;
+            }
+
             ResourceGroup defaultWg = getResourceGroup(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
             if (defaultWg != null) {
                 return;
@@ -695,12 +709,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
         List<ResourceGroup> resourceGroups = new ArrayList<>();
-        for (int i = 0; i < numJson; ++i) {
-            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
-            resourceGroups.add(resourceGroup);
-        }
+        reader.readCollection(ResourceGroup.class, resourceGroups::add);
         resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
         resourceGroups.forEach(this::replayAddResourceGroup);
     }

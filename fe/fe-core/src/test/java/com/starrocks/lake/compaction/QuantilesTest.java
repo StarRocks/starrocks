@@ -19,6 +19,13 @@ import org.junit.Test;
 
 public class QuantilesTest {
     @Test
+    public void testBasic() {
+        Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
+        Quantiles q2 = new Quantiles(q1);
+        Assert.assertTrue(q1.compareTo(q2) == 0);
+    }
+
+    @Test
     public void testCompare() {
         // avg
         {

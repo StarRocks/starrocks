@@ -1308,6 +1308,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
 - 引入版本：v3.1.6
 
+##### enable_active_materialized_view_schema_strict_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
+- 引入版本：v3.3.4
+
 <!--
 ##### mv_active_checker_interval_seconds
 
@@ -3170,6 +3179,24 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.1.11
+
+##### lake_enable_balance_tablets_between_workers
+
+- 默认值：false
+- 类型：Boolean
+- Unit: -
+- 是否动态：是
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
+- 引入版本：v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- Unit: -
+- 是否动态：是
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
+- 引入版本：v3.3.4
 
 ### 其他
 

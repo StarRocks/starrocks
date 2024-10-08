@@ -173,7 +173,7 @@ public class EditLogTest {
         fe.updateHostAndEditLogPort("testHost", 1000);
         JournalEntity journal = new JournalEntity();
         journal.setData(fe);
-        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
+        journal.setOpCode(OperationType.OP_UPDATE_FRONTEND_V2);
         EditLog editLog = new EditLog(null);
         editLog.loadJournal(mgr, journal);
         List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);

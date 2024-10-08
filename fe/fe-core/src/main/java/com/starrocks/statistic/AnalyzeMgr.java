@@ -214,6 +214,11 @@ public class AnalyzeMgr implements Writable {
         statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
+    public void dropExternalBasicStatsData(String catalogName, String dbName, String tableName) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName);
+    }
+
     public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
         List<AnalyzeJob> expireList = Lists.newArrayList();
         try {
@@ -261,6 +266,17 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void removeExternalHistogramStatsMeta(String catalogName, String dbName, String tableName, List<String> columns) {
+        for (String column : columns) {
+            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(catalogName, dbName, tableName, column);
+            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logRemoveExternalHistogramStatsMeta(externalHistogramStatsMetaMap.get(histogramKey));
+                externalHistogramStatsMetaMap.remove(histogramKey);
+            }
+        }
+    }
+
     public void replayRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
         externalBasicStatsMetaMap.remove(new StatsMetaKey(basicStatsMeta.getCatalogName(),
                 basicStatsMeta.getDbName(), basicStatsMeta.getTableName()));
@@ -303,6 +319,10 @@ public class AnalyzeMgr implements Writable {
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
+    }
+
+    public BasicStatsMeta getTableBasicStatsMeta(long tableId) {
+        return basicStatsMetaMap.get(tableId);
     }
 
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
@@ -395,6 +415,11 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void clearStatisticFromDroppedTable() {
+        clearStatisticFromNativeDroppedTable();
+        clearStatisticFromExternalDroppedTable();
+    }
+
+    public void clearStatisticFromNativeDroppedTable() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
@@ -425,6 +450,34 @@ public class AnalyzeMgr implements Writable {
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
+
+    public void clearStatisticFromExternalDroppedTable() {
+        List<StatsMetaKey> droppedTables = new ArrayList<>();
+        for (Map.Entry<StatsMetaKey, ExternalBasicStatsMeta> entry : externalBasicStatsMetaMap.entrySet()) {
+            StatsMetaKey tableKey = entry.getKey();
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName());
+                if (table == null) {
+                    LOG.warn("Table {}.{}.{} not exists, clear it's statistics", tableKey.getCatalogName(),
+                            tableKey.getDbName(), tableKey.getTableName());
+                    droppedTables.add(tableKey);
+                }
+            } catch (Exception e) {
+                LOG.warn("Table {}.{}.{} throw exception, clear it's statistics", tableKey.getCatalogName(),
+                        tableKey.getDbName(), tableKey.getTableName(), e);
+                droppedTables.add(tableKey);
+            }
+        }
+
+        for (StatsMetaKey droppedTable : droppedTables) {
+            dropExternalBasicStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+            dropExternalHistogramStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
+                    droppedTable.getTableName());
+        }
+    }
+
     public void recordDropPartition(long partitionId) {
         dropPartitionIds.add(partitionId);
     }
@@ -632,21 +685,39 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+        List<String> columns = Lists.newArrayList();
+        StatsMetaKey tableKey = new StatsMetaKey(catalogName, dbName, tableName);
+        for (StatsMetaColumnKey histogramKey : externalHistogramStatsMetaMap.keySet()) {
+            if (histogramKey.getTableKey().equals(tableKey)) {
+                columns.add(histogramKey.getColumnName());
+            }
+        }
+
+        dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName, columns);
+    }
+
+    public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName,
+                                                      List<String> columns) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropExternalHistogram(StatisticUtils.buildConnectContext(), catalogName, dbName, tableName,
+                columns);
+
+        removeExternalHistogramStatsMeta(catalogName, dbName, tableName, columns);
+    }
+
     public void dropExternalHistogramStatsMetaAndData(ConnectContext statsConnectCtx,
                                                       TableName tableName, Table table,
                                                       List<String> columns) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropExternalHistogram(statsConnectCtx, table.getUUID(), columns);
 
-        for (String histogramColumn : columns) {
-            StatsMetaColumnKey histogramKey = new StatsMetaColumnKey(tableName.getCatalog(),
-                    tableName.getDb(), tableName.getTbl(), histogramColumn);
-            if (externalHistogramStatsMetaMap.containsKey(histogramKey)) {
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveExternalHistogramStatsMeta(externalHistogramStatsMetaMap.get(histogramKey));
-                externalHistogramStatsMetaMap.remove(histogramKey);
-            }
-        }
+        removeExternalHistogramStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columns);
     }
 
     public void registerConnection(long analyzeID, ConnectContext ctx) {
@@ -822,45 +893,22 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-            replayAddAnalyzeJob(analyzeJob);
-        }
+        reader.readCollection(AnalyzeJob.class, this::replayAddAnalyzeJob);
 
-        int analyzeStatusSize = reader.readInt();
-        for (int i = 0; i < analyzeStatusSize; ++i) {
-            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
-            replayAddAnalyzeStatus(analyzeStatus);
-        }
+        reader.readCollection(AnalyzeStatus.class, this::replayAddAnalyzeStatus);
 
-        int basicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < basicStatsMetaSize; ++i) {
-            BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
-            replayAddBasicStatsMeta(basicStatsMeta);
-        }
+        reader.readCollection(BasicStatsMeta.class, this::replayAddBasicStatsMeta);
 
-        int histogramStatsMetaSize = reader.readInt();
-        for (int i = 0; i < histogramStatsMetaSize; ++i) {
-            HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
-            replayAddHistogramStatsMeta(histogramStatsMeta);
-        }
+        reader.readCollection(HistogramStatsMeta.class, this::replayAddHistogramStatsMeta);
 
-        int externalBasicStatsMetaSize = reader.readInt();
-        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
-            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
-            replayAddExternalBasicStatsMeta(basicStatsMeta);
-        }
+        reader.readCollection(ExternalBasicStatsMeta.class, this::replayAddExternalBasicStatsMeta);
 
-        int externalHistogramStatsMetaSize = reader.readInt();
-        for (int i = 0; i < externalHistogramStatsMetaSize; ++i) {
-            ExternalHistogramStatsMeta histogramStatsMeta = reader.readJson(ExternalHistogramStatsMeta.class);
-            replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-        }
+        reader.readCollection(ExternalHistogramStatsMeta.class, this::replayAddExternalHistogramStatsMeta);
     }
 
     private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
-        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (basicStatsMeta == null) {
             // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
             BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
@@ -887,13 +935,26 @@ public class AnalyzeMgr implements Writable {
     }
 
     public static class StatsMetaKey {
-        String catalogName;
-        String dbName;
-        String tableName;
+        private final String catalogName;
+        private final String dbName;
+        private final String tableName;
+
         public StatsMetaKey(String catalogName, String dbName, String tableName) {
             this.catalogName = catalogName;
             this.dbName = dbName;
             this.tableName = tableName;
+        }
+
+        public String getCatalogName() {
+            return catalogName;
+        }
+
+        public String getDbName() {
+            return dbName;
+        }
+
+        public String getTableName() {
+            return tableName;
         }
 
         @Override
@@ -917,11 +978,19 @@ public class AnalyzeMgr implements Writable {
     }
 
     public static class StatsMetaColumnKey {
-        StatsMetaKey tableKey;
-        String columnName;
+        private final StatsMetaKey tableKey;
+        private final String columnName;
         public StatsMetaColumnKey(String catalogName, String dbName, String tableName, String columnName) {
             this.tableKey = new StatsMetaKey(catalogName, dbName, tableName);
             this.columnName = columnName;
+        }
+
+        public StatsMetaKey getTableKey() {
+            return tableKey;
+        }
+
+        public String getColumnName() {
+            return columnName;
         }
 
         @Override

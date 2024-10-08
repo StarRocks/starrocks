@@ -126,7 +126,7 @@ struct FilterIniter {
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            const auto& data_array = GetContainer<ltype>().get_data(nullable_column->data_column().get());
+            const auto& data_array = GetContainer<ltype>::get_data(nullable_column->data_column().get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 if (!nullable_column->is_null(j)) {
                     filter->insert(data_array[j]);
@@ -137,7 +137,7 @@ struct FilterIniter {
                 }
             }
         } else {
-            const auto& data_array = GetContainer<ltype>().get_data(column.get());
+            const auto& data_array = GetContainer<ltype>::get_data(column.get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 filter->insert(data_array[j]);
             }

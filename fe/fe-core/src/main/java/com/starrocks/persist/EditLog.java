@@ -83,7 +83,6 @@ import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -496,15 +495,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
-                case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
-                case OperationType.OP_ADD_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayAddFrontend(fe);
                     break;
                 }
-                case OperationType.OP_REMOVE_FRONTEND:
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayDropFrontend(fe);
@@ -513,10 +509,14 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
+                    break;
+                }
+                case OperationType.OP_RESET_FRONTENDS: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayResetFrontends(fe);
                     break;
                 }
                 case OperationType.OP_TIMESTAMP:
@@ -888,7 +888,7 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
-                    VariableMgr.replayGlobalVariableV2(info);
+                    globalStateMgr.getVariableMgr().replayGlobalVariableV2(info);
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {
@@ -1197,7 +1197,7 @@ public class EditLog {
                     break;
                 }
                 default: {
-                    if (Config.ignore_unknown_log_id) {
+                    if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
                     } else {
                         throw new IOException("UNKNOWN Operation Type " + opCode);
@@ -1498,6 +1498,10 @@ public class EditLog {
 
     public void logLeaderInfo(LeaderInfo info) {
         logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
+    }
+
+    public void logResetFrontends(Frontend frontend) {
+        logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
