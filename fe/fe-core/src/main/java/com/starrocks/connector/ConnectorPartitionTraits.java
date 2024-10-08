@@ -44,6 +44,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -194,4 +195,21 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
+
+    /**
+     * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds to make sure partition update
+     * time is later than check time
+     * @param checkTime the time to check
+     * @param extraSeconds partition updated time would add extraSeconds to check whether it is after checkTime
+     */
+    public abstract Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds);
+
+    /**
+     * Get the last update time of the table,
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds
+     */
+    public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
 }

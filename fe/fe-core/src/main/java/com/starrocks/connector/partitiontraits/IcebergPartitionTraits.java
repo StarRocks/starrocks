@@ -30,6 +30,9 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -129,6 +132,14 @@ public class IcebergPartitionTraits extends DefaultTraits {
             partitionKey.pushColumn(exprValue, column.getType().getPrimitiveType());
         }
         return partitionKey;
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
+        return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
+                plusSeconds(extraSeconds), Clock.systemDefaultZone().getZone())).orElse(null);
     }
 }
 
