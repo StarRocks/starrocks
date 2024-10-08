@@ -1016,7 +1016,6 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto num_rows = columns[0]->size();
-
     // compute nulls
     NullColumnPtr nulls;
     for (auto& column : columns) {
