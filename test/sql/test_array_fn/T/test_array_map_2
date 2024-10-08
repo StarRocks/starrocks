@@ -44,6 +44,8 @@ delete from t where k = 5;
 select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1,2]) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1]) from t order by k;
+select array_map((x)->x*x, arr_0) from t order by k;
+
 
 select array_map(x->x, arr_0) from t order by k;
 -- independent expr
