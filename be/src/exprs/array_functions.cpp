@@ -39,6 +39,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     const size_t num_rows = columns[0]->size();
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
     if (columns[0]->is_constant()) {
+        // @TODO return const
         auto col_result = Int32Column::create();
         col_result->append(col_array->offsets().get_data().data()[1]);
         col_result->assign(num_rows, 0);
@@ -109,6 +110,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
         return columns[0];
     }
 
+    // @TODO avoid unpack
     const Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
     const Column* arg1 = columns[1].get();
 
@@ -479,6 +481,7 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 
 StatusOr<ColumnPtr> ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    // @TODO avoid unpack
     const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
     const ColumnPtr& arg1 = columns[1];                                                                      // element
 
