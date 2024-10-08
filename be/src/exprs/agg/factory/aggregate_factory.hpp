@@ -33,6 +33,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
+#include "exprs/agg/ds_hll_count_distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -183,6 +184,9 @@ public:
 
     template <LogicalType T>
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
+
+    template <LogicalType T>
+    static AggregateFunctionPtr MakeHllSketchAggregateFunction();
 
     template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
@@ -379,6 +383,11 @@ auto AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
     return std::make_shared<HllNdvAggregateFunction<LT, false>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
+    return std::make_shared<HllSketchAggregateFunction<LT>>();
 }
 
 template <LogicalType LT>

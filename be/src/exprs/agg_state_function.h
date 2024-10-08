@@ -21,13 +21,10 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
-#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 
 namespace starrocks {
-
-static MemHookAllocator kDefaultAggStateFunctionAllocator = MemHookAllocator{};
 
 /**
  * @brief compute the immediate result of aggregate function
@@ -62,7 +59,6 @@ public:
                                          " not match with arg_nullables size " + std::to_string(_arg_nullables.size()));
         }
 
-        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateFunctionAllocator);
         Columns new_columns;
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {

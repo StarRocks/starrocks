@@ -31,7 +31,6 @@
 #include "exec/spill/spiller.hpp"
 #include "exprs/agg/agg_state_merge.h"
 #include "exprs/agg/agg_state_union.h"
-#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"

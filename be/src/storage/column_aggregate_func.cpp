@@ -20,7 +20,6 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate.h"
-#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
