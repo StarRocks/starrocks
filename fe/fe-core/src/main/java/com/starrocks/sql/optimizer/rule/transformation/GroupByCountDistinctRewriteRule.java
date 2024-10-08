@@ -271,12 +271,8 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
     private boolean isPrimaryKey(ColumnRefOperator column, LogicalOlapScanOperator scan) {
         OlapTable olapTable = (OlapTable) scan.getTable();
         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-            List<String> keyColumnNames = olapTable.getKeyColumns()
-                    .stream()
-                    .filter(Column::isKey)
-                    .map(Column::getName)
-                    .collect(Collectors.toList());
-            return keyColumnNames.size() == 1 && keyColumnNames.contains(column.getName());
+            List<Column> keyColumnNames = olapTable.getKeyColumns();
+            return keyColumnNames.size() == 1 && keyColumnNames.stream().anyMatch(c -> c.getName().equals(column.getName()));
         }
         return false;
     }
