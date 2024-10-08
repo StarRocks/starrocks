@@ -87,7 +87,8 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
     int64_t shift = offset - block_offset;
 
     SharedBufferPtr sb = nullptr;
-    if (_enable_block_buffer) {
+    {
+        // try to find data from shared buffer
         auto ret = _sb_stream->find_shared_buffer(offset, size);
         if (ret.ok()) {
             sb = ret.value();
