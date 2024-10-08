@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 - 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW.md)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
 
-- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](../table_design/data_distribution/Data_distribution.md#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### 功能优化
 
@@ -213,9 +213,9 @@ displayed_sidebar: docs
 - 支持 [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)，无需导入数据或创建外部表即可查询 Delta Lake 数据。[#11972](https://github.com/StarRocks/starrocks/issues/11972)
 - Hive catalog、Hudi catalog 和 Iceberg catalog 兼容 AWS Glue。[#12249](https://github.com/StarRocks/starrocks/issues/12249)
 - 支持通过[文件外部表](../data_source/file_external_table.md)查询 HDFS 或对象存储上的 Parquet 和 ORC 文件。[#13064](https://github.com/StarRocks/starrocks/pull/13064)
-- 支持基于 Hive、Hudi 或 Iceberg catalog 创建物化视图，以及基于物化视图创建物化视图。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md)。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
+- 支持基于 Hive、Hudi 或 Iceberg catalog 创建物化视图，以及基于物化视图创建物化视图。相关文档，请参见[物化视图](../using_starrocks/async_mv/Materialized_view.md)。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
 - 主键模型表支持条件更新。相关文档，请参见[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md#条件更新)。[#12159](https://github.com/StarRocks/starrocks/pull/12159)
-- 支持 [Query Cache](../using_starrocks/query_cache.md)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
+- 支持 [Query Cache](../using_starrocks/caching/query_cache.md)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
 - 支持为 Broker Load 作业指定优先级。相关文档，请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
 - 支持为 StarRocks 原生表手动设置数据导入的副本数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。[#11253](https://github.com/StarRocks/starrocks/pull/11253)
 - 支持查询队列功能。相关文档，请参见[查询队列](../administration/management/resource_management/query_queues.md)。[#12594](https://github.com/StarRocks/starrocks/pull/12594)
@@ -232,8 +232,8 @@ displayed_sidebar: docs
 - 优化了 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) 和 [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 的元数据访问速度。[#11349](https://github.com/StarRocks/starrocks/issues/11349)
 - [Elasticsearch 外部表](../data_source/External_table.md#deprecated-elasticsearch-外部表)支持查询 ARRAY 类型数据。[#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - 物化视图优化
-  - 异步物化视图支持 SPJG 类型的物化视图查询的自动透明改写。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md#使用异步物化视图改写加速查询)。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - 异步物化视图支持多种异步刷新机制。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md)。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - 异步物化视图支持 SPJG 类型的物化视图查询的自动透明改写。相关文档，请参见[物化视图](../using_starrocks/async_mv/Materialized_view.md#使用异步物化视图改写加速查询)。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - 异步物化视图支持多种异步刷新机制。相关文档，请参见[物化视图](../using_starrocks/async_mv/Materialized_view.md)。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - 优化了物化视图的刷新效率。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - 导入优化
   - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)

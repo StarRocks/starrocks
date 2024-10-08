@@ -127,6 +127,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -267,7 +268,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
-public class LocalMetastore implements ConnectorMetadata {
+public class LocalMetastore implements ConnectorMetadata, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
@@ -5155,6 +5156,11 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.close();
     }
 
+    /**
+     * When loading the LocalMetastore, the DB/Catalog that the materialized view depends
+     * on may not have been loaded yet, so you cannot reload the materialized view.
+     * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
+     */
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int dbSize = reader.readJson(int.class);
         for (int i = 0; i < dbSize; ++i) {
@@ -5168,7 +5174,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(tbl -> {
+            db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
                 try {
                     tbl.onReload();
                 } catch (Throwable e) {
@@ -5211,6 +5217,46 @@ public class LocalMetastore implements ConnectorMetadata {
          * old versions of the code (defaultCluster is required for 3.0 fallback)
          */
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        List<Object> samples = new ArrayList<>();
+        // get every olap table's first partition
+        for (Database database : idToDb.values()) {
+            database.readLock();
+            try {
+                samples.addAll(database.getPartitionSamples());
+            } finally {
+                database.readUnlock();
+            }
+        }
+        return Lists.newArrayList(Pair.create(samples, totalCount));
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long totalCount = idToDb.values()
+                .stream()
+                .mapToInt(database -> {
+                    database.readLock();
+                    try {
+                        return database.getOlapPartitionsCount();
+                    } finally {
+                        database.readUnlock();
+                    }
+                }).sum();
+        return ImmutableMap.of("Partition", totalCount);
     }
 }
 

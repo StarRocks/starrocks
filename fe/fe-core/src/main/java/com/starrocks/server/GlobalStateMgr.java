@@ -178,6 +178,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -561,6 +562,8 @@ public class GlobalStateMgr {
 
     private MemoryUsageTracker memoryUsageTracker;
 
+    private ProcProfileCollector procProfileCollector;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     public NodeMgr getNodeMgr() {
@@ -830,6 +833,7 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+        this.procProfileCollector = new ProcProfileCollector();
     }
 
     public static void destroyCheckpoint() {
@@ -1519,6 +1523,7 @@ public class GlobalStateMgr {
 
         lockChecker.start();
 
+        procProfileCollector.start();
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
     }

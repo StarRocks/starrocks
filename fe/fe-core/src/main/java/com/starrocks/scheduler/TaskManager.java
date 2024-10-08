@@ -26,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
@@ -49,7 +50,6 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -68,6 +68,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -904,8 +905,12 @@ public class TaskManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(idToTaskMap.values());
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> taskSamples = idToTaskMap.values()
+                .stream()
+                .limit(1)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(taskSamples, (long) idToTaskMap.size()));
     }
 
     private static class SerializeData {

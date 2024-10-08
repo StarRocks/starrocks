@@ -1317,8 +1317,6 @@ public class Coordinator {
         Map<Integer, List<TRuntimeFilterProberParams>> idToProbePrams = new HashMap<>();
 
         for (PlanFragment fragment : fragments) {
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             CoordinatorPreprocessor.FragmentExecParams params =
                     coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {

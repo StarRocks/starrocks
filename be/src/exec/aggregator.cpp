@@ -387,7 +387,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
             // Because max_by and min_by function have two input types,
             // so we use its second arguments type as input.
-            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
+            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by" ||
+                fn.name.function_name == "max_by_v2" || fn.name.function_name == "min_by_v2") {
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 

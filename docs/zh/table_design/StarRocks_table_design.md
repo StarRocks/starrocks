@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
+keywords: ['linshi'] 
 ---
 
 # 理解 StarRocks 表设计

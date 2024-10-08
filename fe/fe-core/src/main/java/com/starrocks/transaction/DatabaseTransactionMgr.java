@@ -107,6 +107,7 @@ import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 public class DatabaseTransactionMgr {
 
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
+    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private long dbId;
@@ -187,8 +188,7 @@ public class DatabaseTransactionMgr {
         return labelToTxnIds.get(label);
     }
 
-    @VisibleForTesting
-    protected int getRunningTxnNums() {
+    public int getRunningTxnNums() {
         return runningTxnNums;
     }
 
@@ -605,8 +605,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitPreparedTransaction(transactionState, db);
-            txnOperated = true;
+            txnOperated = unprotectedCommitPreparedTransaction(transactionState, db);
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -619,14 +618,16 @@ public class DatabaseTransactionMgr {
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
-        // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
-        try {
-            updateCatalogAfterCommitted(transactionState, db);
-        } finally {
-            updateCatalogAfterCommittedSpan.end();
+        if (txnOperated) {
+            // 6. update nextVersion because of the failure of persistent transaction resulting in error version
+            Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
+            try {
+                updateCatalogAfterCommitted(transactionState, db);
+            } finally {
+                updateCatalogAfterCommittedSpan.end();
+            }
+            LOG.info("transaction:[{}] successfully committed", transactionState);
         }
-        LOG.info("transaction:[{}] successfully committed", transactionState);
         return waiter;
     }
 
@@ -1083,10 +1084,10 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
+    protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
         // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
-            return;
+            return false;
         }
         // commit timestamps needs to be strictly monotonically increasing
         long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
@@ -1140,6 +1141,7 @@ public class DatabaseTransactionMgr {
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
+        return true;
     }
 
     // for add/update/delete TransactionState
@@ -1815,6 +1817,27 @@ public class DatabaseTransactionMgr {
                 return TTransactionStatus.PREPARED;
             default:
                 return TTransactionStatus.UNKNOWN;
+        }
+    }
+
+    public List<Object> getSamplesForMemoryTracker() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.size() > 0) {
+                return idToRunningTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            if (idToFinalStatusTransactionState.size() > 0) {
+                return idToFinalStatusTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            return new ArrayList<>();
+        } finally {
+            readUnlock();
         }
     }
 }

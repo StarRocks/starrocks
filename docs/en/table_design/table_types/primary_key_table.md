@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Primary Key table
@@ -78,8 +79,8 @@ PROPERTIES("replication_num" = "3",
 
 > **NOTICE**
 >
-> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#bucketing).
-> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../data_distribution/Data_distribution.md#bucketing).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../data_distribution/Data_distribution.md#determine-the-number-of-buckets).
 
 Example 2: Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
 
@@ -156,6 +157,6 @@ PROPERTIES("replication_num" = "3",
 
 ## What to do next
 
-After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Overview of data loading](../../loading/loading_introduction/Loading_intro.md).
+After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Overview of data loading](../../loading/Loading_intro.md).
 
 If you need to update data in the Primary Key table, you can [run a load job](../../loading/Load_to_Primary_Key_tables.md) or execute a DML statement ([UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) or [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)). Also, these update operations guarantee atomicity.

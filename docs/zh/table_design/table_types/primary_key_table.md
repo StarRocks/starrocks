@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['zhujian']
+sidebar_position: 20
 ---
 
 # 主键模型
@@ -75,8 +76,8 @@ PROPERTIES (
 
 > **注意**
 >
-> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
-> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../Data_distribution.md#确定分桶数量)。
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../data_distribution/Data_distribution.md#确定分桶数量)。
 
 - 例如，需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
 
@@ -142,9 +143,9 @@ PROPERTIES (
 
 - 创建表时，支持为除了主键之外的列创建 BITMAP、Bloom Filter 等索引。
 
-- 自 2.4 版本起，支持基于主键模型的表创建[异步物化视图](../../using_starrocks/Materialized_view.md)。
+- 自 2.4 版本起，支持基于主键模型的表创建[异步物化视图](../../using_starrocks/async_mv/Materialized_view.md)。
 
 ## 下一步
 
-建表完成后，您可以创建导入作业，导入数据至表中。具体导入方式，请参见[导入总览](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建导入作业，导入数据至表中。具体导入方式，请参见[导入总览](../../loading/Loading_intro.md)。
 如果需要更新主键模型表的数据，您可以通过[导入](../../loading/Load_to_Primary_Key_tables.md)或执行 DML 语句（[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) 或 [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md）实现，并且更新操作是原子性的。

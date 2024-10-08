@@ -181,7 +181,7 @@ displayed_sidebar: docs
 
 ### 新增特性
 
-- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/table_types/table_types.md)。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
+- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/table_types/table_types.md)。相关文档，请参见 [物化视图](../using_starrocks/async_mv/Materialized_view.md)。
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
 
@@ -219,7 +219,7 @@ displayed_sidebar: docs
 
 - 统计信息支持直方图，并进一步完善全量统计信息采集。相关文档，请参见[CBO统计信息](../using_starrocks/Cost_based_optimizer.md)。
 
-- 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+- 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见[确定分桶数量](../table_design/data_distribution/Data_distribution.md#确定分桶数量)。
 
 - 支持查询 Apache  Hive 中的压缩文本（.txt）文件。
 

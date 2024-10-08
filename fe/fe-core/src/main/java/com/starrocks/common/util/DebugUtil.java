@@ -34,9 +34,11 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Joiner;
 import com.starrocks.common.Pair;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -164,5 +166,13 @@ public class DebugUtil {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         return sw.toString();
+    }
+
+    public static String getRootStackTrace(Throwable e) {
+        if (e == null) {
+            return "";
+        }
+        String[] stacks = ExceptionUtils.getRootCauseStackTrace(e);
+        return Joiner.on("\n").join(stacks);
     }
 }
