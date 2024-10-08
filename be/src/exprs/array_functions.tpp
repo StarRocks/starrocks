@@ -1970,9 +1970,104 @@ class ArrayHas {
         if (!context->is_notnull_constant_column(0)) {
             return Status::OK();
         }
-        // build state
+        auto* state = new ArrayHasState();
+        context->set_function_state(scope, state);
+        if constexpr (!HashFunc::is_supported()) {
+            return Status::OK();
+        }
+        ColumnPtr column = context->get_constant_column(0);
+        ColumnPtr array_column = FunctionHelper::get_data_column_of_const(column);
+        _build_hash_table(array_column, state);
         return Status::OK();
     }
+
+    static Status close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            auto* state =
+                    reinterpret_cast<ArrayHasState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+            delete state;
+        }
+        return Status::OK();
+    }
+    
+    static StatusOr<ColumnPtr> process(FunctionContext* context, const Columns& columns) {
+        if constexpr (!is_supported(LT)) {
+            return Status::NotSupported(fmt::format("not support type {}", LT));
+        }
+
+        if (columns[0]->only_null()) {
+            return columns[0];
+        }
+
+        // if target_column is subset of array column
+        const ColumnPtr& array_column = columns[0];
+        const ColumnPtr& target_column = columns[1];
+
+        bool is_const_array = array_column->is_constant();
+        ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
+        bool is_nullable_array = array_data_column->is_nullable();
+        NullColumnPtr array_null_column;
+        const NullColumn::ValueType* array_null_data = nullptr;
+        if (is_nullable_array) {
+            array_null_column = down_cast<NullableColumn*>(array_data_column.get())->null_column();
+            array_null_data = down_cast<NullableColumn*>(array_data_column.get())->null_column_data().data();
+            array_data_column = down_cast<NullableColumn*>(array_data_column.get())->data_column();
+        }
+
+        bool is_const_target = target_column->is_constant();
+        ColumnPtr target_data_column = FunctionHelper::get_data_column_of_const(target_column);
+        const NullColumn::ValueType* target_null_data = nullptr;
+        bool is_nullable_target = target_data_column->is_nullable();
+        if (is_nullable_target) {
+            target_null_data = down_cast<NullableColumn*>(target_data_column.get())->null_column_data().data();
+            target_data_column = down_cast<NullableColumn*>(target_data_column.get())->data_column();
+        }
+
+        // @TODO hash
+   
+        return nullptr;
+    }
+private:
+    static constexpr bool is_supported(LogicalType type) {
+        return is_scalar_logical_type(type);
+    }
+
+    static void _build_hash_table(const ColumnPtr& column, ArrayHashState* state) {
+        DCHECK(!column->is_constant() && !column->is_nullable());
+        const ArrayColumn* array_column = down_cast<ArrayColumn*>(column.get());
+
+        const auto& elements_column = down_cast<NullableColumn*>(array_column->elements_column().get())->data_column();
+        const auto& null_column = down_cast<NullableColumn*>(array_column->elements_column().get())->null_column();
+        const auto& offsets_column = array_column->offsets_column();
+
+        const CppType* elements_data = reinterpret_cast<const CppType*>(elements_column->raw_data());
+        const NullColumn::ValueType* null_data = null_column->raw_data();
+        const UInt32Column::ValueType* offsets_data = offsets_column->get_data().data();
+        // column may be null
+        size_t offset = offsets_data[0];
+        size_t array_size = offsets_data[1] - offset;
+        
+        size_t count = 0;
+        for (size_t i = 0;i < array_size;i++) {
+            if (null_data[offset + i]) {
+                state->has_null = true;
+                continue;
+            }
+            const auto& value = elements_data[offset + i];
+            if (!state->hash_map.contains(value)) {
+                state->hash_map[value] = count++;
+            }
+        }
+    }
+
+    template <bool NullableTarget>
+    StatusOr<ColumnPtr> _process_with_hash_table(ArrayHasState* state, const ColumnPtr targets, const NullColumn::ValueType* targets_null_data, bool is_const_target) {
+        // @TODO
+        return nullptr;
+    }
+
+    template <bool NullableArray1, bool NullableArray2>
+    static ColumnPtr _process(const ColumnPtr& arrays_1, const ColumnPtr& arrays2)
 };
 
 } // namespace starrocks
