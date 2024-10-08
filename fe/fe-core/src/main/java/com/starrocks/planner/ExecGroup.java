@@ -55,7 +55,9 @@ public class ExecGroup {
     }
 
     public void disableColocateGroup(PlanNode root) {
-        clearRuntimeFilterExecGroupInfo(root);
+        if (isColocateExecGroup()) {
+            clearRuntimeFilterExecGroupInfo(root);
+        }
         this.disableColocateGroup = true;
     }
 
