@@ -1947,4 +1947,32 @@ private:
     }
 };
 
+template <LogicalType LT, bool Any, bool ContainsSeq>
+class ArrayHas {
+    // don't unpack
+    // 1. prepare stage, arary_contains_all/array_contains_any/array_contains_seq
+    // build hash set for contains all 
+    // for all non-seq, build hash set
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
+    using HashMap = phmap::flat_hash_map<CppType, size_t, HashFunc>;
+
+    struct ArrayHasState {
+        bool has_null = false;
+        HashMap hash_map;
+    };
+
+    static Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope != FunctionContext::FRAGMENT_LOCAL) {
+            return Status::OK();
+        }
+        if (!context->is_notnull_constant_column(0)) {
+            return Status::OK();
+        }
+        // build state
+        return Status::OK();
+    }
+};
+
 } // namespace starrocks
