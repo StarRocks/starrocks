@@ -50,6 +50,10 @@ public class Quantiles implements Comparable<Quantiles> {
         this.max = max;
     }
 
+    public Quantiles(@NotNull Quantiles q) {
+        this(q.getAvg(), q.getP50(), q.getMax());
+    }
+
     public double getAvg() {
         return avg;
     }
