@@ -169,7 +169,7 @@ public class DateUtils {
         return localDateTimeWithZone.toLocalDateTime();
     }
 
-    public static DateTimeFormatter probeFormat(String dateTimeStr) {
+    public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
             return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
