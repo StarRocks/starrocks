@@ -5675,6 +5675,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             {
                 String query = "select tinyint_col,  " +
                         "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('"+ timeUnit +"',  date_col) >= '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                // TODO: we can support this later.
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('"+ timeUnit +"',  date_col) = '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
                         "where date_col >= '2024-09-18 01:00:01' group by tinyint_col ";
                 String plan = sql(query).getExecPlan();
                 PlanTestBase.assertNotContains(plan, "date_mv");

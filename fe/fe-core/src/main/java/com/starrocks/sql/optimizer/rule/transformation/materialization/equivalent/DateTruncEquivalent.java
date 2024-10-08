@@ -36,7 +36,7 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
      * TODO: we can support this later.
      * Change date_trunc('month', col) to col = '2023-12-01' will get a wrong result.
      * MV       : select date_trunc('day', col) as dt from t
-     * Query    : select date_trunc('day, col) from t where date_trunc('month', col) = '2023-11-01'
+     * Query    : select date_trunc('month, col) from t where date_trunc('month', col) = '2023-11-01'
      */
     private static Set<BinaryType> SUPPORTED_BINARY_TYPES = ImmutableSet.of(
             BinaryType.GE,
