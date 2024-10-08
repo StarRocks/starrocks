@@ -66,13 +66,8 @@ StatusOr<ColumnPtr> Column::upgrade_helper_func(ColumnPtr* col) {
     }
 }
 
-<<<<<<< HEAD
 bool Column::empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets) {
-    DCHECK(null_data.size() == this->size());
-=======
-bool Column::empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets) {
     DCHECK_EQ(null_data.size(), this->size());
->>>>>>> e9eedcdd0a ([Enhancement] refactor array_map's implementation (#51244))
     if (!is_array() && !is_map()) {
         throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
     }

@@ -61,14 +61,7 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
-<<<<<<< HEAD
-=======
-class JITContext;
-class JITExpr;
-struct JitScore;
-struct LLVMDatum;
 class LambdaFunction;
->>>>>>> e9eedcdd0a ([Enhancement] refactor array_map's implementation (#51244))
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
