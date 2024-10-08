@@ -272,7 +272,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         OlapTable olapTable = (OlapTable) scan.getTable();
         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
             List<Column> keyColumnNames = olapTable.getKeyColumns();
-            return keyColumnNames.size() == 1 && keyColumnNames.stream().anyMatch(c -> c.getName().equals(column.getName()));
+            // The check() ensures there is only one DISTINCT column, so composite pk is not supported here
+            if (keyColumnNames.size() != 1) {
+                return false;
+            }
+            return keyColumnNames.get(0).getName().equals(column.getName());
         }
         return false;
     }
