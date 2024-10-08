@@ -2640,12 +2640,14 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
 
-    def wait_table_rowcount_not_empty(self, table, max_times=300):
+    def wait_table_rowcount_not_empty(self, table, time_out=300):
         times = 0
         rc = 0
         sql = 'show partitions from ' + table
-        while times < max_times:
+        while times < time_out and times < time_out:
             result = self.execute_sql(sql, True)
+            log.info(sql)
+            log.info(result)
             if len(result["result"]) > 0:
                 rc = int(result["result"][0][-4])
                 log.info(rc)
