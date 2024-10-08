@@ -48,7 +48,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
-import com.starrocks.externalcooldown.ExternalCoolDownConfig;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
@@ -404,7 +404,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND))) {
                 try {
-                    ExternalCoolDownConfig externalCoolDownConfig = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
+                    ExternalCooldownConfig externalCoolDownConfig = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
                     table.setCurExternalCoolDownConfig(externalCoolDownConfig);
                     LOG.info("create table {} set external cool down config, target = {}, schedule = {}, wait second = {}",
                             tableName, externalCoolDownConfig.getTarget(), externalCoolDownConfig.getSchedule(),

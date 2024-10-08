@@ -115,7 +115,7 @@ public class ExternalCooldownPartitionSelectorTest {
                 "PROPERTIES(" +
                 "'replication_num' = '1',\n" +
                 "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE'\n," +
                 "'external_cooldown_wait_second' = '1'\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE test.tbl2\n" +
@@ -136,7 +136,7 @@ public class ExternalCooldownPartitionSelectorTest {
                 "PROPERTIES(" +
                 "'replication_num' = '1',\n" +
                 "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE'\n," +
                 "'external_cooldown_wait_second' = '1'\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE test.tbl3\n" +
@@ -157,7 +157,7 @@ public class ExternalCooldownPartitionSelectorTest {
                 "PROPERTIES(" +
                 "'replication_num' = '1',\n" +
                 "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE'\n," +
                 "'external_cooldown_wait_second' = '1'\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE test.tbl4\n" +
@@ -170,7 +170,7 @@ public class ExternalCooldownPartitionSelectorTest {
                 "PROPERTIES(" +
                 "'replication_num' = '1',\n" +
                 "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 10 SECOND'\n," +
                 "'external_cooldown_wait_second' = '1'\n" +
                 ");");
 
@@ -191,7 +191,7 @@ public class ExternalCooldownPartitionSelectorTest {
                 "PROPERTIES (\n" +
                 "    'replication_num' = '1',\n" +
                 "    'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                "    'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "    'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE'\n," +
                 "    'external_cooldown_wait_second' = '1'\n" +
                 ")");
     }

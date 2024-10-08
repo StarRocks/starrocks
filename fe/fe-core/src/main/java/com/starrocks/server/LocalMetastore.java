@@ -118,7 +118,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.externalcooldown.ExternalCoolDownConfig;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -263,6 +263,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
@@ -3585,6 +3586,64 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+
+            if (key.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_CONFIG)) {
+                ExternalCooldownConfig curConfig = table.getCurExternalCoolDownConfig();
+                ExternalCooldownConfig newConfig = new ExternalCooldownConfig(curConfig);
+                ExternalCooldownConfig updateConfig = (ExternalCooldownConfig) results.get(key);
+
+                if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
+                    newConfig.setSchedule(updateConfig.getSchedule());
+                }
+                if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
+                    newConfig.setWaitSecond(updateConfig.getWaitSecond());
+                }
+                if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
+                    newConfig.setTarget(updateConfig.getTarget());
+                }
+
+                table.setCurExternalCoolDownConfig(newConfig);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(
+                        db.getId(), table.getId(), updateConfig.getProperties());
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(info);
+
+                if (newConfig.isReadyForAutoCooldown()) {
+                    GlobalStateMgr.getCurrentState().getExternalCooldownMgr().prepareMaintenanceWork(db.getId(), table);
+                } else {
+                    GlobalStateMgr.getCurrentState().getExternalCooldownMgr().stopMaintainExternalCooldown(table);
+                }
+
+                if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) &&
+                        curConfig != null  && updateConfig != null &&
+                        !StringUtils.equals(curConfig.getTarget(), updateConfig.getTarget())) {
+                    // clear cooldown synced time if external cooldown target changed
+                    PartitionInfo partitionInfo = table.getPartitionInfo();
+                    Collection<Partition> partitions = table.getPartitions();
+                    long newCooldownSyncedTimeMs = 0L;
+                    List<Long> clearPartitionIds = new ArrayList<>();
+
+                    for (Partition partition : partitions) {
+                        long partitionId = partition.getId();
+                        Long oldCoolDownSyncedTimeMs = partitionInfo.getExternalCoolDownSyncedTimeMs(partitionId);
+                        if (oldCoolDownSyncedTimeMs == null || oldCoolDownSyncedTimeMs <= 0) {
+                            continue;
+                        }
+                        clearPartitionIds.add(partitionId);
+                        partitionInfo.setExternalCoolDownSyncedTimeMs(partitionId, newCooldownSyncedTimeMs);
+                        GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(new ModifyPartitionInfo(
+                                db.getId(), table.getId(), partitionId,
+                                partitionInfo.getDataProperty(partitionId),
+                                partitionInfo.getReplicationNum(partitionId),
+                                partitionInfo.getIsInMemory(partitionId),
+                                newCooldownSyncedTimeMs, -1L
+                        ));
+                    }
+                    if (!clearPartitionIds.isEmpty()) {
+                        LOG.info("clear {} for partition {} as external cooldown target changed",
+                                PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME, clearPartitionIds);
+                    }
+                }
+            }
         }
     }
 
@@ -3632,6 +3691,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
+            ExternalCooldownConfig config;
+            try {
+                config = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+            if (!table.isOlapTable()) {
+                throw new DdlException("Cannot set external cooldown property for non olap table");
+            }
+            results.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_CONFIG, config);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -3780,13 +3853,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         table.setCurBinlogConfig(binlogConfig);
     }
 
-    public void modifyExternalCoolDownMeta(Database db, OlapTable table, ExternalCoolDownConfig externalCoolDownConfig) {
+    public void modifyExternalCoolDownMeta(Database db, OlapTable table, ExternalCooldownConfig externalCoolDownConfig) {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
                 db.getId(),
                 table.getId(),
-                externalCoolDownConfig.toProperties());
+                externalCoolDownConfig.getProperties());
         GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(log);
 
         table.setCurExternalCoolDownConfig(externalCoolDownConfig);

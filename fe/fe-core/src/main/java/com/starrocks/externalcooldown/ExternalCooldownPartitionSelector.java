@@ -74,6 +74,10 @@ public class ExternalCooldownPartitionSelector {
 
     public void init() {
         fullTableName = db.getFullName() + "." + olapTable.getName();
+        reloadSatisfiedPartitions();
+    }
+
+    public void reloadSatisfiedPartitions() {
         tableSatisfied = true;
         partitionInfo = olapTable.getPartitionInfo();
         if (olapTable.getExternalCoolDownWaitSecond() == null) {
@@ -109,7 +113,6 @@ public class ExternalCooldownPartitionSelector {
         } else {
             externalCoolDownWaitSeconds = waitSeconds;
         }
-
         satisfiedPartitions = this.getSatisfiedPartitions(-1);
     }
 
@@ -155,7 +158,8 @@ public class ExternalCooldownPartitionSelector {
                     fullTableName, partition.getName());
             return false;
         }
-        if (partitionInfo.getExternalCoolDownConsistencyCheckDifference(partition.getId()) == 0) {
+        Long diff = partitionInfo.getExternalCoolDownConsistencyCheckDifference(partition.getId());
+        if (diff == null || diff == 0) {
             // has consistency check after external cool down, and check result ok
             LOG.debug("table [{}] partition[{}] external cool down consistency check result ok",
                     fullTableName, partition.getName());
@@ -167,7 +171,10 @@ public class ExternalCooldownPartitionSelector {
 
     public Partition getOneSatisfiedPartition() {
         if (satisfiedPartitions.isEmpty()) {
-            return null;
+            reloadSatisfiedPartitions();
+            if (satisfiedPartitions.isEmpty()) {
+                return null;
+            }
         }
         return satisfiedPartitions.remove(0);
     }

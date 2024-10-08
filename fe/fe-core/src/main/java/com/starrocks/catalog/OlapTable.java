@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -88,7 +89,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.externalcooldown.ExternalCoolDownConfig;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
@@ -488,18 +489,18 @@ public class OlapTable extends Table {
         this.binlogTxnId = binlogTxnId;
     }
 
-    public ExternalCoolDownConfig getCurExternalCoolDownConfig() {
+    public ExternalCooldownConfig getCurExternalCoolDownConfig() {
         if (tableProperty != null) {
             return tableProperty.getExternalCoolDownConfig();
         }
         return null;
     }
 
-    public void setCurExternalCoolDownConfig(ExternalCoolDownConfig externalCoolDownConfig) {
+    public void setCurExternalCoolDownConfig(ExternalCooldownConfig externalCoolDownConfig) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(Maps.newHashMap());
         }
-        tableProperty.modifyTableProperties(externalCoolDownConfig.toProperties());
+        tableProperty.modifyTableProperties(externalCoolDownConfig.getProperties());
         tableProperty.setExternalCoolDownConfig(externalCoolDownConfig);
     }
 
@@ -3464,6 +3465,10 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
                     ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
         }
+
+        if (getCurExternalCoolDownConfig() != null) {
+            properties.putAll(getCurExternalCoolDownConfig().getProperties());
+        }
         return properties;
     }
 
@@ -3539,11 +3544,20 @@ public class OlapTable extends Table {
         return null;
     }
 
-    public Table getExternalCoolDownTable() {
-        if (tableProperty == null) {
+    public TableName getExternalCoolDownTargetTableName() {
+        String tableName = getExternalCoolDownTarget();
+        if (Strings.isNullOrEmpty(tableName)) {
             return null;
         }
-        TableName tableName = TableName.fromString(tableProperty.getExternalCoolDownTarget());
+        List<String> pieces = Splitter.on(".").splitToList(tableName);
+        return new TableName(pieces.get(0), pieces.get(1), pieces.get(2));
+    }
+
+    public Table getExternalCoolDownTable() {
+        TableName tableName = getExternalCoolDownTargetTableName();
+        if (tableName == null) {
+            return null;
+        }
         Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
         return table.orElse(null);
     }

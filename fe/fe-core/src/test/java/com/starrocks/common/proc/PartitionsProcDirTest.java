@@ -18,10 +18,12 @@ package com.starrocks.common.proc;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -42,6 +44,7 @@ import java.util.Map;
 public class PartitionsProcDirTest {
     private Database db;
     private LakeTable cloudNativTable;
+    private OlapTable olapTable;
 
     @Before
     public void setUp() throws DdlException, AnalysisException {
@@ -60,6 +63,15 @@ public class PartitionsProcDirTest {
                 "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(cloudNativTable);
+
+        MaterializedIndex index1 = new MaterializedIndex(1001L, IndexState.NORMAL);
+        Partition partition = new Partition(1028L, "p2", index1, new RandomDistributionInfo(10));
+        List<Column> col1 = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        PartitionInfo listPartition1 = new ListPartitionInfo(PartitionType.LIST, col1);
+        listPartition1.addPartition(partition.getId(), DataProperty.getInferredDefaultDataProperty(), (short) 1, true);
+        olapTable = new OlapTable(1026L, "olap_table", col, null, listPartition1, null);
+        olapTable.addPartition(partition);
+        db.registerTableUnlocked(olapTable);
     }
 
     @Test
@@ -74,5 +86,18 @@ public class PartitionsProcDirTest {
         Assert.assertEquals("2", list1.get(4));
         Assert.assertEquals("NORMAL", list1.get(5));
         Assert.assertEquals("province", list1.get(6));
+    }
+
+    @Test
+    public void testFetchResult4OlapTable() throws AnalysisException {
+        BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, olapTable, false).fetchResult();
+        List<List<String>> rows = result.getRows();
+        List<String> list1 = rows.get(0);
+        Assert.assertEquals("1028", list1.get(0));
+        Assert.assertEquals("p2", list1.get(1));
+        Assert.assertEquals("1", list1.get(2));
+        Assert.assertEquals("\\N", list1.get(20));
+        Assert.assertEquals("\\N", list1.get(21));
+        Assert.assertEquals("0", list1.get(22));
     }
 }

@@ -409,7 +409,7 @@ public class DDLStmtExecutor {
             return null;
         }
 
-        private static ExecuteOption getCooldownExecuteOption(CreateExternalCooldownStmt externalCooldownStmt) {
+        public static ExecuteOption getCooldownExecuteOption(CreateExternalCooldownStmt externalCooldownStmt) {
             boolean force = externalCooldownStmt.isForceRefresh();
             PartitionRangeDesc range = externalCooldownStmt.getPartitionRangeDesc();
             HashMap<String, String> taskRunProperties = new HashMap<>();

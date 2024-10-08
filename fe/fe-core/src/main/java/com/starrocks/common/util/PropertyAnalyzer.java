@@ -72,7 +72,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.externalcooldown.ExternalCoolDownConfig;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
+import com.starrocks.externalcooldown.ExternalCooldownSchedule;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -253,8 +254,11 @@ public class PropertyAnalyzer {
      */
     public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
             "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
+    // external cooldown prefix
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_PREFIX = "external_cooldown";
     // "external_cooldown_target"="iceberg_catalog.iceberg_db.iceberg_tbl",
     public static final String PROPERTIES_EXTERNAL_COOLDOWN_TARGET = "external_cooldown_target";
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_CONFIG = "external_cooldown_config";
 
     // "external_cooldown_schedule"="START <start_time> END <end_time> EVERY INTERVAL <cooldown_interval>"
     public static final String PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE = "external_cooldown_schedule";
@@ -1702,8 +1706,8 @@ public class PropertyAnalyzer {
         return dataProperty;
     }
 
-    public static ExternalCoolDownConfig analyzeExternalCoolDownConfig(Map<String, String> properties) throws AnalysisException {
-        ExternalCoolDownConfig externalCoolDownConfig = new ExternalCoolDownConfig();
+    public static ExternalCooldownConfig analyzeExternalCoolDownConfig(Map<String, String> properties) throws AnalysisException {
+        ExternalCooldownConfig externalCoolDownConfig = new ExternalCooldownConfig();
 
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
             String target = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
@@ -1730,12 +1734,9 @@ public class PropertyAnalyzer {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
             String schedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
             properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
-            Pattern schedulePattern = Pattern.compile(
-                    "^\\s*START\\s+\\d+:\\d+\\s+END\\s+\\d+:\\d+\\s+EVERY\\s+INTERVAL\\s+\\d+[smh]\\s*$",
-                    Pattern.CASE_INSENSITIVE);
-            if (!schedulePattern.matcher(schedule).find()) {
+            if (!ExternalCooldownSchedule.validateScheduleString(schedule)) {
                 throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE +
-                        " must be format like `START 01:00 END 07:59 EVERY INTERVAL 1m`");
+                        " must be format like `START 23:00 END 08:00 EVERY INTERVAL 1 MINUTE`");
             }
             externalCoolDownConfig.setSchedule(schedule);
         }
@@ -1784,5 +1785,39 @@ public class PropertyAnalyzer {
             return 0L;
         }
         return TimeUtils.parseDate(text, PrimitiveType.DATETIME).getTime();
+    }
+
+    public static long analyzeExternalCooldownSyncedTimeMs(Map<String, String> properties) throws AnalysisException {
+        long coldDownSyncedTimeMs = -1L;
+        if (properties != null && properties.containsKey(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME)) {
+            String coldDownSyncedTimeMsStr = properties.get(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME);
+            if (coldDownSyncedTimeMsStr.isEmpty()) {
+                coldDownSyncedTimeMs = 0L;
+            } else {
+                coldDownSyncedTimeMs = TimeUtils.timeStringToLong(coldDownSyncedTimeMsStr);
+                if (coldDownSyncedTimeMs == -1) {
+                    throw new AnalysisException(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME + " format error.");
+                }
+            }
+        }
+
+        return coldDownSyncedTimeMs;
+    }
+
+    public static long analyzeExternalCooldownConsistencyCheckTimeMs(Map<String, String> properties) throws AnalysisException {
+        long coldDownConsistencyCheckTimeMs = -1L;
+        if (properties != null && properties.containsKey(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME)) {
+            String coldDownConsistencyCheckTimeMsStr = properties.get(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME);
+            if (coldDownConsistencyCheckTimeMsStr.isEmpty()) {
+                coldDownConsistencyCheckTimeMs = 0L;
+            } else {
+                coldDownConsistencyCheckTimeMs = TimeUtils.timeStringToLong(coldDownConsistencyCheckTimeMsStr);
+                if (coldDownConsistencyCheckTimeMs == -1) {
+                    throw new AnalysisException(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME + " format error.");
+                }
+            }
+        }
+
+        return coldDownConsistencyCheckTimeMs;
     }
 }

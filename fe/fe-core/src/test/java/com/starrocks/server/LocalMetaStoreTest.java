@@ -41,6 +41,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -49,6 +51,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -311,4 +314,24 @@ public class LocalMetaStoreTest {
         }
     }
 
+    @Test
+    public void testAlterTableExternalCooldownProperties() throws Exception {
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+        String icebergTable = "iceberg0.partitioned_transforms_db.t0_day";
+
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE,
+                "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE");
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, icebergTable);
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, "3600");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.alterTableProperties(db, table, properties);
+        ExternalCooldownConfig config = table.getCurExternalCoolDownConfig();
+        Assert.assertNotNull(config);
+        Assert.assertEquals(config.getTarget(), icebergTable);
+        Assert.assertEquals(config.getSchedule(), "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE");
+        Assert.assertEquals(config.getWaitSecond(), (Long) 3600L);
+    }
 }

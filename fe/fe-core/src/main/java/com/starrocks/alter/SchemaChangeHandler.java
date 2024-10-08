@@ -89,7 +89,6 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -136,7 +135,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -2212,85 +2210,6 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
-    }
-
-    public boolean updateExternalCoolDownConfigMeta(Database db, Long tableId, Map<String, String> properties) {
-        OlapTable olapTable;
-        ExternalCoolDownConfig newExternalCoolDownConfig;
-        boolean hasChanged = false;
-        boolean isModifiedSuccess = true;
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            olapTable = (OlapTable) db.getTable(tableId);
-            if (olapTable == null) {
-                return false;
-            }
-            if (!olapTable.containsExternalCoolDownConfig()) {
-                newExternalCoolDownConfig = new ExternalCoolDownConfig();
-                hasChanged = true;
-            } else {
-                newExternalCoolDownConfig = new ExternalCoolDownConfig(olapTable.getCurExternalCoolDownConfig());
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        // judge whether the attribute has changed
-        // no exception will be thrown, for the analyzer has checked
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
-            String externalCoolDownTarget = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
-            if (!Objects.equals(externalCoolDownTarget, newExternalCoolDownConfig.getTarget())) {
-                newExternalCoolDownConfig.setTarget(externalCoolDownTarget);
-                hasChanged = true;
-            }
-        }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
-            String externalCoolDownSchedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
-            if (!Objects.equals(externalCoolDownSchedule, newExternalCoolDownConfig.getSchedule())) {
-                newExternalCoolDownConfig.setSchedule(externalCoolDownSchedule);
-                hasChanged = true;
-            }
-        }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
-            long externalCoolDownWaitSecond = Long.parseLong(properties.get(
-                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND));
-            if (externalCoolDownWaitSecond != newExternalCoolDownConfig.getWaitSecond()) {
-                newExternalCoolDownConfig.setWaitSecond(externalCoolDownWaitSecond);
-                hasChanged = true;
-            }
-        }
-        if (!hasChanged) {
-            LOG.info("table {} external cool down config is same as the previous version, so nothing need to do",
-                    olapTable.getName());
-            return true;
-        }
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            ExternalCoolDownConfig oldExternalCoolDownConfig = olapTable.getCurExternalCoolDownConfig();
-            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyExternalCoolDownMeta(
-                    db, olapTable, newExternalCoolDownConfig);
-            if (oldExternalCoolDownConfig != null) {
-                LOG.info("update external cool down config of table {} successfully, the external cool down config after " +
-                                "modified is : {}, previous is {}",
-                        olapTable.getName(),
-                        olapTable.getCurExternalCoolDownConfig().toString(),
-                        oldExternalCoolDownConfig.toString());
-            } else {
-                LOG.info("update external cool down config of table {} successfully, the external cool down config"
-                                + " after modified is : {}, ",
-                        olapTable.getName(), olapTable.getCurExternalCoolDownConfig().toString());
-            }
-        } catch (Exception e) {
-            // defensive programming, it normally should not throw an exception,
-            // here is just to ensure that a correct result can be returned
-            LOG.warn("update external cool down config of table {} failed", olapTable.getName());
-            isModifiedSuccess = false;
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
-
-        return isModifiedSuccess;
     }
 
     // return true means that the modification of FEMeta is successful,

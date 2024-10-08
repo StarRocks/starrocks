@@ -586,7 +586,8 @@ public class OperationType {
     // External cool down config
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG = 13600;
-
+    @IgnorableOnReplayFailed
+    public static final short OP_EXTERNAL_COOLDOWN_JOB_STATE = 13601;
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

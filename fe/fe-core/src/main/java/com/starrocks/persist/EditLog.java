@@ -81,6 +81,7 @@ import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownMaintenanceJob;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
@@ -1090,6 +1091,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
                     break;
                 }
+                case OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE: {
+                    ExternalCooldownMaintenanceJob job = (ExternalCooldownMaintenanceJob) journal.getData();
+                    GlobalStateMgr.getCurrentState().getExternalCooldownMgr().replay(job);
+                    break;
+                }
                 case OperationType.OP_CREATE_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
@@ -1953,5 +1959,9 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logExternalCooldownJobState(ExternalCooldownMaintenanceJob job) {
+        logEdit(OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE, job);
     }
 }

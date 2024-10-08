@@ -54,6 +54,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.externalcooldown.ExternalCooldownSchedule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -120,6 +121,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_PREFIX;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
@@ -179,7 +181,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         if (properties.size() != 1
                 && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
-                || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
+                || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX)
+                || TableProperty.isSamePrefixProperties(properties, PROPERTIES_EXTERNAL_COOLDOWN_PREFIX))) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only set one table property at a time");
         }
 
@@ -358,13 +361,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
                 String schedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
-                Pattern schedulePattern = Pattern.compile(
-                        "^\\s*START\\s+\\d+:\\d+\\s+END\\s+\\d+:\\d+\\s+EVERY\\s+INTERVAL\\s+\\d+[smh]\\s*$",
-                        Pattern.CASE_INSENSITIVE);
-                if (!schedulePattern.matcher(schedule).find()) {
+                if (!ExternalCooldownSchedule.validateScheduleString(schedule)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE +
-                                    " must be format like `START 01:00 END 07:59 EVERY INTERVAL 1m`");
+                                    " must be format like `START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE`");
                 }
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
