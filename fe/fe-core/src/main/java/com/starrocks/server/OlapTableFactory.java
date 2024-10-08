@@ -623,6 +623,17 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
+            // analyze partition ttl duration
+            Pair<String, PeriodDuration> ttlDuration = null;
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+                if (ttlDuration == null) {
+                    throw new DdlException("Invalid partition ttl duration");
+                }
+                table.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                table.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
             try {
                 processConstraint(db, table, properties);
             } catch (AnalysisException e) {

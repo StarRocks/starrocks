@@ -80,6 +80,11 @@ CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 // it will be set to physical memory size.
 CONF_String(mem_limit, "90%");
 
+// Enable the jemalloc tracker, which is responsible for reserving memory
+CONF_Bool(enable_jemalloc_memory_tracker, "true");
+// Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -158,6 +163,13 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
+// The replication max speed limit(KB/s).
+CONF_mInt32(replication_max_speed_limit_kbps, "50000");
+// The replication min speed limit(KB/s).
+CONF_mInt32(replication_min_speed_limit_kbps, "50");
+// The replication min speed time(seconds).
+CONF_mInt32(replication_min_speed_time_seconds, "300");
+// Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
@@ -473,7 +485,7 @@ CONF_Bool(use_mmap_allocate_chunk, "false");
 // Chunk Allocator's reserved bytes limit,
 // Default value is 2GB, increase this variable can improve performance, but will
 // acquire more free memory which can not be used by other modules
-CONF_Int64(chunk_reserved_bytes_limit, "2147483648");
+CONF_Int64(chunk_reserved_bytes_limit, "0");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
@@ -703,6 +715,12 @@ CONF_Int32(metric_late_materialization_ratio, "1000");
 
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
+// max chunk size for each tablet write request. (512MB)
+// see: https://github.com/StarRocks/starrocks/pull/50302
+// NOTE: If there are a large number of columns when loading,
+// a too small max_tablet_write_chunk_bytes may cause more frequent RPCs, which may affect performance.
+// In this case, we can try to increase the value to avoid the problem.
+CONF_mInt64(max_tablet_write_chunk_bytes, "536870912");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -1334,6 +1352,9 @@ CONF_mDouble(json_flat_sparsity_factor, "0.9");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
+
+// for whitelist on flat json remain data, max set 1kb
+CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0

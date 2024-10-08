@@ -8,13 +8,13 @@ displayed_sidebar: docs
 
 You can use the statement to perform the following operations:
 
-- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/indexes/Prefix_index_sort_key.md) and [materialized view](../../../using_starrocks/Materialized_view.md) of the table.
+- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/indexes/Prefix_index_sort_key.md) and [materialized view](../../../using_starrocks/async_mv/Materialized_view.md) of the table.
 - View the schema of a table stored in the following external data sources, such as Apache Hive™. Note that you can perform this operation only in StarRocks 2.4 and later versions.
 
 ## Syntax
 
 ```SQL
-DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
+DESC[RIBE] { [[<catalog_name>.]<db_name>.]<table_name> [ALL] | FILES(files_loading_properties) }
 ```
 
 ## Parameters
@@ -25,6 +25,7 @@ DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
 | db_name       | No           | The database name.                                           |
 | table_name    | Yes          | The table name.                                              |
 | ALL           | No           | <ul><li>If this keyword is specified, you can view the type of the sort key, materialized view, and schema of a table stored in your StarRocks cluster. If this keyword is not specified, you only view the table schema. </li><li>Do not specify this keyword when you view the schema of a table stored in an external data source.</li></ul> |
+| FILES         | No           | The FILES() table function. From v3.3.4 onwards, you can use DESC with FILES() to view the schema information of files stored in remote storage. For detailed information, see [Function reference - FILES()](../../sql-functions/table-functions/files.md). |
 
 ## Output
 
@@ -107,6 +108,45 @@ DESC hive_catalog.hive_db.hive_table;
 | name  | VARCHAR(65533) | Yes  | false | NULL    |               | 
 | date  | DATE           | Yes  | false | NULL    | partition key | 
 +-------+----------------+------+-------+---------+---------------+
+```
+
+Example 4: View the schema of parquet file `lineorder` stored in AWS S3.
+
+> **NOTE**
+>
+> For files stored in remote storage, DESC only returns three fields: `Field`, `Type`, and `Null`.
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
 ```
 
 ## References

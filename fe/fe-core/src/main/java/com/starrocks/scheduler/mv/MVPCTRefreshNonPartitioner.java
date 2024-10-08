@@ -60,10 +60,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                 Map<Long, TableSnapshotInfo> snapshotBaseTables,
-                                                String start, String end, boolean force,
+                                                MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
         // non-partitioned materialized view
-        if (force || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
+        if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
             return mv.getVisiblePartitionNames();
         }
         return Sets.newHashSet();
@@ -71,7 +71,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                  String start, String end,
+                                                  MVRefreshParams mvRefreshParams,
                                                   int partitionTTLNumber,
                                                   boolean isAutoRefresh) {
         return Sets.newHashSet();

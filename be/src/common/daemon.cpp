@@ -213,6 +213,80 @@ void calculate_metrics(void* arg_this) {
     }
 }
 
+struct JemallocStats {
+    int64_t allocated = 0;
+    int64_t active = 0;
+    int64_t metadata = 0;
+    int64_t resident = 0;
+    int64_t mapped = 0;
+    int64_t retained = 0;
+};
+
+static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+
+    int64_t value = 0;
+    sz = sizeof(value);
+    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+        stats->allocated = value;
+    }
+    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+        stats->active = value;
+    }
+    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+        stats->metadata = value;
+    }
+    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+        stats->resident = value;
+    }
+    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+        stats->mapped = value;
+    }
+    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+        stats->retained = value;
+    }
+}
+
+// Tracker the memory usage of jemalloc
+void jemalloc_tracker_daemon(void* arg_this) {
+    auto* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        JemallocStats stats;
+        retrieve_jemalloc_stats(&stats);
+
+        // metadata
+        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+            int64_t delta = stats.metadata - tracker->consumption();
+            tracker->consume(delta);
+        }
+
+        // fragmentation
+        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
+            if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
+                int64_t fragmentation = stats.resident - stats.allocated - stats.metadata;
+                fragmentation *= config::jemalloc_fragmentation_ratio;
+
+                // In case that released a lot of memory but not get purged, we would not consider it as fragmentation
+                bool released_a_lot = stats.allocated < (stats.resident * 0.5);
+                if (released_a_lot) {
+                    fragmentation = 0;
+                }
+
+                if (fragmentation >= 0) {
+                    auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
+                    int64_t delta = fragmentation - tracker->consumption();
+                    tracker->consume(delta);
+                }
+            }
+        }
+
+        nap_sleep(1, [daemon] { return daemon->stopped(); });
+    }
+}
+
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
     std::set<std::string> disk_devices;
@@ -317,6 +391,12 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
+    }
+
+    if (config::enable_jemalloc_memory_tracker) {
+        std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 
     init_signals();

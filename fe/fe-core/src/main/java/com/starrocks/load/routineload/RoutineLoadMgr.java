@@ -800,17 +800,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     public void loadRoutineLoadJobsV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
-
+        reader.readCollection(RoutineLoadJob.class, routineLoadJob -> {
             if (routineLoadJob.needRemove()) {
                 LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                continue;
+                return;
             }
 
             putJob(routineLoadJob);
-        }
+        });
     }
 
     @Override

@@ -1045,6 +1045,15 @@ public class StarRocksAssert {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }
 
+    public void dropAnalyzeForTable(String tableName) throws Exception {
+        List<String> showJob = show(String.format("show analyze job where `table` = '%s' ", tableName)).get(0);
+        if (showJob.isEmpty()) {
+            return;
+        }
+        long jobId = Long.parseLong(showJob.get(0));
+        ddl("drop analyze " + jobId);
+    }
+
     private void checkAlterJob() throws InterruptedException {
         // check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();

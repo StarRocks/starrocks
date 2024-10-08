@@ -738,6 +738,16 @@ struct TReportExecStatusParams {
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
+struct TReportFragmentFinishParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    4: optional i32 backend_num
+}
+
+struct TReportFragmentFinishResponse {
+    1: optional Status.TStatus status
+}
+
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -1934,5 +1944,7 @@ service FrontendService {
 
     TListSessionsResponse listSessions(1: TListSessionsRequest request)
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 }
 

@@ -136,6 +136,8 @@ public:
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                           const Columns& flat_columns);
 
+    bool is_equallity_schema(const Column* other) const;
+
     std::string debug_flat_paths() const;
 
 private:

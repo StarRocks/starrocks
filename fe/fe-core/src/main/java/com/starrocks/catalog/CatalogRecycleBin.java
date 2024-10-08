@@ -53,7 +53,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
-import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -1064,30 +1063,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int idToDatabaseSize = reader.readInt();
-        for (int i = 0; i < idToDatabaseSize; ++i) {
-            RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
+        reader.readCollection(RecycleDatabaseInfo.class, recycleDatabaseInfo -> {
             idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
-        }
+        });
 
-        int idToTableInfoSize = reader.readInt();
-        for (int i = 0; i < idToTableInfoSize; ++i) {
-            RecycleTableInfo recycleTableInfo = reader.readJson(RecycleTableInfo.class);
+        reader.readCollection(RecycleTableInfo.class, recycleTableInfo -> {
             idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
             nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
-        }
+        });
 
-        int idToPartitionSize = reader.readInt();
-        for (int i = 0; i < idToPartitionSize; ++i) {
-            RecyclePartitionInfo recyclePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
-            if (recyclePartitionInfo instanceof IForwardCompatibleObject) {
-                // Ignore the future unknown subtype derived from RecyclePartitionInfoV2
-                LOG.warn("Ignore unknown partition type(partitionId: {}) from the future version!",
-                        recyclePartitionInfo.getPartition().getId());
-                continue;
-            }
+        reader.readCollection(RecyclePartitionInfoV2.class, recyclePartitionInfo -> {
             idToPartition.put(recyclePartitionInfo.partition.getId(), recyclePartitionInfo);
-        }
+        });
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
         }.getType());

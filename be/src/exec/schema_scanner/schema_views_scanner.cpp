@@ -35,8 +35,7 @@ SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
 };
 
 SchemaViewsScanner::SchemaViewsScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _timeout_ms(config::thrift_rpc_timeout_ms) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaViewsScanner::~SchemaViewsScanner() = default;
 

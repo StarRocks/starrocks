@@ -714,17 +714,16 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public void loadBackupHandlerV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         BackupHandler data = reader.readJson(BackupHandler.class);
         this.repoMgr = data.repoMgr;
-        int size = reader.readInt();
+
         long currentTimeMs = System.currentTimeMillis();
-        while (size-- > 0) {
-            AbstractJob job = reader.readJson(AbstractJob.class);
+        reader.readCollection(AbstractJob.class, job -> {
             if (isJobExpired(job, currentTimeMs)) {
                 LOG.warn("skip expired job {}", job);
-                continue;
+                return;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
-        }
+        });
     }
 
     /**

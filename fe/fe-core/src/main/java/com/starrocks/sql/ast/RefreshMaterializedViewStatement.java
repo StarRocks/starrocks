@@ -18,12 +18,16 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.util.EitherOr;
+
+import java.util.Set;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
 
     private final TableName mvName;
-    private final PartitionRangeDesc partitionRangeDesc;
+    private EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc;
     private final boolean forceRefresh;
     private final boolean isSync;
 
@@ -33,17 +37,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
                     .build();
 
     public RefreshMaterializedViewStatement(TableName mvName,
-                                            PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh, boolean isSync) {
-        this(mvName, partitionRangeDesc, forceRefresh, isSync, NodePosition.ZERO);
-    }
-
-    public RefreshMaterializedViewStatement(TableName mvName,
-                                            PartitionRangeDesc partitionRangeDesc,
+                                            EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
                                             boolean forceRefresh, boolean isSync, NodePosition pos) {
         super(pos);
         this.mvName = mvName;
-        this.partitionRangeDesc = partitionRangeDesc;
+        this.partitionDesc = partitionDesc;
         this.forceRefresh = forceRefresh;
         this.isSync = isSync;
     }
@@ -57,8 +55,22 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         return visitor.visitRefreshMaterializedViewStatement(this, context);
     }
 
+    public EitherOr<PartitionRangeDesc, Set<PListCell>> getPartitionDesc() {
+        return partitionDesc;
+    }
+
     public PartitionRangeDesc getPartitionRangeDesc() {
-        return partitionRangeDesc;
+        if (partitionDesc == null) {
+            return null;
+        }
+        return partitionDesc.left();
+    }
+
+    public Set<PListCell> getPartitionListDesc() {
+        if (partitionDesc == null) {
+            return null;
+        }
+        return partitionDesc.right();
     }
 
     public boolean isForceRefresh() {

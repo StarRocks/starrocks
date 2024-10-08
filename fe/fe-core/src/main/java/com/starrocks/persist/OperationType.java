@@ -237,16 +237,6 @@ public class OperationType {
     public static final short OP_FINISH_DECOMMISSION_BACKEND = 54;
 
     @Deprecated
-    public static final short OP_ADD_FRONTEND = 55;
-
-    @Deprecated
-    public static final short OP_ADD_FIRST_FRONTEND = 56;
-
-    @Deprecated
-    @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_FRONTEND = 57;
-
-    @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_SET_LOAD_ERROR_HUB = 58;
 
@@ -598,10 +588,6 @@ public class OperationType {
     public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
     public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
-    // manage system node info 10101 ~ 10120
-    @Deprecated
-    public static final short OP_UPDATE_FRONTEND = 10101;
-
     // manage compute node 10201 ~ 10220
 
     @IgnorableOnReplayFailed
@@ -869,6 +855,9 @@ public class OperationType {
     public static final short OP_TIMESTAMP_V2 = 13040;
 
     public static final short OP_LEADER_INFO_CHANGE_V2 = 13041;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_RESET_FRONTENDS = 13042;
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_FUNCTION_V2 = 13050;

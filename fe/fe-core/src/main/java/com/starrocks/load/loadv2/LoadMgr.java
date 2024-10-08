@@ -776,18 +776,16 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
         long now = System.currentTimeMillis();
-        while (size-- > 0) {
-            LoadJob loadJob = reader.readJson(LoadJob.class);
+        reader.readCollection(LoadJob.class, loadJob -> {
             // discard expired job right away
             if (isJobExpired(loadJob, now)) {
                 LOG.info("discard expired job: {}", loadJob);
-                continue;
+                return;
             }
 
             putLoadJob(loadJob);
-        }
+        });
     }
 
     private void putLoadJob(LoadJob loadJob) {
