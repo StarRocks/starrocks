@@ -74,7 +74,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .executor(statsCacheRefresherExecutor)
-            .buildAsync(new PartitionStatsCacheLoaders());
+            .buildAsync(new PartitionStatsCacheLoader());
 
     AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics =
             Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)

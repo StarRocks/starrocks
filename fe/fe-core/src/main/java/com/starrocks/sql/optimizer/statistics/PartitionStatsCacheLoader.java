@@ -30,7 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
-public class PartitionStatsCacheLoaders implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<PartitionStats>> {
+public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<PartitionStats>> {
 
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
