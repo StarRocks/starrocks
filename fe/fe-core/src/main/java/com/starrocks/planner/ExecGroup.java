@@ -64,9 +64,9 @@ public class ExecGroup {
 
         root.getProbeRuntimeFilters().forEach(RuntimeFilterDescription::clearExecGroupInfo);
 
-        if (root instanceof JoinNode) {
-            JoinNode joinNode = (JoinNode) root;
-            joinNode.buildRuntimeFilters.forEach(RuntimeFilterDescription::clearExecGroupInfo);
+        if (root instanceof RuntimeFilterBuildNode) {
+            RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
+            rfBuildNode.getBuildRuntimeFilters().forEach(RuntimeFilterDescription::clearExecGroupInfo);
         }
 
         root.getChildren().forEach(this::clearRuntimeFilterExecGroupInfo);
