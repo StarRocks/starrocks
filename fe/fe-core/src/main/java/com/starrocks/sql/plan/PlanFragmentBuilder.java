@@ -2813,7 +2813,10 @@ public class PlanFragmentBuilder {
                     // do nothing
                 } else {
                     // we don't support group execution for other join
-                    currentExecGroup.setDisableColocateGroup();
+                    currentExecGroup.disableColocateGroup(leftFragmentPlanRoot);
+                    rightExecGroup.disableColocateGroup(rightFragmentPlanRoot);
+                    currentExecGroup.merge(rightExecGroup);
+                    execGroups.remove(rightExecGroup);
                 }
             }
             currentExecGroup.add(joinNode);
