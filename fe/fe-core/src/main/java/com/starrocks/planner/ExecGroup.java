@@ -49,7 +49,9 @@ public class ExecGroup {
 
     public void add(PlanNode node, boolean disableColocateGroup) {
         add(node);
-        this.disableColocateGroup = this.disableColocateGroup || disableColocateGroup;
+        if (!this.disableColocateGroup && disableColocateGroup) {
+            disableColocateGroup(node);
+        }
     }
 
     public void disableColocateGroup(PlanNode root) {
