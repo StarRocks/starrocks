@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -96,6 +97,9 @@ public class StatisticsCalcUtils {
             return null;
         }
         List<Partition> selectedPartitions = getSelectedPartitions(node, table);
+        if (CollectionUtils.isEmpty(selectedPartitions)) {
+            return null;
+        }
         List<Long> partitionIdList = selectedPartitions.stream().map(Partition::getId).collect(Collectors.toList());
 
         // column stats
