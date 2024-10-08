@@ -149,7 +149,8 @@ public class LeaderOpExecutor {
                 SetStmt stmt = (SetStmt) parsedStmt;
                 for (SetListItem var : stmt.getSetListItems()) {
                     if (var instanceof SystemVariable) {
-                        VariableMgr.setSystemVariable(ctx.getSessionVariable(), (SystemVariable) var, true);
+                        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
+                                ctx.getSessionVariable(), (SystemVariable) var, true);
                     }
                 }
             } catch (DdlException e) {

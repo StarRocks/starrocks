@@ -265,7 +265,7 @@ public class ConnectContext {
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
+        sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         userVariables = new ConcurrentHashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
@@ -402,8 +402,9 @@ public class ConnectContext {
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
-        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
+        if (!SetType.GLOBAL.equals(setVar.getType()) && GlobalStateMgr.getCurrentState().getVariableMgr()
+                .shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -498,7 +499,7 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         modifiedSessionVariables.clear();
     }
 
@@ -1111,8 +1112,10 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                String currentValue = VariableMgr.getValue(sessionVariable, new VariableExpr(entry.getKey()));
-                if (!currentValue.equalsIgnoreCase(VariableMgr.getDefaultValue(entry.getKey()))) {
+                String currentValue = GlobalStateMgr.getCurrentState().getVariableMgr().getValue(
+                        sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(
+                        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(entry.getKey()))) {
                     // If the current session variable is not default value, we should respect it.
                     continue;
                 }
@@ -1121,8 +1124,9 @@ public class ConnectContext {
             }
 
             // set catalog and database
-            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(VariableMgr.getDefaultValue(SessionVariable.CATALOG)) ||
-                    !getDatabase().isEmpty();
+            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
+                    || !getDatabase().isEmpty();
             if (!dbHasBeenSetByUser) {
                 String catalog = userProperty.getCatalog();
                 String database = userProperty.getDatabase();

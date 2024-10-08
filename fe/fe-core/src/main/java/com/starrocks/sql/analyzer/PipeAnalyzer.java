@@ -30,7 +30,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -94,7 +93,7 @@ public class PipeAnalyzer {
             if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
                 // Task execution variable
                 String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
-                if (!VariableMgr.containsVariable(taskVariableName)) {
+                if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(taskVariableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
                 }
                 continue;

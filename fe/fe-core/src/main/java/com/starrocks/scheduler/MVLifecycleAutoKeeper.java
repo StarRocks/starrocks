@@ -22,7 +22,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.generator.MVName;
@@ -65,7 +64,7 @@ public class MVLifecycleAutoKeeper extends FrontendDaemon {
         ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setSessionVariable(VariableMgr.newSessionVariable());
+        ctx.setSessionVariable(GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable());
         ctx.getSessionVariable().setAutoMVDecayAcceleratedQueries(true);
         ctx.setThreadLocalInfo();
 

@@ -45,6 +45,7 @@ import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -82,6 +83,7 @@ public class MockedBase {
     protected static OdpsConnector odpsConnector = Mockito.mock(OdpsConnector.class);
     protected static OdpsMetadata odpsMetadata = Mockito.mock(OdpsMetadata.class);
     protected static ConnectorContext context = Mockito.mock(ConnectorContext.class);
+    protected static VariableMgr variableMgr = new VariableMgr();
 
     @Mock
     static TableReadSessionBuilder mockTableReadSessionBuilder = Mockito.mock(TableReadSessionBuilder.class);
@@ -177,6 +179,7 @@ public class MockedBase {
         when(globalStateMgr.getCatalogMgr()).thenReturn(catalogMgr);
         when(globalStateMgr.getConnectorMgr()).thenReturn(connectorMgr);
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
+        when(globalStateMgr.getVariableMgr()).thenReturn(variableMgr);
         when(connectorMgr.getConnector(anyString())).thenReturn(new CatalogConnector(
                 odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog", "odps")));
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));

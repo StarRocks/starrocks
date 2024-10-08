@@ -23,7 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
@@ -148,7 +148,7 @@ public class RboOptimizer {
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                 for (Map.Entry<String, String> var : variables.entrySet()) {
-                    VariableMgr.setSystemVariable(sessionVariable,
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable,
                             new SystemVariable(var.getKey(), new StringLiteral(var.getValue())), true);
                 }
                 connectContext.setSessionVariable(sessionVariable);

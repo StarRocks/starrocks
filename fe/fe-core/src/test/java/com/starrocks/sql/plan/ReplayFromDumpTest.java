@@ -18,7 +18,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -182,7 +182,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testGroupByLimit() throws Exception {
         // check can generate 1 phase with limit 1
         // This test has column statistics and accurate table row count
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         sessionVariable.setNewPlanerAggStage(1);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);

@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -50,6 +51,8 @@ public class ComputeNodeProcDirTest {
     private NodeMgr nodeMgr;
     @Mocked
     private RunMode runMode;
+
+    private final VariableMgr variableMgr = new VariableMgr();
 
     @Before
     public void setUp() {
@@ -88,6 +91,10 @@ public class ComputeNodeProcDirTest {
                 globalStateMgr.getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 
