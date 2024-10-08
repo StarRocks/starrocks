@@ -37,6 +37,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PListCell;
 import org.apache.commons.lang.NotImplementedException;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -172,5 +175,46 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             }
         }
         return result;
+    }
+
+    @Override
+    public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
+        List<String> updatedPartitions = Lists.newArrayList();
+        try {
+            getPartitionNameWithPartitionInfo().
+                    forEach((partitionName, partitionInfo) -> {
+                        long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
+                                partitionInfo.getModifiedTime());
+
+                        LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                                Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
+                                Clock.systemDefaultZone().getZone());
+                        if (partitionUpdateTime.isAfter(checkTime)) {
+                            updatedPartitions.add(partitionName);
+                        }
+                    });
+            return Sets.newHashSet(updatedPartitions);
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+            return null;
+        }
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        try {
+            long lastModifiedTimeMillis = getPartitionNameWithPartitionInfo().values().stream().
+                    map(partitionInfo -> partitionInfo.getModifiedTimeUnit().toMillis(partitionInfo.getModifiedTime())).
+                    max(Long::compareTo).orElse(0L);
+            if (lastModifiedTimeMillis != 0L) {
+                return LocalDateTime.ofInstant(Instant.ofEpochMilli(lastModifiedTimeMillis).plusSeconds(extraSeconds),
+                        Clock.systemDefaultZone().getZone());
+            }
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+        }
+        return null;
     }
 }

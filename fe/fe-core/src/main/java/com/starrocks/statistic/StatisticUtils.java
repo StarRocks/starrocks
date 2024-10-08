@@ -27,7 +27,6 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -48,7 +47,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
@@ -66,7 +65,6 @@ import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -298,30 +296,13 @@ public class StatisticUtils {
             long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
-        } else if (table.isHiveTable()) {
-            // for external table, we get last modified time from other system, there may be a time inconsistency
-            // between the two systems, so we add 60 seconds to make sure table update time is later than
-            // statistics update time
-            HiveTable hiveTable = (HiveTable) table;
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
-            List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
-            long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
-                    orElse(0L);
-            if (lastModifiedTime != 0L) {
-                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime).plusSeconds(60),
-                        Clock.systemDefaultZone().getZone());
-            } else {
+        } else {
+            try {
+                return ConnectorPartitionTraits.build(table).getTableLastUpdateTime(60);
+            } catch (Exception e) {
+                // ConnectorPartitionTraits do not support all type of table, ignore exception
                 return null;
             }
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
-                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
-        } else {
-            return null;
         }
     }
 
