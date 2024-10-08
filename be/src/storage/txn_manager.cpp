@@ -267,12 +267,11 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // if not in recovery mode, then should persist the meta to meta env
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+    if (tablet == nullptr) {
+        return Status::InternalError("tablet not exist during commit txn");
+    }
     if (!is_recovery) {
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-        if (tablet == nullptr) {
-            return Status::InternalError("tablet not exist during commit txn");
-        }
-
         Status st;
         RowsetMetaPB rowset_meta_pb;
         bool skip_schema = config::skip_schema_in_rowset_meta &&
@@ -303,6 +302,10 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                          << ", rowset_id: " << rowset_ptr->rowset_id();
             return Status::InternalError(
                     fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
+        }
+    } else {
+        if (rowset_ptr->rowset_meta()->skip_tablet_schema()) {
+            tablet->add_committed_rowset(rowset_ptr);
         }
     }
 
