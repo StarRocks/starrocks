@@ -165,6 +165,7 @@ public:
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
+    UInt32Column::Ptr offsets_column() const { return _offsets; }
 
     bool is_nullable() const override { return false; }
 
