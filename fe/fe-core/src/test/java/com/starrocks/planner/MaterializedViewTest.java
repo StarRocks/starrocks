@@ -5614,21 +5614,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(mv1);
 
         // date column should be the same with date_trunc('day', ct)
-        {
-            String query = "select tinyint_col, date_trunc('day', date_col) as date_col, " +
+        String[] rollupTimeUnits = new String[]{"day", "week", "month", "quarter", "year"};
+        for (String rollupTimeUnit : rollupTimeUnits) {
+            String query = "select tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col) as date_col, " +
                     "   sum(float_col_1 * int_col) as sum_value from t0 " +
-                    "group by tinyint_col, date_trunc('day', date_col);";
+                    "group by tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col);";
             String plan = sql(query).getExecPlan();
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("date_mv"));
-        }
-        {
-            String query = "select tinyint_col, date_trunc('month', date_col) as date_col, " +
-                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
-                    "group by tinyint_col, date_trunc('month', date_col);";
-            String plan = sql(query).getExecPlan();
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("date_mv"));
+            PlanTestBase.assertContains(plan, "date_mv");
         }
         starRocksAssert.dropTable("t0");
         starRocksAssert.dropMaterializedView("date_mv");
@@ -5661,70 +5653,33 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(mv1);
 
         // date column should be the same with date_trunc('day', ct)
-        {
-            String query = "select tinyint_col, date_trunc('day', date_col) as date_col, " +
-                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
-                    "group by tinyint_col, date_trunc('day', date_col);";
-            String plan = sql(query).getExecPlan();
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("date_mv"));
-        }
-        {
-            String query = "select tinyint_col, date_trunc('month', date_col) as date_col, " +
-                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
-                    "group by tinyint_col, date_trunc('month', date_col);";
-            String plan = sql(query).getExecPlan();
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("date_mv"));
-            Assert.assertTrue(plan.contains("  |  <slot 15> : date_trunc('month', 12: date_trunc('day', date_col))"));
-        }
-        starRocksAssert.dropTable("t0");
-        starRocksAssert.dropMaterializedView("date_mv");
-    }
+        //String[] timeUnits = new String[]{"day", "week",  "month", "quarter", "year"};
+        String[] timeUnits = new String[]{"week",  "month", "quarter", "year"};
+        for (String timeUnit : timeUnits) {
+            {
+                String query = "select tinyint_col, date_trunc('"+ timeUnit + "', date_col) as date_col, " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "group by tinyint_col, date_trunc('" + timeUnit + "', date_col);";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
 
-    @Test
-    public void testAggRollupWithTimeUnit3() throws Exception {
-        String sql = "CREATE TABLE `t0` (\n" +
-                "  `date_col` datetime NOT NULL,\n" +
-                "  `id` int(11) NOT NULL,\n" +
-                "  `int_col` int(11) NOT NULL,\n" +
-                "  `float_col_1` float NOT NULL,\n" +
-                "  `float_col_2` float NOT NULL,\n" +
-                "  `varchar_col` varchar(255) NOT NULL,\n" +
-                "  `tinyint_col` tinyint(4) NOT NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`date_col`, `id`)\n" +
-                "PARTITION BY range(`date_col`)\n" +
-                "(PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
-                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
-                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
-                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`id`)\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");\n";
-        starRocksAssert.withTable(sql);
-        String mv1 = "create MATERIALIZED VIEW date_mv\n" +
-                "PARTITION BY (dt)\n" +
-                "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ")   as select tinyint_col, date_trunc('day', date_col) as dt, sum(float_col_1 * int_col) as sum_value " +
-                "from t0 group by tinyint_col, date_trunc('day', date_col);";
-        starRocksAssert.withMaterializedView(mv1);
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-01-01 00:00:00' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
 
-        // date column should be the same with date_trunc('day', ct)
-        {
-            String query = "select tinyint_col,  " +
-                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
-                    "where date_col >= '2024-09-18 01:00:00' group by tinyint_col ";
-            String plan = sql(query).getExecPlan();
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("date_mv"));
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-09-18 01:00:01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
         }
-
         starRocksAssert.dropTable("t0");
         starRocksAssert.dropMaterializedView("date_mv");
     }

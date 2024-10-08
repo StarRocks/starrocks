@@ -15,7 +15,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -25,6 +24,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Set;
+
+import static com.starrocks.sql.common.TimeUnitUtils.ALL_TIME_MAP;
 
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
@@ -122,10 +123,15 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
             if (!newCall.getChild(1).equals(oldCall.getChild(1))) {
                 return null;
             }
-            TimestampArithmeticExpr.TimeUnit oldTimeUnit = TimestampArithmeticExpr.TimeUnit.fromName(oldChild0.getVarchar());
             ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
-            TimestampArithmeticExpr.TimeUnit newTimeUnit = TimestampArithmeticExpr.TimeUnit.fromName(newChild0.getVarchar());
-            if (oldTimeUnit.ordinal() <= newTimeUnit.ordinal()) {
+            if (!ALL_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
+                    !ALL_TIME_MAP.containsKey(newChild0.getVarchar())) {
+                // only can rewrite date_trunc('day', col) to date_trunc('month', col)
+                return null;
+            }
+            int oldTimeUnit = ALL_TIME_MAP.get(oldChild0.getVarchar());
+            int newTimeUnit = ALL_TIME_MAP.get(newChild0.getVarchar());
+            if (oldTimeUnit > newTimeUnit) {
                 return null;
             }
             CallOperator rewritten = (CallOperator) newCall.clone();

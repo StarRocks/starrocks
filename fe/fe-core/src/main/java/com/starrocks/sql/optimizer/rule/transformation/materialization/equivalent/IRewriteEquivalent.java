@@ -39,7 +39,8 @@ public interface IRewriteEquivalent {
      */
     enum RewriteEquivalentType {
         PREDICATE,
-        AGGREGATE;
+        AGGREGATE,
+        ANY;
 
         public boolean isPredicate() {
             return this == PREDICATE;
@@ -47,6 +48,10 @@ public interface IRewriteEquivalent {
 
         public boolean isAggregate() {
             return this == AGGREGATE;
+        }
+
+        public boolean isAny() {
+            return this == ANY;
         }
     }
 
