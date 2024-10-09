@@ -701,8 +701,8 @@ Follow these steps if you want to start a new FE node with the metadata backup:
 
    If the field `Role` is `LEADER`, this FE node is the Leader FE node. Make sure its IP address is the that of the current FE node.
 
-5. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
-6. Now you have successfully start a new Leader FE node with the metadata backup. You can start new Follower nodes using the new Leader FE node as the helper.
+5. If the data and metadata are intact, and the role of the node is Leader, you must remove the configuration `bdbje_reset_election_group` and restart the node.
+6. Now you have successfully start a new Leader FE node with the metadata backup. You can add new Follower nodes using the new Leader FE node as the helper.
 
    ```Bash
    # Replace <leader_ip> with the IP address (priority_networks) 
