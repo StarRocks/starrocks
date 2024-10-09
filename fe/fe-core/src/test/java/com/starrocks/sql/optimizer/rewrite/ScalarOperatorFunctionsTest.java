@@ -126,6 +126,11 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void to_days() {
+        assertEquals(734443, ScalarOperatorFunctions.to_days(O_DT_20101102_183010).getInt());
+    }
+
+    @Test
     public void yearsAdd() {
         assertEquals("2025-03-23T09:23:55",
                 ScalarOperatorFunctions.yearsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
