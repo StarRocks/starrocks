@@ -433,9 +433,17 @@ public class CachedStatisticStorage implements StatisticStorage {
             List<ColumnStatistic> newStatistics = Lists.newArrayList();
             for (int i = 0; i < columns.size(); i++) {
                 ColumnStatistic columnStatistic = columnStatistics.get(i);
-                double distinctCount = columnNDVForPartitions.get(columns.get(i)).getDistinctCount().get(partition);
-                ColumnStatistic newStats =
-                        ColumnStatistic.buildFrom(columnStatistic)
+                PartitionStats partitionStats = columnNDVForPartitions.get(columns.get(i));
+                if (partitionStats == null) {
+                    // some of the columns miss statistics
+                    return null;
+                }
+                if (!partitionStats.getDistinctCount().containsKey(partition)) {
+                    // some of the partitions miss statistics
+                    return null;
+                }
+                double distinctCount = partitionStats.getDistinctCount().get(partition);
+                ColumnStatistic newStats = ColumnStatistic.buildFrom(columnStatistic)
                                 .setDistinctValuesCount(distinctCount).build();
                 newStatistics.add(newStats);
             }

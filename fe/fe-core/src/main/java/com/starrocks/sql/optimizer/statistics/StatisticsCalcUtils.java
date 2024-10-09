@@ -84,7 +84,8 @@ public class StatisticsCalcUtils {
     }
 
     /**
-     * Return partition-level statistics if it exists
+     * Return partition-level statistics if it exists.
+     * Only return the statistics if all columns and all partitions have the required statistics, otherwise return null
      */
     public static Map<Long, Statistics> getPartitionStatistics(Operator node, OlapTable table,
                                                                Map<ColumnRefOperator, Column> columns) {
