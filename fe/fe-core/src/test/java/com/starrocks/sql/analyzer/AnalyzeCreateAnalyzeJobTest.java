@@ -28,6 +28,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
@@ -92,9 +94,23 @@ public class AnalyzeCreateAnalyzeJobTest {
         DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
         Assert.assertEquals(1,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
-
-        sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
+        sql = "create analyze sample table hive0.tpch.customer(C_NAME, C_PHONE)";
         analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
+    }
 
+    @Test
+    public void testCreateHistogram() throws Exception {
+        starRocksAssert.ddl("create analyze table db.tbl update histogram on kk2, kk1 ");
+        List<List<String>> analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
+        List<String> jobDesc = analyzeJobs.get(0);
+        String jobId = jobDesc.get(0);
+        Assert.assertEquals(
+                List.of("default_catalog", "db", "tbl", "ALL", "HISTOGRAM", "SCHEDULE", "{}", "PENDING", "None", ""),
+                jobDesc.subList(1, jobDesc.size()));
+
+        // drop analyze
+        starRocksAssert.ddl("drop analyze " + jobId);
+        analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
+        Assert.assertEquals(0, analyzeJobs.size());
     }
 }
