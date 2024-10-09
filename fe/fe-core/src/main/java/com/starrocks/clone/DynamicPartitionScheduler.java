@@ -474,7 +474,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
-                } catch (DdlException | AnalysisException e) {
+                } catch (Exception e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 }
             }
