@@ -33,6 +33,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private long tableId;
     private final TableName tbl;
     private final StatsConstants.AnalyzeType analyzeType;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
 
     private List<Expr> columns;
     private List<String> columnNames = Lists.newArrayList();
@@ -42,16 +43,18 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
         this(null, Lists.newArrayList(), isSample, properties,
                 isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                null,
                 pos);
     }
 
     public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
         this(new TableName(db, null), Lists.newArrayList(), isSample, properties,
-                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, pos);
+                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, null, pos);
     }
 
     public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
                                 Map<String, String> properties, StatsConstants.AnalyzeType analyzeType,
+                                AnalyzeTypeDesc analyzeTypeDesc,
                                 NodePosition pos) {
         super(pos);
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -62,6 +65,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.isSample = isSample;
         this.properties = properties;
         this.analyzeType = analyzeType;
+        this.analyzeTypeDesc = analyzeTypeDesc;
     }
 
     public void setDbId(long dbId) {
@@ -123,6 +127,10 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public StatsConstants.AnalyzeType getAnalyzeType() {
         return analyzeType;
+    }
+
+    public AnalyzeTypeDesc getAnalyzeTypeDesc() {
+        return analyzeTypeDesc;
     }
 
     @Override
