@@ -20,12 +20,9 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 AuditStatisticsReporter::AuditStatisticsReporter() {
     auto status = ThreadPoolBuilder("audit_report")
@@ -42,47 +39,14 @@ AuditStatisticsReporter::AuditStatisticsReporter() {
 // including the final status when execution finishes.
 Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                                         const TNetworkAddress& fe_addr) {
-    Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
-                                    &fe_status);
-    if (!fe_status.ok()) {
-        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
-        return fe_status;
-    }
-
     TReportAuditStatisticsResult res;
     Status rpc_status;
-
-    try {
-        try {
-            coord->reportAuditStatistics(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
-
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->reportAuditStatistics(res, params);
-            } else {
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-                return rpc_status;
-            }
-        }
-
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr.hostname, fe_addr.port,
+            [&res, &params](FrontendServiceConnection& client) { client->reportAuditStatistics(res, params); },
+            config::thrift_rpc_timeout_ms);
+    if (rpc_status.ok()) {
         rpc_status = Status(res.status);
-    } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
-        return rpc_status;
     }
     return rpc_status;
 }
