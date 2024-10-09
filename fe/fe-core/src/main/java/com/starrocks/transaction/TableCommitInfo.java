@@ -51,7 +51,7 @@ public class TableCommitInfo implements Writable {
     private Map<Long, PartitionCommitInfo> idToPartitionCommitInfo;
 
     public TableCommitInfo() {
-
+        this.idToPartitionCommitInfo = Maps.newHashMap();
     }
 
     public TableCommitInfo(long tableId) {

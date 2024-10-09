@@ -2174,6 +2174,7 @@ public class StmtExecutor {
             return;
         }
 
+        DmlType dmlType = DmlType.fromStmt(stmt);
         stmt.getTableName().normalization(context);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
@@ -2192,8 +2193,7 @@ public class StmtExecutor {
                     "explain analyze only supports insert into olap native table");
         }
 
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
-                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+        if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
             handleInsertOverwrite((InsertStmt) parsedStmt);
             return;
@@ -2588,8 +2588,8 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
-                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtJobTransactionFinish(txnState, database,
-                        targetTable);
+                GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                        .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
         }
 
