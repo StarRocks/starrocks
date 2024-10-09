@@ -96,6 +96,8 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+    private boolean isDynamicOverwrite = false;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
                       NodePosition pos) {
@@ -180,6 +182,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isVersionOverwrite() {
         return isVersionOverwrite;
+    }
+
+    public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {
+        this.isDynamicOverwrite = isDynamicOverwrite;
+    }
+
+    public boolean isDynamicOverwrite() {
+        return isDynamicOverwrite;
     }
 
     public QueryStatement getQueryStatement() {

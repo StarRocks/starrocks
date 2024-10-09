@@ -149,7 +149,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobLog jobInfo) {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
-                jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds());
+                jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds(), jobInfo.isDynamicOverwrite());
         boolean registered = registerOverwriteJob(insertOverwriteJob);
         if (!registered) {
             LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
