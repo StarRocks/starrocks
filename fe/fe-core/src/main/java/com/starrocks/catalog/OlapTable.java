@@ -1521,6 +1521,10 @@ public class OlapTable extends Table {
         return partition;
     }
 
+    public Optional<Partition> mayGetPartition(long partitionId) {
+        return Optional.ofNullable(getPartition(partitionId));
+    }
+
     public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
         Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
         if (partitionId == null) {
