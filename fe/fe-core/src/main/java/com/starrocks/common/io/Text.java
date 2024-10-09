@@ -34,14 +34,17 @@
 
 package com.starrocks.common.io;
 
+import com.google.gson.stream.JsonReader;
 import com.starrocks.meta.LimitExceededException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -452,6 +455,15 @@ public class Text implements Writable {
         bytes = new byte[length];
         readAndCheckEof(in, bytes, length);
         return decode(bytes);
+    }
+
+    public static JsonReader getJsonReaderWithChecksum(CheckedInputStream in) throws IOException {
+        byte[] bytes = new byte[4];
+        readAndCheckEof(in, bytes, 4);
+        int length = ByteBuffer.wrap(bytes).getInt();
+        bytes = new byte[length];
+        readAndCheckEof(in, bytes, length);
+        return new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
     }
 
     /**
