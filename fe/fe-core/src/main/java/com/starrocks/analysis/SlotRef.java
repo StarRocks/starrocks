@@ -283,7 +283,8 @@ public class SlotRef extends Expr {
         if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + colName + "`";
         } else if (label != null) {
-            return label;
+            sb.append("`").append(label).append("`");
+            return sb.toString();
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
