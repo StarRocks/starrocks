@@ -692,8 +692,8 @@ jstat -gcutil pid 1000 1000
 
    如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。确保返回的是当前 FE 节点的 IP 地址。
 
-5. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
-6. 现在，您已成功通过元数据备份启动了新的 Leader FE 节点。您可以使用新 Leader FE 节点作为 Helper 启动 Follower 节点。
+5. 如果数据和元数据完整，且该节点的角色是 Leader 后，需要删除之前添加的配置项 `bdbje_reset_election_group` 并重新启动节点。
+6. 现在，您已成功通过元数据备份启动了新的 Leader FE 节点。您可以使用新 Leader FE 节点作为 Helper 添加 Follower 节点。
 
    ```Bash
    # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
