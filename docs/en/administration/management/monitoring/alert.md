@@ -2,7 +2,7 @@
 
 This article introduces the alarm items that need attention and their handling methods from multiple dimensions such as business continuity, cluster availability, and machines.
 
-The following $job_name needs to be replaced with the corresponding job name in the prometheus configuration, and $fe_leader needs to be replaced with the corresponding ip of the leader fe.
+The following  `$job_name` needs to be replaced with the corresponding job name in the prometheus configuration, and `$fe_leader` needs to be replaced with the corresponding IP of the leader FE.
 
 ## Service pending alarm
 
@@ -16,7 +16,7 @@ count(up{group="fe", job="$job_name"}) >= 3
 
 Alarm description:
 
-Please adjust the number of surviving Fe nodes according to the actual number of Fe nodes.
+Please adjust the number of surviving FE nodes according to the actual number of FE nodes.
 
 Processing method:
 
@@ -36,11 +36,11 @@ The number of pending nodes are greater than 1.
 
 Processing method:
 
-There is a be service down, try to pull up.
+There is a BE service down, try to pull up.
 
 ## Machine overload alarm
 
-### BE cpu alarm
+### BE CPU alarm
 
 Expression:
 
@@ -82,7 +82,7 @@ Memory usage rate exceeds 90%.
 
 Processing method:
 
-Troubleshooting methods can refer to [memory problem troubleshooting](https://docs.starrocks.io/docs/administration/management/resource_management/Memory_management/) or get [heap profile](https://github.com/StarRocks/starrocks/pull/35322) troubleshooting.
+Troubleshooting methods can refer to [memory problem troubleshooting](./management/resource_management/Memory_management.md) or get [heap profile](https://github.com/StarRocks/starrocks/pull/35322) troubleshooting.
 
 - In case of emergency, in order to restore the service as soon as possible, you can try to restart the corresponding BE service (emergency: BE node process memory monitoring continues to be abnormal and full, and it is impossible to reduce memory usage through effective positioning).
 - If other services of the mixed department affect SR, other services can be considered to be stopped in an emergency
@@ -105,7 +105,7 @@ Processing method:
 
 If there is a node_disk_io_time_seconds_total alarm, then first confirm whether there is a change in the business, if there is, whether the change can be rolled back, maintain the resource balance conditions before, if not, consider whether it is normal business growth leads to the need to expand resources.
 
-You can use the iotop tool to analyze and monitor disk I/O usage. Iotop has a UI similar to top, including pid, user, I/O, process and other related information.
+You can use the `iotop` tool to analyze and monitor disk I/O usage. `iotop` has a UI similar to `top`, including PID, user, I/O, process and other related information.
 
 You can also use the following command to obtain the tablets that consume IO in the current system in StarRocks, and then locate specific tasks and tables.
 
@@ -157,16 +157,16 @@ You can pay attention to the load bytes monitoring item in the grafana monitorin
 
 If there is no significant change in the amount of data imported, and the dataused and disk usage seen in show backends are inconsistent, you can check whether you have recently performed drop database, drop table, or drop partition operations (fe.audite.log).
 
-The metadata information involved in these operations will be retained in the fe memory for 1 day (data can be recovered through recover within one day to avoid misoperation), this time may occur, disk occupancy is greater than the displayed in the show backends used space, memory retention 1 day can be adjusted by the fe parameter catalog_trash_expire_second, adjustment method
+The metadata information involved in these operations will be retained in the FE memory for 1 day (data can be recovered through recover within one day to avoid misoperation), this time may occur, disk occupancy is greater than the displayed in the show backends used space, memory retention 1 day can be adjusted by the FE parameter catalog_trash_expire_second, adjustment method
 
 ```sql
 admin set frontend config ("catalog_trash_expire_second"="86400") #If persistence is required, remember to add it to the `fe.conf` file.
 ```
 
-The data dropped in the fe memory after 1 day into the be trash directory ($storage_root_path/trash), the data will be retained in the trash directory for 3 days by default, this time will also appear disk occupancy is greater than the show backends displayed in the used space, trash retention time by be configuration trash_file_expire_time_sec (default 259200, 3 days, since v2.5.17, v3.0.9 and v3.1.6, the default value from 259,200 to 86,400), the adjustment method.
+The data dropped in the FE memory after 1 day into the BE trash directory ($storage_root_path/trash), the data will be retained in the trash directory for 3 days by default, this time will also appear disk occupancy is greater than the show backends displayed in the used space, trash retention time by BE configuration trash_file_expire_time_sec (default 259200, 3 days, since v2.5.17, v3.0.9 and v3.1.6, the default value from 259,200 to 86,400), the adjustment method.
 
 ```shell
-curl http://be_ip:be_http_port/api/update_config?trash_file_expire_time_sec=xxx #如果需要持久化需要在be.conf新增该配置
+curl http://be_ip:be_http_port/api/update_config?trash_file_expire_time_sec=xxx #If persistence is required, the configuration needs to be added to `be.conf`.
 ```
 
 #### FE metadata disk capacity alarm
@@ -301,13 +301,13 @@ starocks_fe_meta_log_count{job="$job_name",instance="$fe_master"} > 100000
 
 Alarm description:
 
-If the number of fe bdb logs exceeds 100000, the default value of 50000 will be set to 0 for checkpoint and re-accumulation.
+If the number of FE bdb logs exceeds 100000, the default value of 50000 will be set to 0 for checkpoint and re-accumulation.
 
 Processing method:
 
 The reason for the alarm is that Checkpoint was not done, so we confirmed the problem by investigating the Checkpoint situation.
 
-Check if there is a log of completed checkpoint in fe: search for `begin to generate new image: image.xxxx` in the fe.log of Leader FE. If found, it means that the image has started to be generated. Check the subsequent logs of this thread. If `checkpoint finished save image.xxxx` appears, it means that the image has been written successfully. If `an Exception occurs when generating new image file`, the generation fails. You need to check the specific error information, which involves metadata issues. The operation needs to be cautious. Please contact S ta r R o c k s support personnel for analysis.
+Check if there is a log of completed checkpoint in FE: search for `begin to generate new image: image.xxxx` in the fe.log of Leader FE. If found, it means that the image has started to be generated. Check the subsequent logs of this thread. If `checkpoint finished save image.xxxx` appears, it means that the image has been written successfully. If `an Exception occurs when generating new image file`, the generation fails. You need to check the specific error information, which involves metadata issues. The operation needs to be cautious. Please contact S ta r R o c k s support personnel for analysis.
 
 ### FE thread count is full alarm
 
@@ -319,11 +319,11 @@ s ta ro c k sfe_thread_pool{job="$job_name"} > 3000
 
 Alarm description:
 
-Fe thread pool size exceeds 3000.
+FE thread pool size exceeds 3000.
 
 Processing method:
 
-The default number of threads for Fe and BE is 4096. Generally, there are many union all queries, so reduce the execution concurrency of union all and adjust the SQL level pipeline_dop. If it is not convenient to adjust the SQL granularity, you can adjust the pipeline_dop globally, `set global pipeline_dop = 8`.
+The default number of threads for FE and BE is 4096. Generally, there are many union all queries, so reduce the execution concurrency of union all and adjust the SQL level pipeline_dop. If it is not convenient to adjust the SQL granularity, you can adjust the pipeline_dop globally, `set global pipeline_dop = 8`.
 
 Emergency handling:
 
@@ -343,7 +343,7 @@ sum(jvm_heap_size_bytes{job="$job_name", type="used"}) * 100 / sum(jvm_heap_size
 
 Alarm description:
 
-Fe JVM usage rate exceeds 90%.
+FE JVM usage rate exceeds 90%.
 
 
 Processing method:
@@ -354,7 +354,7 @@ If this monitoring alarm occurs, you can manually download jmap to assist in ana
 jmap -histo[:live] $fe_pid > jmap.dump  #Adding "live" may cause the FE to restart.
 ```
 
-You can restart the corresponding FE node or adjust the JVM (Xmx) to restart the Fe service if it continues to hit high without releasing.
+You can restart the corresponding FE node or adjust the JVM (Xmx) to restart the FE service if it continues to hit high without releasing.
 
 ## Business availability alarm
 
@@ -374,7 +374,7 @@ The number of failed items imported exceeds 5%.
 
 Processing method:
 
-View leader fe log
+View leader FE log
 
 Search for information related to import errors, you can search for the keyword "status: ABORTED" to view the task of import failure.
 
@@ -403,7 +403,7 @@ Processing method:
 
 1. First, check whether the routine load task status is RUNNING
 
-show routine load from $db; #关注State字段
+show routine load from $db; #Pay attention to the State field.
 
 2. If the routine load task status is PAUSED
 
@@ -416,10 +416,10 @@ Pay attention to the ReasonOfStateChanged, ErrorLogUrls or TrackingSQL returned 
 You can try to increase the task parallelism. The concurrency of a single Routine Load Job is determined by the minimum of the following four values.
 
 ```plain text
-kafka_partition_num，kafka topic的分区个数
-desired_concurrent_number，任务设置的并行度
-alive_be_num，存活的be节点
-max_routine_load_task_concurrent_num，fe的配置，默认5
+kafka_partition_num: the number of partitions for the Kafka topic.
+desired_concurrent_number: the parallelism set for the task.
+alive_be_num: the number of alive BE nodes.
+max_routine_load_task_concurrent_num: the configuration for the FE, with a default of 5.
 ```
 
 Generally, it is necessary to adjust the parallelism of tasks or the number of topic partitions in Kafka (contact Kafka colleagues for processing). The following is the method to adjust the parallelism of tasks
@@ -442,7 +442,7 @@ sum(starocks_fe_txn_running{job="$job_name"}) by(db) > 900
 
 Alarm description:
 
-The number of imported transactions in a single db exceeds 900. Before version 3.1, the limit was 100. Please modify the alarm threshold accordingly.
+The number of imported transactions in a single db exceeds 900. BEfore version 3.1, the limit was 100. Please modify the alarm threshold accordingly.
 
 Processing method:
 
@@ -589,7 +589,7 @@ First, check whether the field Msg returned by the following command has a corre
 
 show alter column from $db;
 
-If not, search for the JobId context returned from the previous step in the leader fe log
+If not, search for the JobId context returned from the previous step in the leader FE log
 
 1. Schema change out of memory
 
