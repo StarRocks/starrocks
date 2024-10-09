@@ -390,7 +390,10 @@ struct THdfsScanRange {
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
 
+     // attached partition value.
     28: optional Descriptors.THdfsPartition partition_value;
+
+    29: optional Types.TTableId table_id;
 }
 
 struct TBinlogScanRange {
