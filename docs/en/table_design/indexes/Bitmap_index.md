@@ -246,7 +246,7 @@ SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 
 **Query performance analysis**: Since the table queried does not have bitmap index, all pages containing the `lo_shipmode` column data need to be read and then predicate filtering is applied.
 
-Total Time: Approximately 0.91 milliseconds, **with data loading taking 0.47 milliseconds**, decoding dictionary for low cardinality optimization taking 0.31 milliseconds, and predicate filtering taking 0.23 milliseconds.
+Total Time: Approximately 0.91 seconds, **with data loading taking 0.47 seconds**, decoding dictionary for low cardinality optimization taking 0.31 seconds, and predicate filtering taking 0.23 seconds.
 
 ```Bash
 PullRowNum: 20.566M (20566493) // Number of rows in the result set.
