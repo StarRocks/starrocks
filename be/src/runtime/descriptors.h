@@ -108,6 +108,7 @@ public:
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
+    const std::string& col_physical_name() const { return _col_physical_name; }
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
 
@@ -124,6 +125,7 @@ private:
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
+    const std::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -206,16 +208,12 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
-    const TPhysicalSchema* get_physical_schema() const { return &_physical_schema; }
-
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
-
-    TPhysicalSchema _physical_schema;
 };
 
 class HdfsTableDescriptor : public HiveTableDescriptor {

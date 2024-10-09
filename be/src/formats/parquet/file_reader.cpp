@@ -185,8 +185,7 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
         return std::make_shared<IcebergMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
                                                    _scanner_ctx->iceberg_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
-                                                   _scanner_ctx->physical_schema);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
     }
 }
 
@@ -481,7 +480,7 @@ bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_gr
                 }
                 std::unordered_map<std::string, size_t> column_name_2_pos_in_meta{};
                 std::vector<SlotDescriptor*> slot_v{slot};
-                _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, row_group, slot_v);
+                _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, slot_v);
                 const tparquet::ColumnMetaData* column_meta =
                         _meta_helper->get_column_meta(column_name_2_pos_in_meta, row_group, slot->col_name());
                 if (column_meta == nullptr || !column_meta->__isset.statistics) continue;
@@ -499,7 +498,7 @@ bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_gr
                     std::vector<string> min_values;
                     std::vector<string> max_values;
 
-                    const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
+                    const ParquetField* field = _meta_helper->get_parquet_field(slot);
                     if (field == nullptr) {
                         LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                         continue;
@@ -545,7 +544,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
     // Key is column name, format with case sensitive, comes from SlotDescription.
     // Value is the position of the filed in parquet schema.
     std::unordered_map<std::string, size_t> column_name_2_pos_in_meta{};
-    _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, row_group, slots);
+    _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, slots);
 
     for (size_t i = 0; i < slots.size(); i++) {
         const SlotDescriptor* slot = slots[i];
@@ -576,7 +575,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             std::vector<string> min_values;
             std::vector<string> max_values;
 
-            const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
+            const ParquetField* field = _meta_helper->get_parquet_field(slot);
             if (field == nullptr) {
                 LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                 return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));

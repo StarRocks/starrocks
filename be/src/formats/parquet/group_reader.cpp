@@ -299,7 +299,7 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         if (column.t_iceberg_schema_field == nullptr) {
             RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
-                                                 column.t_physical_schema_field, &column_reader));
+                                                 &column_reader));
         } else {
             RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
                                                  column.t_iceberg_schema_field, &column_reader));

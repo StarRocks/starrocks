@@ -27,15 +27,26 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDeltaLakeTable;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
+import com.starrocks.thrift.TSlotDescriptor;
+import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTypeDesc;
+import com.starrocks.thrift.TTypeNode;
+import com.starrocks.thrift.TTypeNodeType;
 import io.delta.kernel.Snapshot;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
+import io.delta.kernel.internal.util.ColumnMapping;
+import io.delta.kernel.types.ArrayType;
+import io.delta.kernel.types.FieldMetadata;
+import io.delta.kernel.types.MapType;
+import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -43,12 +54,11 @@ public class DeltaLakeTable extends Table {
     private String catalogName;
     private String dbName;
     private String tableName;
-    private StructType physicalSchema;
     private List<String> partColumnNames;
     private SnapshotImpl deltaSnapshot;
     private String tableLocation;
     private Engine deltaEngine;
-
+    private Map<String, StructField> physicalSchema;
 
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -57,19 +67,20 @@ public class DeltaLakeTable extends Table {
         super(TableType.DELTALAKE);
     }
 
-    public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> localSchema,
+    public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> logicalSchema,
                           StructType physicalSchema, List<String> partitionNames,
                           SnapshotImpl deltaSnapshot, String tableLocation, Engine deltaEngine, long createTime) {
-        super(id, tableName, TableType.DELTALAKE, localSchema);
+        super(id, tableName, TableType.DELTALAKE, logicalSchema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
-        this.physicalSchema = physicalSchema;
         this.partColumnNames = partitionNames;
         this.deltaSnapshot = deltaSnapshot;
         this.tableLocation = tableLocation;
         this.deltaEngine = deltaEngine;
         this.createTime = createTime;
+        this.physicalSchema = physicalSchema.fields().stream()
+                .collect(Collectors.toMap(StructField::getName, field -> field));
     }
 
     @Override
@@ -177,7 +188,89 @@ public class DeltaLakeTable extends Table {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.DELTALAKE_TABLE,
                 fullSchema.size(), 0, tableName, dbName);
         tTableDescriptor.setDeltaLakeTable(tDeltaLakeTable);
-        tTableDescriptor.setPhysicalSchema(DeltaUtils.getPhysicalSchema(physicalSchema, getDeltaMetadata()));
         return tTableDescriptor;
+    }
+
+    public void setColumnPhysicalIdName(TSlotDescriptor slotDescriptor, Column column) {
+        StructField physicalSchemaField = physicalSchema.get(column.getName());
+        String columnMappingMode = ColumnMapping.getColumnMappingMode(getDeltaMetadata().getConfiguration());
+
+        if (!columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                !columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME)) {
+            return;
+        }
+
+        FieldMetadata fieldMetadata = physicalSchemaField.getMetadata();
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+            slotDescriptor.setCol_unique_id(((Long) fieldMetadata.get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue());
+        }
+
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                fieldMetadata.contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+            slotDescriptor.setCol_physical_name(
+                    (String) fieldMetadata.get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY));
+        }
+        Integer typeDescIndex = 0;
+        setComplexColumnPhysicalIdName(slotDescriptor, physicalSchemaField, typeDescIndex, columnMappingMode);
+    }
+
+    // set column physical id and name for complex column (struct, map, array)
+    public void setComplexColumnPhysicalIdName(TSlotDescriptor slotDescriptor, StructField physicalSchemaField,
+                                               Integer typeDescIndex, String columnMappingMode) {
+        TTypeDesc typeDesc = slotDescriptor.getSlotType();
+        if (physicalSchemaField.getDataType() instanceof StructType) {
+            TTypeNode structNode = typeDesc.getTypes().get(typeDescIndex);
+            Preconditions.checkState(structNode.type.equals(TTypeNodeType.STRUCT));
+            StructType physicalStruct = (StructType) physicalSchemaField.getDataType();
+
+            for (int childIndex = 0; childIndex < structNode.struct_fields.size(); childIndex++) {
+                TStructField typeNodeStructField = structNode.struct_fields.get(childIndex);
+                StructField physicalStructFiled = physicalStruct.fields().get(childIndex);
+                typeDescIndex++;
+                setStructFieldPhysicalIdName(typeDesc, typeDescIndex, typeNodeStructField, physicalStructFiled,
+                        columnMappingMode);
+            }
+        } else if (physicalSchemaField.getDataType() instanceof MapType) {
+            MapType physicalMapType = (MapType) physicalSchemaField.getDataType();
+            StructField keyField = new StructField("key", physicalMapType.getKeyType(), true, FieldMetadata.empty());
+            StructField valueField = new StructField("value", physicalMapType.getValueType(), true, FieldMetadata.empty());
+
+            typeDescIndex++;
+            setComplexColumnPhysicalIdName(slotDescriptor, keyField, typeDescIndex, columnMappingMode);
+
+            typeDescIndex++;
+            setComplexColumnPhysicalIdName(slotDescriptor, valueField, typeDescIndex, columnMappingMode);
+        } else if (physicalSchemaField.getDataType() instanceof ArrayType) {
+            ArrayType arrayType = (ArrayType) physicalSchemaField.getDataType();
+            StructField elementField = new StructField("element", arrayType.getElementType(), true, FieldMetadata.empty());
+            typeDescIndex++;
+            setComplexColumnPhysicalIdName(slotDescriptor, elementField, typeDescIndex, columnMappingMode);
+        }
+    }
+
+    // set column physical id and name for struct field
+    public void setStructFieldPhysicalIdName(TTypeDesc typeDesc, Integer typeDescIndex, TStructField tField,
+                                             StructField physicalStructFiled, String columnMappingMode) {
+        TTypeNode typeNode = typeDesc.getTypes().get(typeDescIndex);
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                physicalStructFiled.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+            tField.setId(((Long) physicalStructFiled.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue());
+        }
+
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                physicalStructFiled.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+            tField.setPhysical_name(
+                    (String) physicalStructFiled.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY));
+        }
+
+        if (typeNode.type.equals(TTypeNodeType.STRUCT)) {
+            for (int childIndex = 0; childIndex < typeNode.struct_fields.size(); childIndex++) {
+                TStructField typeNodeStructField = typeNode.struct_fields.get(childIndex);
+                StructField  childField = ((StructType) physicalStructFiled.getDataType()).fields().get(childIndex);
+                typeDescIndex++;
+                setStructFieldPhysicalIdName(typeDesc, typeDescIndex, typeNodeStructField, childField, columnMappingMode);
+            }
+        }
     }
 }

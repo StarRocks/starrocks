@@ -221,8 +221,6 @@ struct HdfsScannerParams {
     MORParams mor_params;
 
     int64_t connector_max_split_size = 0;
-
-    const TPhysicalSchema* physical_schema = nullptr;
 };
 
 struct HdfsScannerContext {
@@ -235,6 +233,8 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
@@ -295,8 +295,6 @@ struct HdfsScannerContext {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     int64_t connector_max_split_size = 0;
-
-    const TPhysicalSchema* physical_schema = nullptr;
 
     // update none_existed_slot
     // update conjunct

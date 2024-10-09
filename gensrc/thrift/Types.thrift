@@ -127,6 +127,7 @@ struct TStructField {
     1: optional string name
     2: optional string comment
     3: optional i32 id
+    4: optional string physical_name
 }
 
 struct TTypeNode {

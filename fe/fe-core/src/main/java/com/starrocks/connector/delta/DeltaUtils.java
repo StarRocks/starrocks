@@ -28,18 +28,13 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.thrift.TPhysicalSchema;
-import com.starrocks.thrift.TPhysicalSchemaField;
 import io.delta.kernel.Table;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
-import io.delta.kernel.internal.util.ColumnMapping;
-import io.delta.kernel.types.ArrayType;
 import io.delta.kernel.types.DataType;
-import io.delta.kernel.types.MapType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import org.apache.logging.log4j.LogManager;
@@ -109,55 +104,5 @@ public class DeltaUtils {
         } else {
             throw new StarRocksConnectorException("Unexpected file format: " + format);
         }
-    }
-
-    public static TPhysicalSchema getPhysicalSchema(StructType physicalSchema, Metadata metadata) {
-        String columnMappingMode = ColumnMapping.getColumnMappingMode(metadata.getConfiguration());
-        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) ||
-                columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME)) {
-            TPhysicalSchema tPhysicalSchema = new TPhysicalSchema();
-            for (StructField field : physicalSchema.fields()) {
-                tPhysicalSchema.addToFields(getPhysicalSchemaField(field, columnMappingMode));
-            }
-            return tPhysicalSchema;
-        }
-        return null;
-    }
-
-    private static TPhysicalSchemaField getPhysicalSchemaField(StructField field, String columnMappingMode) {
-        TPhysicalSchemaField tPhysicalSchemaField = new TPhysicalSchemaField();
-        tPhysicalSchemaField.setLogical_name(field.getName());
-        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
-                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
-            tPhysicalSchemaField.setPhysical_name(
-                    (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY));
-        }
-
-        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
-                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
-            tPhysicalSchemaField.setField_id((long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY));
-        }
-        // if field is a struct type, we need to recursively get the physical schema
-        if (field.getDataType() instanceof StructType) {
-            StructType fieldStruct = (StructType) field.getDataType();
-            List<TPhysicalSchemaField> childrenFields = Lists.newArrayList();
-            for (StructField childField : fieldStruct.fields()) {
-                childrenFields.add(getPhysicalSchemaField(childField, columnMappingMode));
-            }
-
-            tPhysicalSchemaField.setChildren(childrenFields);
-        } else if (field.getDataType() instanceof MapType) {
-            MapType mapType = (MapType) field.getDataType();
-            StructField keyField = new StructField("key", mapType.getKeyType(), true, field.getMetadata());
-            StructField valueField = new StructField("value", mapType.getValueType(), true, field.getMetadata());
-            tPhysicalSchemaField.setChildren(Lists.newArrayList(
-                    getPhysicalSchemaField(keyField, columnMappingMode),
-                    getPhysicalSchemaField(valueField, columnMappingMode)));
-        } else if (field.getDataType() instanceof ArrayType) {
-            ArrayType arrayType = (ArrayType) field.getDataType();
-            StructField elementField = new StructField("element", arrayType.getElementType(), true, field.getMetadata());
-            tPhysicalSchemaField.setChildren(Lists.newArrayList(getPhysicalSchemaField(elementField, columnMappingMode)));
-        }
-        return tPhysicalSchemaField;
     }
 }
