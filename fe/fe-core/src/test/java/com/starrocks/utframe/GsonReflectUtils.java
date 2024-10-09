@@ -19,6 +19,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.TypeAdapterFactory;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.gson.RuntimeTypeAdapterFactory;
 import mockit.Delegate;
@@ -83,6 +84,13 @@ public class GsonReflectUtils {
                 result = new Delegate() {
                     public <T> T fromJson(String json, Type typeOfT) throws JsonSyntaxException {
                         return gson.fromJson(json, typeOfT);
+                    }
+                };
+
+                GsonUtils.GSON.fromJson((JsonReader) any, (Type) any);
+                result = new Delegate() {
+                    public <T> T fromJson(JsonReader jsonReader, Type typeOfT) throws JsonSyntaxException {
+                        return gson.fromJson(jsonReader, typeOfT);
                     }
                 };
             }
