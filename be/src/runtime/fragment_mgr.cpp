@@ -65,6 +65,7 @@
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/threadpool.h"
+#include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
@@ -80,10 +81,6 @@ std::string to_load_error_http_path(const std::string& file_name) {
         << "file=" << file_name;
     return url.str();
 }
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 class RuntimeProfile;
 
@@ -237,17 +234,6 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(status.ok() || done); // if !status.ok() => done
     Status exec_status = update_status(status);
 
-    Status coord_status;
-    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, config::thrift_rpc_timeout_ms,
-                                    &coord_status);
-    if (!coord_status.ok()) {
-        std::stringstream ss;
-        ss << "couldn't get a client for " << _coord_addr;
-        LOG(WARNING) << ss.str();
-        (void)update_status(Status::InternalError(ss.str()));
-        return;
-    }
-
     TReportExecStatusParams params;
     params.protocol_version = FrontendServiceVersion::V1;
     params.__set_query_id(_query_id);
@@ -320,29 +306,14 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     Status rpc_status;
 
     VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-    try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
 
-            if (!rpc_status.ok()) {
-                // we need to cancel the execution of this fragment
-                (void)update_status(rpc_status);
-                _executor.cancel();
-                return;
-            }
-            coord->reportExecStatus(res, params);
-        }
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            _coord_addr.hostname, _coord_addr.port,
+            [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
 
+    if (rpc_status.ok()) {
         rpc_status = Status(res.status);
-    } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
     }
 
     if (!rpc_status.ok()) {
@@ -699,22 +670,6 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 continue;
             }
 
-            Status fe_connection_status;
-
-            FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
-                                                    fragment_exec_state->coord_addr(), config::thrift_rpc_timeout_ms,
-                                                    &fe_connection_status);
-            if (!fe_connection_status.ok()) {
-                std::stringstream ss;
-                ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
-                LOG(WARNING) << ss.str();
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                        fragment_exec_state->fragment_instance_id());
-                fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
-                        fragment_exec_state->coord_addr());
-                continue;
-            }
-
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
             TReportExecStatusParams params;
@@ -752,23 +707,16 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-            try {
-                try {
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                } catch (TTransportException& e) {
-                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                    if (!rpc_status.ok()) {
-                        continue;
-                    }
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                }
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fragment_exec_state->coord_addr(),
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
 
-            } catch (TException& e) {
-                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
