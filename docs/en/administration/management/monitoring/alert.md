@@ -82,7 +82,7 @@ Memory usage rate exceeds 90%.
 
 Processing method:
 
-Troubleshooting methods can refer to [memory problem troubleshooting](./management/resource_management/Memory_management.md) or get [heap profile](https://github.com/StarRocks/starrocks/pull/35322) troubleshooting.
+Troubleshooting methods can refer to [memory problem troubleshooting](../../management/resource_management/Memory_management.md) or get [heap profile](https://github.com/StarRocks/starrocks/pull/35322) troubleshooting.
 
 - In case of emergency, in order to restore the service as soon as possible, you can try to restart the corresponding BE service (emergency: BE node process memory monitoring continues to be abnormal and full, and it is impossible to reduce memory usage through effective positioning).
 - If other services of the mixed department affect SR, other services can be considered to be stopped in an emergency
