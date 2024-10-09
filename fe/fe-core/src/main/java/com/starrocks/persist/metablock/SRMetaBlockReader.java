@@ -15,6 +15,7 @@
 
 package com.starrocks.persist.metablock;
 
+import com.google.gson.stream.JsonReader;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
@@ -77,18 +78,20 @@ public class SRMetaBlockReader {
         return header;
     }
 
-    private String readJsonText() throws IOException, SRMetaBlockEOFException {
+    private JsonReader getJsonReader() throws IOException, SRMetaBlockEOFException {
         if (numJsonRead >= header.getNumJson()) {
             throw new SRMetaBlockEOFException(String.format(
                     "Read json more than expect: %d >= %d", numJsonRead, header.getNumJson()));
         }
-        String s = Text.readStringWithChecksum(checkedInputStream);
+        JsonReader reader = Text.getJsonReaderWithChecksum(checkedInputStream);
         numJsonRead += 1;
-        return s;
+        return reader;
     }
 
     public <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        return GsonUtils.GSON.fromJson(readJsonText(), returnClass);
+        try (JsonReader jsonReader = getJsonReader()) {
+            return GsonUtils.GSON.fromJson(jsonReader, returnClass);
+        }
     }
 
     public int readInt() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
@@ -96,7 +99,9 @@ public class SRMetaBlockReader {
     }
 
     public Object readJson(Type returnType) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        return GsonUtils.GSON.fromJson(readJsonText(), returnType);
+        try (JsonReader jsonReader = getJsonReader()) {
+            return GsonUtils.GSON.fromJson(jsonReader, returnType);
+        }
     }
 
     public void close() throws IOException, SRMetaBlockException {
