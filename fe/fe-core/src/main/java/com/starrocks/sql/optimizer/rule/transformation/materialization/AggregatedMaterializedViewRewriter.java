@@ -138,6 +138,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                 return null;
             }
         }
+        rewriteContext.setRollup(isRollup);
 
         // normalize mv's aggs by using query's table ref and query ec
         Map<ColumnRefOperator, ScalarOperator> mvProjection =
@@ -264,7 +265,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             return null;
         }
         if (!isAllExprReplaced(rewritten, originalColumnSet)) {
-            // it means there is some column that can not be rewritten by outputs of mv
+            // it means there is some column that cannot be rewritten by outputs of mv
             return null;
         }
         return rewritten;

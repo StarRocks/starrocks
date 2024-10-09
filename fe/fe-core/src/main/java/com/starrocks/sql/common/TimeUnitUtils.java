@@ -39,7 +39,8 @@ public class TimeUnitUtils {
                     .put(YEAR, 7)
                     .build();
 
-    public static final ImmutableMap<String, Integer> ALL_TIME_MAP =
+    // all time units which date_trunc supported
+    public static final ImmutableMap<String, Integer> DATE_TRUNC_SUPPORTED_TIME_MAP =
             new ImmutableMap.Builder<String, Integer>()
                     .put(SECOND, 1)
                     .put(MINUTE, 2)

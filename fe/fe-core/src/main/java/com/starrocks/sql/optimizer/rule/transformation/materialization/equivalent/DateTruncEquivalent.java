@@ -25,7 +25,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Set;
 
-import static com.starrocks.sql.common.TimeUnitUtils.ALL_TIME_MAP;
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
 
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
@@ -124,13 +124,13 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
                 return null;
             }
             ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
-            if (!ALL_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
-                    !ALL_TIME_MAP.containsKey(newChild0.getVarchar())) {
+            if (!DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
+                    !DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(newChild0.getVarchar())) {
                 // only can rewrite date_trunc('day', col) to date_trunc('month', col)
                 return null;
             }
-            int oldTimeUnit = ALL_TIME_MAP.get(oldChild0.getVarchar());
-            int newTimeUnit = ALL_TIME_MAP.get(newChild0.getVarchar());
+            int oldTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(oldChild0.getVarchar());
+            int newTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(newChild0.getVarchar());
             if (oldTimeUnit > newTimeUnit) {
                 return null;
             }

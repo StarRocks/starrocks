@@ -246,7 +246,7 @@ public class EquationRewriter {
     }
 
     /**
-     * Replace expr with equivalent shuttle
+     * Replace expr with equivalent shuttle with specific type.
      * @param rewriteContext rewrite context
      * @param expr input expr to be rewritten
      * @param type equivalent type which is used for call operator rewrite to deduce rewriting strategy
@@ -256,12 +256,17 @@ public class EquationRewriter {
             RewriteContext rewriteContext,
             ScalarOperator expr,
             IRewriteEquivalent.RewriteEquivalentType type) {
+        boolean isRollup = rewriteContext.isRollup();
         final EquivalentShuttleContext shuttleContext = new EquivalentShuttleContext(rewriteContext,
-                true, true, type);
+                isRollup, true, type);
         final EquivalentShuttle shuttle = new EquivalentShuttle(shuttleContext);
         return Pair.create(expr.accept(shuttle, null), shuttleContext);
     }
 
+    /**
+     * Replace expr with equivalent shuttle, by default, we can rewrite call operator with any type of equivalent
+     * since call operator can be aggregate or predicate or group by keys.
+     */
     public Pair<ScalarOperator, EquivalentShuttleContext> replaceExprWithEquivalent(RewriteContext rewriteContext,
                                                                                     ScalarOperator expr) {
         return replaceExprWithEquivalent(rewriteContext, expr, IRewriteEquivalent.RewriteEquivalentType.ANY);
