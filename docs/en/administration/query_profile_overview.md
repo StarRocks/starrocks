@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query profile']
+keywords: ['profile', 'query']
 ---
 
 # Query Profile Overview
