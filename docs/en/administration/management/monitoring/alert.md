@@ -409,7 +409,7 @@ show routine load from $db; #关注State字段
 
 Pay attention to the ReasonOfStateChanged, ErrorLogUrls or TrackingSQL returned in the previous step. Generally, the SQL corresponding to TrackingSQL can see the specific error information, such as
 
-    ![Tracking SQL](../../../_assets/routine_load_tracking.png)
+![Tracking SQL](../../../_assets/alert_routine_load_tracking.png)
 
 3. If the routine load task status is RUNNING
 

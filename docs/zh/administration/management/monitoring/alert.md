@@ -151,7 +151,6 @@ du -sh / --max-depth=1
 
 处理办法：
 
-
 1. 排查导入数据量是否有变化
 
 可以关注 grafana 监控中的 load bytes 监控项，如果数据导入量新增许多，建议扩容资源
@@ -414,7 +413,7 @@ show routine load from $db; #关注State字段
 
 关注上一步返回的ReasonOfStateChanged、ErrorLogUrls或TrackingSQL，一般执行TrackingSQL对应的SQL可以看到具体的报错信息，例如
 
-    ![Tracking SQL](../../../_assets/routine_load_tracking.png)
+![Tracking SQL](../../../_assets/alert_routine_load_tracking.png)
 
 3. 如果routine load任务状态为RUNNING
 
