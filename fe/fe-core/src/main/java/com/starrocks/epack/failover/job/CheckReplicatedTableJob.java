@@ -76,9 +76,15 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             OlapTable remoteOlapTable = remoteTable;
             if (!checkTableConsistency(localOlapTable)) {
                 if (Config.failover_group_allow_drop_inconsistent_table) {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                            remoteTable, localDatabase, localTable, isIncludeObject, true);
-                    job.start();
+                    if (localTable.getCreateTime() < failoverGroup.getSchedule().getRoundScheduledTimeMs() / 1000) {
+                        // If local table is created in previous replication round, drop and create it
+                        DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                                remoteTable, localDatabase, localTable, isIncludeObject, true);
+                        job.start();
+                    } else {
+                        LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                                localDatabase.getFullName(), localTable.getName());
+                    }
                 } else {
                     LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
                             localDatabase.getFullName(), localTable.getName());
@@ -149,14 +155,27 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
             if (Config.failover_group_allow_drop_inconsistent_partition) {
                 if (localTable.getPartitionInfo().isPartitioned()) {
-                    DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
-                            remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
-                            isIncludeObject, true);
-                    job.start();
+                    if (localPartition.getVisibleVersionTime() < failoverGroup.getSchedule()
+                            .getRoundScheduledTimeMs()) {
+                        // If local partition is created in previous replication round, drop and create
+                        DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
+                                remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
+                                isIncludeObject, true);
+                        job.start();
+                    } else {
+                        LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                                localDatabase.getFullName(), localTable.getName());
+                    }
                 } else {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                            remoteTable, localDatabase, localTable, isIncludeObject, true);
-                    job.start();
+                    if (localTable.getCreateTime() < failoverGroup.getSchedule().getRoundScheduledTimeMs() / 1000) {
+                        // If local table is created in previous replication round, drop and create it
+                        DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                                remoteTable, localDatabase, localTable, isIncludeObject, true);
+                        job.start();
+                    } else {
+                        LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                                localDatabase.getFullName(), localTable.getName());
+                    }
                 }
             } else {
                 LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_partition = false",

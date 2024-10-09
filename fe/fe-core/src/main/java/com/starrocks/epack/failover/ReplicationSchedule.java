@@ -104,6 +104,14 @@ public class ReplicationSchedule {
         return lastFinishedTimeMs;
     }
 
+    public long getRoundScheduledTimeMs() {
+        return roundScheduledTimeMs;
+    }
+
+    public long getRoundFinishedTimeMs() {
+        return roundFinishedTimeMs;
+    }
+
     public int getRoundFinishedTimes() {
         return roundFinishedTimes;
     }
