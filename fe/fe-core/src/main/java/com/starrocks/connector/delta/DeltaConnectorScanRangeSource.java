@@ -98,6 +98,7 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
         hdfsScanRange.setFile_length(fileStatus.getSize());
         hdfsScanRange.setFile_format(remoteFileInputFormat.toThrift());
         hdfsScanRange.setPartition_value(table.toHdfsPartition(referencedPartitionInfo));
+        hdfsScanRange.setTable_id(table.getId());
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
