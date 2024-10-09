@@ -1258,13 +1258,13 @@ dropStatsStatement
     ;
 
 histogramStatement:
-    UPDATE HISTOGRAM ON qualifiedName (',' qualifiedName)*
+    ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON qualifiedName (',' qualifiedName)*
         (WITH bucket=INTEGER_VALUE BUCKETS)?
         properties?
     ;
 
 analyzeHistogramStatement
-    : ANALYZE TABLE qualifiedName histogramStatement
+    : histogramStatement
         (WITH (SYNC | ASYNC) MODE)?
     ;
 
@@ -1276,7 +1276,7 @@ createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
     | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
-    | CREATE ANALYZE TABLE qualifiedName histogramStatement
+    | CREATE histogramStatement
     ;
 
 dropAnalyzeJobStatement

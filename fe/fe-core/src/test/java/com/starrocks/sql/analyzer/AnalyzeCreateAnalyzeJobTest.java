@@ -105,7 +105,8 @@ public class AnalyzeCreateAnalyzeJobTest {
         List<String> jobDesc = analyzeJobs.get(0);
         String jobId = jobDesc.get(0);
         Assert.assertEquals(
-                List.of("default_catalog", "db", "tbl", "ALL", "HISTOGRAM", "SCHEDULE", "{}", "PENDING", "None", ""),
+                List.of("default_catalog", "db", "tbl", "kk2,kk1", "HISTOGRAM", "SCHEDULE", "{}", "PENDING", "None",
+                        ""),
                 jobDesc.subList(1, jobDesc.size()));
 
         // drop analyze
