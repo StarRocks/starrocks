@@ -109,6 +109,8 @@ public class StatisticsCollectJobFactory {
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
                     StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+        } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            return new HistogramStatisticsCollectJob(db, table, columnNames, columnTypes, scheduleType, properties);
         } else {
             if (partitionIdList == null) {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
@@ -350,8 +352,9 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        // FIXME: deal with Histogram
+        BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {
@@ -414,6 +417,8 @@ public class StatisticsCollectJobFactory {
                 job.getAnalyzeType());
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
             createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes);
+        } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            createHistogramJob(allTableJobMap, job, db, table, columnNames, columnTypes);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
             if (basicStatsMeta == null || basicStatsMeta.isInitJobMeta()) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columnNames, columnTypes);
@@ -432,6 +437,14 @@ public class StatisticsCollectJobFactory {
                                              List<Type> columnTypes) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
+        allTableJobMap.add(sample);
+    }
+
+    private static void createHistogramJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
+                                           Database db, Table table, List<String> columnNames,
+                                           List<Type> columnTypes) {
+        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
+                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties());
         allTableJobMap.add(sample);
     }
 
