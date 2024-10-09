@@ -423,6 +423,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 }
             }
             return root;
+        } else {
+            return root;
         }
 
         ExpressionMapping outputTranslations = new ExpressionMapping(root.getScope(), root.getFieldMappings(),
