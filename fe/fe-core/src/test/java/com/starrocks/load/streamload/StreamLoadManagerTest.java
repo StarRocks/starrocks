@@ -220,10 +220,7 @@ public class StreamLoadManagerTest {
         Assert.assertTrue(task.isUnreversibleState());
         Assert.assertFalse(task.isFinalState());
 
-<<<<<<< HEAD
-=======
         streamLoadManager.cleanSyncStreamLoadTasks();
         Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
->>>>>>> 49ef20f904 ([BugFix] Fix stream load load_finish_time updated unexpected after transaction committed (#51174))
     }
 }
