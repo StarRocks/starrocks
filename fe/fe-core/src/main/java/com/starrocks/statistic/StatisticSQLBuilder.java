@@ -190,6 +190,11 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
     }
 
+    public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE CATALOG_NAME = '" + catalogName + "'" +
+                " AND DB_NAME = '" + dbName + "' AND TABLE_NAME = '" + tableName + "'";
+    }
+
     public static String buildDropPartitionSQL(List<Long> pids) {
         return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
                 " PARTITION_ID IN (" +
@@ -253,6 +258,13 @@ public class StatisticSQLBuilder {
         return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
                 + tableUUID + "' and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+    public static String buildDropExternalHistogramSQL(String catalogName, String dbName, String tableName,
+                                                       List<String> columnNames) {
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where catalog_name = '"
+                + catalogName + "' and db_name = '" + dbName + "' and table_name = '" + tableName + "' and column_name in ("
+                + Joiner.on(", ").join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
     private static String build(VelocityContext context, String template) {

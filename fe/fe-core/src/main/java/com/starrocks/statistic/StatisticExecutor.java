@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -182,6 +183,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(catalogName, dbName, tableName);
+        LOG.debug("Expire external statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -219,6 +230,15 @@ public class StatisticExecutor {
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute external histogram statistic table expire fail.");
+        }
+    }
+
+    public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName,
+                                      List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(catalogName, dbName, tableName, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
             LOG.warn("Execute external histogram statistic table expire fail.");
@@ -428,34 +448,66 @@ public class StatisticExecutor {
         }
     }
 
+    /**
+     * In case of INSERT-OVERWRITE, the partition-id would change but the statistics would not. So we need to update
+     * the partition id of the statistics. Since PRIMARY-KEY tables doesn't really support update key columns, we
+     * choose to copy existing row but change the id of it,  then delete existing row.
+     * If the second step failed before finish, the statistics cleanup procedure will handle it.
+     */
+    public static void overwritePartitionStatistics(ConnectContext context,
+                                                    long dbId,
+                                                    long tableId,
+                                                    long sourcePartition,
+                                                    long targetPartition) {
+        List<String> sqlList =
+                FullStatisticsCollectJob.buildOverwritePartitionSQL(tableId, sourcePartition, targetPartition);
+        Preconditions.checkState(sqlList.size() == 2);
+
+        // copy
+        executeDML(context, sqlList.get(0));
+
+        // delete
+        executeDML(context, sqlList.get(1));
+
+        // NOTE: why don't we refresh the statistics cache ?
+        // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
+        // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be
+        // vacuumed by background job. so to conclude we don't need to refresh the stats cache manually
+        GlobalStateMgr.getCurrentState().getStatisticStorage().overwritePartitionStatistics(
+                tableId, sourcePartition, targetPartition);
+    }
+
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+        context.setQueryId(UUIDUtil.genUUID());
+        if (Config.enable_print_sql) {
+            LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+        }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                DebugUtil.printId(context.getQueryId()), sql);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
+            AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
     }
 
-    private boolean executeDML(ConnectContext context, String sql) {
+    private static boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
         try {
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            executor.execute();
             AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-            executor.execute();
             return true;
         } catch (Exception e) {
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
