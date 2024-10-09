@@ -21,6 +21,7 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -33,8 +34,13 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Map;
+import java.util.TimeZone;
+
+import static org.junit.Assert.fail;
 
 public class DynamicPartitionSchedulerTest {
 
@@ -120,7 +126,7 @@ public class DynamicPartitionSchedulerTest {
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
-            Assert.fail();
+            fail();
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
         }
@@ -308,4 +314,45 @@ public class DynamicPartitionSchedulerTest {
         Assert.assertFalse(result);
     }
 
+    @Test
+    public void testDuplicatePartitionException() throws Exception {
+        // construct a partition when creating table, and it is duplicated with that dynamic partition will create
+        TimeZone timeZone = TimeUtils.getOrSystemTimeZone("Asia/Shanghai");
+        ZonedDateTime now = ZonedDateTime.now(timeZone.toZoneId());
+        String dateStr = DateTimeFormatter.ofPattern("yyyyMMdd")
+                .format(now.plusDays(2).withHour(0).withMinute(0).withSecond(0));
+        String partitionName = "p" + dateStr;
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test_duplicate_part_exception (\n" +
+                        "    uid String,\n" +
+                        "    tdbank_imp_date Date\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`uid`) \n" +
+                        "PARTITION BY RANGE(`tdbank_imp_date`) (" +
+                        "PARTITION " + partitionName + " VALUES LESS THAN (\"2020-03-25\")" +
+                        ")\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "     \"replication_num\" = \"1\", \n" +
+                        "     \"dynamic_partition.enable\" = \"true\", \n" +
+                        "     \"dynamic_partition.time_unit\" = \"DAY\", \n" +
+                        "     \"dynamic_partition.time_zone\" = \"Asia/Shanghai\", \n" +
+                        "     \"dynamic_partition.end\" = \"3\", \n" +
+                        "     \"dynamic_partition.prefix\" = \"p\", \n" +
+                        "     \"dynamic_partition.buckets\" = \"4\", \n" +
+                        "     \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "     \"compression\" = \"LZ4\" );");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_duplicate_part_exception");
+        try {
+            dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());
+        } catch (Exception e) {
+            fail("Should not throw exception: " + e.getMessage());
+        }
+    }
 }
