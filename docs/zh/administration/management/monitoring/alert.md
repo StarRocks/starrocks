@@ -166,7 +166,7 @@ du -sh / --max-depth=1
 admin set frontend config ("catalog_trash_expire_second"="86400") #如果需要持久化，记得加到fe.conf中
 ```
 
-drop的数据在fe内存中过了1天后进入到了be的trash目录下(${storage_root_path}/trash)，该数据默认会在trash目录保留3天，这个时候也会出现磁盘占用大于show backends中显示的已用空间，trash保留时间由be的配置 trash_file_expire_time_sec（默认259200，3天，自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。）,调整方式
+drop的数据在fe内存中过了1天后进入到了be的trash目录下($storage_root_path/trash)，该数据默认会在trash目录保留3天，这个时候也会出现磁盘占用大于show backends中显示的已用空间，trash保留时间由be的配置 trash_file_expire_time_sec（默认259200，3天，自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。）,调整方式
 
 ```shell
 curl http://be_ip:be_http_port/api/update_config?trash_file_expire_time_sec=xxx #如果需要持久化需要在be.conf新增该配置

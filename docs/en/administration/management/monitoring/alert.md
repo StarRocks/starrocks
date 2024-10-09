@@ -163,7 +163,7 @@ The metadata information involved in these operations will be retained in the fe
 admin set frontend config ("catalog_trash_expire_second"="86400") #If persistence is required, remember to add it to the `fe.conf` file.
 ```
 
-The data dropped in the fe memory after 1 day into the be trash directory (${storage_root_path}/trash), the data will be retained in the trash directory for 3 days by default, this time will also appear disk occupancy is greater than the show backends displayed in the used space, trash retention time by be configuration trash_file_expire_time_sec (default 259200, 3 days, since v2.5.17, v3.0.9 and v3.1.6, the default value from 259,200 to 86,400), the adjustment method.
+The data dropped in the fe memory after 1 day into the be trash directory ($storage_root_path/trash), the data will be retained in the trash directory for 3 days by default, this time will also appear disk occupancy is greater than the show backends displayed in the used space, trash retention time by be configuration trash_file_expire_time_sec (default 259200, 3 days, since v2.5.17, v3.0.9 and v3.1.6, the default value from 259,200 to 86,400), the adjustment method.
 
 ```shell
 curl http://be_ip:be_http_port/api/update_config?trash_file_expire_time_sec=xxx #如果需要持久化需要在be.conf新增该配置
