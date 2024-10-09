@@ -84,7 +84,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (state->is_cancelled()) {
         return Status::Cancelled("runtime state is cancelled");
     }
-    RETURN_IF_ERROR(_join_builder->build_ht(state));
+    RETURN_IF_ERROR(_join_builder->build_ht(state, false));
 
     size_t merger_index = _driver_sequence;
     // Broadcast Join only has one build operator.
