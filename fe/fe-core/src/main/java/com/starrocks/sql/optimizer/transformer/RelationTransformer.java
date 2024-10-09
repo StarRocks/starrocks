@@ -413,17 +413,12 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
     private OptExprBuilder addProject(OptExprBuilder root, List<ColumnRefOperator> outputColumns,
                                       SetOperationRelation setRelation) {
-        addProjection:
-        if (setRelation.hasOrderByClause()) {
-            for (OrderByElement orderByElement : setRelation.getOrderBy()) {
-                final Expr expr = orderByElement.getExpr();
-                // order by constant will be ignored
-                if (!(expr instanceof SlotRef) && !expr.isLiteral()) {
-                    break addProjection;
-                }
-            }
-            return root;
-        } else {
+
+        // add projection if order by no-column ref
+        final boolean needNotAddProject =
+                !setRelation.hasOrderByClause() || setRelation.getOrderBy().stream().map(OrderByElement::getExpr)
+                        .allMatch(e -> (e instanceof SlotRef) || e.isLiteral());
+        if (needNotAddProject) {
             return root;
         }
 
