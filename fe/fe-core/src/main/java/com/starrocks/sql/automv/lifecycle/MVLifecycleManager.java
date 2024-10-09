@@ -119,16 +119,15 @@ public class MVLifecycleManager {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
         try {
-            for (int i = 0; i < numJson; ++i) {
-                MVChangeLog mvChangeLog = reader.readJson(MVChangeLog.Builder.class).build();
+            reader.readCollection(MVChangeLog.Builder.class, mvChangeBuilder -> {
+                MVChangeLog mvChangeLog = mvChangeBuilder.build();
                 if (mvChangeLog.getMVName().equals(AUDIT_LATEST_TIMESTAMP_MARK)) {
                     auditLatestTimestamp = mvChangeLog;
                 } else {
                     nameToMVLifecycles.put(mvChangeLog.getMVName(), MVLifecycle.ofDangling(mvChangeLog));
                 }
-            }
+            });
         } catch (Throwable ignored) {
             nameToMVLifecycles.clear();
         }

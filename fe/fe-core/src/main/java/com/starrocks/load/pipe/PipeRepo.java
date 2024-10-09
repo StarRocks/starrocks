@@ -60,12 +60,8 @@ public class PipeRepo {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int cnt = reader.readInt();
-        for (int i = 0; i < cnt; ++i) {
-            Pipe pipe = reader.readJson(Pipe.class);
-            pipeManager.putPipe(pipe);
-        }
-        LOG.info("loaded {} pipes", cnt);
+        reader.readCollection(Pipe.class, pipeManager::putPipe);
+        LOG.info("loaded {} pipes", pipeManager.getAllPipes().size());
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

@@ -331,12 +331,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        int nameToWhSize = reader.readInt();
-        for (int i = 0; i != nameToWhSize; ++i) {
-            Warehouse warehouse = reader.readJson(Warehouse.class);
+        reader.readCollection(Warehouse.class, warehouse -> {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
-        }
+        });
     }
 
     @Override

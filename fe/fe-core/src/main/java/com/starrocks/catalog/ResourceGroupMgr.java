@@ -678,12 +678,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
         List<ResourceGroup> resourceGroups = new ArrayList<>();
-        for (int i = 0; i < numJson; ++i) {
-            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
-            resourceGroups.add(resourceGroup);
-        }
+        reader.readCollection(ResourceGroup.class, resourceGroups::add);
         resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
         resourceGroups.forEach(this::replayAddResourceGroup);
     }

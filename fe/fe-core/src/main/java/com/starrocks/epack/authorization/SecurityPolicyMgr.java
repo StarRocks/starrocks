@@ -391,23 +391,18 @@ public class SecurityPolicyMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
-        int policySize = reader.readInt();
-        for (int i = 0; i < policySize; ++i) {
-            CreatePolicyLog createPolicyInfo = reader.readJson(CreatePolicyLog.class);
-
+        reader.readCollection(CreatePolicyLog.class, createPolicyInfo -> {
             Policy policy = new Policy(createPolicyInfo.getPolicyType(), createPolicyInfo.getPolicyId(),
                     createPolicyInfo.getName(), createPolicyInfo.getDbUID(),
                     createPolicyInfo.getArgNames(), createPolicyInfo.getArgTypes(),
                     createPolicyInfo.getRetType(), createPolicyInfo.getPolicyExpressionSQL(),
                     createPolicyInfo.getComment());
             registerPolicy(policy);
-        }
+        });
 
         int policyContextSize = reader.readInt();
         for (int i = 0; i < policyContextSize; ++i) {
-            TableUID tablePEntryObject = reader.readJson(TableUID.class);
-            PolicyAppliedContext policyContext = reader.readJson(PolicyAppliedContext.class);
-            policyContextMap.put(tablePEntryObject, policyContext);
+            reader.readMap(TableUID.class, PolicyAppliedContext.class, policyContextMap::put);
         }
     }
 

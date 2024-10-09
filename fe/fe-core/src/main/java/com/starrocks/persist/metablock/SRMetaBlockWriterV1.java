@@ -94,6 +94,41 @@ public class SRMetaBlockWriterV1 implements SRMetaBlockWriter {
     }
 
     @Override
+    public void writeByte(byte value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeShort(short value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeDouble(double value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeFloat(float value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeChar(char value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeBoolean(boolean value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
+    public void writeString(String value) throws IOException, SRMetaBlockException {
+        writeJson(value);
+    }
+
+    @Override
     public void close() throws IOException, SRMetaBlockException {
         // check if write as many json string as expect
         if (numJsonWritten != header.getNumJson()) {

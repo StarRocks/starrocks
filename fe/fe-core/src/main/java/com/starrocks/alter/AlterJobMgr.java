@@ -70,7 +70,6 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
-import com.starrocks.persist.gson.IForwardCompatibleObject;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -602,13 +601,7 @@ public class AlterJobMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int schemaChangeJobSize = reader.readInt();
-        for (int i = 0; i != schemaChangeJobSize; ++i) {
-            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-            if (alterJobV2 instanceof IForwardCompatibleObject) {
-                LOG.warn("Ignore unknown alterJobV2(id: {}) from the future version!", alterJobV2.getJobId());
-                continue;
-            }
+        reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             schemaChangeHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -618,15 +611,9 @@ public class AlterJobMgr {
                 alterJobV2.replay(alterJobV2);
                 LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
-        }
+        });
 
-        int materializedViewJobSize = reader.readInt();
-        for (int i = 0; i != materializedViewJobSize; ++i) {
-            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-            if (alterJobV2 instanceof IForwardCompatibleObject) {
-                LOG.warn("Ignore unknown MV job(id: {}) from the future version!", alterJobV2.getJobId());
-                continue;
-            }
+        reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             materializedViewHandler.addAlterJobV2(alterJobV2);
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -636,6 +623,6 @@ public class AlterJobMgr {
                 alterJobV2.replay(alterJobV2);
                 LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
-        }
+        });
     }
 }

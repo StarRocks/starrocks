@@ -12,11 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.persist.gson;
+package com.starrocks.persist.metablock;
 
-/**
- * Interface for derived object to be implemented as Compatible Object
- */
-public interface IForwardCompatibleObject {
-    // Empty interface by intention.
+import com.google.gson.annotations.SerializedName;
+
+public class PrimitiveObject<T> {
+
+    @SerializedName("v")
+    private T value;
+
+    public PrimitiveObject(T value) {
+        this.value = value;
+    }
+
+    public T getValue() {
+        return value;
+    }
+
+    public void setValue(T value) {
+        this.value = value;
+    }
 }

@@ -300,13 +300,11 @@ public class MaterializedViewMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+        reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
             // NOTE: job's view is not serialized, cannot use it directly!
             MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
             mvMaintenanceJob.restore();
             jobMap.put(mvId, mvMaintenanceJob);
-        }
+        });
     }
 }
