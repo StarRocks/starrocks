@@ -193,9 +193,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     private Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
-            Table table,
-            ScalarOperator operator,
-            boolean enableCollectColumnStats) {
+            Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
         Engine engine = deltaLakeTable.getDeltaEngine();
