@@ -19,19 +19,8 @@ import java.util.concurrent.TimeUnit;
 
 public interface PartitionInfo {
     long getModifiedTime();
-<<<<<<< HEAD
-=======
 
     default TimeUnit getModifiedTimeUnit()  {
         return TimeUnit.SECONDS;
     }
-
-    default RemoteFileInputFormat getFileFormat() {
-        throw new UnsupportedOperationException("");
-    }
-
-    default String getFullPath() {
-        throw new UnsupportedOperationException("");
-    }
->>>>>>> 9e9ee2d977 ([Refactor] refactor get updated partitions when create analyze job (#51560))
 }

@@ -190,11 +190,11 @@ public abstract class ConnectorPartitionTraits {
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
 
-<<<<<<< HEAD
+
     public List<PartitionInfo> getPartitions(List<String> names) {
         throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
     }
-=======
+
     /**
      * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
      * For external table, we get partition update time from other system, there may be a time
@@ -211,5 +211,4 @@ public abstract class ConnectorPartitionTraits {
      * inconsistency between the two systems, so we add extraSeconds
      */
     public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
->>>>>>> 9e9ee2d977 ([Refactor] refactor get updated partitions when create analyze job (#51560))
 }

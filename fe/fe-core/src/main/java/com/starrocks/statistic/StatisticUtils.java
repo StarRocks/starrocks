@@ -303,16 +303,6 @@ public class StatisticUtils {
                 // ConnectorPartitionTraits do not support all type of table, ignore exception
                 return null;
             }
-<<<<<<< HEAD
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
-                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
-        } else {
-            return null;
-=======
->>>>>>> 9e9ee2d977 ([Refactor] refactor get updated partitions when create analyze job (#51560))
         }
     }
 
