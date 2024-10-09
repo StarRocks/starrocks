@@ -290,6 +290,7 @@ public class ExecuteSqlAction extends RestBaseAction {
             // for queryStatement, if some data already sent, we just close the channel
             if (parsedStmt instanceof QueryStatement && context.getSendDate()) {
                 context.getNettyChannel().close();
+                LOG.warn("http sql:Netty channel is closed because: " + context.getState().getErrorMessage());
                 return;
             }
             // send error message

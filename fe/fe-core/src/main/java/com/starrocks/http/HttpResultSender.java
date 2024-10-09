@@ -117,21 +117,33 @@ public class HttpResultSender {
     }
 
     // BE already transferred results into json format, FE just need to Forward json objects to the client
-    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord) {
+    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord)
+            throws InterruptedException {
         int rowsSize = resultBatch.getRowsSize();
+        int unWritableCount = 0;
         for (ByteBuffer row : resultBatch.getRows()) {
             // when channel is not writeable, sleep a while to balance read/write speed to avoid oom
             while (!channel.channel().isWritable()) {
+                //                LOG.warn("http sql:channel is not writable when sending result");
                 // if channel is closed, cancel query
                 if (!channel.channel().isActive()) {
                     coord.cancel("channel is closed, cancel query");
+                    //                    LOG.warn("http query:channel is closed, cancel query");
                     return;
                 }
-                Thread.yield();
+                unWritableCount++;
+                if (unWritableCount == 10) {
+                    //                    LOG.warn("http sql:sleep");
+                    Thread.sleep(1);
+                    unWritableCount = 0;
+                } else {
+                    Thread.onSpinWait();
+                }
             }
             if (row != resultBatch.getRows().get(rowsSize - 1)) {
                 channel.write(Unpooled.wrappedBuffer(row));
                 if (!channel.channel().isWritable()) {
+                    //                    LOG.warn("http sql:channel is not writable so flush!");
                     channel.flush();
                 }
             } else {
