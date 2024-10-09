@@ -30,12 +30,9 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
@@ -524,7 +521,6 @@ void QueryContextManager::report_fragments_with_same_host(
                 continue;
             }
 
-            Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
@@ -625,24 +621,10 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
-            Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
-            auto exec_env = fragment_ctx->runtime_state()->exec_env();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
-
-            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr,
-                                                    config::thrift_rpc_timeout_ms, &fe_connection_status);
-            if (!fe_connection_status.ok()) {
-                std::stringstream ss;
-                ss << "couldn't get a client for " << fe_addr;
-                LOG(WARNING) << ss.str();
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
-                exec_env->frontend_client_cache()->close_connections(fe_addr);
-                continue;
-            }
 
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
@@ -680,27 +662,15 @@ void QueryContextManager::report_fragments(
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-
-            // TODO: refactor me
-            try {
-                try {
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                } catch (TTransportException& e) {
-                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                    if (!rpc_status.ok()) {
-                        LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
-                                     << rpc_status.message();
-                        continue;
-                    }
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                }
-
-            } catch (TException& e) {
-                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fe_addr,
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
