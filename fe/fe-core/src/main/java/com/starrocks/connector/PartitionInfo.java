@@ -15,6 +15,12 @@
 
 package com.starrocks.connector;
 
+import java.util.concurrent.TimeUnit;
+
 public interface PartitionInfo {
     long getModifiedTime();
+
+    default TimeUnit getModifiedTimeUnit()  {
+        return TimeUnit.SECONDS;
+    }
 }
