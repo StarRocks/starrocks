@@ -442,7 +442,7 @@ sum(starocks_fe_txn_running{job="$job_name"}) by(db) > 900
 
 Alarm description:
 
-The number of imported transactions in a single db exceeds 900. BEfore version 3.1, the limit was 100. Please modify the alarm threshold accordingly.
+The number of imported transactions in a single db exceeds 900. Before version 3.1, the limit was 100. Please modify the alarm threshold accordingly.
 
 Processing method:
 
