@@ -17,12 +17,12 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ## Syntax
 
 ```SQL
-SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' 
-          | '/jobs' | '/statistic' | '/tasks' | '/frontends' 
-          | '/brokers' | '/resources' | '/load_error_hub' 
-          | '/transactions' | '/monitor' | '/current_queries' 
-          | '/current_backend_instances' | '/cluster_balance' 
-          | '/routine_loads' | '/colocation_group' | '/catalog' }
+SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs' 
+          | '/statistic' | '/tasks' | '/frontends' | '/brokers' 
+          | '/resources' | '/load_error_hub' | '/transactions' 
+          | '/monitor' | '/current_queries' | '/current_backend_instances' 
+          | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
+          | '/catalog' | '/replications' }
 ```
 
 ## Parameters
@@ -47,6 +47,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs'
 | '/routine_loads'             | Shows the information of Routine Load in the cluster.        |
 | '/colocation_group'          | Shows the information of Colocate Join groups in the cluster. |
 | '/catalog'                   | Shows the information of catalogs in the cluster.            |
+| '/replications'              | Shows the information of data replication tasks in the cluster. |
 
 ## Examples
 
@@ -442,3 +443,31 @@ mysql> SHOW PROC '/catalog';
 | Catalog    | Catalog name.             |
 | Type       | Catalog type.             |
 | Comment    | Comments for the catalog. |
+
+Example 14: Shows the information of replication tasks in the cluster.
+
+```Plain
+mysql> SHOW PROC '/replications';
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| JobID                                           | DatabaseID | TableID | TxnID | CreatedTime         | FinishedTime        | State     | Progress | Error |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| FAILOVER_GROUP_group1-11006-11010-1725593360156 | 11006      | 11010   | 99    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11009-1725593360161 | 11006      | 11009   | 98    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11074-1725593360161 | 11006      | 11074   | 100   | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-12474-1725593360250 | 11006      | 12474   | 102   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11024-1725593360293 | 11006      | 11024   | 101   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-13861-1725607270963 | 11006      | 13861   | 627   | 2024-09-06 15:21:10 | 2024-09-06 15:21:14 | COMMITTED |          |       |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+```
+
+| **Return**   | **Description**                 |
+| ------------ | ------------------------------- |
+| JobID        | Job ID.                         |
+| DatabaseID   | Database ID.                    |
+| TableID      | Table ID.                       |
+| TxnID        | Transaction ID.                 |
+| CreatedTime  | Time when the task was created. |
+| FinishedTime | Time when the task finished.    |
+| State        | Status of the task. Valid values: INITIALIZING, SNAPSHOTING, REPLICATING, COMMITTED, ABORTED. |
+| Progress     | Progress of the task.           |
+| Error        | Error message (if any).         |
