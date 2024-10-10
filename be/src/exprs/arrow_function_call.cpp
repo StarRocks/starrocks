@@ -21,7 +21,6 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
@@ -71,11 +70,11 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
     RETURN_IF_ERROR(Expr::prepare(state, context));
     DCHECK(_fn.__isset.fid);
 
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
     }
 
     _fn_context_index = context->register_func(state, return_type, args_types);

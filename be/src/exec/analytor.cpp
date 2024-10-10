@@ -25,7 +25,6 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
@@ -192,14 +191,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
-            auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             for (auto& type : fn.arg_types) {
-                arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
+                arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
 
-            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
