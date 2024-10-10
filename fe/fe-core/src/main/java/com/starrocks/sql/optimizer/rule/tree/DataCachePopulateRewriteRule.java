@@ -166,8 +166,12 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         }
 
         private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates, OperatorType operatorType) {
-            if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN || operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN) {
+            if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
+                    operatorType == OperatorType.PHYSICAL_PAIMON_SCAN) {
                 // For iceberg/delta lake we can't infer total partitions, so don't check here.
+                // Paimon partition prune is after Optimizer (in PaimonScanNode#setupScanRangeLocations()),
+                // so here also don't check it
                 return false;
             }
             if (scanOperatorPredicates.getIdToPartitionKey().size() <= 1) {
