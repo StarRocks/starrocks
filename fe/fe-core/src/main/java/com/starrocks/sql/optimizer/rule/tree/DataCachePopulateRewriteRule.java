@@ -169,9 +169,10 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
             if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
                     operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
                     operatorType == OperatorType.PHYSICAL_PAIMON_SCAN) {
-                // For iceberg/delta lake we can't infer total partitions, so don't check here.
-                // Paimon partition prune is after Optimizer (in PaimonScanNode#setupScanRangeLocations()),
-                // so here also don't check it
+                // For iceberg/delta lake is very expensive to get all partitions,
+                // so we didn't set the correct idToPartitionKey/selectedPartitionIds here.
+                // Paimon partition prune is after Optimizer (in PaimonScanNode#setupScanRangeLocations()).
+                // For the above cases, there is no need to check here.
                 return false;
             }
             if (scanOperatorPredicates.getIdToPartitionKey().size() <= 1) {
