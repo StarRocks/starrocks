@@ -14,6 +14,7 @@ Generally, you may have to resort to metadata recovery when and only when one of
 
 - [FE fails to restart](#fe-fails-to-restart)
 - [FE fails to provide services](#fe-fails-to-provide-services)
+- [Recover metadata on a new FE node with the metadata backup](#recover-metadata-on-a-new-fe-node-with-metadata-backup).
 
 Check the issue you encountered, follow the solution provided in the corresponding section, and perform any recommended actions.
 
@@ -124,7 +125,7 @@ You can follow these steps to fix this issue:
    ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
    
    -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-   -- of the Oberver node, and replace <observer_edit_log_port> (Default: 9010) with 
+   -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
    -- the Observer node's edit_log_port.
    ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
    ```
@@ -540,7 +541,7 @@ Follow these steps to recover the metadata:
 
     </TabItem>
 
-    <TabItem value="oberserver" label="Proceed with Observer Node" >
+    <TabItem value="observer" label="Proceed with Observer Node" >
 
    If an Observer node has the latest metadata, perform the following operations:
 
@@ -579,7 +580,7 @@ Follow these steps to recover the metadata:
       ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
 
       -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-      -- of the Oberver node, and replace <observer_edit_log_port> (Default: 9010) with 
+      -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
       -- the Observer node's edit_log_port.
       ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
       ```
@@ -649,7 +650,7 @@ Follow these steps to recover the metadata:
    ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
 
    -- To drop an Observer node, replace <observer_host> with the IP address (priority_networks) 
-   -- of the Oberver node, and replace <observer_edit_log_port> (Default: 9010) with 
+   -- of the Observer node, and replace <observer_edit_log_port> (Default: 9010) with 
    -- the Observer node's edit_log_port.
    ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
    ```
@@ -671,6 +672,44 @@ Follow these steps to recover the metadata:
    ```
 
 After all nodes are added back to the cluster, the metadata is successfully recovered.
+
+## Recover metadata on a new FE node with metadata backup
+
+Follow these steps if you want to start a new FE node with the metadata backup:
+
+1. Copy the backup metadata directory `meta_dir` to the new FE node.
+2. In the configuration file of the FE node, set `bdbje_reset_election_group` to `true`.
+
+   ```Properties
+   bdbje_reset_election_group = true
+   ````
+
+3. Start the FE node.
+
+   ```Bash
+   # Replace <fe_ip> with the IP address (priority_networks) 
+   # of the new FE node, and replace <fe_edit_log_port> (Default: 9010) with 
+   # the new FE node's edit_log_port.
+   ./fe/bin/start_fe.sh --helper <fe_ip>:<fe_edit_log_port> --daemon
+   ```
+
+4. Check whether the current FE node is the Leader FE node.
+
+   ```SQL
+   SHOW FRONTENDS;
+   ```
+
+   If the field `Role` is `LEADER`, this FE node is the Leader FE node. Make sure its IP address is the that of the current FE node.
+
+5. If the data and metadata are intact, and the role of the node is Leader, you must remove the configuration `bdbje_reset_election_group` and restart the node.
+6. Now you have successfully start a new Leader FE node with the metadata backup. You can add new Follower nodes using the new Leader FE node as the helper.
+
+   ```Bash
+   # Replace <leader_ip> with the IP address (priority_networks) 
+   # of the Leader FE node, and replace <leader_edit_log_port> (Default: 9010) with 
+   # the Leader FE node's edit_log_port.
+   ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
+   ```
 
 ## Metadata recovery-related configurations
 
