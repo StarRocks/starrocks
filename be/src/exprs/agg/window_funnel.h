@@ -49,7 +49,7 @@ struct ComparePairFirst final {
     }
 };
 
-enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
+enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
 template <LogicalType logical_type>
@@ -208,48 +208,10 @@ struct WindowFunnelState {
             sort();
         }
 
+        bool deduplication = (mode & DEDUPLICATION);
+        bool fixed = (mode & FIXED);
         bool increase = (mode & INCREASE);
-        mode &= DEDUPLICATION_FIXED;
         auto const& ordered_events_list = events_list;
-        if (!mode) {
-            TimestampVector events_timestamp(events_size);
-            auto begin = ordered_events_list.begin();
-            while (begin != ordered_events_list.end()) {
-                TimestampType timestamp = (*begin).first;
-                uint8_t event_idx = (*begin).second;
-
-                if (event_idx == 0) {
-                    ++begin;
-                    continue;
-                }
-
-                event_idx -= 1;
-                if (event_idx == 0) {
-                    events_timestamp[0].start_timestamp = timestamp;
-                    events_timestamp[0].last_timestamp = timestamp;
-                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
-                    bool matched = timestamp <= events_timestamp[event_idx - 1].start_timestamp + window_size;
-                    if (increase) {
-                        matched = matched && events_timestamp[event_idx - 1].last_timestamp < timestamp;
-                    }
-                    if (matched) {
-                        events_timestamp[event_idx].start_timestamp = events_timestamp[event_idx - 1].start_timestamp;
-                        events_timestamp[event_idx].last_timestamp = timestamp;
-                        if (event_idx + 1 == events_size) {
-                            return events_size;
-                        }
-                    }
-                }
-                ++begin;
-            }
-
-            for (size_t event = events_timestamp.size(); event > 0; --event) {
-                if (events_timestamp[event - 1].start_timestamp >= 0) {
-                    return event;
-                }
-            }
-            return 0;
-        }
 
         // max level when search event chains.
         int8_t max_level = -1;
@@ -262,127 +224,43 @@ struct WindowFunnelState {
          */
         TimestampVector events_timestamp(events_size);
         auto begin = ordered_events_list.begin();
-        switch (mode) {
-        // mode: deduplication
-        case DEDUPLICATION: {
-            while (begin != ordered_events_list.end()) {
-                TimestampType timestamp = (*begin).first;
-                uint8_t event_idx = (*begin).second;
-
-                if (event_idx == 0) {
-                    ++begin;
-                    continue;
+        bool first_event = false;
+        while (begin != ordered_events_list.end()) {
+            TimestampType timestamp = (*begin).first;
+            uint8_t event_idx = (*begin).second;
+            if (event_idx == 0) {
+                ++begin;
+                continue;
+            }
+            event_idx -= 1;
+            // begin a new event chain.
+            if (event_idx == 0) {
+                events_timestamp[0].start_timestamp = timestamp;
+                if (event_idx > curr_event_level) {
+                    curr_event_level = event_idx;
                 }
-
-                event_idx -= 1;
-                // begin a new event chain.
-                if (event_idx == 0) {
-                    events_timestamp[0].start_timestamp = timestamp;
-                    if (event_idx > curr_event_level) {
-                        curr_event_level = event_idx;
-                    }
-                    // encounter condition of deduplication: an existing event occurs.
-                } else if (events_timestamp[event_idx].start_timestamp >= 0) {
+                first_event = true;
+                // encounter condition of deduplication: an existing event occurs.
+            } else if (deduplication && events_timestamp[event_idx].start_timestamp >= 0) {
+                if (curr_event_level > max_level) {
+                    max_level = curr_event_level;
+                }
+                // Eliminate last event chain
+                eliminate_last_event_chains(&curr_event_level, &events_timestamp);
+            } else if (fixed && (first_event && events_timestamp[event_idx - 1].start_timestamp < 0)) {
+                if (curr_event_level >= 0) {
                     if (curr_event_level > max_level) {
                         max_level = curr_event_level;
                     }
-
                     // Eliminate last event chain
                     eliminate_last_event_chains(&curr_event_level, &events_timestamp);
-
-                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
-                        return events_size;
-                    }
                 }
-                ++begin;
+            } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
+                    return events_size;
+                }
             }
-        } break;
-        // mode: fixed
-        case FIXED: {
-            bool first_event = false;
-            while (begin != ordered_events_list.end()) {
-                TimestampType timestamp = (*begin).first;
-                uint8_t event_idx = (*begin).second;
-
-                if (event_idx == 0) {
-                    ++begin;
-                    continue;
-                }
-
-                event_idx -= 1;
-                if (event_idx == 0) {
-                    events_timestamp[0].start_timestamp = timestamp;
-                    if (event_idx > curr_event_level) {
-                        curr_event_level = event_idx;
-                    }
-                    first_event = true;
-                    // encounter condition of fixed: a leap event occurred.
-                } else if (first_event && events_timestamp[event_idx - 1].start_timestamp < 0) {
-                    if (curr_event_level >= 0) {
-                        if (curr_event_level > max_level) {
-                            max_level = curr_event_level;
-                        }
-
-                        // Eliminate last event chain
-                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
-                    }
-                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
-                        return events_size;
-                    }
-                }
-                ++begin;
-            }
-        } break;
-        // mode: deduplication | fixed
-        case DEDUPLICATION_FIXED: {
-            bool first_event = false;
-            while (begin != ordered_events_list.end()) {
-                TimestampType timestamp = (*begin).first;
-                uint8_t event_idx = (*begin).second;
-
-                if (event_idx == 0) {
-                    ++begin;
-                    continue;
-                }
-
-                event_idx -= 1;
-
-                if (event_idx == 0) {
-                    events_timestamp[0].start_timestamp = timestamp;
-                    if (event_idx > curr_event_level) {
-                        curr_event_level = event_idx;
-                    }
-                    first_event = true;
-                } else if (events_timestamp[event_idx].start_timestamp >= 0) {
-                    if (curr_event_level > max_level) {
-                        max_level = curr_event_level;
-                    }
-
-                    // Eliminate last event chain
-                    eliminate_last_event_chains(&curr_event_level, &events_timestamp);
-
-                } else if (first_event && events_timestamp[event_idx - 1].start_timestamp < 0) {
-                    if (curr_event_level >= 0) {
-                        if (curr_event_level > max_level) {
-                            max_level = curr_event_level;
-                        }
-
-                        // Eliminate last event chain
-                        eliminate_last_event_chains(&curr_event_level, &events_timestamp);
-                    }
-                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
-                        return events_size;
-                    }
-                }
-                ++begin;
-            }
-        } break;
-
-        default:
-            DCHECK(false);
+            ++begin;
         }
 
         if (curr_event_level > max_level) {
