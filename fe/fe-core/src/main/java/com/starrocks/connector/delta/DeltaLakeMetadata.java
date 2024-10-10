@@ -20,6 +20,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -35,6 +37,7 @@ import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,9 +47,11 @@ import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
+import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.ScanBuilderImpl;
 import io.delta.kernel.internal.ScanImpl;
 import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
@@ -227,6 +232,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
                 ensureOpen();
                 Row scanFileRow = scanFileRows.next();
+
+                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                if (dv != null) {
+                    ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
+                            "Delta table feature [deletion vectors] is not supported");
+                }
+
                 Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
                         ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, estimateRowSize);
                 return pair;
