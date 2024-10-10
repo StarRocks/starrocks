@@ -384,13 +384,12 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
     p -= (offset - begin);
     auto f = [sb, this](const char* buf, size_t off, size_t size) {
         DCHECK(off % _block_size == 0);
-        SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-
         if (_already_populated_blocks.contains(off / _block_size)) {
             // Already populate in CacheInputStream's lifecycle, ignore this time
             return;
         }
 
+        SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
