@@ -42,13 +42,19 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds;
 
+    @SerializedName(value = "sourcePartitionNames")
+    private List<String> sourcePartitionNames = null;
+
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
                                           InsertOverwriteJobState toState,
-                                          List<Long> sourcePartitionIds, List<Long> tmpPartitionIds) {
+                                          List<Long> sourcePartitionIds, 
+                                          List<String> sourcePartitionNames,
+                                          List<Long> tmpPartitionIds) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
         this.sourcePartitionIds = sourcePartitionIds;
+        this.sourcePartitionNames = sourcePartitionNames;
         this.tmpPartitionIds = tmpPartitionIds;
     }
 
@@ -70,6 +76,10 @@ public class InsertOverwriteStateChangeInfo implements Writable {
 
     public List<Long> getTmpPartitionIds() {
         return tmpPartitionIds;
+    }
+
+    public List<String> getSourcePartitionNames() {
+        return sourcePartitionNames;
     }
 
     @Override

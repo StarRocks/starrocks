@@ -35,7 +35,7 @@ public class InsertOverwriteStateChangeInfoTest {
         List<Long> newPartitionNames = Lists.newArrayList(1000L, 1001L);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                sourcePartitionNames, newPartitionNames);
+                sourcePartitionNames, null, newPartitionNames);
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         stateChangeInfo.write(dataOutputStream);
