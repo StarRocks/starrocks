@@ -16,6 +16,7 @@
 package com.starrocks.sql.analyzer;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
@@ -37,8 +38,15 @@ public class StorageAccessException extends RuntimeException {
         Throwable rootCause = getRootCause();
         if (rootCause instanceof S3Exception) {
             S3Exception s3Exception = (S3Exception) rootCause;
-            builder.append("Error code: ").append(s3Exception.awsErrorDetails().errorCode()).append(". ");
-            builder.append("Error message: ").append(s3Exception.awsErrorDetails().errorMessage()).append(". ");
+            AwsErrorDetails awsErrorDetails = s3Exception.awsErrorDetails();
+            if (awsErrorDetails.errorCode() != null) {
+                builder.append("Error code: ").append(awsErrorDetails.errorCode()).append(". ");
+            }
+            if (awsErrorDetails.errorMessage() != null) {
+                builder.append("Error message: ").append(awsErrorDetails.errorMessage());
+            } else {
+                builder.append("Error message: ").append(s3Exception.getMessage());
+            }
         } else {
             builder.append("Error message: ").append(rootCause.getMessage());
         }
