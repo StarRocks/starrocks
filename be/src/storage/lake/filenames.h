@@ -69,6 +69,10 @@ inline bool is_tablet_metadata_lock(std::string_view file_name) {
     return HasSuffixString(file_name, ".lock");
 }
 
+inline bool is_sst(std::string_view file_name) {
+    return HasSuffixString(file_name, ".sst");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
