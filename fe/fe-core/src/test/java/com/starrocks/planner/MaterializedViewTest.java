@@ -56,17 +56,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.useTable("dependents");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
-                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
-                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
-                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "UNIQUE KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -75,17 +74,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_primary` (\n" +
-                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
-                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
-                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -94,17 +92,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_null` (\n" +
-                "    `c_custkey` int(11) NULL COMMENT \"\",\n" +
-                "    `c_name` varchar(26) NULL COMMENT \"\",\n" +
-                "    `c_address` varchar(41) NULL COMMENT \"\",\n" +
-                "    `c_city` varchar(11) NULL COMMENT \"\",\n" +
-                "    `c_nation` varchar(16) NULL COMMENT \"\",\n" +
-                "    `c_region` varchar(13) NULL COMMENT \"\",\n" +
-                "    `c_phone` varchar(16) NULL COMMENT \"\",\n" +
-                "    `c_mktsegment` varchar(11) NULL COMMENT \"\"\n" +
+                "    `c_custkey` int(11) NULL,\n" +
+                "    `c_name` varchar(26) NULL,\n" +
+                "    `c_address` varchar(41) NULL,\n" +
+                "    `c_city` varchar(11) NULL,\n" +
+                "    `c_nation` varchar(16) NULL,\n" +
+                "    `c_region` varchar(13) NULL,\n" +
+                "    `c_phone` varchar(16) NULL,\n" +
+                "    `c_mktsegment` varchar(11) NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -114,17 +111,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
-                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
-                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
-                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
-                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `c_custkey` int(11) NOT NULL,\n" +
+                "    `c_name` varchar(26) NOT NULL,\n" +
+                "    `c_address` varchar(41) NOT NULL,\n" +
+                "    `c_city` varchar(11) NOT NULL,\n" +
+                "    `c_nation` varchar(16) NOT NULL,\n" +
+                "    `c_region` varchar(13) NOT NULL,\n" +
+                "    `c_phone` varchar(16) NOT NULL,\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -133,26 +129,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"c_custkey\"\n" +
                 ")\n");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
-                "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_date` varchar(20) NOT NULL COMMENT \"\",\n" +
-                "    `d_dayofweek` varchar(10) NOT NULL COMMENT \"\",\n" +
-                "    `d_month` varchar(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_year` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_yearmonthnum` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_yearmonth` varchar(9) NOT NULL COMMENT \"\",\n" +
-                "    `d_daynuminweek` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_daynuminmonth` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_daynuminyear` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_monthnuminyear` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_weeknuminyear` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_sellingseason` varchar(14) NOT NULL COMMENT \"\",\n" +
-                "    `d_lastdayinweekfl` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_lastdayinmonthfl` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_holidayfl` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `d_weekdayfl` int(11) NOT NULL COMMENT \"\"\n" +
+                "    `d_datekey` int(11) NOT NULL,\n" +
+                "    `d_date` varchar(20) NOT NULL,\n" +
+                "    `d_dayofweek` varchar(10) NOT NULL,\n" +
+                "    `d_month` varchar(11) NOT NULL,\n" +
+                "    `d_year` int(11) NOT NULL,\n" +
+                "    `d_yearmonthnum` int(11) NOT NULL,\n" +
+                "    `d_yearmonth` varchar(9) NOT NULL,\n" +
+                "    `d_daynuminweek` int(11) NOT NULL,\n" +
+                "    `d_daynuminmonth` int(11) NOT NULL,\n" +
+                "    `d_daynuminyear` int(11) NOT NULL,\n" +
+                "    `d_monthnuminyear` int(11) NOT NULL,\n" +
+                "    `d_weeknuminyear` int(11) NOT NULL,\n" +
+                "    `d_sellingseason` varchar(14) NOT NULL,\n" +
+                "    `d_lastdayinweekfl` int(11) NOT NULL,\n" +
+                "    `d_lastdayinmonthfl` int(11) NOT NULL,\n" +
+                "    `d_holidayfl` int(11) NOT NULL,\n" +
+                "    `d_weekdayfl` int(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`d_datekey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -161,18 +156,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"d_datekey\"\n" +
                 ")");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
-                "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `p_name` varchar(23) NOT NULL COMMENT \"\",\n" +
-                "    `p_mfgr` varchar(7) NOT NULL COMMENT \"\",\n" +
-                "    `p_category` varchar(8) NOT NULL COMMENT \"\",\n" +
-                "    `p_brand` varchar(10) NOT NULL COMMENT \"\",\n" +
-                "    `p_color` varchar(12) NOT NULL COMMENT \"\",\n" +
-                "    `p_type` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `p_size` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `p_container` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `p_partkey` int(11) NOT NULL,\n" +
+                "    `p_name` varchar(23) NOT NULL,\n" +
+                "    `p_mfgr` varchar(7) NOT NULL,\n" +
+                "    `p_category` varchar(8) NOT NULL,\n" +
+                "    `p_brand` varchar(10) NOT NULL,\n" +
+                "    `p_color` varchar(12) NOT NULL,\n" +
+                "    `p_type` varchar(26) NOT NULL,\n" +
+                "    `p_size` int(11) NOT NULL,\n" +
+                "    `p_container` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`p_partkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -181,16 +175,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"unique_constraints\" = \"p_partkey\"\n" +
                 ")");
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
-                "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `s_name` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `s_address` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "    `s_city` varchar(11) NOT NULL COMMENT \"\",\n" +
-                "    `s_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `s_region` varchar(13) NOT NULL COMMENT \"\",\n" +
-                "    `s_phone` varchar(16) NOT NULL COMMENT \"\"\n" +
+                "    `s_suppkey` int(11) NOT NULL,\n" +
+                "    `s_name` varchar(26) NOT NULL,\n" +
+                "    `s_address` varchar(26) NOT NULL,\n" +
+                "    `s_city` varchar(11) NOT NULL,\n" +
+                "    `s_nation` varchar(16) NOT NULL,\n" +
+                "    `s_region` varchar(13) NOT NULL,\n" +
+                "    `s_phone` varchar(16) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`s_suppkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -200,26 +193,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
-                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`lo_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "PARTITION BY RANGE(`lo_orderdate`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
@@ -241,26 +233,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_primary` (\n" +
-                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`lo_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -268,26 +259,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_unique` (\n" +
-                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `lo_custkey` int(11) NOT NULL,\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_partkey` int(11) NOT NULL,\n" +
+                "    `lo_suppkey` int(11) NOT NULL,\n" +
+                "    `lo_orderdate` int(11) NOT NULL,\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "UNIQUE KEY(`lo_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -295,26 +285,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
-                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_custkey` int(11) COMMENT \"\",\n" +
-                "    `lo_partkey` int(11) COMMENT \"\",\n" +
-                "    `lo_suppkey` int(11) COMMENT \"\",\n" +
-                "    `lo_orderdate` int(11) COMMENT \"\",\n" +
-                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                "    `lo_orderkey` int(11) NOT NULL,\n" +
+                "    `lo_linenumber` int(11) NOT NULL,\n" +
+                "    `lo_custkey` int(11),\n" +
+                "    `lo_partkey` int(11),\n" +
+                "    `lo_suppkey` int(11),\n" +
+                "    `lo_orderdate` int(11),\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL,\n" +
+                "    `lo_shippriority` int(11) NOT NULL,\n" +
+                "    `lo_quantity` int(11) NOT NULL,\n" +
+                "    `lo_extendedprice` int(11) NOT NULL,\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL,\n" +
+                "    `lo_discount` int(11) NOT NULL,\n" +
+                "    `lo_revenue` int(11) NOT NULL,\n" +
+                "    `lo_supplycost` int(11) NOT NULL,\n" +
+                "    `lo_tax` int(11) NOT NULL,\n" +
+                "    `lo_commitdate` int(11) NOT NULL,\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`lo_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "PARTITION BY RANGE(`lo_orderdate`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")),\n" +
@@ -335,12 +324,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
-                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                "    `c5` int(11) NOT NULL,\n" +
+                "    `c6` int(11) NOT NULL,\n" +
+                "    `c7` int(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c5`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -350,12 +338,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
-                "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                "    `c5` int(11) NOT NULL,\n" +
+                "    `c6` int(11) NOT NULL,\n" +
+                "    `c7` int(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c5`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -365,12 +352,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
-                "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c2` int(11) NOT NULL COMMENT \"\",\n" +
-                "    `c3` int(11) NOT NULL COMMENT \"\"\n" +
+                "    `c1` int(11) NOT NULL,\n" +
+                "    `c2` int(11) NOT NULL,\n" +
+                "    `c3` int(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`c1`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
@@ -389,12 +375,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 .withTable(userTagTable);
 
         String eventTable = "CREATE TABLE `event1` (\n" +
-                "  `event_id` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `event_type` varchar(26) NOT NULL COMMENT \"\",\n" +
-                "  `event_time` datetime NOT NULL COMMENT \"\"\n" +
+                "  `event_id` int(11) NOT NULL,\n" +
+                "  `event_type` varchar(26) NOT NULL,\n" +
+                "  `event_time` datetime NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`event_id`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`event_id`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -2368,12 +2353,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2382,12 +2366,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2396,13 +2379,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2426,12 +2408,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2439,12 +2420,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`C5`, `C6`, `c7`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`C5`, `C6`, `c7`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2452,13 +2432,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5, C6, c7\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2482,12 +2461,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testViewDeltaColumnCaseSensitiveOnPrimary() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2496,12 +2474,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "PRIMARY KEY(`c5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2509,13 +2486,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2539,12 +2515,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2552,25 +2527,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "PRIMARY KEY(`C5`, `C6`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2595,12 +2568,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testViewDeltaColumnCaseSensitiveOnUnique() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2608,25 +2580,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "UNIQUE KEY(`C5`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`C5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2649,12 +2619,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             // multi key columns
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
-                    "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `c5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c5`, `c6`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c5`, `c6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2662,25 +2631,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
-                    "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c6` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c7` int(11) NOT NULL COMMENT \"\"\n" +
+                    "    `C5` int(11) NOT NULL,\n" +
+                    "    `c6` int(11) NOT NULL,\n" +
+                    "    `c7` int(11) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "UNIQUE KEY(`C5`, `C6`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
-                    "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C2` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `c3` int(11) NOT NULL COMMENT \"\",\n" +
-                    "    `C4` decimal(38, 19) NOT NULL COMMENT \"\"\n" +
+                    "    `c1` int(11) NOT NULL,\n" +
+                    "    `C2` int(11) NOT NULL,\n" +
+                    "    `c3` int(11) NOT NULL,\n" +
+                    "    `C4` decimal(38, 19) NOT NULL\n" +
                     ") ENGINE=OLAP\n" +
                     "DUPLICATE KEY(`c1`)\n" +
-                    "COMMENT \"OLAP\"\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
@@ -2845,9 +2812,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
-        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
-        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+        setTracLogModule("MV");
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : 7: bitmap_union(to_bitmap(tag_id))");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 7: user_id\n" +
+                        "  |  <slot 6> : bitmap_count(8: bitmap_union(to_bitmap(tag_id)))");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : bitmap_count(7: bitmap_union(to_bitmap(tag_id)))");
     }
 
     @Test
@@ -3044,22 +3018,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testQueryWithLimitRewrite() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` datetime NULL COMMENT \"\",\n" +
-                "  `k3` char(20) NULL COMMENT \"\",\n" +
-                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
-                "  `k5` boolean NULL COMMENT \"\",\n" +
-                "  `v1` bigint(20) SUM NULL COMMENT \"\",\n" +
-                "  `v2` bigint(20) SUM NULL COMMENT \"\",\n" +
-                "  `v3` bigint(20) SUM NULL COMMENT \"\",\n" +
-                "  `v4` bigint(20) MAX NULL COMMENT \"\",\n" +
-                "  `v5` largeint(40) MAX NULL COMMENT \"\",\n" +
-                "  `v6` float MIN NULL COMMENT \"\",\n" +
-                "  `v7` double MIN NULL COMMENT \"\",\n" +
-                "  `v8` decimal128(38, 9) SUM NULL COMMENT \"\"\n" +
+                "  `k1` date NULL,\n" +
+                "  `k2` datetime NULL,\n" +
+                "  `k3` char(20) NULL,\n" +
+                "  `k4` varchar(20) NULL,\n" +
+                "  `k5` boolean NULL,\n" +
+                "  `v1` bigint(20) SUM NULL,\n" +
+                "  `v2` bigint(20) SUM NULL,\n" +
+                "  `v3` bigint(20) SUM NULL,\n" +
+                "  `v4` bigint(20) MAX NULL,\n" +
+                "  `v5` largeint(40) MAX NULL,\n" +
+                "  `v6` float MIN NULL,\n" +
+                "  `v7` double MIN NULL,\n" +
+                "  `v8` decimal128(38, 9) SUM NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -3071,22 +3044,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `duplicate_table_with_null_partition` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` datetime NULL COMMENT \"\",\n" +
-                "  `k3` char(20) NULL COMMENT \"\",\n" +
-                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
-                "  `k5` boolean NULL COMMENT \"\",\n" +
-                "  `k6` tinyint(4) NULL COMMENT \"\",\n" +
-                "  `k7` smallint(6) NULL COMMENT \"\",\n" +
-                "  `k8` int(11) NULL COMMENT \"\",\n" +
-                "  `k9` bigint(20) NULL COMMENT \"\",\n" +
-                "  `k10` largeint(40) NULL COMMENT \"\",\n" +
-                "  `k11` float NULL COMMENT \"\",\n" +
-                "  `k12` double NULL COMMENT \"\",\n" +
-                "  `k13` decimal128(27, 9) NULL COMMENT \"\"\n" +
+                "  `k1` date NULL,\n" +
+                "  `k2` datetime NULL,\n" +
+                "  `k3` char(20) NULL,\n" +
+                "  `k4` varchar(20) NULL,\n" +
+                "  `k5` boolean NULL,\n" +
+                "  `k6` tinyint(4) NULL,\n" +
+                "  `k7` smallint(6) NULL,\n" +
+                "  `k8` int(11) NULL,\n" +
+                "  `k9` bigint(20) NULL,\n" +
+                "  `k10` largeint(40) NULL,\n" +
+                "  `k11` float NULL,\n" +
+                "  `k12` double NULL,\n" +
+                "  `k13` decimal128(27, 9) NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "PARTITION BY RANGE(`k1`)\n" +
                 "(PARTITION p202006 VALUES [(\"0000-01-01\"), (\"2020-07-01\")),\n" +
                 "PARTITION p202007 VALUES [(\"2020-07-01\"), (\"2020-08-01\")),\n" +
@@ -3306,11 +3278,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testTimeSliceRewrite() throws Exception {
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
-                "    `dt` datetime NOT NULL COMMENT \"\",\n" +
-                "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
+                "    `dt` datetime NOT NULL,\n" +
+                "    `c1` int(11) NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`dt`)\n" +
-                "COMMENT \"OLAP\"\n" +
                 "PARTITION BY RANGE(`dt`)\n" +
                 "(\n" +
                 "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
@@ -3324,6 +3295,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
+        setTracLogModule("MV");
         testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
                 "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
         starRocksAssert.dropTable("t_time_slice");
@@ -3361,7 +3333,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " on lo_custkey = c_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'";
             testRewriteOK(mv, query);
@@ -3374,7 +3346,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " group by lo_orderkey, c_name";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'" +
                     " group by lo_orderkey, c_name";
@@ -3386,7 +3358,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_orderkey, c_custkey";
-            String query =  "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_orderkey, c_custkey";
@@ -3402,7 +3374,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3417,7 +3389,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_custkey = 1";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3432,7 +3404,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3447,7 +3419,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3461,7 +3433,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3478,7 +3450,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue" +
                     " from lineorder left anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3497,7 +3469,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " on lo_custkey = c_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 10";
             testRewriteOK(mv, query);
@@ -3508,7 +3480,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_linenumber = 10";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3525,7 +3497,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " group by lo_orderkey, lo_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 10" +
                     " group by lo_orderkey, lo_custkey";
@@ -3537,7 +3509,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_custkey, c_name";
-            String query =  "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_custkey, c_name";
@@ -3552,7 +3524,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 1";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3567,7 +3539,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3582,7 +3554,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3597,7 +3569,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_linenumber = 10 and lo_quantity = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3614,7 +3586,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder right anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3629,7 +3601,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer_primary" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer_primary" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3642,7 +3614,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer_unique" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer_unique" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3655,7 +3627,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3668,7 +3640,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder_primary inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder_primary right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3681,7 +3653,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder_unique inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder_unique right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3694,7 +3666,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3708,7 +3680,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3722,7 +3694,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null left outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3736,7 +3708,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3750,7 +3722,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer_null" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer_null" +
                     " on lo_custkey = c_custkey";
             testRewriteFail(mv, query);
@@ -3760,7 +3732,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3774,7 +3746,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer_null" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer_null" +
                     " on lo_custkey = c_custkey";
             testRewriteFail(mv, query);
@@ -3784,7 +3756,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -4295,7 +4267,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
                     "WHERE t1.fdate = 20230705\n" +
                     "GROUP BY fplat_form_itg2_name;";
-                    testRewriteOK(mv, query);
+            testRewriteOK(mv, query);
         } finally {
             starRocksAssert.dropTable("test_sr_table_join");
             starRocksAssert.dropTable("dim_test_sr_table");
@@ -5621,5 +5593,119 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "0:OlapScanNode\n" +
                     "TABLE: mv0");
         }
+    }
+
+    @Test
+    public void testAggRollupWithTimeUnit1() throws Exception {
+        String sql = "CREATE TABLE `t0` (\n" +
+                "  `date_col` date NOT NULL,\n" +
+                "  `id` int(11) NOT NULL,\n" +
+                "  `int_col` int(11) NOT NULL,\n" +
+                "  `float_col_1` float NOT NULL,\n" +
+                "  `float_col_2` float NOT NULL,\n" +
+                "  `varchar_col` varchar(255) NOT NULL,\n" +
+                "  `tinyint_col` tinyint(4) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`date_col`, `id`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n";
+        starRocksAssert.withTable(sql);
+        String mv1 = "create MATERIALIZED VIEW date_mv\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select tinyint_col, date_col , sum(float_col_1 * int_col) as sum_value " +
+                "from t0 group by tinyint_col, date_col;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        // date column should be the same with date_trunc('day', ct)
+        String[] rollupTimeUnits = new String[]{"day", "week", "month", "quarter", "year"};
+        for (String rollupTimeUnit : rollupTimeUnits) {
+            String query = "select tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col) as date_col, " +
+                    "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                    "group by tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col);";
+            String plan = sql(query).getExecPlan();
+            PlanTestBase.assertContains(plan, "date_mv");
+        }
+        starRocksAssert.dropTable("t0");
+        starRocksAssert.dropMaterializedView("date_mv");
+    }
+
+    @Test
+    public void testAggRollupWithTimeUnit2() throws Exception {
+        String sql = "CREATE TABLE `t0` (\n" +
+                "  `date_col` datetime NOT NULL,\n" +
+                "  `id` int(11) NOT NULL,\n" +
+                "  `int_col` int(11) NOT NULL,\n" +
+                "  `float_col_1` float NOT NULL,\n" +
+                "  `float_col_2` float NOT NULL,\n" +
+                "  `varchar_col` varchar(255) NOT NULL,\n" +
+                "  `tinyint_col` tinyint(4) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`date_col`, `id`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n";
+        starRocksAssert.withTable(sql);
+        String mv1 = "create MATERIALIZED VIEW date_mv\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select tinyint_col, date_trunc('day', date_col), sum(float_col_1 * int_col) as sum_value " +
+                "from t0 group by tinyint_col, date_trunc('day', date_col);";
+        starRocksAssert.withMaterializedView(mv1);
+
+        // date column should be the same with date_trunc('day', ct)
+        //String[] timeUnits = new String[]{"day", "week",  "month", "quarter", "year"};
+        String[] timeUnits = new String[]{"week",  "month", "quarter", "year"};
+        for (String timeUnit : timeUnits) {
+            {
+                String query = "select tinyint_col, date_trunc('"+ timeUnit + "', date_col) as date_col, " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "group by tinyint_col, date_trunc('" + timeUnit + "', date_col);";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-01-01 00:00:00' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('"+ timeUnit +"',  date_col) >= '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertContains(plan, "date_mv");
+            }
+
+            {
+                // TODO: we can support this later.
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_trunc('"+ timeUnit +"',  date_col) = '2024-01-01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
+
+            {
+                String query = "select tinyint_col,  " +
+                        "   sum(float_col_1 * int_col) as sum_value from t0 " +
+                        "where date_col >= '2024-09-18 01:00:01' group by tinyint_col ";
+                String plan = sql(query).getExecPlan();
+                PlanTestBase.assertNotContains(plan, "date_mv");
+            }
+        }
+        starRocksAssert.dropTable("t0");
+        starRocksAssert.dropMaterializedView("date_mv");
     }
 }

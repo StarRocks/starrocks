@@ -68,8 +68,7 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
     }
 
     @Override
-    public RangePredicate visitBinaryPredicate(
-            BinaryPredicateOperator predicate, PredicateExtractorContext context) {
+    public RangePredicate visitBinaryPredicate(BinaryPredicateOperator predicate, PredicateExtractorContext context) {
         RangePredicate rangePredicate = rewriteBinaryPredicate(predicate);
         if (rangePredicate != null) {
             return rangePredicate;
