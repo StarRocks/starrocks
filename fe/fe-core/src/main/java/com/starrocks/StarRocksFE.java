@@ -163,13 +163,14 @@ public class StarRocksFE {
             // 3. HttpServer for HTTP Server
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
                     ExecuteEnv.getInstance().getScheduler());
+            qeService.start();
+            
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
+            frontendThriftServer.start();
+            
             HttpServer httpServer = new HttpServer(Config.http_port);
             httpServer.setup();
-
-            frontendThriftServer.start();
             httpServer.start();
-            qeService.start();
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
