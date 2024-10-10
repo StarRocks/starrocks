@@ -47,7 +47,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
-#include "runtime_state.h"
+#include "runtime/runtime_state.h"
 #include "util/compression/block_compression.h"
 #include "util/thrift_util.h"
 
