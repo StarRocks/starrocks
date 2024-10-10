@@ -17,14 +17,28 @@ package com.starrocks.http.rest.v2;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.http.rest.RestBaseResult;
 
 import java.util.List;
 import java.util.Objects;
 
+import static com.starrocks.persist.gson.GsonUtils.GSON;
+
 public class RestBaseResultV2<T> extends RestBaseResult {
+
+    protected static final Gson REST_GSON = GSON.newBuilder()
+            .setExclusionStrategies(new ExclusionStrategy() {
+                @Override
+                public boolean shouldSkipField(FieldAttributes f) {
+                    return f.getAnnotation(Legacy.class) != null;
+                }
+
+                @Override
+                public boolean shouldSkipClass(Class<?> clazz) {
+                    return false;
+                }
+            }).create();
 
     @SerializedName("result")
     private T result;
@@ -58,19 +72,7 @@ public class RestBaseResultV2<T> extends RestBaseResult {
 
     @Override
     public String toJson() {
-        Gson gson = new GsonBuilder()
-                .setExclusionStrategies(new ExclusionStrategy() {
-                    @Override
-                    public boolean shouldSkipField(FieldAttributes f) {
-                        return f.getAnnotation(Legacy.class) != null;
-                    }
-
-                    @Override
-                    public boolean shouldSkipClass(Class<?> clazz) {
-                        return false;
-                    }
-                }).create();
-        return gson.toJson(this);
+        return REST_GSON.toJson(this);
     }
 
     public T getResult() {

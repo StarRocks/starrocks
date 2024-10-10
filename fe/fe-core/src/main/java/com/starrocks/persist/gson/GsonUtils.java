@@ -120,6 +120,7 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.encryption.EncryptionKeyPBAdapter;
+import com.starrocks.http.rest.v2.vo.ColumnView;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -422,6 +423,8 @@ public class GsonUtils {
 
     private static final JsonDeserializer<PrimitiveType> PRIMITIVE_TYPE_DESERIALIZER = new PrimitiveTypeDeserializer();
 
+    private static final JsonDeserializer<ColumnView.TypeView> COLUMN_TYPE_DESERIALIZER = new TypeViewDeserializer();
+
     // the builder of GSON instance.
     // Add any other adapters if necessary.
     private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
@@ -465,7 +468,8 @@ public class GsonUtils {
             .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
-            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
+            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER)
+            .registerTypeAdapter(ColumnView.TypeView.class, COLUMN_TYPE_DESERIALIZER);
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -727,4 +731,31 @@ public class GsonUtils {
             }
         }
     }
+
+    private static class TypeViewDeserializer implements JsonDeserializer<ColumnView.TypeView> {
+
+        @Override
+        public ColumnView.TypeView deserialize(JsonElement json,
+                                               java.lang.reflect.Type typeOfT,
+                                               JsonDeserializationContext context) throws JsonParseException {
+            JsonObject jsonObj = json.getAsJsonObject();
+            JsonElement nameElement = jsonObj.get("name");
+            if (nameElement == null) {
+                throw new JsonParseException("Missing 'name' field in JSON.");
+            }
+
+            String typeName = nameElement.getAsString();
+            if (ColumnView.ArrayTypeView.TYPE_NAME.equalsIgnoreCase(typeName)) {
+                return context.deserialize(json, ColumnView.ArrayTypeView.class);
+            } else if (ColumnView.StructTypeView.TYPE_NAME.equalsIgnoreCase(typeName)) {
+                return context.deserialize(json, ColumnView.StructTypeView.class);
+            } else if (ColumnView.MapTypeView.TYPE_NAME.equalsIgnoreCase(typeName)) {
+                return context.deserialize(json, ColumnView.MapTypeView.class);
+            } else {
+                return context.deserialize(json, ColumnView.ScalarTypeView.class);
+            }
+        }
+
+    }
+
 }
