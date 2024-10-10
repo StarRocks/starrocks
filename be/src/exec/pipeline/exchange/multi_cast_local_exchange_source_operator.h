@@ -38,6 +38,8 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    void update_exec_stats(RuntimeState* state) override {}
+
 private:
     bool _is_finished = false;
     int32_t _mcast_consumer_index;

@@ -54,6 +54,8 @@ public:
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 
     void add_stats_item(QueryStatisticsItemPB& stats_item);
+    void add_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
+                             int64_t rf_filter);
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
@@ -73,6 +75,9 @@ public:
 private:
     void update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes);
 
+    void update_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
+                                int64_t rf_filter);
+
     std::atomic_int64_t scan_rows{0};
     std::atomic_int64_t scan_bytes{0};
     std::atomic_int64_t cpu_ns{0};
@@ -87,8 +92,26 @@ private:
         int64_t scan_rows = 0;
         int64_t scan_bytes = 0;
     };
+
+    struct NodeExecStats {
+        std::atomic_int64_t push_rows;
+        std::atomic_int64_t pull_rows;
+        std::atomic_int64_t pred_filter_rows;
+        std::atomic_int64_t index_filter_rows;
+        std::atomic_int64_t rf_filter_rows;
+
+        NodeExecStats() : push_rows(0), pull_rows(0), pred_filter_rows(0), index_filter_rows(0), rf_filter_rows(0) {}
+
+        NodeExecStats(int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter, int64_t rf_filter)
+                : push_rows(push),
+                  pull_rows(pull),
+                  pred_filter_rows(pred_filter),
+                  index_filter_rows(index_filter),
+                  rf_filter_rows(rf_filter) {}
+    };
     SpinLock _lock;
     std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
+    std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> _exec_stats_items;
 };
 
 // It is used for collecting sub plan query statistics in DataStreamRecvr.

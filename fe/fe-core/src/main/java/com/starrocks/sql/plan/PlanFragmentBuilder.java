@@ -361,6 +361,7 @@ public class PlanFragmentBuilder {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
+            fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
         }
         Collections.reverse(fragments);
         // assign colocate groups to plan fragment
@@ -412,6 +413,8 @@ public class PlanFragmentBuilder {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
         private final ExecGroupSets execGroups = new ExecGroupSets();
+
+        private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
         private boolean canUseLocalShuffleAgg = true;
@@ -423,8 +426,26 @@ public class PlanFragmentBuilder {
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
             PlanFragment fragment = visit(optExpression, context);
             computeFragmentCost(context, fragment);
+            collectExecStatsIds(fragment.getPlanRoot());
             context.setExecGroups(execGroups.getExecGroups());
+            context.setCollectExecStatsIds(collectExecStatsIds);
             return fragment;
+        }
+
+        private void collectExecStatsIds(PlanNode root) {
+            if (ConnectContext.get() == null) {
+                return;
+            }
+            if (!ConnectContext.get().getSessionVariable().isEnablePlanAdvisor()) {
+                return;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                collectExecStatsIds(child);
+            }
+            if (root.needCollectExecStats()) {
+                collectExecStatsIds.add(root.getId().asInt());
+            }
         }
 
         private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
@@ -2262,6 +2283,7 @@ public class PlanFragmentBuilder {
             }
             currentExecGroup.add(aggregationNode);
             inputFragment.setPlanRoot(aggregationNode);
+            inputFragment.getPlanRoot().forceCollectExecStats();
             inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());
             inputFragment.mergeQueryGlobalDicts(originalInputFragment.getQueryGlobalDicts());
             return inputFragment;
@@ -2546,9 +2568,11 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            leftFragment.getPlanRoot().forceCollectExecStats();
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            rightFragment.getPlanRoot().forceCollectExecStats();
             return visitPhysicalJoin(leftFragment, rightFragment, leftExecGroup, currentExecGroup, optExpr, context);
         }
 
@@ -2583,9 +2607,11 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            leftFragment.getPlanRoot().forceCollectExecStats();
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            rightFragment.getPlanRoot().forceCollectExecStats();
             this.currentExecGroup = leftExecGroup;
 
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
@@ -3300,6 +3326,7 @@ public class PlanFragmentBuilder {
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
+            exchangeNode.forceCollectExecStats();
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
@@ -3337,6 +3364,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
             PlanFragment child = visit(optExpression.inputAt(0), context);
+            child.getPlanRoot().forceCollectExecStats();
             int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
             context.getFragments().remove(child);
             MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);

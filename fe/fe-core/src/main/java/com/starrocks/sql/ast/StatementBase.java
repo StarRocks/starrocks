@@ -63,7 +63,8 @@ public abstract class StatementBase implements ParseNode {
         COST,
         OPTIMIZER,
         REWRITE,
-        SCHEDULER
+        SCHEDULER,
+        PLAN_ADVISOR
     }
 
     private ExplainLevel explainLevel;

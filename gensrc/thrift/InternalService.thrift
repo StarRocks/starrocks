@@ -486,6 +486,8 @@ struct TExecPlanFragmentParams {
   59: optional i32 group_execution_scan_dop
 
   60: optional TPredicateTreeParams pred_tree_params
+
+  61: optional list<i32> exec_stats_node_ids;
 }
 
 struct TExecPlanFragmentResult {

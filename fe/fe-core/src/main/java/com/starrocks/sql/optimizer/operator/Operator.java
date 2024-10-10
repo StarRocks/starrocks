@@ -77,6 +77,8 @@ public abstract class Operator {
 
     protected DomainProperty domainProperty;
 
+    protected int planNodeId = -1;
+
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -208,6 +210,14 @@ public abstract class Operator {
         }
 
         return domainProperty;
+    }
+
+    public int getPlanNodeId() {
+        return planNodeId;
+    }
+
+    public void setPlanNodeId(int planNodeId) {
+        this.planNodeId = planNodeId;
     }
 
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

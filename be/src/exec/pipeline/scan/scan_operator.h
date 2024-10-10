@@ -95,6 +95,8 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
+    void update_exec_stats(RuntimeState* state) override;
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
