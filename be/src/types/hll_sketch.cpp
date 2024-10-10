@@ -51,7 +51,7 @@ void DataSketchesHll::update(uint64_t hash_value) {
 
 void DataSketchesHll::merge(const DataSketchesHll& other) {
     if (UNLIKELY(_sketch_union == nullptr)) {
-        _sketch_union = std::make_unique<hll_union_type>(other.get_lg_config_k(), alloc_type(_memory_usage));
+        _sketch_union = std::make_unique<hll_union_type>(other.get_lg_config_k(), alloc_type());
     }
     auto o_sketch = other.get_hll_sketch();
     if (o_sketch == nullptr) {
@@ -97,8 +97,8 @@ bool DataSketchesHll::deserialize(const Slice& slice) {
 
     try {
         auto sketch = std::make_unique<hll_sketch_type>(
-                hll_sketch_type::deserialize((uint8_t*)slice.data, slice.size, alloc_type(_memory_usage)));
-        _sketch_union = std::make_unique<hll_union_type>(sketch->get_lg_config_k(), alloc_type(_memory_usage));
+                hll_sketch_type::deserialize((uint8_t*)slice.data, slice.size, alloc_type()));
+        _sketch_union = std::make_unique<hll_union_type>(sketch->get_lg_config_k(), alloc_type());
         _sketch_union->update(*sketch);
         this->mark_changed();
     } catch (std::logic_error& e) {

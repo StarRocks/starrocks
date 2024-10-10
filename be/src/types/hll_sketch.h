@@ -20,10 +20,12 @@
 #include <memory>
 #include <string>
 
+#include "common/compiler_util.h"
 #include "datasketches/hll.hpp"
 #include "gutil/stl_util.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
