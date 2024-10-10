@@ -125,4 +125,8 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
             return remoteFileInfoSource.hasMoreOutput();
         }
     }
+
+    public int selectedPartitionCount() {
+        return partitionKeys.size();
+    }
 }

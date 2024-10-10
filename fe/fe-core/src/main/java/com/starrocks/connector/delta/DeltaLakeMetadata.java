@@ -30,7 +30,6 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.TableVersionRange;
@@ -119,7 +118,6 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
-        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
         PredicateSearchKey key =
@@ -133,10 +131,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     dbName, tableName, params.getPredicate());
         }
 
-        List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(
-                DeltaLakeRemoteFileDesc.createDeltaLakeRemoteFileDesc(scanTasks));
-        remoteFileInfo.setFiles(remoteFileDescs);
-        return Lists.newArrayList(remoteFileInfo);
+        return scanTasks.stream().map(x -> new DeltaRemoteFileInfo(x)).collect(Collectors.toList());
     }
 
     @Override

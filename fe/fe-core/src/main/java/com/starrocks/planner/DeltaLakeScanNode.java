@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
@@ -49,6 +50,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
     private DeltaConnectorScanRangeSource scanRangeSource = null;
+    private int selectedPartitionCount = -1;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -98,7 +100,7 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeSource.hasMoreOutput();
     }
 
-    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames)
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
             throws UserException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -107,8 +109,13 @@ public class DeltaLakeScanNode extends ScanNode {
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(fieldNames).build();
-        RemoteFileInfoSource remoteFileInfoSource =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(deltaLakeTable, params);
+        RemoteFileInfoSource remoteFileInfoSource = null;
+        if (enableIncrementalScanRanges) {
+            remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(deltaLakeTable, params);
+        } else {
+            remoteFileInfoSource = new RemoteFileInfoDefaultSource(
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params));
+        }
         scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource);
     }
 
@@ -158,8 +165,16 @@ public class DeltaLakeScanNode extends ScanNode {
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
 
+            if (selectedPartitionCount == -1) {
+                // we have to consume all scan ranges to know how many partition been selected.
+                while (scanRangeSource.hasMoreOutput()) {
+                    scanRangeSource.getOutputs(1000);
+                }
+                selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+            }
+
             output.append(prefix).append(
-                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                    String.format("partitions=%s/%s", selectedPartitionCount,
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));
             output.append("\n");
         }

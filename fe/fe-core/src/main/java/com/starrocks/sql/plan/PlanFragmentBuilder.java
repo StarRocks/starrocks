@@ -1250,7 +1250,8 @@ public class PlanFragmentBuilder {
                 List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                         .map(ColumnRefOperator::getName)
                         .collect(Collectors.toList());
-                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames);
+                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames,
+                        context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
