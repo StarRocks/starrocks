@@ -203,7 +203,8 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
-    void add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition);
+    Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
+                               const THdfsPartition& thrift_partition);
 
 protected:
     std::string _hdfs_base_path;

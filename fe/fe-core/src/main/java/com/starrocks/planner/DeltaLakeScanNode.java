@@ -87,6 +87,9 @@ public class DeltaLakeScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
     }
 

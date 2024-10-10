@@ -371,8 +371,8 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
 
 // there will be partition values used by this batch of scan ranges and maybe following scan ranges
 // so before process this batch of scan ranges, we have to put partition values into the table associated with.
-static void add_scan_ranges_partition_values(RuntimeState* runtime_state,
-                                             const std::vector<TScanRangeParams>& scan_ranges) {
+static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                               const std::vector<TScanRangeParams>& scan_ranges) {
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
@@ -393,8 +393,10 @@ static void add_scan_ranges_partition_values(RuntimeState* runtime_state,
         if (table == nullptr) continue;
         // only hive table supports this feature.
         HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(const_cast<TableDescriptor*>(table));
-        hive_table->add_partition_value(obj_pool, hdfs_scan_range.partition_id, hdfs_scan_range.partition_value);
+        RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
+                                                        hdfs_scan_range.partition_value));
     }
+    return Status::OK();
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
@@ -522,7 +524,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             enable_shared_scan = false;
         }
 
-        add_scan_ranges_partition_values(runtime_state, scan_ranges);
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
@@ -909,7 +911,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             continue;
         }
 
-        add_scan_ranges_partition_values(runtime_state, scan_ranges);
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);

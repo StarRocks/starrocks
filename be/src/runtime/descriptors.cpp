@@ -47,6 +47,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "runtime_state.h"
 #include "util/compression/block_compression.h"
 #include "util/thrift_util.h"
 
@@ -432,10 +433,15 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
     return tPartitionMap;
 }
 
-void HiveTableDescriptor::add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition) {
-    std::unique_lock lock(_map_mutex);
+Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
+                                                const THdfsPartition& thrift_partition) {
     auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition));
-    _partition_id_to_desc_map[id] = partition;
+    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+    {
+        std::unique_lock lock(_map_mutex);
+        _partition_id_to_desc_map[id] = partition;
+    }
+    return Status::OK();
 }
 
 // =============================================
