@@ -29,7 +29,6 @@
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
 #include "service/backend_options.h"
-#include "util/arrow/utils.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

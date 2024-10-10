@@ -38,7 +38,7 @@ public class ArrowFlightSqlAuthenticator implements org.apache.arrow.flight.auth
     public AuthResult authenticate(CallHeaders incomingHeaders) {
         if (arrowFlightSqlAseKey.length() != 43) {
             throw CallStatus.UNAUTHENTICATED
-                    .withDescription("BE configuration item arrow_flight_sql_ase_key is invalid.").toRuntimeException();
+                    .withDescription("FE configuration item arrow_flight_sql_ase_key is invalid.").toRuntimeException();
         }
 
         final String token = AuthUtilities.getValueFromAuthHeader(incomingHeaders,
