@@ -133,6 +133,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long startPreparingTimeMs;
     @SerializedName(value = "finishPreparingTimeMs")
     private long finishPreparingTimeMs;
+    @SerializedName(value = "commitTimeMs")
+    private long commitTimeMs;
     @SerializedName(value = "endTimeMs")
     private long endTimeMs;
     @SerializedName(value = "txnId")
@@ -608,7 +610,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         boolean exception = false;
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     resp.setOKMsg("txn could not be prepared because task state is: " + state
                             + ", error_msg: " + errorMsg);
@@ -681,7 +683,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         boolean exception = false;
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     resp.setOKMsg("txn could not be committed because task state is: " + state
                             + ", error_msg: " + errorMsg);
@@ -864,7 +866,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         readLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
                     return "cur task state is: " + state 
                             + ", error_msg: " + errorMsg;
@@ -952,7 +954,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforePrepared(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be prepared because task state is: " + state);
             }
         } finally {
@@ -996,7 +998,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void beforeCommitted(TransactionState txnState) throws TransactionException {
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 throw new TransactionException("txn could not be commited because task state is: " + state);
             }
             isCommitting = true;
@@ -1023,8 +1025,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = System.currentTimeMillis();
             isCommitting = false;
-            endTimeMs = System.currentTimeMillis();
         } finally {
             writeUnlock();
         }
@@ -1106,8 +1108,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.channels.set(i, State.COMMITED);
             }
             this.state = State.COMMITED;
+            commitTimeMs = txnState.getCommitTime();
             this.preparedChannelNum = this.channelNum;
-            this.endTimeMs = txnState.getCommitTime();
         } finally {
             writeUnlock();
         }
@@ -1126,7 +1128,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         writeLock();
         try {
-            if (isFinalState()) {
+            if (isUnreversibleState()) {
                 return;
             }
             if (coord != null && !isSyncStreamLoad) {
@@ -1265,11 +1267,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return createTimeMs;
     }
 
+    public long commitTimeMs() {
+        return commitTimeMs;
+    }
+
     public long endTimeMs() {
         return endTimeMs;
     }
 
     public boolean isFinalState() {
+        return state == State.CANCELLED || state == State.FINISHED;
+    }
+
+    public boolean isUnreversibleState() {
         return state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
     }
 
