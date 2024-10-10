@@ -364,8 +364,59 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             throw unsupportedException("New Planner only support Query Statement");
         }
 
+        root = addProject(root, outputColumns, setOperationRelation);
         root = addOrderByLimit(root, setOperationRelation);
         return new LogicalPlan(root, outputColumns, ImmutableList.of());
+    }
+
+    private OptExprBuilder addProject(OptExprBuilder root, List<ColumnRefOperator> outputColumns,
+                                      SetOperationRelation setRelation) {
+
+        // add projection if order by no-column ref
+        final boolean needNotAddProject =
+                !setRelation.hasOrderByClause() || setRelation.getOrderBy().stream().map(OrderByElement::getExpr)
+                        .allMatch(e -> (e instanceof SlotRef) || e.isLiteral());
+        if (needNotAddProject) {
+            return root;
+        }
+
+        ExpressionMapping outputTranslations = new ExpressionMapping(root.getScope(), root.getFieldMappings(),
+                root.getColumnRefToConstOperators());
+        Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+
+        for (ColumnRefOperator outputColumn : outputColumns) {
+            projections.put(outputColumn, outputColumn);
+        }
+
+        final List<Expr> orderByExpressions = setRelation.getOrderByExpressions();
+        for (Expr expression : orderByExpressions) {
+            final ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
+                    root.getExpressionMapping(), columnRefFactory);
+
+            ColumnRefOperator columnRefOperator = null;
+            if (scalarOperator.isColumnRef()) {
+                columnRefOperator = (ColumnRefOperator) scalarOperator;
+            } else if (scalarOperator.isVariable() && projections.containsValue(scalarOperator)) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projections.entrySet()) {
+                    if (entry.getValue().equals(scalarOperator)) {
+                        columnRefOperator = entry.getKey();
+                        break;
+                    }
+                }
+            } else {
+                columnRefOperator =
+                        columnRefFactory.create(expression, expression.getType(), scalarOperator.isNullable());
+            }
+            projections.put(columnRefOperator, scalarOperator);
+            outputTranslations.put(expression, columnRefOperator);
+            if (scalarOperator.isConstant()) {
+                outputTranslations.putConstOperator(columnRefOperator, scalarOperator);
+            }
+        }
+
+        final LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
+        root = new OptExprBuilder(projectOperator, Lists.newArrayList(root), outputTranslations);
+        return root;
     }
 
     private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
@@ -374,6 +425,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<Ordering> orderings = new ArrayList<>();
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : orderBy) {
+                if (item.getExpr().isLiteral()) {
+                    continue;
+                }
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                         root.getExpressionMapping(), columnRefFactory);
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
@@ -383,7 +437,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     orderings.add(ordering);
                 }
             }
-            root = root.withNewRoot(new LogicalTopNOperator(orderings));
+            if (!orderings.isEmpty()) {
+                root = root.withNewRoot(new LogicalTopNOperator(orderings));
+            }
         }
 
         LimitElement limit = relation.getLimit();
