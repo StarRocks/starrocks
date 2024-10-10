@@ -16,7 +16,9 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
@@ -35,6 +37,8 @@ protected:
 
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
+
+    SegmentedChunkPtr build_segmented_chunk();
 
     // A tuple with one column
     TupleDescriptor* _create_simple_desc() {
@@ -88,6 +92,26 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
     return tuple_desc;
+}
+
+SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
+    auto* tuple_desc = _create_simple_desc();
+    auto segmented_chunk = SegmentedChunk::create(1 << 16);
+    segmented_chunk->append_column(Int32Column::create(), 0);
+
+    // put 100 chunks into the segmented chunk
+    int row_id = 0;
+    for (int i = 0; i < 100; i++) {
+        size_t chunk_rows = 4096;
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, chunk_rows);
+        for (int j = 0; j < chunk_rows; j++) {
+            chunk->get_column_by_index(0)->append_datum(row_id++);
+        }
+
+        segmented_chunk->append_chunk(std::move(chunk));
+    }
+    segmented_chunk->append_finished();
+    return segmented_chunk;
 }
 
 TEST_F(ChunkHelperTest, new_chunk_with_tuple) {
@@ -183,6 +207,48 @@ TEST_F(ChunkHelperTest, Accumulator) {
     auto output = accumulator.pull();
     EXPECT_EQ(nullptr, output);
     EXPECT_TRUE(accumulator.reach_limit());
+}
+
+TEST_F(ChunkHelperTest, SegmentedChunk) {
+    auto segmented_chunk = build_segmented_chunk();
+
+    [[maybe_unused]] auto downgrade_result = segmented_chunk->downgrade();
+    [[maybe_unused]] auto upgrade_result = segmented_chunk->upgrade_if_overflow();
+
+    EXPECT_EQ(409600, segmented_chunk->num_rows());
+    EXPECT_EQ(7, segmented_chunk->num_segments());
+    EXPECT_EQ(1835008, segmented_chunk->memory_usage());
+    EXPECT_EQ(1, segmented_chunk->columns().size());
+    auto column0 = segmented_chunk->columns()[0];
+    EXPECT_EQ(false, column0->is_nullable());
+    EXPECT_EQ(false, column0->has_null());
+    EXPECT_EQ(409600, column0->size());
+    std::vector<uint32_t> indexes = {1, 2, 4, 10000, 20000};
+    ColumnPtr cloned = column0->clone_selective(indexes.data(), 0, indexes.size());
+    EXPECT_EQ("[1, 2, 4, 10000, 20000]", cloned->debug_string());
+
+    // reset
+    segmented_chunk->reset();
+    EXPECT_EQ(0, segmented_chunk->num_rows());
+    EXPECT_EQ(7, segmented_chunk->num_segments());
+    EXPECT_EQ(1835008, segmented_chunk->memory_usage());
+
+    // slicing
+    segmented_chunk = build_segmented_chunk();
+    SegmentedChunkSlice slice;
+    slice.reset(segmented_chunk);
+    size_t total_rows = 0;
+    while (!slice.empty()) {
+        auto chunk = slice.cutoff(1000);
+        EXPECT_LE(chunk->num_rows(), 1000);
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            EXPECT_EQ(total_rows + i, chunk->get_column_by_index(0)->get(i).get_int32());
+        }
+        total_rows += chunk->num_rows();
+    }
+    EXPECT_EQ(409600, total_rows);
+    EXPECT_EQ(0, segmented_chunk->num_rows());
+    EXPECT_EQ(7, segmented_chunk->num_segments());
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
