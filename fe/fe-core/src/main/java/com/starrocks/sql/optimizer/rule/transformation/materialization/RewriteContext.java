@@ -47,6 +47,8 @@ public class RewriteContext {
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
     private ScalarOperator unionRewriteQueryExtraPredicate;
     private AggregatePushDownContext aggregatePushDownContext;
+    // whether this rewritten query is a rollup query
+    private boolean isRollup;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -170,5 +172,13 @@ public class RewriteContext {
 
     public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
         this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+
+    public boolean isRollup() {
+        return isRollup;
+    }
+
+    public void setRollup(boolean rollup) {
+        isRollup = rollup;
     }
 }
