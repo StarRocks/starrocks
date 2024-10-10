@@ -346,4 +346,16 @@ public class DateUtils {
         }
         return builder;
     }
+
+    /**
+     * Get a unix datetime format builder with default MONTH_OF_YEAR and DAY_OF_MONTH
+     * @param pattern the date time pattern
+     * @param isOutputFormat true if the formatter is output format
+     * @return DateTimeFormatterBuilder
+     */
+    public static DateTimeFormatterBuilder unixDatetimeFormatBuilderWithDefault(String pattern, boolean isOutputFormat) {
+        return unixDatetimeFormatBuilder(pattern, isOutputFormat)
+            .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+            .parseDefaulting(ChronoField.DAY_OF_MONTH, 1);
+    }
 }
