@@ -193,7 +193,6 @@ select sum(array_contains(@arr, str)) from t;
 -- result:
 0
 -- !result
-<<<<<<< HEAD
 -- name: test_array_contains_with_decimal
 create table t (
     k bigint,
@@ -245,7 +244,9 @@ select array_position(v2, v1) from t;
 1
 -- !result
 select array_position(v3, v2) from t;
-=======
+-- result:
+1
+-- !result
 -- name: test_array_contains_all_and_seq
 CREATE TABLE t (
   k bigint(20) NOT NULL,
@@ -655,7 +656,6 @@ set @arr1 = array_append(array_repeat(1, 5000), 2);
 -- result:
 -- !result
 select array_contains_seq(@arr0, @arr1);
->>>>>>> 6b8c200f8e (opt)
 -- result:
 1
 -- !result
