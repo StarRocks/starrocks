@@ -32,7 +32,6 @@
 #include "exprs/agg/agg_state_merge.h"
 #include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate_state_allocator.h"
-#include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -171,7 +170,7 @@ void AggregatorParams::init() {
             // collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             for (auto& type : fn.arg_types) {
-                arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
+                arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
@@ -451,7 +450,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         auto& agg_fn_type = _agg_fn_types[i];
         auto& agg_func = _agg_functions[i];
-        TypeDescriptor return_type = AnyValUtil::column_type_to_type_desc(agg_fn_type.result_type);
+        TypeDescriptor return_type = agg_fn_type.result_type;
         std::vector<TypeDescriptor> arg_types = agg_fn_type.arg_typedescs;
 
         const AggStateDesc* agg_state_desc = nullptr;

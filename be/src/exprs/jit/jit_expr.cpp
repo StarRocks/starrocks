@@ -24,7 +24,6 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"

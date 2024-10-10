@@ -14,7 +14,6 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
-#include "exprs/anyval_util.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

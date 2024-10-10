@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "exprs/anyval_util.h"
 #include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 
@@ -165,7 +164,7 @@ TEST(FieldTest, test_with_nullable) {
 
 TEST(FieldTest, test_with_agg_state_desc) {
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     AggStateDesc desc("avg", return_type, arg_types, true, 1);
 
     // copy assignment
