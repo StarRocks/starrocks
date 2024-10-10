@@ -399,9 +399,6 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->upsert(chunk_index.first);
         }
-<<<<<<< HEAD
-        RETURN_IF_ERROR(delta_writer->finish());
-=======
         size_t delete_size = _random_generator->random() % MaxUpsert;
         for (int i = 0; i < delete_size; i++) {
             auto chunk_index = gen_upsert_data(false);
@@ -409,8 +406,7 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->erase(chunk_index.first);
         }
-        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
->>>>>>> 44d947c56e ([BugFix] fix cloud native persistent index sst compaction when sst files contain same max_rss_rowid (#51612))
+        RETURN_IF_ERROR(delta_writer->finish());
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
@@ -505,9 +501,6 @@ public:
                                                     chunk_index.second.size()));
                 _replayer->upsert(chunk_index.first);
             }
-<<<<<<< HEAD
-            RETURN_IF_ERROR(delta_writer->finish());
-=======
             size_t delete_size = _random_generator->random() % MaxUpsert;
             for (int i = 0; i < delete_size; i++) {
                 auto chunk_index = gen_upsert_data(false);
@@ -515,8 +508,7 @@ public:
                                                     chunk_index.second.size()));
                 _replayer->erase(chunk_index.first);
             }
-            RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
->>>>>>> 44d947c56e ([BugFix] fix cloud native persistent index sst compaction when sst files contain same max_rss_rowid (#51612))
+            RETURN_IF_ERROR(delta_writer->finish());
             delta_writer->close();
         }
         // Batch Publish version
