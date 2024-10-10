@@ -44,7 +44,6 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/anyval_util.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
