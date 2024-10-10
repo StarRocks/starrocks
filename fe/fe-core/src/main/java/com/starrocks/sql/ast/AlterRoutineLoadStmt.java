@@ -56,6 +56,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
             .add(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
+            .add(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .build();
@@ -280,6 +281,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         if (jobProperties.containsKey(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)) {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
+        }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS)) {
+            boolean discardUnknownFields = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS, String.valueOf(discardUnknownFields));
         }
     }
 

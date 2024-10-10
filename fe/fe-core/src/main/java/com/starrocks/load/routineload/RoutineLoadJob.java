@@ -372,6 +372,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             jobProperties.put(CreateRoutineLoadStmt.TRIMSPACE, stmt.isTrimspace() ? "true" : "false");
             jobProperties.put(CreateRoutineLoadStmt.ENCLOSE, Byte.toString(stmt.getEnclose()));
             jobProperties.put(CreateRoutineLoadStmt.ESCAPE, Byte.toString(stmt.getEscape()));
+            jobProperties.put(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS, String.valueOf(stmt.isDiscardUnknownFields()));
         } else if (stmt.getFormat().equals("json")) {
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
@@ -2081,5 +2082,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (streamLoadTask != null) {
             streamLoadTask.replayOnVisible(txnState);
         }
+    }
+
+    public boolean isDiscardUnknownFields() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.DISCARD_UNKNOWN_FIELDS);
+        if (value == null) {
+            return false;
+        }
+        return Boolean.valueOf(value);
     }
 }

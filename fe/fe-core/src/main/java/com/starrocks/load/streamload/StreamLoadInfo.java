@@ -86,6 +86,7 @@ public class StreamLoadInfo {
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private boolean discardUnknownFields = false;
 
     private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
 
@@ -522,6 +523,7 @@ public class StreamLoadInfo {
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
         warehouseId = routineLoadJob.getWarehouseId();
+        discardUnknownFields = routineLoadJob.isDiscardUnknownFields();
     }
 
     // used for stream load
@@ -569,5 +571,9 @@ public class StreamLoadInfo {
 
     public long getExecMemLimit() {
         return execMemLimit;
+    }
+
+    public boolean isDiscardUnknownFields() {
+        return discardUnknownFields;
     }
 }

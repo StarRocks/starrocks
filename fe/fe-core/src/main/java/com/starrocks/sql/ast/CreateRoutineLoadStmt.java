@@ -118,6 +118,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String TRIMSPACE = "trim_space";
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
+    public static final String DISCARD_UNKNOWN_FIELDS = "discard_unknown_fields";
 
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
@@ -164,6 +165,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
             .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+            .add(DISCARD_UNKNOWN_FIELDS)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -223,6 +225,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean trimspace = false;
     private byte enclose = 0;
     private byte escape = 0;
+    private boolean discardUnknownFields = false;
 
     // kafka related properties
     private String kafkaBrokerList;
@@ -566,6 +569,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,
                 LoadStmt.STRICT_MODE + " should be a boolean");
+
+        discardUnknownFields = Util.getBooleanPropertyOrDefault(jobProperties.get(DISCARD_UNKNOWN_FIELDS),
+                false, DISCARD_UNKNOWN_FIELDS + " should be a boolean");
 
         partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
                 false,
@@ -995,5 +1001,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
+    }
+
+    public boolean isDiscardUnknownFields() {
+        return discardUnknownFields;
     }
 }
