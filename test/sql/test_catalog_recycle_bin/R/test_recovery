@@ -1,0 +1,61 @@
+-- name: test_partition_recovery
+create table test_recycle (`id` int(11), `name` varchar(128), `datepart` date) engine=olap duplicate key(id)
+    partition by range(datepart)(
+        PARTITION p3 VALUES LESS THAN ('2023-01-01'),
+        PARTITION p4 VALUES LESS THAN ('2024-01-01'),
+        PARTITION p5 VALUES LESS THAN ('2025-01-01'))
+    distributed by hash(id) buckets 2
+    properties(
+        "replication_num"="1"
+    );
+-- result:
+-- !result
+insert into test_recycle values(1, 'a', '2022-01-02');
+-- result:
+-- !result
+insert into test_recycle values(2, 'a', '2023-01-02');
+-- result:
+-- !result
+insert into test_recycle values(3, 'a', '2024-01-02');
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+select * from  test_recycle order by id,name,datepart;
+-- result:
+1	a	2022-01-02
+2	a	2023-01-02
+3	a	2024-01-02
+-- !result
+insert overwrite test_recycle values(3, 'a', '2024-01-02');
+-- result:
+-- !result
+select * from  test_recycle order by id,name,datepart;
+-- result:
+3	a	2024-01-02
+-- !result
+ALTER TABLE test_recycle DROP PARTITION p3 force;
+-- result:
+-- !result
+ALTER TABLE test_recycle DROP PARTITION p4 force;
+-- result:
+-- !result
+ALTER TABLE test_recycle DROP PARTITION p5 force;
+-- result:
+-- !result
+recover partition p3  from test_recycle;
+-- result:
+-- !result
+recover partition p4  from test_recycle;
+-- result:
+-- !result
+recover partition p5  from test_recycle;
+-- result:
+-- !result
+select * from  test_recycle order by id,name,datepart;
+-- result:
+1	a	2022-01-02
+2	a	2023-01-02
+3	a	2024-01-02
+-- !result

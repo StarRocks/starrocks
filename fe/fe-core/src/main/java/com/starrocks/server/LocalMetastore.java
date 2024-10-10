@@ -4550,7 +4550,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             partitionNames.stream().forEach(e ->
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
-            olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
+            olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName, true);
 
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
@@ -4577,13 +4577,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             if (replaceTempPartitionLog.isUnPartitionedTable()) {
                 olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
-                        replaceTempPartitionLog.getTempPartitions().get(0));
+                        replaceTempPartitionLog.getTempPartitions().get(0), true);
                 return;
             }
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),
-                    replaceTempPartitionLog.useTempPartitionName());
+                    replaceTempPartitionLog.useTempPartitionName(), true);
         } catch (DdlException e) {
             LOG.warn("should not happen.", e);
         } finally {

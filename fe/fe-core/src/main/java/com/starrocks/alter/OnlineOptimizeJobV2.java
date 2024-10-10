@@ -453,9 +453,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(
-                            Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName), true, false);
+                            Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName), true, false, true);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(sourcePartitionName, tmpPartitionName);
+                targetTable.replacePartition(sourcePartitionName, tmpPartitionName, true);
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }

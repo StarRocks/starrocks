@@ -44,6 +44,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
+import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -84,6 +85,15 @@ public class LocalMetaStoreTest {
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
+        starRocksAssert.withDatabase("test1").useDatabase("test1")
+                    .withTable(
+                                "CREATE TABLE test1.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        starRocksAssert.withDatabase("test2").useDatabase("test2")
+                    .withTable(
+                                "CREATE TABLE test2.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
         UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
@@ -114,7 +124,7 @@ public class LocalMetaStoreTest {
         partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
                     partitionInfo.getReplicationNum(sourcePartition.getId()),
                     partitionInfo.getIsInMemory(sourcePartition.getId()));
-        olapTable.replacePartition("t1", "t1_100");
+        olapTable.replacePartition("t1", "t1_100", true);
 
         Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
     }
@@ -141,7 +151,7 @@ public class LocalMetaStoreTest {
             @Mock
             public void logModifyPartition(ModifyPartitionInfo info) {
                 Assert.assertNotNull(info);
-                Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
+                Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(info.getDbId(), info.getTableId())
                             .isOlapTableOrMaterializedView());
                 Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
                 Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
@@ -312,4 +322,79 @@ public class LocalMetaStoreTest {
         }
     }
 
+    @Test
+    public void testReplaceTempPartitionPartitionedTable() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        Partition sourcePartition = olapTable.getPartition("t1");
+        List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
+        List<Long> tmpPartitionIds = Lists.newArrayList(connectContext.getGlobalStateMgr().getNextId());
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Map<Long, String> origPartitions = Maps.newHashMap();
+        OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+        Assert.assertEquals(olapTable.getName(), copiedTable.getName());
+        Set<Long> tabletIdSet = Sets.newHashSet();
+        List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
+                    olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
+                    null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
+        Assert.assertEquals(1, newPartitions.size());
+        Partition newPartition = newPartitions.get(0);
+        Assert.assertEquals("t1_100", newPartition.getName());
+        olapTable.addTempPartition(newPartition);
+    
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
+                    partitionInfo.getReplicationNum(sourcePartition.getId()),
+                    partitionInfo.getIsInMemory(sourcePartition.getId()));
+
+        List<String> partitionNames = Lists.newArrayList();
+        partitionNames.add("t1");
+        List<String> tempPartitonNames = Lists.newArrayList();
+        tempPartitonNames.add("t1_100");
+
+        ReplacePartitionOperationLog rtp1 = new ReplacePartitionOperationLog(db.getId(), table.getId(),
+                partitionNames, tempPartitonNames, false, true, false);
+        localMetastore.replayReplaceTempPartition(rtp1);
+    }
+
+    @Test
+    public void testReplaceTempPartitionUnpartitionedTable() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test2");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        Partition sourcePartition = olapTable.getPartition("t1");
+        List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
+        List<Long> tmpPartitionIds = Lists.newArrayList(connectContext.getGlobalStateMgr().getNextId());
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Map<Long, String> origPartitions = Maps.newHashMap();
+        OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+        Assert.assertEquals(olapTable.getName(), copiedTable.getName());
+        Set<Long> tabletIdSet = Sets.newHashSet();
+        List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
+                    olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
+                    null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
+        Assert.assertEquals(1, newPartitions.size());
+        Partition newPartition = newPartitions.get(0);
+        Assert.assertEquals("t1_100", newPartition.getName());
+        olapTable.addTempPartition(newPartition);
+    
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
+                    partitionInfo.getReplicationNum(sourcePartition.getId()),
+                    partitionInfo.getIsInMemory(sourcePartition.getId()));
+
+        List<String> partitionNames = Lists.newArrayList();
+        partitionNames.add("t1");
+        List<String> tempPartitonNames = Lists.newArrayList();
+        tempPartitonNames.add("t1_100");
+
+        ReplacePartitionOperationLog rtp2 = new ReplacePartitionOperationLog(db.getId(), table.getId(),
+                partitionNames, tempPartitonNames, false, true, true);
+        localMetastore.replayReplaceTempPartition(rtp2);
+    }
 }
