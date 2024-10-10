@@ -363,7 +363,10 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode");
+            "Unsupported statement in shared_nothing mode"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_DATA_MODE(10008, new byte[] {'4', '2', '0', '0', '0'},
+            "Unsupported statement in shared_data mode");
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

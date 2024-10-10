@@ -33,6 +33,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -65,6 +66,10 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
     }
 
     public void createFailoverGroup(CreatePrimaryFailoverGroupStmt stmt) throws DdlException {
+        if (RunMode.isSharedDataMode()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_DATA_MODE);
+        }
+
         long nextId = GlobalStateMgr.getServingState().getNextId();
         FailoverGroup failoverGroup = new FailoverGroup(nextId, stmt);
         FailoverGroup previous = nameToFailoverGroup.putIfAbsent(failoverGroup.getName(), failoverGroup);
@@ -82,6 +87,10 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
     }
 
     public void createFailoverGroup(CreateSecondaryFailoverGroupStmt stmt) throws DdlException {
+        if (RunMode.isSharedDataMode()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_DATA_MODE);
+        }
+
         long nextId = GlobalStateMgr.getServingState().getNextId();
         FailoverGroup failoverGroup = new FailoverGroup(nextId, stmt);
         FailoverGroup previous = nameToFailoverGroup.putIfAbsent(failoverGroup.getName(), failoverGroup);
