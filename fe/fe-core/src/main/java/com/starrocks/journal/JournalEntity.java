@@ -131,6 +131,7 @@ import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownMaintenanceJob;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
@@ -762,6 +763,14 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_KEY: {
                 data = new Text(Text.readBinary(in));
+                break;
+            }
+            case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG: {
+                data = ModifyTablePropertyOperationLog.read(in);
+                break;
+            }
+            case OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), ExternalCooldownMaintenanceJob.class);
                 break;
             }
             default: {
