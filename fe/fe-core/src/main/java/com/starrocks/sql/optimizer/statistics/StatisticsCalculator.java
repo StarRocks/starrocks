@@ -146,6 +146,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -586,6 +587,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         ScanOperatorPredicates predicates;
         try {
             if (node.isLogical()) {
+                OptExternalPartitionPruner.prunePartitions(optimizerContext, (LogicalScanOperator) node);
                 predicates = ((LogicalScanOperator) node).getScanOperatorPredicates();
             } else {
                 predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
