@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -1227,5 +1230,14 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
+
+    @Test
+    public void testShowSchemasFroCatalog() throws Exception {
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+        String showSQL = "show schemas from default_catalog";
+        ShowDbStmt showDbStmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, connectContext);
+        Assert.assertNotNull(showDbStmt);
+        Assert.assertEquals(1, showDbStmt.getMetaData().getColumnCount());
     }
 }
