@@ -626,6 +626,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
                 }
             }
+            if (latest_metadata->sstable_meta().sstables_size() > 0) {
+                for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
+                }
+            }
         }
 
         for (auto version : versions) {
@@ -716,26 +721,27 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     int64_t total_files = 0;
     int64_t total_bytes = 0;
     const auto now = std::time(nullptr);
-    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(segment_root_location,
-                                                                [&](DirEntry entry) {
-                                                                    total_files++;
-                                                                    total_bytes += entry.size.value_or(0);
+    RETURN_IF_ERROR_WITH_WARN(
+            ignore_not_found(fs->iterate_dir2(segment_root_location,
+                                              [&](DirEntry entry) {
+                                                  total_files++;
+                                                  total_bytes += entry.size.value_or(0);
 
-                                                                    if (!is_segment(entry.name)) { // Only segment files
-                                                                        return true;
-                                                                    }
-                                                                    if (!entry.mtime.has_value()) {
-                                                                        LOG(WARNING) << "Fail to get modified time of "
-                                                                                     << entry.name;
-                                                                        return true;
-                                                                    }
+                                                  if (!is_segment(entry.name) &&
+                                                      !is_sst(entry.name)) { // Only segment files and sst
+                                                      return true;
+                                                  }
+                                                  if (!entry.mtime.has_value()) {
+                                                      LOG(WARNING) << "Fail to get modified time of " << entry.name;
+                                                      return true;
+                                                  }
 
-                                                                    if (now >= entry.mtime.value() + expired_seconds) {
-                                                                        data_files.emplace(entry.name, entry);
-                                                                    }
-                                                                    return true;
-                                                                })),
-                              "Failed to list " + segment_root_location);
+                                                  if (now >= entry.mtime.value() + expired_seconds) {
+                                                      data_files.emplace(entry.name, entry);
+                                                  }
+                                                  return true;
+                                              })),
+            "Failed to list " + segment_root_location);
     LOG(INFO) << "Listed all data files, total files: " << total_files << ", total bytes: " << total_bytes
               << ", candidate files: " << data_files.size();
     return data_files;
@@ -762,6 +768,12 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             data_files_in_metadatas.emplace(segment);
         }
     };
+    auto check_sst_meta = [&](const PersistentIndexSstableMetaPB& sst_meta) {
+        for (const auto& sst : sst_meta.sstables()) {
+            data_files.erase(sst.filename());
+            data_files_in_metadatas.emplace(sst.filename());
+        }
+    };
 
     if (audit_ostream) {
         audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
@@ -783,6 +795,7 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
+        check_sst_meta(metadata->sstable_meta());
         ++progress;
         if (audit_ostream) {
             audit_ostream << '(' << progress << '/' << meta_files.size() << ") " << name << '\n'
