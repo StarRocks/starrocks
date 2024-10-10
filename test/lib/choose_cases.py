@@ -518,6 +518,8 @@ class ChooseCase(object):
                             _thread_ori_sql_list.append("\n".join([_line.rstrip() for _line in _ori_lines]))
                         line_id = next_line_id
 
+                        tools.assert_less(line_id, len(f_lines), f"[ERROR] Concurrency struct format error!")
+
                         _next_line = f_lines[line_id].rstrip().lstrip()
                         if (re.match(r"^-- [0-9a-zA-Z ]+(\([0-9]+\))?:$", _next_line)
                                 or END_CONCURRENCY_FLAG in _next_line):
