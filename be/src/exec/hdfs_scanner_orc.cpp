@@ -326,9 +326,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
                                                       _scanner_params.datacache_options);
 
     for (const auto& tdelete_file : _scanner_params.deletes) {
-        RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
-                                                         _scanner_params.mor_params.equality_slots, _runtime_state,
-                                                         _mor_processor));
+        RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file));
     }
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
     return Status::OK();
@@ -570,6 +568,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
 }

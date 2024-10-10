@@ -30,10 +30,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(new IcebergDeleteBuilder(
                 scanner_params.fs, scanner_params.path, &_need_skip_rowids, scanner_params.datacache_options));
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
-                    runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
-                    scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
-                    runtime_state, _mor_processor));
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     } else if (scanner_params.paimon_deletion_file != nullptr) {
