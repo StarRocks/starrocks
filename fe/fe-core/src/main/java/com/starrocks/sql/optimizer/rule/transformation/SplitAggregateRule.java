@@ -132,7 +132,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
         // 3. group_concat distinct or avg distinct is not support two stage aggregate
         // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
         String fnName = distinctCall.getFnName();
-        if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+        if (FunctionSet.GROUP_CONCAT_V2.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
             return false;
         } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
             AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
