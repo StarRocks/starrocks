@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include <cstddef>
-#include <functional>
 #include <memory>
 
 #include "column/array_column.h"
@@ -1950,29 +1948,20 @@ private:
     }
 };
 
-class ArrayContainsAllImpl {};
-class ArrayContainsSeqImpl {
-    // @TODO
-    // prepare_state
-    // process
-};
-
+// Implementation of array_contains_all and array_contains_seq
+// for array_contains_all, we build  hash table to speed up the search.
+// for array_contains_seq, we use the idea of ​​KMP algorithm to speed up the search.
 template <LogicalType LT, bool ContainsSeq>
 class ArrayContainsAll {
-    // don't unpack
-    // 1. prepare stage, arary_contains_all/array_contains_any/array_contains_seq
-    // build hash set for contains all
-    // for all non-seq, build hash set
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
     using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
     using HashMap = phmap::flat_hash_map<CppType, size_t, HashFunc>;
-    // array_contains_seq will use prefix table to speed up search
     using PrefixTable = std::vector<size_t>;
 
     struct ArrayContainsAllState {
         bool has_null = false;
-        // final result, only used when both two input are constant
+        // final result, only used when both two inputs are constant
         bool contains = false;
         std::variant<HashMap, PrefixTable> variant;
     };
@@ -2000,7 +1989,6 @@ public:
             }
         }
 
-        LOG(INFO) << "array_has::prepare";
         auto* state = new ArrayContainsAllState();
         context->set_function_state(scope, state);
 
@@ -2066,8 +2054,7 @@ public:
             return Status::NotSupported(fmt::format("not support type {}", LT));
         }
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        LOG(INFO) << "array_has::process";
-        // if target_column is subset of array column
+
         const ColumnPtr& left_column = columns[0];
         const ColumnPtr& right_column = columns[1];
         bool is_const_left = left_column->is_constant();
@@ -2076,8 +2063,7 @@ public:
                 reinterpret_cast<ArrayContainsAllState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
         if (is_const_left && is_const_right) {
-            // if both inputs are constant, we just compute result directly
-            LOG(INFO) << "both const, result is : " << state->contains;
+            // if both input columns are constant, return result directly
             auto result_column = BooleanColumn::create();
             result_column->append(state->contains);
             return ConstColumn::create(std::move(result_column), columns[0]->size());
@@ -2101,7 +2087,6 @@ public:
             right_data_column = down_cast<NullableColumn*>(right_data_column.get())->data_column();
         }
 
-        // @TODO hash
         if (is_nullable_left && is_nullable_right) {
             return _process<true, true>(state, left_data_column, right_data_column, left_null_data, right_null_data,
                                         is_const_left, is_const_right);
@@ -2120,7 +2105,6 @@ public:
 private:
     static constexpr bool is_supported(LogicalType type) { return is_scalar_logical_type(type); }
 
-    // build hash table based on offset and array_size
     static void _build_hash_table(const CppType* elements_data, const NullColumn::ValueType* elements_null_data,
                                   size_t offset, size_t array_size, ArrayContainsAllState* state) {
         HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
@@ -2145,6 +2129,9 @@ private:
                                          size_t array_size) {
         const HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
         DCHECK(hash_map != nullptr);
+        // for array_contains_all(left, right), hash table may be built from the left or the right.
+        // if ht comes from left side, all the data of right side must be found in ht.
+        // if ht comes from right side, all the data in ht must be appeared in the left side.
 
         if (hash_map->empty()) {
             if (state->has_null) {
@@ -2156,7 +2143,6 @@ private:
         }
 
         if constexpr (HTFromLeft) {
-            // check if all elements can be find in ht
             for (size_t i = 0; i < array_size; i++) {
                 if (elements_null_data[i + offset]) {
                     if (!state->has_null) {
@@ -2170,7 +2156,6 @@ private:
                 }
             }
         } else {
-            // check if array contains all elements in ht
             BitMask bit_mask(hash_map->size());
             size_t find_count = 0;
             bool has_null = false;
@@ -2213,15 +2198,14 @@ private:
         if (array_size == 0) {
             return;
         }
-        LOG(INFO) << "build_prefix_table, offset: " << offset << ", array_size: " << array_size;
         PrefixTable* prefix_table = std::get_if<PrefixTable>(&(state->variant));
         DCHECK(prefix_table != nullptr);
         prefix_table->resize(array_size);
+
         (*prefix_table)[0] = 0;
         size_t length = 0;
         size_t idx = 1;
         while (idx < array_size) {
-            // LOG(INFO) << "check idx: " << idx << ", length: " << length;
             if (_check_element_equal(elements_data, null_data, elements_data, null_data, offset + idx,
                                      offset + length)) {
                 length++;
@@ -2236,11 +2220,6 @@ private:
                 }
             }
         }
-        std::ostringstream oss;
-        for (auto pos : *prefix_table) {
-            oss << pos << ",";
-        }
-        LOG(INFO) << "build prefix table done, " << oss.str();
     }
 
     static bool _process_with_prefix_table(const ArrayContainsAllState* state, const CppType* left_elements_data,
@@ -2264,14 +2243,11 @@ private:
             bool is_equal =
                     _check_element_equal(left_elements_data, left_elements_null_data, right_elements_data,
                                          right_elements_null_data, left_offset + left_idx, right_offset + right_idx);
-
             if (is_equal) {
                 left_idx++;
                 right_idx++;
             }
-
             if (right_idx == right_array_size) {
-                LOG(INFO) << "match done, left_idx: " << left_idx << ", right_idx: " << right_idx;
                 return true;
             } else if (left_idx < left_array_size &&
                        !_check_element_equal(left_elements_data, left_elements_null_data, right_elements_data,
@@ -2340,8 +2316,7 @@ private:
                     continue;
                 }
             }
-            // no null
-            // check data
+
             size_t left_array_offset = is_const_left ? left_offsets_data[0] : left_offsets_data[i];
             size_t left_array_size = is_const_left ? left_offsets_data[1] - left_offsets_data[0]
                                                    : left_offsets_data[i + 1] - left_offsets_data[i];
@@ -2361,7 +2336,6 @@ private:
 
             [[maybe_unused]] const ArrayContainsAllState* state_ref = nullptr;
             [[maybe_unused]] ArrayContainsAllState tmp_state;
-            // handle null and empty case
             if constexpr (ContainsSeq) {
                 if (is_const_right) {
                     state_ref = state;
@@ -2371,9 +2345,6 @@ private:
                                         right_array_size, &tmp_state);
                     state_ref = &tmp_state;
                 }
-                // use seq match
-                // consider const input
-                LOG(INFO) << "process_seq";
                 result_data[i] =
                         _process_with_prefix_table(state_ref, left_elements_data, right_elements_data,
                                                    left_elements_null_data, right_elements_null_data, left_array_offset,
@@ -2382,13 +2353,12 @@ private:
                 bool build_from_left;
 
                 if (is_const_left || is_const_right) {
-                    LOG(INFO) << "skip build ht";
                     state_ref = state;
                     build_from_left = is_const_left;
                 } else {
                     tmp_state.variant = HashMap{};
+                    // we build hash table on the side with less elements
                     build_from_left = left_not_null_element_num <= right_not_null_element_num;
-                    LOG(INFO) << "use " << (build_from_left ? "left" : "right") << " side to build ht";
                     const CppType* build_elements_data = build_from_left ? left_elements_data : right_elements_data;
                     const NullColumn::ValueType* build_elements_null_data =
                             build_from_left ? left_elements_null_data : right_elements_null_data;
