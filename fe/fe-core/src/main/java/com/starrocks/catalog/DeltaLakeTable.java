@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
@@ -47,9 +46,7 @@ public class DeltaLakeTable extends Table {
     private String tableLocation;
     private Engine deltaEngine;
 
-
     public static final String PARTITION_NULL_VALUE = "null";
-
 
     public DeltaLakeTable() {
         super(TableType.DELTALAKE);
@@ -126,10 +123,25 @@ public class DeltaLakeTable extends Table {
         return partColumnNames.size() == 0;
     }
 
+    public THdfsPartition toHdfsPartition(DescriptorTable.ReferencedPartitionInfo info) {
+        Metadata deltaMetadata = getDeltaMetadata();
+        PartitionKey key = info.getKey();
+        THdfsPartition tPartition = new THdfsPartition();
+        tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
+
+        List<LiteralExpr> keys = key.getKeys();
+        tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+
+        THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
+        tPartitionLocation.setPrefix_index(-1);
+        tPartitionLocation.setSuffix(info.getPath());
+        tPartition.setLocation(tPartitionLocation);
+        return tPartition;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
-        Metadata deltaMetadata = getDeltaMetadata();
 
         TDeltaLakeTable tDeltaLakeTable = new TDeltaLakeTable();
         tDeltaLakeTable.setLocation(getTableLocation());
@@ -155,19 +167,8 @@ public class DeltaLakeTable extends Table {
         }
 
         for (DescriptorTable.ReferencedPartitionInfo info : partitions) {
-            PartitionKey key = info.getKey();
             long partitionId = info.getId();
-
-            THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
-
-            List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
-
-            THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
-            tPartitionLocation.setPrefix_index(-1);
-            tPartitionLocation.setSuffix(info.getPath());
-            tPartition.setLocation(tPartitionLocation);
+            THdfsPartition tPartition = toHdfsPartition(info);
             tDeltaLakeTable.putToPartitions(partitionId, tPartition);
         }
 
