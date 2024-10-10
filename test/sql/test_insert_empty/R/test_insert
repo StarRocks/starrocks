@@ -14,21 +14,21 @@ create table t2(k int, v int not null) primary key(k) distributed by hash(k);
 insert into t2 select * from t1;
 -- result:
 -- !result
-select * from information_schema.loads where database_name='test_insert_empty' and label like 'insert%';
+select * from information_schema.loads where db_name='test_insert_empty' and label like 'insert%';
 -- result:
 [REGEX].*FINISHED.*
 -- !result
 update t2 set v=1 where k=1;
 -- result:
 -- !result
-select * from information_schema.loads where database_name='test_insert_empty' and label like 'update%';
+select * from information_schema.loads where db_name='test_insert_empty' and label like 'update%';
 -- result:
 [REGEX].*FINISHED.*
 -- !result
 delete from t2 where k=1;
 -- result:
 -- !result
-select * from information_schema.loads where database_name='test_insert_empty' and label like 'delete%';
+select * from information_schema.loads where db_name='test_insert_empty' and label like 'delete%';
 -- result:
 [REGEX].*FINISHED.*
 -- !result
