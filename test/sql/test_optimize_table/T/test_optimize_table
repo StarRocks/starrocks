@@ -284,3 +284,15 @@ function: wait_optimize_table_finish()
 show create table t;
 -- show partitions from t;
 select count(*) from t;
+
+-- name: test_optimize_table_with_special_characters
+create table `t#t`(k int) distributed by hash(k) buckets 10;
+show create table `t#t`;
+alter table `t#t` distributed by hash(k) buckets 20;
+function: wait_optimize_table_finish()
+show create table `t#t`;
+admin set frontend config ('enable_online_optimize_table'='false');
+alter table `t#t` distributed by hash(k) buckets 30;
+function: wait_optimize_table_finish()
+show create table `t#t`;
+admin set frontend config ('enable_online_optimize_table'='true');
