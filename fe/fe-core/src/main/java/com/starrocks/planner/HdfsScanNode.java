@@ -61,8 +61,6 @@ public class HdfsScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
-    private DescriptorTable descTbl;
-
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
@@ -86,7 +84,6 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
-        this.descTbl = descTbl;
         this.scanRangeSource = new HiveConnectorScanRangeSource(descTbl, hiveTable, scanNodePredicates);
         this.scanRangeSource.setup();
     }
