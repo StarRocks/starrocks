@@ -35,6 +35,8 @@ import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +45,7 @@ import java.util.List;
  * full scan on JDBC table.
  */
 public class JDBCScanNode extends ScanNode {
+    private static final Logger LOG = LogManager.getLogger(JDBCScanNode.class);
 
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
@@ -147,6 +150,7 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
+            LOG.info("create JDBC table filter expr: {}", p);
             // dameng view plan 问题临时处理
             if (isDameng() && p instanceof SlotRef){
                 continue;
