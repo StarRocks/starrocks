@@ -198,6 +198,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
+            builder.fromSplitOR = scanOperator.fromSplitOR;
             return this;
         }
 
