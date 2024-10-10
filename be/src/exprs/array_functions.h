@@ -159,11 +159,13 @@ public:
         return ArrayContainsAll<LT, false>::process(context, columns);
     }
     template <LogicalType LT>
-    static Status array_contains_all_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_all_specific_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
         return ArrayContainsAll<LT, false>::prepare(context, scope);
     }
     template <LogicalType LT>
-    static Status array_contains_all_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_all_specific_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
         return ArrayContainsAll<LT, false>::close(context, scope);
     }
 
@@ -178,11 +180,13 @@ public:
         return ArrayContainsAll<LT, true>::process(context, columns);
     }
     template <LogicalType LT>
-    static Status array_contains_seq_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_seq_specific_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
         return ArrayContainsAll<LT, true>::prepare(context, scope);
     }
     template <LogicalType LT>
-    static Status array_contains_seq_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    static Status array_contains_seq_specific_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
         return ArrayContainsAll<LT, true>::close(context, scope);
     }
 
