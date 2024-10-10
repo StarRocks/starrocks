@@ -555,7 +555,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
         }
 
-        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
+        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull() && !columnDef.getType().isComplexType()) {
             throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
         }
 
@@ -588,7 +588,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
             }
-            if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
+            if (!colDef.isAllowNull() && colDef.defaultValueIsNull() && !colDef.getType().isComplexType()) {
                 throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
             }
 
