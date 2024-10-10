@@ -18,17 +18,15 @@
 
 #include <string>
 
-#include "exprs/anyval_util.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
 
 TEST(AggStateDescTest, Basic) {
     {
-        std::vector<TypeDescriptor> arg_types = {
-                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-                AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
-        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
         AggStateDesc desc("array_agg2", return_type, arg_types, true, 1);
         ASSERT_EQ("array_agg2", desc.get_func_name());
         ASSERT_EQ(true, desc.is_result_nullable());
@@ -38,7 +36,7 @@ TEST(AggStateDescTest, Basic) {
     }
     {
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
         AggStateDesc desc("group_concat", return_type, arg_types, true, 1);
         ASSERT_EQ("group_concat", desc.get_func_name());
         ASSERT_EQ(true, desc.is_result_nullable());
@@ -48,7 +46,7 @@ TEST(AggStateDescTest, Basic) {
     }
     {
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
-        auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
         AggStateDesc desc("avg", return_type, arg_types, true, 1);
         ASSERT_EQ("avg", desc.get_func_name());
         ASSERT_EQ(true, desc.is_result_nullable());

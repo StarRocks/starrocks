@@ -28,7 +28,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
 #include "common/statusor.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"

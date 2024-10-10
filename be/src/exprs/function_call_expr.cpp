@@ -20,7 +20,6 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -81,7 +80,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
     // parpare result type and arg types
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     if (!_fn.__isset.fid && !_fn.__isset.agg_state_desc) {
         return Status::InternalError("Vectorized engine doesn't implement agg state function " +
                                      _fn.name.function_name);
@@ -89,7 +88,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     std::vector<FunctionContext::TypeDesc> args_types;
     std::vector<bool> arg_nullblaes;
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
         arg_nullblaes.emplace_back(child->is_nullable());
     }
 
