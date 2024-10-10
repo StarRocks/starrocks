@@ -14,19 +14,26 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator;
 import com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator.ColumnFilter;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
@@ -38,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator.NON_SELECTIVITY;
@@ -108,7 +116,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        List<ColumnFilter> unknownSelectivityFilters = columnFilters.stream().filter(e -> e.isUnknownSelectRatio())
+        List<ColumnFilter> unknownSelectivityFilters = columnFilters.stream().filter(ColumnFilter::isUnknownSelectRatio)
                 .collect(Collectors.toList());
         List<ColumnFilter> remainingFilters = columnFilters.stream().filter(e -> !e.isUnknownSelectRatio())
                 .collect(Collectors.toList());
@@ -127,8 +135,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
 
         List<ScalarOperator> newScanPredicates = rebuildScanPredicate(decomposeFilters, remainingFilters);
 
-        return Lists.newArrayList(OptExpression.create(buildUnionAllOperator(scan, newScanPredicates.size()),
-                buildUnionAllInputs(scan, newScanPredicates)));
+        return Lists.newArrayList(buildUnion(context.getColumnRefFactory(), scan, newScanPredicates));
     }
 
     private Pair<List<ColumnFilter>, List<ColumnFilter>> chooseRewriteColumnFilter(List<ColumnFilter> columnFilters,
@@ -178,39 +185,93 @@ public class SplitScanORToUnionRule extends TransformationRule {
         ScalarOperator remainingPredicate = Utils.compoundAnd(remainingFilters.stream().map(ColumnFilter::getFilter)
                 .collect(Collectors.toList()));
         List<ScalarOperator> scanPredicates = Lists.newArrayList();
-        NegateFilterShuttle shuttle = NegateFilterShuttle.getInstance();
-        for (int i = 0; i < decomposeFilters.size(); i++) {
-            List<ScalarOperator> elements = Lists.newArrayList();
-            elements.add(decomposeFilters.get(i).getFilter());
-            List<ColumnFilter> subList = decomposeFilters.subList(0, i);
-            for (ColumnFilter columnFilter : subList) {
-                elements.add(shuttle.negateFilter(columnFilter.getFilter()));
+
+        boolean isSplitFromIn = true;
+        for (ColumnFilter decomposeFilter : decomposeFilters) {
+            isSplitFromIn &= decomposeFilter.getFilter() instanceof InPredicateOperator;
+            if (!isSplitFromIn) {
+                break;
             }
-            elements.add(remainingPredicate);
-            scanPredicates.add(Utils.compoundAnd(elements));
+            isSplitFromIn = !((InPredicateOperator) decomposeFilter.getFilter()).isNotIn();
+            isSplitFromIn &= decomposeFilter.getColumn().isPresent();
+        }
+
+        if (isSplitFromIn && decomposeFilters.stream().map(ColumnFilter::getColumn).distinct().count() == 1) {
+            for (ColumnFilter decomposeFilter : decomposeFilters) {
+                List<ScalarOperator> elements = Lists.newArrayList();
+                elements.add(decomposeFilter.getFilter());
+                elements.add(remainingPredicate);
+                scanPredicates.add(Utils.compoundAnd(elements));
+            }
+        } else {
+            NegateFilterShuttle shuttle = NegateFilterShuttle.getInstance();
+            for (int i = 0; i < decomposeFilters.size(); i++) {
+                List<ScalarOperator> elements = Lists.newArrayList();
+                elements.add(decomposeFilters.get(i).getFilter());
+                List<ColumnFilter> subList = decomposeFilters.subList(0, i);
+                for (ColumnFilter columnFilter : subList) {
+                    elements.add(shuttle.negateFilter(columnFilter.getFilter()));
+                }
+                elements.add(remainingPredicate);
+                scanPredicates.add(Utils.compoundAnd(elements));
+            }
         }
         return scanPredicates;
     }
 
-    private LogicalUnionOperator buildUnionAllOperator(LogicalOlapScanOperator scanOperator, int childNum) {
-        List<ColumnRefOperator> outputColumns = scanOperator.getOutputColumns();
+    private OptExpression buildUnion(ColumnRefFactory factory, LogicalOlapScanOperator scan,
+                                     List<ScalarOperator> scanPredicates) {
+        List<ColumnRefOperator> outputColumns = scan.getOutputColumns();
         List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();
-        for (int i = 0; i < childNum; i++) {
-            childOutputColumns.add(outputColumns);
-        }
-        return new LogicalUnionOperator(outputColumns, childOutputColumns, true);
-    }
-
-    private List<OptExpression> buildUnionAllInputs(LogicalOlapScanOperator scanOperator,
-                                                    List<ScalarOperator> scanPredicates) {
         List<OptExpression> inputs = Lists.newArrayList();
         for (ScalarOperator scanPredicate : scanPredicates) {
-            LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-            LogicalOlapScanOperator scan = builder.withOperator(scanOperator)
-                    .setPredicate(scanPredicate).setFromSplitOR(true).build();
-            inputs.add(OptExpression.create(scan));
+            Pair<OptExpression, List<ColumnRefOperator>> child =
+                    buildUnionInputs(factory, scan, scanPredicate, outputColumns);
+            inputs.add(child.first);
+            childOutputColumns.add(child.second);
         }
-        return inputs;
+
+        return OptExpression.create(new LogicalUnionOperator(outputColumns, childOutputColumns, true), inputs);
+    }
+
+    private Pair<OptExpression, List<ColumnRefOperator>> buildUnionInputs(ColumnRefFactory factory,
+                                                                          LogicalOlapScanOperator scan,
+                                                                          ScalarOperator scanPredicate,
+                                                                          List<ColumnRefOperator> outputs) {
+        Map<ColumnRefOperator, ColumnRefOperator> replaceRefs = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRefs = Maps.newHashMap();
+        Map<ColumnRefOperator, Column> refToColumns = Maps.newHashMap();
+
+        scan.getColumnMetaToColRefMap().forEach((meta, ref) -> {
+            ColumnRefOperator newRef = factory.create(ref.getName(), ref.getType(), ref.isNullable());
+            columnToRefs.put(meta, newRef);
+            refToColumns.put(newRef, meta);
+            replaceRefs.put(ref, newRef);
+        });
+
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceRefs);
+        LogicalOlapScanOperator.Builder builder = LogicalOlapScanOperator.builder().withOperator(scan)
+                .setColRefToColumnMetaMap(refToColumns)
+                .setColumnMetaToColRefMap(columnToRefs)
+                .setFromSplitOR(true)
+                .setPredicate(rewriter.rewrite(scanPredicate));
+
+        if (scan.getProjection() != null) {
+            Map<ColumnRefOperator, ScalarOperator> newProjections = Maps.newHashMap();
+            scan.getProjection().getColumnRefMap().forEach((k, v) -> {
+                if (replaceRefs.containsKey(k)) {
+                    Preconditions.checkState(k.equals(v));
+                    newProjections.put(replaceRefs.get(k), replaceRefs.get(k));
+                } else {
+                    ColumnRefOperator newRef = factory.create(k.getName(), k.getType(), k.isNullable());
+                    newProjections.put(newRef, rewriter.rewrite(v));
+                    replaceRefs.put(k, newRef);
+                }
+            });
+            builder.setProjection(new Projection(newProjections));
+        }
+        outputs = outputs.stream().map(replaceRefs::get).collect(Collectors.toList());
+        return Pair.create(OptExpression.create(builder.build()), outputs);
     }
 
     private boolean canBenefitFromSplit(double existSelectRatio, double splitMaxSelectRatio) {
