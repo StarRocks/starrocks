@@ -24,6 +24,7 @@
 #include "runtime/memory/counting_allocator.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
