@@ -145,9 +145,8 @@ Status CacheInputStream::_read_block_from_local(const int64_t offset, const int6
         _stats.skip_read_cache_count += 1;
         _stats.skip_read_cache_bytes += read_size;
     }
-    if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
-    if (sb) {
+    if (res.ok() && sb) {
         // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
         _deduplicate_shared_buffer(sb);
     }
