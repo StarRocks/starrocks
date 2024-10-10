@@ -134,7 +134,7 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
                     }
 
                     // ignore full partition scan
-                    if (checkIsFullPartitionScan(predicates)) {
+                    if (checkIsFullPartitionScan(predicates, scanOperator.getOpType())) {
                         return rewritePhysicalScanOperator(scanOperator, false);
                     }
 
@@ -165,10 +165,13 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
             return usedColumns == totalColumns;
         }
 
-        private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
+        private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates, OperatorType operatorType) {
+            if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN || operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN) {
+                // For iceberg/delta lake we can't infer total partitions, so don't check here.
+                return false;
+            }
             if (scanOperatorPredicates.getIdToPartitionKey().size() <= 1) {
                 // for none-partition table, it has one partition id
-                // but delta lake's none-partition table, it has none partition id
                 return false;
             }
             return scanOperatorPredicates.getSelectedPartitionIds().size() ==
