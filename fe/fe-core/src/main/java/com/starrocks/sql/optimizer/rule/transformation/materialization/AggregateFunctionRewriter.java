@@ -34,6 +34,8 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
+
 /**
  * `AggregateFunctionRewriter` will try to rewrite some agg functions to some transformations so can be
  * better to be rewritten.
@@ -163,8 +165,7 @@ public class AggregateFunctionRewriter {
         if (rewritten == null || !(rewritten instanceof ColumnRefOperator)) {
             return null;
         }
-        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc,
-                (ColumnRefOperator) rewritten, false);
+        return getRollupAggregateFunc(aggFunc, (ColumnRefOperator) rewritten, false);
     }
 
     public Map<ColumnRefOperator, CallOperator> getNewColumnRefToAggFuncMap() {
