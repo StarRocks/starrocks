@@ -947,7 +947,13 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            profile.addChild(coord.buildQueryProfile(needMerge));
+            try {
+                RuntimeProfile runtimeProfile = coord.buildQueryProfile(needMerge);
+                profile.addChild(runtimeProfile);
+            } catch (Exception e) {
+                LOG.warn("build query runtime profile for query {} failed", executionId, e);
+                return;
+            }
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();
