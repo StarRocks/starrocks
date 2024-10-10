@@ -155,23 +155,11 @@ public class AggStateCombinatorTest {
         List<String> args = Lists.newArrayList();
         switch (funcName) {
             case FunctionSet.PERCENTILE_DISC:
-            case FunctionSet.LC_PERCENTILE_DISC:
             case FunctionSet.PERCENTILE_APPROX:
             case FunctionSet.PERCENTILE_CONT:
                 args.add(colTypes.get(argTypes.get(0)));
                 args.add("0.5");
                 break;
-            case FunctionSet.MANN_WHITNEY_U_TEST: {
-                args.add(colTypes.get(argTypes.get(0)));
-                args.add(colTypes.get(argTypes.get(1)));
-                if (argTypes.size() == 3) {
-                    args.add("'less'");
-                } else {
-                    args.add("'two-sided'");
-                    args.add("0");
-                }
-                break;
-            }
             case FunctionSet.DS_HLL_COUNT_DISTINCT: {
                 args.add(colTypes.get(argTypes.get(0)));
                 if (argTypes.size() == 2) {

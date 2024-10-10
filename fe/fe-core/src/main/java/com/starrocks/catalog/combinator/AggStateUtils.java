@@ -47,7 +47,6 @@ public class AggStateUtils {
     // Functions that only support numeric-like types(numeric/date/bool)
     public static final Set<String> ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L2 =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add(FunctionSet.LC_PERCENTILE_DISC)
                     .build();
     // Functions that only support numeric types
     public static final Set<String> ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L3 =

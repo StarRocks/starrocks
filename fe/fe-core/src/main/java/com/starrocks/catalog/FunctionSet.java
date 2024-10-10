@@ -766,7 +766,6 @@ public class FunctionSet {
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
                     .add(INTERSECT_COUNT)
-                    .add(LC_PERCENTILE_DISC)
                     .build();
 
     public FunctionSet() {
