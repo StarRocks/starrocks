@@ -467,9 +467,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null) {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
-                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                        throw new DdlException("Primary key table does not support storage medium cool down currently.");
-                    }
                     if (partitionInfo instanceof ListPartitionInfo) {
                         throw new DdlException("List partition table does not support storage medium cool down currently.");
                     }
@@ -482,8 +479,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                                     "does not support storage medium cool down currently.");
                         }
                         Column column = partitionColumns.get(0);
-                        if (!column.getType().getPrimitiveType().isDateType()) {
-                            throw new DdlException("Only support partition is date type for" +
+                        if (!column.getType().getPrimitiveType().isDateType() &&
+                                !column.getType().getPrimitiveType().isIntegerType()) {
+                            throw new DdlException("Only support partition is date/integer type for" +
                                     " storage medium cool down currently.");
                         }
                     }
