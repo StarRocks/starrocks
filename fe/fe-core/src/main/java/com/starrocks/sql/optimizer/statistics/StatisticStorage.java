@@ -51,6 +51,14 @@ public interface StatisticStorage {
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
 
+    /**
+     * Return partition-level column statistics, it may not exist
+     */
+    default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                 List<String> columns) {
+        return null;
+    }
+
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);
     }
