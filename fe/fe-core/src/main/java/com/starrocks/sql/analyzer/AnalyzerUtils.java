@@ -1336,7 +1336,7 @@ public class AnalyzerUtils {
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
-                            + "_" + partitionName.hashCode();
+                            + "_" + Integer.toHexString(partitionName.hashCode());
                 }
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
