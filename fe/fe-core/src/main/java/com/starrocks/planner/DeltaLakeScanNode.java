@@ -166,11 +166,15 @@ public class DeltaLakeScanNode extends ScanNode {
                     deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
 
             if (selectedPartitionCount == -1) {
-                // we have to consume all scan ranges to know how many partition been selected.
-                while (scanRangeSource.hasMoreOutput()) {
-                    scanRangeSource.getOutputs(1000);
+                if (scanRangeSource != null) {
+                    // we have to consume all scan ranges to know how many partition been selected.
+                    while (scanRangeSource.hasMoreOutput()) {
+                        scanRangeSource.getOutputs(1000);
+                    }
+                    selectedPartitionCount = scanRangeSource.selectedPartitionCount();
+                } else {
+                    selectedPartitionCount = 0;
                 }
-                selectedPartitionCount = scanRangeSource.selectedPartitionCount();
             }
 
             output.append(prefix).append(
