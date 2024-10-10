@@ -73,7 +73,7 @@ public class RestBaseAction extends BaseAction {
     protected static final String DB_KEY = "db";
     protected static final String TABLE_KEY = "table";
     protected static final String LABEL_KEY = "label";
-    protected static final String WAREHOUSE_KEY = "warehouse";
+    public static final String WAREHOUSE_KEY = "warehouse";
     protected static final String USER_KEY = "user";
 
     protected static final String PAGE_NUM_KEY = "page_num";
