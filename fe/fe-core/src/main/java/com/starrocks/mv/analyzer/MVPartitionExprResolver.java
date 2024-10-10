@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -234,9 +235,14 @@ public class MVPartitionExprResolver {
                 return null;
             }
 
-            FunctionCallExpr funcExpr = (FunctionCallExpr) expr;
-            String fnName = funcExpr.getFnName().getFunction();
-            int slotRefIdx = FN_NAMES_WITH_FIRST_SLOT.contains(fnName) ? 0 : 1;
+            int slotRefIdx;
+            if (expr instanceof CastExpr) {
+                slotRefIdx = 0;
+            } else {
+                FunctionCallExpr funcExpr = (FunctionCallExpr) expr;
+                String fnName = funcExpr.getFnName().getFunction();
+                slotRefIdx = FN_NAMES_WITH_FIRST_SLOT.contains(fnName) ? 0 : 1;
+            }
             Exprs eqs = visitExpr(context.withExpr(expr.getChild(slotRefIdx)));
             if (eqs == null) {
                 return null;
