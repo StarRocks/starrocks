@@ -1525,6 +1525,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+        MetaUtils.checkNotSupportCatalog(context.getCurrentCatalog(), "TRUNCATE");
         try {
             Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
