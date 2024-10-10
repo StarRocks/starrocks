@@ -2105,6 +2105,12 @@ public class SchemaChangeHandler extends AlterHandler {
             if (enableLoadProfile == olapTable.enableLoadProfile()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+            String baseCompactionForbiddenTimeRanges = properties.get(
+                    PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            if (baseCompactionForbiddenTimeRanges.equals(olapTable.getBaseCompactionForbiddenTimeRanges())) {
+                return;
+            }
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));

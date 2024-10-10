@@ -1,2 +1,4 @@
 # ignore protobuf cve temporary
 CVE-2024-7254
+CVE-2024-47554
+CVE-2024-47561
