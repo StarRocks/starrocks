@@ -903,6 +903,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 
+    @ConfField(mutable = true)
+    public static boolean lake_use_combined_txn_log = false;
+
     /**
      * The thrift server max worker threads
      */

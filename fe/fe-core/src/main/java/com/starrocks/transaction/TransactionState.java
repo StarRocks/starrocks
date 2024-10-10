@@ -257,6 +257,10 @@ public class TransactionState implements Writable {
     // error replica ids
     @SerializedName("er")
     private Set<Long> errorReplicas;
+
+    @SerializedName("ctl")
+    private boolean combinedTxnLog;
+
     private final CountDownLatch latch;
 
     // these states need not be serialized
@@ -979,6 +983,14 @@ public class TransactionState implements Writable {
 
     public void setWriteDurationMs(long writeDurationMs) {
         this.writeDurationMs = writeDurationMs;
+    }
+
+    public void setCombinedTxnLog(boolean combinedTxnLog) {
+        this.combinedTxnLog = combinedTxnLog;
+    }
+
+    public boolean isCombinedTxnLog() {
+        return combinedTxnLog;
     }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {

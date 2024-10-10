@@ -29,13 +29,14 @@ class Segment;
 class TabletSchema;
 class TabletMetadataPB;
 class TxnLogPB;
+class CombinedTxnLogPB;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-using CacheValue =
-        std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
-                     std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>, std::shared_ptr<Segment>>;
+using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
+                                std::shared_ptr<const CombinedTxnLogPB>, std::shared_ptr<const TabletSchema>,
+                                std::shared_ptr<const DelVector>, std::shared_ptr<Segment>>;
 
 class Metacache {
 public:
@@ -49,6 +50,8 @@ public:
 
     std::shared_ptr<const TxnLogPB> lookup_txn_log(std::string_view key);
 
+    std::shared_ptr<const CombinedTxnLogPB> lookup_combined_txn_log(std::string_view key);
+
     std::shared_ptr<const TabletSchema> lookup_tablet_schema(std::string_view key);
 
     std::shared_ptr<Segment> lookup_segment(std::string_view key);
@@ -60,6 +63,8 @@ public:
     void cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size);
 
     void cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log);
+
+    void cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log);
 
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 

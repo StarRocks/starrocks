@@ -15,16 +15,13 @@
 #include "exec/tablet_sink_index_channel.h"
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
-#include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -172,6 +169,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
     request.set_is_lake_tablet(_parent->_is_lake_table);
+    if (_parent->_is_lake_table) {
+        // If the OlapTableSink node is responsible for writing the txn log, then the tablet writer
+        // does not need to write the txn log again.
+        request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
+    }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
@@ -817,6 +819,9 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         if (tablet_ids.size() < 128) {
             tablet_ids.emplace_back(commit_info.tabletId);
         }
+    }
+    for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
+        _txn_logs.emplace_back(std::move(log));
     }
 
     if (!tablet_ids.empty()) {
