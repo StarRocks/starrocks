@@ -700,15 +700,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (1: mock_004)"));
+                "     - filter_id = 4, probe_expr = (80: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (24: mock_004)"));
+                "     - filter_id = 3, probe_expr = (62: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (1: mock_004)"));
+                "     - filter_id = 1, probe_expr = (116: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (24: mock_004)"));
+                "     - filter_id = 0, probe_expr = (98: mock_004)\n"));
 
     }
 
