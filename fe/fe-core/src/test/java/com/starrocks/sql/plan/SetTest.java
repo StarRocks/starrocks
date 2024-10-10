@@ -540,6 +540,7 @@ public class SetTest extends PlanTestBase {
                     "     TABLE: t0"));
         }
 
+<<<<<<< HEAD
         {
             String sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
             String plan = getFragmentPlan(sql);
@@ -548,6 +549,56 @@ public class SetTest extends PlanTestBase {
             Assert.assertTrue(plan.contains("  2:Project\n" +
                     "  |  <slot 4> : 1: v1 + 2: v2"));
         }
+=======
+        sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 4> : 1: v1 + 2: v2"));
+
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "7:SORT\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))\n" +
+                "  |  \n" +
+                "  0:UNION");
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by upper(x) limit 1,10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:TOP-N\n" +
+                "  |  order by: <slot 9> 9: upper ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 11\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 9> : upper(CAST(8: expr AS VARCHAR))");
+
+        // order by null literal
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "SORT");
+
+        // order by null literal with limit
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:EXCHANGE\n" +
+                "     limit: 10");
+
+        // order by null literal with limit offset
+        sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+                "     offset: 10\n" +
+                "     limit: 20");
+
+
+>>>>>>> bf39677961 ([BugFix] Fix UnionAll cannot process order by expression (#51647))
     }
     */
 
