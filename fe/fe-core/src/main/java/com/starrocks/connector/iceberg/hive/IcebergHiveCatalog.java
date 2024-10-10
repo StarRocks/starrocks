@@ -88,7 +88,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // The property is false by default, in such case, when we execute SHOW TABLES FROM CATALOG.DB,
         // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
         // database, timeout may happen.
-        copiedProperties.put(HiveCatalog.LIST_ALL_TABLES, "true");
+        copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }
