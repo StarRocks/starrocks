@@ -89,7 +89,21 @@ Usage: $0 <options>
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      -j                 build Backend parallel
+<<<<<<< HEAD
 
+=======
+     --output-compile-time 
+                        save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
+                        Turning this option on automatically disables ccache.
+     --without-tenann
+                        build without vector index tenann library
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+     --without-avx2     build Backend without avx2(instruction)    
+     -h,--help          Show this help message
+>>>>>>> 8e82fd1307 ([Enhancement] A build machine that supports the AVX2 instruction set compiles a package without the AVX2 instruction set. (#51673))
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
@@ -115,7 +129,16 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'without-gcov' \
   -l 'use-staros' \
+<<<<<<< HEAD
   -o 'j:' \
+=======
+  -l 'enable-shared-data' \
+  -l 'output-compile-time' \
+  -l 'without-tenann' \
+  -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
+  -l 'without-avx2' \
+>>>>>>> 8e82fd1307 ([Enhancement] A build machine that supports the AVX2 instruction set compiles a package without the AVX2 instruction set. (#51673))
   -l 'help' \
   -- "$@")
 
@@ -204,6 +227,17 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+<<<<<<< HEAD
+=======
+            --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
+>>>>>>> 8e82fd1307 ([Enhancement] A build machine that supports the AVX2 instruction set compiles a package without the AVX2 instruction set. (#51673))
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
