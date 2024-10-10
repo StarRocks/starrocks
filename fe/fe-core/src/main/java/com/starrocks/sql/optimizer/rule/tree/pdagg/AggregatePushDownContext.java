@@ -38,6 +38,7 @@ public class AggregatePushDownContext {
     // aggregate function.
     public final Map<CallOperator, CallOperator> aggToPartialAggMap = Maps.newHashMap();
     public final Map<CallOperator, CallOperator> aggToFinalAggMap = Maps.newHashMap();
+    public final Map<CallOperator, CallOperator> aggToOrigAggMap = Maps.newHashMap();
     // Query's aggregate call operator to push down aggregate call operator mapping,
     // those two operators are not the same so record it to be used later.
     public final Map<ColumnRefOperator, CallOperator> aggColRefToPushDownAggMap = Maps.newHashMap();
@@ -74,6 +75,11 @@ public class AggregatePushDownContext {
                                        CallOperator finalStageAgg) {
         aggToPartialAggMap.put(aggFunc, partialStageAgg);
         aggToFinalAggMap.put(aggFunc, finalStageAgg);
+    }
+
+    public void registerOrigAggRewriteInfo(CallOperator aggFunc,
+                                       CallOperator origAgg) {
+        aggToOrigAggMap.put(aggFunc, origAgg);
     }
 
     /**
