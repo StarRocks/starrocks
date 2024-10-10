@@ -2607,7 +2607,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.histogramStatement() != null) {
             analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
         }
-        boolean isSample = analyzeType == StatsConstants.AnalyzeType.SAMPLE;
+        boolean isSample = context.FULL() == null;
 
         if (context.DATABASE() != null) {
             return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), isSample,
