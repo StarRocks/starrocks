@@ -102,6 +102,46 @@ struct HdfsScanStats {
 
 class HdfsParquetProfile;
 
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
+
+    ~CountedSeekableInputStream() override = default;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        _stats->bytes_read += size;
+        return _stream->read_at_fully(offset, data, size);
+    }
+
+    StatusOr<std::string_view> peek(int64_t count) override {
+        auto st = _stream->peek(count);
+        return st;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, out, count));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    HdfsScanStats* _stats;
+};
+
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
@@ -240,7 +280,7 @@ struct HdfsScannerContext {
         return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -367,6 +407,8 @@ public:
     virtual Status reinterpret_status(const Status& st);
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
+    void do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name,
+                                      HdfsScanStats& app_stats, HdfsScanStats& fs_stats);
 
 protected:
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
