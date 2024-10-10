@@ -1293,4 +1293,8 @@ public class DefaultCoordinator extends Coordinator {
     private void execShortCircuit() throws Exception {
         shortCircuitExecutor.exec();
     }
+
+    public ResultReceiver getReceiver() {
+        return receiver;
+    }
 }

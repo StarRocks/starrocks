@@ -56,6 +56,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendThriftServer;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -161,15 +162,20 @@ public class StarRocksFE {
             // 1. QeService for MySQL Server
             // 2. FrontendThriftServer for Thrift Server
             // 3. HttpServer for HTTP Server
+            // 4. ArrowFlightSqlService for Arrow Flight Sql Server
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
                     ExecuteEnv.getInstance().getScheduler());
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
+            ArrowFlightSqlService arrowFlightSqlService =
+                    new ArrowFlightSqlService(Config.arrow_flight_port, Config.arrow_flight_be_port);
+
             httpServer.setup();
 
             frontendThriftServer.start();
             httpServer.start();
             qeService.start();
+            arrowFlightSqlService.start();
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
@@ -325,7 +331,7 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            
+
             BDBTool bdbTool = new BDBTool(BDBEnvironment.getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);
