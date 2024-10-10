@@ -67,7 +67,7 @@ public class HttpResultSender {
     }
 
     // for select
-    public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan) throws Exception {
+    public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan, String sql) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
         // if some data already sent to client, when exception occurs,we just close the channel
@@ -84,7 +84,7 @@ public class HttpResultSender {
         while (true) {
             batch = coord.getNext();
             if (batch.getBatch() != null) {
-                writeResultBatch(batch.getBatch(), nettyChannel, coord);
+                writeResultBatch(batch.getBatch(), nettyChannel, coord, sql);
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
@@ -117,7 +117,8 @@ public class HttpResultSender {
     }
 
     // BE already transferred results into json format, FE just need to Forward json objects to the client
-    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord) {
+    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord,
+                                  String sql) {
         int rowsSize = resultBatch.getRowsSize();
         int count = 0;
         for (ByteBuffer row : resultBatch.getRows()) {
@@ -126,7 +127,8 @@ public class HttpResultSender {
                 // if channel is closed, cancel query
                 if (!channel.channel().isActive()) {
                     coord.cancel("channel is closed, cancel query");
-                    LOG.warn("http query:channel is closed, cancel query");
+                    LOG.warn("http query:channel is closed, cancel query, query id:{}, query:{}", coord.getQueryId(),
+                            sql);
                     return;
                 }
                 count++;
