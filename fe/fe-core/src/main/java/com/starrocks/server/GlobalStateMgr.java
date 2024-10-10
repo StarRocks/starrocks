@@ -900,6 +900,10 @@ public class GlobalStateMgr {
         return statisticStorage;
     }
 
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
+    }
+
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
     }
