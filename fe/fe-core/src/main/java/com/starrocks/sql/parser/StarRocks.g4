@@ -199,6 +199,7 @@ statement
     | showUserPropertyStatement
     | showVariablesStatement
     | showWarningStatement
+    | showCatalogRecycleBinStatement
     | helpStatement
 
     // authz Statement
@@ -1560,6 +1561,10 @@ showVariablesStatement
 
 showWarningStatement
     : SHOW (WARNINGS | ERRORS) (limitElement)?
+    ;
+
+showCatalogRecycleBinStatement
+    : SHOW CATALOG RECYCLE BIN
     ;
 
 helpStatement
