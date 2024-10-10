@@ -1,0 +1,11 @@
+--- HeartbeatService_types.cpp	2024-10-10 23:29:19
++++ HeartbeatService_types.cpp.new	2024-10-10 23:31:19
+@@ -402,7 +402,7 @@
+   out << "network_address=" << to_string(network_address);
+   out << ", " << "cluster_id="; (__isset.cluster_id ? (out << to_string(cluster_id)) : (out << "<null>"));
+   out << ", " << "epoch=" << to_string(epoch);
+-  out << ", " << "token="; (__isset.token ? (out << to_string(token)) : (out << "<null>"));
++  out << ", " << "token="; (__isset.token ? (out << "<hidden>") : (out << "<null>"));
+   out << ", " << "backend_ip="; (__isset.backend_ip ? (out << to_string(backend_ip)) : (out << "<null>"));
+   out << ", " << "http_port="; (__isset.http_port ? (out << to_string(http_port)) : (out << "<null>"));
+   out << ", " << "heartbeat_flags="; (__isset.heartbeat_flags ? (out << to_string(heartbeat_flags)) : (out << "<null>"));

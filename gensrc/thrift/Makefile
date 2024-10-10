@@ -64,3 +64,8 @@ ${BUILD_DIR}/gen_cpp/%_types.cpp: ${CURDIR}/%.thrift | ${BUILD_DIR}/gen_cpp
 ${BUILD_DIR}/gen_cpp/StatusCode_types.cpp: ${CURDIR}/StatusCode.thrift | ${BUILD_DIR}/gen_cpp
 	${THRIFT} ${THRIFT_CPP_ARGS} $<
 	patch -p0 -d ${BUILD_DIR}/gen_cpp < StatusCode_types.diff 2>&1 1>/dev/null
+
+# Use patch to avoid token print in BE log.
+${BUILD_DIR}/gen_cpp/HeartbeatService_types.cpp: ${CURDIR}/HeartbeatService.thrift | ${BUILD_DIR}/gen_cpp
+	${THRIFT} ${THRIFT_CPP_ARGS} $<
+	patch -p0 -d ${BUILD_DIR}/gen_cpp < HeartbeatService_types.diff 2>&1 1>/dev/null
