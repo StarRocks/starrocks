@@ -720,4 +720,30 @@ public class StarOSAgentTest {
         Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
     }
+<<<<<<< HEAD
+=======
+
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
+    }
+
+    @Test
+    public void testListShard() throws StarClientException, DdlException {
+        ShardInfo shardInfo = ShardInfo.newBuilder().setShardId(1000L).build();
+        List<List<ShardInfo>> infos = new ArrayList<>();
+        infos.add(Lists.newArrayList(shardInfo));
+        new Expectations() {
+            {
+                client.listShard("1", Lists.newArrayList(999L), StarOSAgent.DEFAULT_WORKER_GROUP_ID, true);
+                result = infos;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        List<Long> ids = starosAgent.listShard(999L);
+        Assert.assertEquals(1, ids.size());
+        Assert.assertEquals((Long) 1000L, (Long) ids.get(0));
+    }
+>>>>>>> f483906198 ([Enhancement] Staros agent listShard does not need replica info (#51628))
 }
