@@ -74,7 +74,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    protected List<StatisticsCollectJob> runJobs() {
+    public List<StatisticsCollectJob> runJobs() {
         List<StatisticsCollectJob> result = Lists.newArrayList();
 
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =

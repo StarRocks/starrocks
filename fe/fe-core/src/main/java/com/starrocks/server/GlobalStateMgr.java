@@ -974,6 +974,10 @@ public class GlobalStateMgr {
         return getCurrentState().statisticStorage;
     }
 
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
+    }
+
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
     }
