@@ -23,6 +23,7 @@ import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,7 +69,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_LOADS_HISTORY_REPLICATION_NUM =
-            "ALTER TABLE %s SET ('default.replication_num'='3')";
+            "ALTER TABLE %s SET ('default.replication_num'='%d')";
 
     private static final String LOADS_HISTORY_SYNC =
             "INSERT INTO %s " +
@@ -78,10 +79,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "AND load_finish_time > ( " +
             "SELECT COALESCE(MAX(load_finish_time), '0001-01-01 00:00:00') " +
             "FROM %s);";
-    
+
     private boolean databaseExists = false;
     private boolean tableExists = false;
-    private boolean tableCorrected = false;
 
     public LoadsHistorySyncer() {
         super("Load history syncer", Config.loads_history_sync_interval_second * 1000L);
@@ -97,18 +97,22 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public static boolean correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
+        if (RunMode.isSharedDataMode()) {
+            return true;
+        }
+        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getRetainedBackendNumber();
+        int expectedReplication = Integer.max(1, Integer.min(Config.default_replication_num, numBackends));
         int replica = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .mayGetTable(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
-        if (numBackends < 3) {
-            LOG.info("not enough backends in the cluster, expected 3 but got {}", numBackends);
-            return false;
-        }
-        if (replica < 3) {
-            String sql = SQLBuilder.buildAlterTableSql();
+        // For scale-out, we may need to extend it to more replicas
+        // For scale-in, we may need to drop replicas
+        if (replica != expectedReplication) {
+            String sql = SQLBuilder.buildAlterTableSql(expectedReplication);
             RepoExecutor.getInstance().executeDDL(sql);
+            LOG.info("changed table {} replication_num from {} to {}",
+                    LOADS_HISTORY_TABLE_NAME, replica, expectedReplication);
         } else {
             LOG.info("table {} already has {} replicas, no need to alter replication_num",
                     LOADS_HISTORY_TABLE_NAME, replica);
@@ -129,10 +133,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             LOG.info("table created: " + LOADS_HISTORY_TABLE_NAME);
             tableExists = true;
         }
-        if (!tableCorrected && correctTable()) {
-            LOG.info("table corrected: " + LOADS_HISTORY_TABLE_NAME);
-            tableCorrected = true;
-        }
+
+        correctTable();
 
         if (getInterval() != Config.loads_history_sync_interval_second * 1000L) {
             setInterval(Config.loads_history_sync_interval_second * 1000L);
@@ -171,9 +173,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                     CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME), replica);
         }
 
-        public static String buildAlterTableSql() {
+        public static String buildAlterTableSql(int replica) {
             return String.format(CORRECT_LOADS_HISTORY_REPLICATION_NUM,
-                    CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME));
+                    CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME), replica);
         }
 
         public static String buildSyncSql() {
