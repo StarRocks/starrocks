@@ -17,6 +17,7 @@
 #include <chrono>
 #include <thread>
 
+#include "compaction_manager.h"
 #include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
@@ -209,6 +210,19 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
                 << ", not RUNNING";
         return false;
+    }
+
+    // check if the table base compaction is disabled
+    if (candidate.type == CompactionType::BASE_COMPACTION &&
+        _table_to_disable_deadline_map.find(tablet->tablet_meta()->table_id()) !=
+                _table_to_disable_deadline_map.end()) {
+        int64_t deadline = _table_to_disable_deadline_map[tablet->tablet_meta()->table_id()];
+        if (deadline > 0 && UnixSeconds() < deadline) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because table is disabled";
+            return false;
+        } else {
+            _table_to_disable_deadline_map.erase(tablet->tablet_meta()->table_id());
+        }
     }
 
     int64_t last_failure_ts = 0;
@@ -595,6 +609,12 @@ int64_t CompactionManager::cumulative_compaction_concurrency() {
 
 int CompactionManager::get_waiting_task_num() {
     return _compaction_candidates.size();
+}
+
+void CompactionManager::disable_table_compaction(int64_t table_id, int64_t deadline) {
+    std::lock_guard lg(_candidates_mutex);
+    VLOG(2) << "disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
+    _table_to_disable_deadline_map[table_id] = deadline;
 }
 
 } // namespace starrocks
