@@ -14,6 +14,7 @@ import TabItem from '@theme/TabItem';
 
 - [FE 节点无法启动](#fe-节点无法启动)
 - [FE 节点无法提供服务](#fe-节点无法提供服务)
+- [基于备份在新 FE 节点恢复元数据](#基于备份在新-fe-节点恢复元数据)
 
 请排查您所遇到的问题，并按照对应解决方案进行操作。建议按照文中推荐的操作执行。
 
@@ -538,7 +539,7 @@ jstat -gcutil pid 1000 1000
 
     </TabItem>
 
-    <TabItem value="oberserver" label="从 Observer 节点恢复" >
+    <TabItem value="observer" label="从 Observer 节点恢复" >
 
    如果元数据最新的节点为 Observer，则执行以下操作：
 
@@ -663,6 +664,42 @@ jstat -gcutil pid 1000 1000
    ```
 
 当所有节点都重新添加到集群后，元数据恢复成功。
+
+## 基于备份在新 FE 节点恢复元数据
+
+如果要使用元数据备份启动新的 FE 节点，请按照以下步骤操作：
+
+1. 将备份的元数据路径 `meta_dir` 复制至新的 FE 节点。
+2. 在该 FE 节点的配置文件中添加配置项 `bdbje_reset_election_group` 为 `true`。
+
+   ```Properties
+   bdbje_reset_election_group = true
+   ````
+
+3. 启动该 FE 节点。
+
+   ```Bash
+   # 将 <fe_ip> 替换为新 FE 节点的 IP 地址（priority_networks），
+   # 并将 <fe_edit_log_port>（默认：9010）替换为新 FE 节点的 edit_log_port。
+   ./fe/bin/start_fe.sh --helper <fe_ip>:<fe_edit_log_port> --daemon
+   ```
+
+4. 查看当前节点是否为 Leader 节点。
+
+   ```SQL
+   SHOW FRONTENDS;
+   ```
+
+   如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。确保返回的是当前 FE 节点的 IP 地址。
+
+5. 如果数据和元数据完整，且该节点的角色是 Leader 后，需要删除之前添加的配置项 `bdbje_reset_election_group` 并重新启动节点。
+6. 现在，您已成功通过元数据备份启动了新的 Leader FE 节点。您可以使用新 Leader FE 节点作为 Helper 添加 Follower 节点。
+
+   ```Bash
+   # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
+   # 并将 <leader_edit_log_port>（默认：9010）替换为 Leader FE 节点的 edit_log_port。
+   ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
+   ```
 
 ## 元数据恢复相关配置
 
