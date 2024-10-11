@@ -15,6 +15,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
 import java.util.Map;
@@ -31,6 +32,21 @@ public class StatsConstants {
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
     public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
     public static final int STATISTIC_EXTERNAL_QUERY_V2_VERSION = 8;
+    public static final int STATISTIC_PARTITION_VERSION = 11;
+
+    public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
+            ImmutableSet.<Integer>builder()
+                    .add(STATISTIC_DATA_VERSION)
+                    .add(STATISTIC_DICT_VERSION)
+                    .add(STATISTIC_HISTOGRAM_VERSION)
+                    .add(STATISTIC_TABLE_VERSION)
+                    .add(STATISTIC_BATCH_VERSION)
+                    .add(STATISTIC_EXTERNAL_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_VERSION)
+                    .add(STATISTIC_EXTERNAL_HISTOGRAM_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_V2_VERSION)
+                    .add(STATISTIC_PARTITION_VERSION)
+                    .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";

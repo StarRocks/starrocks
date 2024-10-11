@@ -304,6 +304,12 @@ public class StatisticExecutor {
         return executeStatisticDQL(context, sql);
     }
 
+    public List<TStatisticData> queryPartitionLevelColumnNDV(ConnectContext context, long tableId,
+                                                             List<Long> partitions, List<String> columns) {
+        String sql = StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(tableId, partitions, columns);
+        return executeStatisticDQL(context, sql);
+    }
+
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
@@ -316,15 +322,7 @@ public class StatisticExecutor {
             return statistics;
         }
 
-        if (version == StatsConstants.STATISTIC_DATA_VERSION
-                || version == StatsConstants.STATISTIC_DICT_VERSION
-                || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
-                || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION) {
+        if (StatsConstants.STATISTIC_SUPPORTED_VERSION.contains(version)) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
