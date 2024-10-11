@@ -529,6 +529,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_BUCKET_SIZE:
             case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
             case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:

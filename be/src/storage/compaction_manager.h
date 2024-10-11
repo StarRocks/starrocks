@@ -128,6 +128,8 @@ public:
 
     int get_waiting_task_num();
 
+    void disable_table_compaction(int64_t table_id, int64_t deadline);
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
@@ -153,6 +155,7 @@ private:
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
+    std::unordered_map<int64_t, int64_t> _table_to_disable_deadline_map;
     std::unique_ptr<ThreadPool> _update_candidate_pool;
     std::mutex _dispatch_mutex;
     std::thread _dispatch_update_candidate_thread;
