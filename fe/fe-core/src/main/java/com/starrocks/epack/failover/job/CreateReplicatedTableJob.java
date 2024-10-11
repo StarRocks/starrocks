@@ -293,6 +293,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         Map<String, String> properties = table.getProperties();
         // labels.location is not supported now
         properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+        // colocate_with is not supported now
+        properties.remove(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
         return properties;
     }
 
