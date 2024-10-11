@@ -304,6 +304,10 @@ public class AnalyzeMgr implements Writable {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
 
+    public BasicStatsMeta getTableBasicStatsMeta(long tableId) {
+        return basicStatsMetaMap.get(tableId);
+    }
+
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
         return basicStatsMetaMap;
     }
