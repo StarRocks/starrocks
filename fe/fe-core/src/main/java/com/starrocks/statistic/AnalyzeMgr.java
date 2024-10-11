@@ -332,6 +332,17 @@ public class AnalyzeMgr implements Writable {
         return externalBasicStatsMetaMap;
     }
 
+    public HistogramStatsMeta getHistogramMeta(long tableId, String column) {
+        return histogramStatsMetaMap.get(Pair.create(tableId, column));
+    }
+
+    public List<HistogramStatsMeta> getHistogramMetaByTable(long tableId) {
+        return histogramStatsMetaMap.entrySet().stream()
+                .filter(x -> x.getKey().first == tableId)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+    }
+
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
         histogramStatsMetaMap.put(
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);

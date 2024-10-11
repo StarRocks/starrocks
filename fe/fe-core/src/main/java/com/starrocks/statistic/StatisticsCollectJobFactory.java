@@ -29,6 +29,7 @@ import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,6 +111,8 @@ public class StatisticsCollectJobFactory {
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
             return new SampleStatisticsCollectJob(db, table, columnNames, columnTypes,
                     StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
+        } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            return new HistogramStatisticsCollectJob(db, table, columnNames, columnTypes, scheduleType, properties);
         } else {
             if (partitionIdList == null) {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
@@ -350,18 +354,39 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
         double healthy = 0;
+        List<HistogramStatsMeta> histogramStatsMetas = analyzeMgr.getHistogramMetaByTable(table.getId());
+        boolean useBasicStats = job.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE ||
+                job.getAnalyzeType() == StatsConstants.AnalyzeType.FULL;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        LocalDateTime statsUpdateTime = LocalDateTime.MIN;
+        boolean isInitJob = true;
+        if (useBasicStats && basicStatsMeta != null) {
+            statsUpdateTime = basicStatsMeta.getUpdateTime();
+            isInitJob = basicStatsMeta.isInitJobMeta();
+        } else if (!useBasicStats && CollectionUtils.isNotEmpty(histogramStatsMetas)) {
+            statsUpdateTime =
+                    histogramStatsMetas.stream().map(HistogramStatsMeta::getUpdateTime)
+                            .min(Comparator.naturalOrder())
+                            .get();
+            isInitJob = histogramStatsMetas.stream().anyMatch(HistogramStatsMeta::isInitJobMeta);
+        }
+
         if (basicStatsMeta != null) {
-            if (basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
+            // 1. if the table has no update after the stats collection
+            if (useBasicStats && basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
                 LOG.debug("statistics job doesn't work on non-update table: {}, " +
                                 "last update time: {}, last collect time: {}",
                         table.getName(), tableUpdateTime, basicStatsMeta.getUpdateTime());
                 return;
             }
+            if (!useBasicStats && !isInitJob && statsUpdateTime.isAfter(tableUpdateTime)) {
+                return;
+            }
 
+            // 2. if the stats collection is too frequent
             long sumDataSize = 0;
             for (Partition partition : table.getPartitions()) {
                 LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
@@ -370,22 +395,25 @@ public class StatisticsCollectJobFactory {
                 }
             }
 
-            long defaultInterval = sumDataSize > Config.statistic_auto_collect_small_table_size ?
+            long defaultInterval =
+                    job.getAnalyzeType() == StatsConstants.AnalyzeType.HISTOGRAM ?
+                            Config.statistic_auto_collect_histogram_interval :
+                            (sumDataSize > Config.statistic_auto_collect_small_table_size ?
                     Config.statistic_auto_collect_large_table_interval :
-                    Config.statistic_auto_collect_small_table_interval;
+                                    Config.statistic_auto_collect_small_table_interval);
 
             long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
 
-            if (!basicStatsMeta.isInitJobMeta() &&
-                    basicStatsMeta.getUpdateTime().plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+            if (!isInitJob && statsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
                 return;
             }
 
+            // 3. if the table stats is healthy enough (only a small portion has been updated)
             double statisticAutoCollectRatio =
                     job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
                             Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
@@ -397,7 +425,8 @@ public class StatisticsCollectJobFactory {
                         table.getName(), healthy, statisticAutoCollectRatio);
                 return;
             } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
-                if (sumDataSize > Config.statistic_auto_collect_small_table_size) {
+                if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM &&
+                        sumDataSize > Config.statistic_auto_collect_small_table_size) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
@@ -414,6 +443,8 @@ public class StatisticsCollectJobFactory {
                 job.getAnalyzeType());
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
             createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes);
+        } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            createHistogramJob(allTableJobMap, job, db, table, columnNames, columnTypes);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
             if (basicStatsMeta == null || basicStatsMeta.isInitJobMeta()) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columnNames, columnTypes);
@@ -432,6 +463,14 @@ public class StatisticsCollectJobFactory {
                                              List<Type> columnTypes) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
+        allTableJobMap.add(sample);
+    }
+
+    private static void createHistogramJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
+                                           Database db, Table table, List<String> columnNames,
+                                           List<Type> columnTypes) {
+        StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
+                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties());
         allTableJobMap.add(sample);
     }
 

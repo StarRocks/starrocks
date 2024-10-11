@@ -31,7 +31,7 @@ public class AnalyzeStmt extends StatementBase {
     private List<Expr> columns;
     private List<String> columnNames = Lists.newArrayList();
     private final boolean isSample;
-    private final boolean isAsync;
+    private boolean isAsync;
     private boolean isExternal = false;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
@@ -74,6 +74,10 @@ public class AnalyzeStmt extends StatementBase {
 
     public boolean isAsync() {
         return isAsync;
+    }
+
+    public void setIsAsync(boolean value) {
+        this.isAsync = value;
     }
 
     public Map<String, String> getProperties() {

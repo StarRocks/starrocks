@@ -409,8 +409,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                properties);
+                StatsConstants.ScheduleType.ONCE, properties);
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
