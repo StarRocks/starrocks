@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -37,23 +39,7 @@ using ColumnPtr = std::shared_ptr<Column>;
 
 class FunctionContext {
 public:
-    struct TypeDesc {
-        ::starrocks::LogicalType type = ::starrocks::TYPE_NULL;
-
-        /// Only valid if type == TYPE_DECIMAL
-        int precision = 0;
-        int scale = 0;
-
-        /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
-        int len = 0;
-
-        // only valid if type is nested type
-        // array's element: children[0].
-        // map's key: children[0]; map's value: children[1].
-        // struct's types: keep order with field_names.
-        std::vector<TypeDesc> children;
-        std::vector<std::string> field_names;
-    };
+    using TypeDesc = TypeDescriptor;
 
     enum FunctionStateScope {
         /// Indicates that the function state for this FunctionContext's UDF is shared across

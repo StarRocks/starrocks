@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -137,6 +138,10 @@ public class Function implements Writable {
     @SerializedName(value = "checksum")
     protected String checksum = "";
 
+    // aggStateDesc is used for combinator to generate the nested aggregated function.
+    @SerializedName(value = "aggStateDesc")
+    protected AggStateDesc aggStateDesc;
+
     // Function id, every function has a unique id. Now all built-in functions' id is 0
     private long id = 0;
     // User specified function name e.g. "Add"
@@ -229,6 +234,7 @@ public class Function implements Writable {
         couldApplyDictOptimize = other.couldApplyDictOptimize;
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
+        aggStateDesc = other.aggStateDesc;
     }
 
     public FunctionName getFunctionName() {
@@ -345,6 +351,10 @@ public class Function implements Writable {
         return isPolymorphic;
     }
 
+    public void setPolymorphic(boolean isPolymorphic) {
+        this.isPolymorphic = isPolymorphic;
+    }
+
     public boolean isMetaFunction() {
         return isMetaFunction;
     }
@@ -420,6 +430,14 @@ public class Function implements Writable {
 
     public void setCouldApplyDictOptimize(boolean couldApplyDictOptimize) {
         this.couldApplyDictOptimize = couldApplyDictOptimize;
+    }
+
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
     }
 
     // Compares this to 'other' for mode.
@@ -698,6 +716,9 @@ public class Function implements Writable {
         if (!checksum.isEmpty()) {
             fn.setChecksum(checksum);
         }
+        if (aggStateDesc != null) {
+            fn.setAgg_state_desc(aggStateDesc.toThrift());
+        }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
     }
@@ -957,5 +978,4 @@ public class Function implements Writable {
 
         return this;
     }
-
 }

@@ -580,5 +580,4 @@ void HyperLogLog::_merge_registers(uint8_t* other_registers) {
     }
 #endif
 }
-
 } // namespace starrocks
