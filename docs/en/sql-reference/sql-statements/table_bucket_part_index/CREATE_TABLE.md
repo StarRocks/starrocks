@@ -601,8 +601,7 @@ To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.m
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>",
-    "enable_async_write_back" = "{ true | false }"
+    "datacache.partition_duration" = "<string_value>"
 )
 ```
 
@@ -623,10 +622,20 @@ PROPERTIES (
   >
   > This property is available only when `datacache.enable` is set to `true`.
 
+<<<<<<< HEAD
 - `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
 
   - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
   - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
+=======
+#### Set fast schema evolution
+
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+  > **NOTE**
+  >
+  > - This parameter is supported for shared-nothing clusters since v3.2.0, and shared-data clusters since v3.3.0.
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter `enable_fast_schema_evolution`.
+>>>>>>> 1992f75242 ([Doc] Remove enable_async_write_back (#51793))
 
 ## Examples
 
