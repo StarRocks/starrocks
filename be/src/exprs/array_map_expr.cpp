@@ -28,7 +28,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
 #include "common/statusor.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
@@ -116,8 +115,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                     offsets_column->append(offset);
                 }
             } else {
-                data_column->empty_null_in_complex_column(result_null_column->get_data(),
-                                                          array_column->offsets().get_data());
+                if (result_null_column != nullptr) {
+                    data_column->empty_null_in_complex_column(result_null_column->get_data(),
+                                                              array_column->offsets().get_data());
+                }
                 elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
             }
         }

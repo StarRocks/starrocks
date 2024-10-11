@@ -2054,6 +2054,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
+    @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
+    public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
@@ -2074,6 +2077,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
+
+    @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
+            "we would use sample statistics instead of full statistics")
+    public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
     /**
      * default bucket size of histogram statistics

@@ -12,14 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.sql.optimizer.statistics;
 
-#include "util/phmap/phmap.h"
+import com.google.common.collect.Maps;
 
-namespace starrocks {
+import java.util.Map;
 
-using AggDataPtr = uint8_t*;
-using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr>;
-using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr>;
+/**
+ * Partition-level statistics
+ */
+public class PartitionStats {
+    public final Map<Long, Double> distinctCount;
 
-} // namespace starrocks
+    public PartitionStats() {
+        this.distinctCount = Maps.newHashMap();
+    }
+
+    public PartitionStats(Map<Long, Double> distinctCount) {
+        this.distinctCount = distinctCount;
+    }
+
+    public Map<Long, Double> getDistinctCount() {
+        return distinctCount;
+    }
+}

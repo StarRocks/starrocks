@@ -1200,7 +1200,7 @@ public class StmtExecutor {
 
         RowBatch batch;
         if (context instanceof HttpConnectContext) {
-            batch = httpResultSender.sendQueryResult(coord, execPlan);
+            batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1440,8 +1440,7 @@ public class StmtExecutor {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(),
-                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
@@ -2123,6 +2122,7 @@ public class StmtExecutor {
             return;
         }
 
+        DmlType dmlType = DmlType.fromStmt(stmt);
         stmt.getTableName().normalization(context);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
@@ -2141,8 +2141,7 @@ public class StmtExecutor {
                     "explain analyze only supports insert into olap native table");
         }
 
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
-                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+        if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
             handleInsertOverwrite((InsertStmt) parsedStmt);
             return;
@@ -2535,8 +2534,8 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
-                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtJobTransactionFinish(txnState, database,
-                        targetTable);
+                GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                        .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
         }
 

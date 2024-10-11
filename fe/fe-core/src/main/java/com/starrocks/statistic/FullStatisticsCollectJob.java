@@ -45,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,20 @@ import java.util.Map;
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
 
+    //| table_id       | bigint           | NO   | true  | <null>  |       |
+    //| partition_id   | bigint           | NO   | true  | <null>  |       |
+    //| column_name    | varchar(65530)   | NO   | true  | <null>  |       |
+    //| db_id          | bigint           | NO   | false | <null>  |       |
+    //| table_name     | varchar(65530)   | NO   | false | <null>  |       |
+    //| partition_name | varchar(65530)   | NO   | false | <null>  |       |
+    //| row_count      | bigint           | NO   | false | <null>  |       |
+    //| data_size      | bigint           | NO   | false | <null>  |       |
+    //| ndv            | hll              | NO   | false |         |       |
+    //| null_count     | bigint           | NO   | false | <null>  |       |
+    //| max            | varchar(1048576) | NO   | false | <null>  |       |
+    //| min            | varchar(1048576) | NO   | false | <null>  |       |
+    //| update_time    | datetime         | NO   | false | <null>  |       |
+    private static final String TABLE_NAME = "column_statistics";
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
@@ -62,6 +77,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
             " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+    private static final String OVERWRITE_PARTITION_TEMPLATE =
+            "INSERT INTO " + TABLE_NAME + "\n" +
+                    "SELECT " +
+                    "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
+                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
+                    "FROM " + TABLE_NAME + "\n" +
+                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
+    private static final String DELETE_PARTITION_TEMPLATE =
+            "DELETE FROM " + TABLE_NAME + "\n" +
+                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
 
     private final List<Long> partitionIdList;
 
@@ -313,6 +338,27 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+    public static List<String> buildOverwritePartitionSQL(long tableId, long sourcePartitionId,
+                                                          long targetPartitionId) {
+        List<String> result = Lists.newArrayList();
+
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", tableId);
+        context.put("targetPartitionId", sourcePartitionId);
+        context.put("sourcePartitionId", targetPartitionId);
+        {
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
+            result.add(sw.toString());
+        }
+        {
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", DELETE_PARTITION_TEMPLATE);
+            result.add(sw.toString());
+        }
+        return result;
     }
 
     @Override

@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+
 import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
@@ -11,6 +13,8 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 # BE Configuration
 
 <BEConfigMethod />
+
+<CNConfigMethod />
 
 
 ## View BE configuration items
@@ -3710,11 +3714,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
 <!--
