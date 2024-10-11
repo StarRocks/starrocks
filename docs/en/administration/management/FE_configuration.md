@@ -4942,6 +4942,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
+##### query_detail_explain_level
+
+- Default: COSTS
+- Type: String
+- Unit: -
+- Is mutable: true
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
+
 <!--
 ##### max_varchar_length
 
