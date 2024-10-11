@@ -84,8 +84,10 @@ public class DataCacheSelectExecutor {
         connectContext.setSessionVariable(sessionVariableBackup);
 
         Preconditions.checkNotNull(metrics, "Failed to retrieve cache select metrics");
+        // Don't update datacache metrics after cache select, because of datacache instance still not unified.
+        // Here update will display wrong metrics in show backends/compute nodes
         // update backend's datacache metrics after cache select
-        updateBackendDataCacheMetrics(metrics);
+        // updateBackendDataCacheMetrics(metrics);
         return metrics;
     }
 
