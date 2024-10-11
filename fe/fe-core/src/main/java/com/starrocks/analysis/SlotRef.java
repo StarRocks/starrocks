@@ -177,6 +177,10 @@ public class SlotRef extends Expr {
         this.isBackQuoted = isBackQuoted;
     }
 
+    public boolean isBackQuoted() {
+        return isBackQuoted;
+    }
+
     public QualifiedName getQualifiedName() {
         return qualifiedName;
     }
@@ -288,7 +292,7 @@ public class SlotRef extends Expr {
         if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + colName + "`";
         } else if (label != null) {
-            if (isBackQuoted) {
+            if (isBackQuoted && !(label.startsWith("`") && label.endsWith("`"))) {
                 sb.append("`").append(label).append("`");
                 return sb.toString();
             } else {

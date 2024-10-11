@@ -137,6 +137,9 @@ public class ColumnIdExpr {
             if (node.getTblNameWithoutAnalyzed() != null) {
                 return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnId().getId();
             } else {
+                if (node.isBackQuoted()) {
+                    return "`" + node.getColumnId().getId() + "`";
+                }
                 return node.getColumnId().getId();
             }
         }
