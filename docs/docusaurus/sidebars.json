@@ -461,6 +461,7 @@
                         "administration/management/enable_fqdn",
                         "administration/management/timezone",
                         "administration/management/monitor_manage_big_queries",
+                        "administration/management/compaction",
                         {
                             "type": "category",
                             "label": "Resource management",
