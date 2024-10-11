@@ -179,9 +179,12 @@ Status Rowset::do_load() {
         auto res = Segment::open(fs, seg_info, seg_id, _schema, &footer_size_hint,
                                  rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
-            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            auto st = res.status().clone_and_prepend(fmt::format(
+                    "Load rowset failed tablet:{} rowset:{} rssid:{} seg:{} path:{}", _rowset_meta->tablet_id(),
+                    rowset_id().to_string(), _rowset_meta->get_rowset_seg_id(), seg_id, seg_path));
+            LOG(WARNING) << st.message();
             _segments.clear();
-            return res.status();
+            return st;
         }
         _segments.push_back(std::move(res).value());
     }
