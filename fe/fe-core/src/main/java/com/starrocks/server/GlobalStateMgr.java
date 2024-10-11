@@ -1013,6 +1013,14 @@ public class GlobalStateMgr {
         return getCurrentState().tabletStatMgr;
     }
 
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
+    }
+
+    public TabletStatMgr getTabletStatMgr() {
+        return tabletStatMgr;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;

@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.math.BigDecimal;
@@ -228,6 +229,7 @@ public class AnalyzeStmtAnalyzer {
                 }
             }
             analyzeProperties(statement.getProperties());
+            analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
 
@@ -256,11 +258,27 @@ public class AnalyzeStmtAnalyzer {
             }
         }
 
-        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, StatementBase statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
-                List<Expr> columns = statement.getColumns();
-                Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                List<Expr> columns;
+                Map<String, String> properties;
+                TableName tableName;
+                if (statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    columns = analyzeStmt.getColumns();
+                    properties = analyzeStmt.getProperties();
+                    tableName = analyzeStmt.getTableName();
+                } else if (statement instanceof CreateAnalyzeJobStmt) {
+                    CreateAnalyzeJobStmt createAnalyzeJobStmt = (CreateAnalyzeJobStmt) statement;
+                    columns = createAnalyzeJobStmt.getColumns();
+                    properties = createAnalyzeJobStmt.getProperties();
+                    tableName = createAnalyzeJobStmt.getTableName();
+                } else {
+                    throw new NotImplementedException("unreachable");
+                }
+
+                Table analyzeTable = MetaUtils.getTable(session, tableName);
                 if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
@@ -274,13 +292,11 @@ public class AnalyzeStmtAnalyzer {
                     }
                 }
 
-                Map<String, String> properties = statement.getProperties();
-
                 long bucket = ((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets();
                 if (bucket <= 0) {
                     throw new SemanticException("Bucket number can't less than 1");
                 }
-                statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
+                properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
                         p -> String.valueOf(Config.histogram_mcv_size));
@@ -292,7 +308,6 @@ public class AnalyzeStmtAnalyzer {
                     OlapTable analyzedOlapTable = (OlapTable) analyzeTable;
                     totalRows = analyzedOlapTable.getRowCount();
                 } else {
-                    TableName tableName = statement.getTableName();
                     List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
                                     tableName.getTbl());

@@ -784,7 +784,7 @@ public class DDLStmtExecutor {
                             stmt.getTableId(),
                             stmt.getColumnNames(),
                             stmt.getColumnTypes(),
-                            stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            stmt.getAnalyzeType(),
                             StatsConstants.ScheduleType.SCHEDULE,
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
@@ -792,7 +792,7 @@ public class DDLStmtExecutor {
                     analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
                             stmt.getTableName().getTbl(), stmt.getColumnNames(),
                             stmt.getColumnTypes(),
-                            stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            stmt.getAnalyzeType(),
                             StatsConstants.ScheduleType.SCHEDULE,
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);

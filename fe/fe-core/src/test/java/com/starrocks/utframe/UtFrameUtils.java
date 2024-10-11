@@ -1259,6 +1259,19 @@ public class UtFrameUtils {
             }
         };
 
+        mockDML();
+    }
+
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
+    }
+
+    public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
