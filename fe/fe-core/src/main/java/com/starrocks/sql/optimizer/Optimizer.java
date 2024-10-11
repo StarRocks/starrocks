@@ -106,6 +106,7 @@ import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
+import com.starrocks.sql.optimizer.rule.tree.pieces.ReuseFusionPlanRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -528,6 +529,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
+        tree = extractCommonCTE(tree, rootTaskContext, requiredColumns);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
 
@@ -668,6 +670,21 @@ public class Optimizer {
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
         return tree.getInputs().get(0);
+    }
+
+    private OptExpression extractCommonCTE(OptExpression tree, TaskContext rootTaskContext,
+                                           ColumnRefSet requiredColumns) {
+        if (!context.getSessionVariable().isCboExtractCommonPlan()) {
+            return tree;
+        }
+        ReuseFusionPlanRule fusion = new ReuseFusionPlanRule();
+        tree = fusion.rewrite(tree, rootTaskContext);
+        if (fusion.hasRewrite()) {
+            deriveLogicalProperty(tree);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        }
+        return tree;
     }
 
     private void rewriteGroupingSets(OptExpression tree, TaskContext rootTaskContext, SessionVariable sessionVariable) {

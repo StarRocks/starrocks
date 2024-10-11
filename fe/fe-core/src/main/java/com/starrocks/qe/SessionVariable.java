@@ -376,6 +376,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
+    public static final String CBO_EXTRACT_COMMON_PLAN = "cbo_extract_common_plan";
+
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
@@ -1272,6 +1274,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GIN_FILTER)
     private boolean enableGinFilter = true;
+
+    @VariableMgr.VarAttr(name = CBO_EXTRACT_COMMON_PLAN)
+    private boolean cboExtractCommonPlan = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -3482,6 +3487,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMultiColumnsOnGlobbalRuntimeFilter(boolean value) {
         this.enableMultiColumnsOnGlobalRuntimeFilter = value;
+    }
+
+    public boolean isCboExtractCommonPlan() {
+        return cboExtractCommonPlan;
+    }
+
+    public void setCboExtractCommonPlan(boolean cboExtractCommonPlan) {
+        this.cboExtractCommonPlan = cboExtractCommonPlan;
     }
 
     public boolean isEnableQueryDebugTrace() {
