@@ -993,4 +993,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             connectContext.getSessionVariable().replayFromJson(savedSv);
         }
     }
+
+    @Test
+    public void testJoinInitError() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
+    }
 }
