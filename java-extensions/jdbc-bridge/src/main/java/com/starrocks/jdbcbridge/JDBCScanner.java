@@ -57,9 +57,9 @@ public class JDBCScanner {
     }
 
     public void open() throws Exception {
-        String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
+        String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
-        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
+        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
                     driverURL,
             });
@@ -103,6 +103,10 @@ public class JDBCScanner {
                 resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
             }
         }
+    }
+
+    private static String computeCacheKey(String username, String password, String jdbcUrl) {
+        return username + "/" + password + "/" + jdbcUrl;
     }
 
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
