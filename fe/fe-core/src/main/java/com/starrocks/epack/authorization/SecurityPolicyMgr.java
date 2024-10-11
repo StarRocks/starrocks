@@ -400,10 +400,7 @@ public class SecurityPolicyMgr {
             registerPolicy(policy);
         });
 
-        int policyContextSize = reader.readInt();
-        for (int i = 0; i < policyContextSize; ++i) {
-            reader.readMap(TableUID.class, PolicyAppliedContext.class, policyContextMap::put);
-        }
+        reader.readMap(TableUID.class, PolicyAppliedContext.class, policyContextMap::put);
     }
 
     public void applyMaskingPolicyContext(ConnectContext ctx, TableName tableName, String columnName,
