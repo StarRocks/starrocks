@@ -408,8 +408,8 @@ size_t TabletUpdates::data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return total_size;
     } else {
         return total_size + (*size_st).pindex_size + (*size_st).col_size;
@@ -473,8 +473,8 @@ std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return {total_row, total_size};
     } else {
         return {total_row, total_size + (*size_st).pindex_size + (*size_st).col_size};
@@ -3485,8 +3485,8 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
     } else {
         total_size += (*size_st).pindex_size + (*size_st).col_size;
     }
@@ -4667,8 +4667,8 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-                   << ", error: " << size_st.status();
+        VLOG(2) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
+                << ", error: " << size_st.status();
     } else {
         info.index_disk_usage = (*size_st).pindex_size;
     }
