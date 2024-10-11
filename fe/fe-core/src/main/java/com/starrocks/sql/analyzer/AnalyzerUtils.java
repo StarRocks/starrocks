@@ -958,7 +958,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            boolean internal = CatalogMgr.isInternalCatalog(table.getCatalogName())
+            boolean internal = table.getCatalogName() == null || CatalogMgr.isInternalCatalog(table.getCatalogName())
                     || table.isNativeTableOrMaterializedView()
                     || table.isOlapView();
             if (!internal && predicate.test(table)) {
