@@ -331,7 +331,7 @@ public class LocalMetaStoreTest {
         ExternalCooldownConfig config = table.getCurExternalCoolDownConfig();
         Assert.assertNotNull(config);
         Assert.assertEquals(config.getTarget(), icebergTable);
-        Assert.assertEquals(config.getSchedule(), "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE");
+        Assert.assertEquals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", config.getSchedule());
         Assert.assertEquals(config.getWaitSecond(), (Long) 3600L);
     }
 }

@@ -20,13 +20,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.externalcooldown.ExternalCooldownPartitionSelector;
 import com.starrocks.externalcooldown.ExternalCooldownSchedule;
-import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
@@ -46,7 +45,7 @@ import java.util.Objects;
 /**
  * Long-running job responsible for external cooldown maintenance.
  */
-public class ExternalCooldownMaintenanceJob implements Writable, GsonPreProcessable, GsonPostProcessable {
+public class ExternalCooldownMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(ExternalCooldownMaintenanceJob.class);
 
     // Persisted state
@@ -59,10 +58,10 @@ public class ExternalCooldownMaintenanceJob implements Writable, GsonPreProcessa
 
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
-    private transient OlapTable olapTable;
-    private transient ExternalCooldownPartitionSelector partitionSelector;
-    private transient ExternalCooldownSchedule schedule;
-    private transient String lastRunTaskName = null;
+    private OlapTable olapTable;
+    private ExternalCooldownPartitionSelector partitionSelector;
+    private ExternalCooldownSchedule schedule;
+    private String lastRunTaskName = null;
 
     public ExternalCooldownMaintenanceJob(OlapTable olapTable, long dbId) {
         this.jobId = olapTable.getId();
@@ -72,9 +71,8 @@ public class ExternalCooldownMaintenanceJob implements Writable, GsonPreProcessa
     }
 
     public static ExternalCooldownMaintenanceJob read(DataInput input) throws IOException {
-        ExternalCooldownMaintenanceJob job = GsonUtils.GSON.fromJson(
+        return GsonUtils.GSON.fromJson(
                 Text.readString(input), ExternalCooldownMaintenanceJob.class);
-        return job;
     }
 
     public void restore() {
@@ -101,10 +99,10 @@ public class ExternalCooldownMaintenanceJob implements Writable, GsonPreProcessa
     }
 
     public void stopJob() {
-        // stopTasks();
+        throw new UnsupportedOperationException("external cooldown maintenance job stopped");
     }
 
-    public void onSchedule() throws Exception {
+    public void onSchedule() throws DdlException {
         if (lastRunTaskName != null) {
             Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(lastRunTaskName);
             if (task != null && task.getState() != Constants.TaskState.ACTIVE) {
@@ -188,13 +186,5 @@ public class ExternalCooldownMaintenanceJob implements Writable, GsonPreProcessa
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-    }
-
-    @Override
-    public void gsonPreProcess() throws IOException {
     }
 }

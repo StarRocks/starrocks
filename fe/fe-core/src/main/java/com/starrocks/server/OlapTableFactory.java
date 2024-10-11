@@ -403,15 +403,15 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND))) {
-                try {
-                    ExternalCooldownConfig externalCoolDownConfig = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
-                    table.setCurExternalCoolDownConfig(externalCoolDownConfig);
-                    LOG.info("create table {} set external cool down config, target = {}, schedule = {}, wait second = {}",
-                            tableName, externalCoolDownConfig.getTarget(), externalCoolDownConfig.getSchedule(),
-                            externalCoolDownConfig.getWaitSecond());
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
+                ExternalCooldownConfig externalCoolDownConfig = table.getCurExternalCoolDownConfig();
+                if (externalCoolDownConfig == null) {
+                    externalCoolDownConfig = new ExternalCooldownConfig();
                 }
+                externalCoolDownConfig.mergeUpdateFromProperties(properties);
+                table.setCurExternalCoolDownConfig(externalCoolDownConfig);
+                LOG.info("create table {} set external cool down config, target = {}, schedule = {}, wait second = {}",
+                        tableName, externalCoolDownConfig.getTarget(), externalCoolDownConfig.getSchedule(),
+                        externalCoolDownConfig.getWaitSecond());
             }
 
             try {

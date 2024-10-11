@@ -24,7 +24,7 @@ public class ExternalCooldownSchedule {
             "\\s*START\\s+(?<start>\\d{2}:\\d{2})\\s+END\\s+(?<end>\\d{2}:\\d{2})\\s+EVERY\\s+" +
                     "INTERVAL\\s+(?<interval>\\d+)\\s+(?<unit>(HOUR|MINUTE|SECOND))\\s*",
             Pattern.CASE_INSENSITIVE);
-    private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm");
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm");
 
     private final String start;
     private final String end;
@@ -46,15 +46,18 @@ public class ExternalCooldownSchedule {
             return false;
         }
         ExternalCooldownSchedule externalCooldownSchedule = fromString(schedule);
+        if (externalCooldownSchedule == null) {
+            return false;
+        }
         String start = externalCooldownSchedule.getStart();
+        if (start == null) {
+            return false;
+        }
         if (start.compareTo("23:59") > 0 || start.compareTo("00:00") < 0) {
             return false;
         }
         String end = externalCooldownSchedule.getEnd();
-        if (end.compareTo("23:59") > 0 || end.compareTo("00:00") < 0) {
-            return false;
-        }
-        return true;
+        return end.compareTo("23:59") <= 0 && end.compareTo("00:00") >= 0;
     }
 
     public long getIntervalSeconds() {
@@ -120,7 +123,7 @@ public class ExternalCooldownSchedule {
 
     public boolean trySchedule() {
         long currentMs = System.currentTimeMillis();
-        String s = TIME_FORMAT.format(currentMs);
+        String s = timeFormat.format(currentMs);
         if (end.compareTo(start) < 0) {
             // ex: [start=23:00, end=07:00)
             if (!(s.compareTo(start) >= 0 || s.compareTo(end) < 0)) {

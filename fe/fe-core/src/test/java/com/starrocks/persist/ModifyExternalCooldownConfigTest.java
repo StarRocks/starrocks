@@ -71,8 +71,8 @@ public class ModifyExternalCooldownConfigTest {
         Assert.assertTrue(data instanceof ModifyTablePropertyOperationLog);
 
         ModifyTablePropertyOperationLog readModifyExternalCooldownConfigInfo = (ModifyTablePropertyOperationLog) data;
-        Assert.assertEquals(readModifyExternalCooldownConfigInfo.getDbId(), 100L);
-        Assert.assertEquals(readModifyExternalCooldownConfigInfo.getTableId(), 200L);
+        Assert.assertEquals(100L, readModifyExternalCooldownConfigInfo.getDbId());
+        Assert.assertEquals(200L, readModifyExternalCooldownConfigInfo.getTableId());
         Assert.assertEquals(readModifyExternalCooldownConfigInfo.getProperties(), properties);
         in.close();
     }

@@ -531,25 +531,24 @@ public class AlterTableTest {
         OlapTable olapTable = (OlapTable) db.getTable("test_external_cooldown");
 
         Assert.assertNotNull(olapTable.getExternalCoolDownTarget());
-        Assert.assertTrue(olapTable.getExternalCoolDownTarget().equals("iceberg_catalog.db.external_iceberg_tbl"));
-        Assert.assertTrue(olapTable.getExternalCoolDownSchedule().equals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE"));
-        Assert.assertTrue(olapTable.getExternalCoolDownWaitSecond().equals(3600L));
+        Assert.assertEquals("iceberg_catalog.db.external_iceberg_tbl", olapTable.getExternalCoolDownTarget());
+        Assert.assertEquals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", olapTable.getExternalCoolDownSchedule());
+        Assert.assertEquals((Long) 3600L, olapTable.getExternalCoolDownWaitSecond());
         String sql = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"iceberg_catalog.db.tbl\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
-        Assert.assertTrue(olapTable.getExternalCoolDownTarget().equals("iceberg_catalog.db.tbl"));
+        Assert.assertEquals("iceberg_catalog.db.tbl", olapTable.getExternalCoolDownTarget());
 
         String sql2 = "ALTER TABLE test_external_cooldown " +
                 "SET(\"external_cooldown_schedule\" = \"START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE\");";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt2);
-        Assert.assertTrue(olapTable.getExternalCoolDownSchedule().equals(
-                "START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE"));
+        Assert.assertEquals("START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE", olapTable.getExternalCoolDownSchedule());
 
         String sql3 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_wait_second\" = \"7200\");";
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
-        Assert.assertTrue(olapTable.getExternalCoolDownWaitSecond().equals(7200L));
+        Assert.assertEquals((Long) 7200L, olapTable.getExternalCoolDownWaitSecond());
     }
 
     @Test

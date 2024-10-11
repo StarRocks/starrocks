@@ -68,7 +68,8 @@ public class ExternalCooldownMgr {
                 LOG.debug("reload external cooldown maintenance job details: {}", str);
             }
             checksum ^= data.jobList.size();
-        } catch (EOFException ignored) {
+        } catch (EOFException e) {
+            LOG.warn("reload external cooldown maintenance job details: {}", e.getMessage());
         }
         return checksum;
     }
@@ -76,7 +77,7 @@ public class ExternalCooldownMgr {
     /**
      * Replay from journal
      */
-    public void replay(ExternalCooldownMaintenanceJob job) throws IOException {
+    public void replay(ExternalCooldownMaintenanceJob job) {
         try {
             job.restore();
             jobMap.put(job.getTableId(), job);
@@ -160,7 +161,7 @@ public class ExternalCooldownMgr {
         writer.close();
     }
 
-    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException {
         int numJson = reader.readInt();
         for (int i = 0; i < numJson; ++i) {
             ExternalCooldownMaintenanceJob job = reader.readJson(ExternalCooldownMaintenanceJob.class);

@@ -15,6 +15,7 @@
 package com.starrocks.externalcooldown;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -64,25 +65,7 @@ public class ExternalCooldownConfig implements Writable {
         if (waitSecond <= 0) {
             return false;
         }
-        if (schedule == null || schedule.isEmpty()) {
-            return false;
-        }
-        return true;
-    }
-
-    public void buildFromProperties(Map<String, String> properties) {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
-            target = properties.get(
-                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
-        }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
-            schedule = properties.get(
-                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
-        }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
-            waitSecond = Long.parseLong(properties.get(
-                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND));
-        }
+        return schedule != null && !schedule.isEmpty();
     }
 
     public String getTarget() {
@@ -124,6 +107,19 @@ public class ExternalCooldownConfig implements Writable {
 
     public static ExternalCooldownConfig read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), ExternalCooldownConfig.class);
+    }
+
+    public void mergeUpdateFromProperties(Map<String, String> properties) throws DdlException {
+        ExternalCooldownConfig externalCoolDownConfig = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
+        if (externalCoolDownConfig.getSchedule() != null) {
+            this.setSchedule(externalCoolDownConfig.getSchedule());
+        }
+        if (externalCoolDownConfig.getWaitSecond() != null) {
+            this.setWaitSecond(externalCoolDownConfig.getWaitSecond());
+        }
+        if (externalCoolDownConfig.getTarget() != null) {
+            this.setTarget(externalCoolDownConfig.getTarget());
+        }
     }
 
     @Override

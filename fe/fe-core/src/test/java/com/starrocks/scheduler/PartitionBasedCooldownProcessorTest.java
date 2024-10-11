@@ -33,10 +33,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -50,7 +46,6 @@ import java.time.Instant;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedCooldownProcessorTest {
-    private static final Logger LOG = LogManager.getLogger(PartitionBasedCooldownProcessorTest.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
@@ -106,17 +101,9 @@ public class PartitionBasedCooldownProcessorTest {
                         ");");
     }
 
-    @AfterClass
-    public static void afterClass() throws Exception {
-    }
-
     @Before
     public void before() {
         startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
     }
 
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
@@ -138,7 +125,7 @@ public class PartitionBasedCooldownProcessorTest {
         initAndExecuteTaskRun(taskRun);
     }
 
-    protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
+    protected void assertPlanContains(ExecPlan execPlan, String... explain) {
         String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
 
         for (String expected : explain) {

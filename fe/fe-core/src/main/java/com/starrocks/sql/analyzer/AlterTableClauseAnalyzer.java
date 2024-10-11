@@ -346,13 +346,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                                         " must be format of {catalog}.{db}.{tbl}");
                     }
                     String[] parts = target.split("\\.");
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(parts[0], parts[1], parts[2]);
-                    if (table == null) {
+                    Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            parts[0], parts[1], parts[2]);
+                    if (targetTable == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                 "Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
                                         " table " + target + " not exist");
                     }
-                    if (!(table instanceof IcebergTable)) {
+                    if (!(targetTable instanceof IcebergTable)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                 "Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
                                         " only support iceberg table");
@@ -389,10 +390,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             } catch (DateTimeParseException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
-            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

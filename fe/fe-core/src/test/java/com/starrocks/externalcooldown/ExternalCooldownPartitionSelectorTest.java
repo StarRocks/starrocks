@@ -201,20 +201,20 @@ public class ExternalCooldownPartitionSelectorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl1");
 
+        long updateTime = System.currentTimeMillis() - 2000;
         Partition p1 = table.getPartition("p1");
-        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
         Partition p2 = table.getPartition("p2");
-        p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
+        p2.updateVisibleVersion(p2.getVisibleVersion() + 1, updateTime);
         Partition p3 = table.getPartition("p3");
-        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
         Partition p5 = table.getPartition("p5");
-        p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
+        p5.updateVisibleVersion(p5.getVisibleVersion() + 1, updateTime);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql3 = "ALTER TABLE test.tbl1 SET(\"external_cooldown_wait_second\" = \"1\");";
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
-        Thread.sleep(1150);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, (OlapTable) table);
         Assert.assertTrue(selector.isTableSatisfied());
@@ -234,20 +234,20 @@ public class ExternalCooldownPartitionSelectorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl2");
 
+        long updateTime = System.currentTimeMillis() - 2000;
         Partition p1 = table.getPartition("p1");
-        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
         Partition p2 = table.getPartition("p2");
-        p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
+        p2.updateVisibleVersion(p2.getVisibleVersion() + 1, updateTime);
         Partition p3 = table.getPartition("p3");
-        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
         Partition p5 = table.getPartition("p5");
-        p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
+        p5.updateVisibleVersion(p5.getVisibleVersion() + 1, updateTime);
 
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql3 = "ALTER TABLE test.tbl2 SET(\"external_cooldown_wait_second\" = \"1\");";
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
-        Thread.sleep(1150);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(
                 testDb, (OlapTable) table, "2024-03-02 00:00:00", "2024-03-05 00:00:00", false);
@@ -297,13 +297,13 @@ public class ExternalCooldownPartitionSelectorTest {
     }
 
     @Test
-    public void testSinglePartitionTable() throws Exception {
+    public void testSinglePartitionTable() {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl4");
 
+        long updateTime = System.currentTimeMillis() - 2000;
         Partition p1 = table.getPartition("tbl4");
-        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
-        Thread.sleep(1150);
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, (OlapTable) table);
         Assert.assertTrue(selector.isTableSatisfied());
@@ -315,15 +315,15 @@ public class ExternalCooldownPartitionSelectorTest {
     }
 
     @Test
-    public void testListPartitionTable() throws Exception {
+    public void testListPartitionTable() {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl5");
 
+        long updateTime = System.currentTimeMillis() - 2000;
         Partition p1 = table.getPartition("p1");
-        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
         Partition p3 = table.getPartition("p3");
-        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
-        Thread.sleep(1150);
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, (OlapTable) table);
         Assert.assertTrue(selector.isTableSatisfied());

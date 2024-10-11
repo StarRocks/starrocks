@@ -24,13 +24,15 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.StatementBase;
-import org.apache.commons.collections.MapUtils;
 
-import java.util.Map;
 
 public class ExternalCooldownAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new ExternalCooldownAnalyzer.ExternalCooldownAnalyzerVisitor().visit(stmt, session);
+    }
+
+    private ExternalCooldownAnalyzer() {
+        throw new IllegalStateException("creating an instance is illegal");
     }
 
     static class ExternalCooldownAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
@@ -47,14 +49,7 @@ public class ExternalCooldownAnalyzer {
             }
             createExternalCooldownStmt.setTableName(tableName);
             createExternalCooldownStmt.setPartitionRangeDesc(createExternalCooldownStmt.getPartitionRangeDesc());
-            analyzeExternalCooldownProperties(createExternalCooldownStmt.getProperties());
             return null;
-        }
-
-        public static void analyzeExternalCooldownProperties(Map<String, String> properties) {
-            if (MapUtils.isEmpty(properties)) {
-                return;
-            }
         }
 
         @Override

@@ -3695,15 +3695,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
-            ExternalCooldownConfig config;
-            try {
-                config = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
-            } catch (AnalysisException ex) {
-                throw new RuntimeException(ex.getMessage());
-            }
             if (!table.isOlapTable()) {
                 throw new DdlException("Cannot set external cooldown property for non olap table");
             }
+            ExternalCooldownConfig config = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
             results.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_CONFIG, config);
         }
         if (!properties.isEmpty()) {

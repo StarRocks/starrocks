@@ -1706,7 +1706,8 @@ public class PropertyAnalyzer {
         return dataProperty;
     }
 
-    public static ExternalCooldownConfig analyzeExternalCoolDownConfig(Map<String, String> properties) throws AnalysisException {
+    public static ExternalCooldownConfig analyzeExternalCoolDownConfig(Map<String, String> properties)
+            throws DdlException {
         ExternalCooldownConfig externalCoolDownConfig = new ExternalCooldownConfig();
 
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
@@ -1715,17 +1716,17 @@ public class PropertyAnalyzer {
             if (!target.isEmpty()) {
                 Pattern targetPattern = Pattern.compile("^\\w+\\.\\w+\\.\\w+$", Pattern.CASE_INSENSITIVE);
                 if (!targetPattern.matcher(target).find()) {
-                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                    throw new DdlException(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
                             " must be format of {catalog}.{db}.{tbl}");
                 }
                 String[] parts = target.split("\\.");
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(parts[0], parts[1], parts[2]);
                 if (table == null) {
-                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                    throw new DdlException(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
                             " table " + target + " not exist");
                 }
                 if (!(table instanceof IcebergTable)) {
-                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                    throw new DdlException(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
                             " only support iceberg table");
                 }
             }
@@ -1735,7 +1736,7 @@ public class PropertyAnalyzer {
             String schedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
             properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
             if (!ExternalCooldownSchedule.validateScheduleString(schedule)) {
-                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE +
+                throw new DdlException(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE +
                         " must be format like `START 23:00 END 08:00 EVERY INTERVAL 1 MINUTE`");
             }
             externalCoolDownConfig.setSchedule(schedule);
@@ -1745,9 +1746,8 @@ public class PropertyAnalyzer {
             try {
                 waitSecond = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, 0);
-            } catch (NumberFormatException e) {
-                throw new AnalysisException("Property " +
-                        PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND + " must be long");
+            } catch (AnalysisException e) {
+                throw new DdlException(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND + " must be long");
             }
             externalCoolDownConfig.setWaitSecond(waitSecond);
         }

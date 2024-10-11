@@ -21,7 +21,7 @@ import org.junit.Test;
 public class ExternalCooldownConfigTest {
 
     @Test
-    public void testPartitionStartEnd() throws Exception {
+    public void testPartitionStartEnd() {
         ExternalCooldownConfig config = new ExternalCooldownConfig(
                 "iceberg.db1.tbl1", "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", 3600);
 

@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.externalcooldown;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
@@ -59,7 +60,7 @@ public class ExternalCooldownJobExecutor extends FrontendDaemon {
             }
             try {
                 job.onSchedule();
-            } catch (Exception e) {
+            } catch (DdlException e) {
                 LOG.warn("[ExternalCooldownJobExecutor] execute job got exception", e);
             }
         }

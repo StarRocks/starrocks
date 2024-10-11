@@ -236,7 +236,6 @@ public class ExternalCooldownPartitionSelector {
 
     // get partition names in range [partitionStart, partitionEnd]
     private Set<String> getPartitionsInRange() throws AnalysisException {
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionStart == null && partitionEnd == null) {
             if (partitionInfo instanceof SinglePartitionInfo) {
                 return olapTable.getVisiblePartitionNames();
@@ -264,12 +263,10 @@ public class ExternalCooldownPartitionSelector {
         List<Partition> chosenPartitions = new ArrayList<>();
 
         boolean isOlapTablePartitioned = olapTable.getPartitions().size() > 1 || olapTable.dynamicPartitionExists();
-        if (!isOlapTablePartitioned) {
-            if (targetIcebergTable.spec() != null && !targetIcebergTable.spec().fields().isEmpty()) {
-                LOG.warn("table: {} is a none partitioned table, cannot have partitionSpec fields",
-                        fullTableName);
-                return chosenPartitions;
-            }
+        if (!isOlapTablePartitioned && targetIcebergTable.spec() != null && !targetIcebergTable.spec().fields().isEmpty()) {
+            LOG.warn("table: {} is a none partitioned table, cannot have partitionSpec fields",
+                    fullTableName);
+            return chosenPartitions;
         }
 
         boolean isSatisfied;
@@ -286,25 +283,24 @@ public class ExternalCooldownPartitionSelector {
 
         for (String partitionName : sortedPartitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
-            if (partition == null) {
-                continue;
-            }
-            try {
-                isSatisfied = isPartitionSatisfied(partition);
-            } catch (Exception e) {
-                isSatisfied = false;
-                String msg = String.format("check partition [%s-%s] satisfy external cool down condition failed",
-                        fullTableName, partition.getName());
-                LOG.warn(msg, e);
-            }
-            if (isSatisfied) {
-                LOG.info("choose partition[{}-{}] to external cool down", fullTableName, partition.getName());
-                chosenPartitions.add(partition);
-            }
+            if (partition != null) {
+                try {
+                    isSatisfied = isPartitionSatisfied(partition);
+                } catch (Exception e) {
+                    isSatisfied = false;
+                    String msg = String.format("check partition [%s-%s] satisfy external cool down condition failed",
+                            fullTableName, partition.getName());
+                    LOG.warn(msg, e);
+                }
+                if (isSatisfied) {
+                    LOG.info("choose partition[{}-{}] to external cool down", fullTableName, partition.getName());
+                    chosenPartitions.add(partition);
+                }
 
-            if (limit > 0 && chosenPartitions.size() >= limit) {
-                LOG.info("stop choose partition as no remain jobs");
-                break;
+                if (limit > 0 && chosenPartitions.size() >= limit) {
+                    LOG.info("stop choose partition as no remain jobs");
+                    break;
+                }
             }
         }
         return chosenPartitions;

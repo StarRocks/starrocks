@@ -21,9 +21,7 @@ import org.junit.Test;
 public class ExternalCooldownScheduleTest {
 
     @Test
-    public void testPartitionStartEnd() throws Exception {
-
-
+    public void testPartitionStartEnd() {
         String scheduleStr = "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE";
         ExternalCooldownSchedule schedule = ExternalCooldownSchedule.fromString(scheduleStr);
         Assert.assertNotNull(schedule);

@@ -51,6 +51,7 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    private static final String TABLE_PREFIX = "Table ";
     private Database db;
     private OlapTable olapTable;
     private Partition partition;
@@ -68,28 +69,28 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
             throw new DmlException("Table with id[" + tableId + "] not found");
         }
         if (!(table instanceof OlapTable)) {
-            throw new DmlException("Table " + table.getName() + " not found or not olap table");
+            throw new DmlException(TABLE_PREFIX + table.getName() + " not found or not olap table");
         }
         olapTable = (OlapTable) table;
         externalTableName = olapTable.getExternalCoolDownTarget();
         if (Strings.isNullOrEmpty(externalTableName)) {
-            throw new DmlException("Table " + table.getName() + " not found external cool down target table");
+            throw new DmlException(TABLE_PREFIX + table.getName() + " not found external cool down target table");
         }
         Table iTable = olapTable.getExternalCoolDownTable();
         if (iTable == null) {
-            throw new DmlException("Table " + table.getName() + " get external cool down target table failed");
+            throw new DmlException(TABLE_PREFIX + table.getName() + " get external cool down target table failed");
         }
         if (!(iTable instanceof IcebergTable)) {
-            throw new DmlException("Table " + table.getName() + "'s external table is not iceberg table");
+            throw new DmlException(TABLE_PREFIX + table.getName() + "'s external table is not iceberg table");
         }
 
         partitionSelector = new ExternalCooldownPartitionSelector(
                 db, olapTable, partitionStart, partitionEnd, isForce);
         if (!partitionSelector.isTableSatisfied()) {
-            throw new DmlException("Table " + table.getName() + " don't satisfy external cool down condition");
+            throw new DmlException(TABLE_PREFIX + table.getName() + " don't satisfy external cool down condition");
         }
         if (!partitionSelector.hasPartitionSatisfied()) {
-            throw new DmlException("Table " + table.getName() + " has no partition satisfy external cool down condition");
+            throw new DmlException(TABLE_PREFIX + table.getName() + " has no partition satisfy external cool down condition");
         }
         if (context.getProperties().containsKey(PARTITION_ID)) {
             long partitionId = Long.parseLong(context.getProperties().get(PARTITION_ID));
