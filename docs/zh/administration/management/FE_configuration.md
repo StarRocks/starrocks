@@ -4943,8 +4943,8 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：查询详情中查询计划的解释级别。可以是 COSTS/NORMAL/VERBOSE。
-- 引入版本：3.2.12, 3.3.5
+- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
+- 引入版本：v3.2.12，v3.3.5
 
 <!--
 ##### max_varchar_length
