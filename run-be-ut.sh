@@ -32,7 +32,8 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --test  [TEST_NAME]            run specific test
+     --test TEST_NAME               run specific test
+     --gtest_filter GTEST_FILTER    run test cases with gtest filters
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
@@ -51,6 +52,7 @@ Usage: $0 <options>
     $0 --dry-run                    dry-run unit tests
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
+    $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
   "
   exit 1
 }
@@ -116,8 +118,8 @@ while true; do
         --clean) CLEAN=1 ; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --run) shift ;; # Option only for compatibility
-        --test) TEST_NAME=$2 ; shift 2;;
-        --gtest_filter) TEST_NAME=$2 ; shift 2;; # Option only for compatibility
+        --test) TEST_NAME=${2}* ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;;
         --module) TEST_MODULE=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
