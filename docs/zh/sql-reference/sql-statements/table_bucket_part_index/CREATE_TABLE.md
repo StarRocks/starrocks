@@ -750,8 +750,7 @@ PROPERTIES (
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>",
-    "enable_async_write_back" = "{ true | false }"
+    "datacache.partition_duration" = "<string_value>"
 )
 ```
 
@@ -771,11 +770,6 @@ PROPERTIES (
   > **说明**
   >
   > 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
-
-- `enable_async_write_back`：是否允许数据异步写入对象存储。默认值：`false`。
-
-  - 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-  - 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
 
 #### 设置 fast schema evolution
 
