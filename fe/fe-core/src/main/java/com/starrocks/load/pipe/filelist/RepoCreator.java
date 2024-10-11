@@ -30,7 +30,6 @@ public class RepoCreator {
 
     private static boolean databaseExists = false;
     private static boolean tableExists = false;
-    private static boolean tableCorrected = false;
 
     public static RepoCreator getInstance() {
         return INSTANCE;
@@ -50,10 +49,7 @@ public class RepoCreator {
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
                 tableExists = true;
             }
-            if (!tableCorrected && correctTable()) {
-                LOG.info("table corrected: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
-                tableCorrected = true;
-            }
+            correctTable();
         } catch (Exception e) {
             LOG.error("error happens in RepoCreator: ", e);
         }
@@ -64,26 +60,24 @@ public class RepoCreator {
     }
 
     public static void createTable() throws UserException {
-        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql();
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql(expectedReplicationNum);
         RepoExecutor.getInstance().executeDDL(sql);
     }
 
     public static boolean correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         int replica = GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().mayGetTable(FileListTableRepo.FILE_LIST_DB_NAME, FileListTableRepo.FILE_LIST_TABLE_NAME)
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
-        if (numBackends < 3) {
-            LOG.info("not enough backends in the cluster, expected 3 but got {}", numBackends);
-            return false;
-        }
-        if (replica < 3) {
-            String sql = FileListTableRepo.SQLBuilder.buildAlterTableSql();
+        if (replica != expectedReplicationNum) {
+            String sql = FileListTableRepo.SQLBuilder.buildAlterTableSql(expectedReplicationNum);
             RepoExecutor.getInstance().executeDDL(sql);
-        } else {
-            LOG.info("table {} already has {} replicas, no need to alter replication_num",
-                    FileListTableRepo.FILE_LIST_FULL_NAME, replica);
+            LOG.info("changed table {} replication_num from {} to {}",
+                    FileListTableRepo.FILE_LIST_FULL_NAME, replica, expectedReplicationNum);
         }
         return true;
     }
@@ -94,9 +88,5 @@ public class RepoCreator {
 
     public boolean isTableExists() {
         return tableExists;
-    }
-
-    public boolean isTableCorrected() {
-        return tableCorrected;
     }
 }
