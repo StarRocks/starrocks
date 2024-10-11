@@ -88,6 +88,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --without-avx2     build Backend without avx2(instruction)
      -j                 build Backend parallel
 
   Eg.
@@ -114,6 +115,7 @@ OPTS=$(getopt \
   -l 'with-gcov' \
   -l 'with-bench' \
   -l 'without-gcov' \
+  -l 'without-avx2' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
@@ -204,6 +206,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
