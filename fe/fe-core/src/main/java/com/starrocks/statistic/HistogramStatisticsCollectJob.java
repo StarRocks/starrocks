@@ -55,9 +55,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "order by count($columnName) desc limit $topN ) t";
 
     public HistogramStatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
-                                         StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                         Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+                                         StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
+        super(db, table, columnNames, columnTypes, StatsConstants.AnalyzeType.HISTOGRAM, scheduleType, properties);
     }
 
     @Override
