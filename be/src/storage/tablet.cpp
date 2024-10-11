@@ -628,6 +628,12 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 }
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
+        VLOG(1) << "tablet: " << tablet_id()
+                << " too many committed without schema rowset : " << _committed_rs_map.size();
+        return false;
+    }
+
     if (rowset->rowset_meta()->tablet_schema() != nullptr &&
         rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
         rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
@@ -1442,7 +1448,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         return;
     }
     LOG(INFO) << "start to do tablet meta checkpoint, tablet=" << full_name();
-    save_meta();
+    save_meta(config::skip_schema_in_rowset_meta);
     // if save meta successfully, then should remove the rowset meta existing in tablet
     // meta from rowset meta store
     for (auto& rs_meta : _tablet_meta->all_rs_metas()) {
