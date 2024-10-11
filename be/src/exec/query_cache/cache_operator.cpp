@@ -367,11 +367,6 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
     bool can_pickup_delta_rowsets = false;
     bool exists_non_empty_delta_rowsets = false;
 
-    if (_cache_param.is_lake && !base_rowsets.empty()) {
-        buffer->state = PLBS_MISS;
-        buffer->cached_version = 0;
-        return;
-    }
     for (auto& rs : base_rowsets) {
         can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
         exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
