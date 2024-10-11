@@ -4937,6 +4937,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
 
+##### query_detail_explain_level
+
+- 默认值：COSTS
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
+- 引入版本：v3.2.12，v3.3.5
+
 <!--
 ##### max_varchar_length
 
