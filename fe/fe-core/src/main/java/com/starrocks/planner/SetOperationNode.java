@@ -41,7 +41,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
@@ -58,7 +57,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -172,7 +170,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
-        Preconditions.checkState(materializedResultExprLists_.size() == children.size());
         List<List<TExpr>> texprLists = Lists.newArrayList();
         for (List<Expr> exprList : materializedResultExprLists_) {
             texprLists.add(Expr.treesToThrift(exprList));

@@ -78,7 +78,6 @@ public class RuntimeFilterDescription {
     // ExecGroupInfo. used for check build colocate runtime filter
     private boolean isBuildFromColocateGroup = false;
     private int execGroupId = -1;
-
     private RuntimeFilterType type;
 
     int numInstances;
@@ -148,7 +147,6 @@ public class RuntimeFilterDescription {
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
     }
-
     public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
         if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
@@ -552,7 +550,6 @@ public class RuntimeFilterDescription {
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
-
         return t;
     }
 
