@@ -50,7 +50,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SysFeLocks {
-
     public static final String NAME = "fe_locks";
 
     public static SystemTable create() {
