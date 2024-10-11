@@ -243,3 +243,51 @@ None
 DROP table t_generated_column_complex_rewrite_3;
 -- result:
 -- !result
+CREATE TABLE `t_generated_column_complex_rewrite_4` (
+  `pday` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`pday`)
+PARTITION BY (`pday`)
+DISTRIBUTED BY HASH(`pday`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t_generated_column_complex_rewrite_5` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `json_string` varchar(1048576) NOT NULL COMMENT "",
+  `col1` varchar(65533) NULL AS get_json_string(`json_string`, 'a') COMMENT "",
+  `col2` varchar(65533) NULL AS get_json_string(`json_string`, 'b') COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_generated_column_complex_rewrite_4 values (1);
+-- result:
+-- !result
+INSERT INTO t_generated_column_complex_rewrite_5 values (1,"{\"a\" : \"b\"}");
+-- result:
+-- !result
+select * from (select t4.* from t_generated_column_complex_rewrite_4 as t4 left join t_generated_column_complex_rewrite_5 as t5 on t4.pday = t5.id) result;
+-- result:
+1
+-- !result
+DROP TABLE t_generated_column_complex_rewrite_4;
+-- result:
+-- !result
+DROP TABLE t_generated_column_complex_rewrite_5;
+-- result:
+-- !result

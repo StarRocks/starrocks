@@ -196,19 +196,23 @@ public class QueryAnalyzer {
             }
 
             // 3. analyze generated column expression based on current scope
+            Map<Expr, SlotRef> analyzedGeneratedExprToColumnRef = new HashMap<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
                 entry.getKey().reset();
                 entry.getValue().reset();
-                
+
                 try {
                     ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), scope, session);
                     ExpressionAnalyzer.analyzeExpression(entry.getValue(), new AnalyzeState(), scope, session);
                 } catch (Exception ignore) {
-                    // ignore generated column rewrite if hit any exception
-                    generatedExprToColumnRef.clear();
+                    // skip this generated column rewrite if hit any exception
+                    // some exception is reasonable because some of illegal generated column
+                    // rewrite will be rejected by ananlyzer exception.
+                    continue;
                 }
+                analyzedGeneratedExprToColumnRef.put(entry.getKey(), entry.getValue());
             }
-            resultGeneratedExprToColumnRef.putAll(generatedExprToColumnRef);
+            resultGeneratedExprToColumnRef.putAll(analyzedGeneratedExprToColumnRef);
         }
 
         @Override
