@@ -2572,6 +2572,13 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
+    public String getBaseCompactionForbiddenTimeRanges() {
+        if (tableProperty != null) {
+            return tableProperty.getBaseCompactionForbiddenTimeRanges();
+        }
+        return "";
+    }
+
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2592,6 +2599,36 @@ public class OlapTable extends Table {
         tableProperty.buildMutableBucketNum();
     }
 
+<<<<<<< HEAD
+=======
+    public Boolean enableLoadProfile() {
+        if (tableProperty != null) {
+            return tableProperty.enableLoadProfile();
+        }
+        return false;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
+                        Boolean.valueOf(enableLoadProfile).toString());
+        tableProperty.buildEnableLoadProfile();
+    }
+
+    public void setBaseCompactionForbiddenTimeRanges(String baseCompactionForbiddenTimeRanges) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+                        baseCompactionForbiddenTimeRanges);
+        tableProperty.buildBaseCompactionForbiddenTimeRanges();
+    }
+
+>>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -3301,6 +3338,21 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
         }
 
+<<<<<<< HEAD
+=======
+        // enable load profile
+        Boolean enableLoadProfile = enableLoadProfile();
+        if (enableLoadProfile) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
+        // base compaction forbidden time ranges
+        if (!getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+                    getBaseCompactionForbiddenTimeRanges());
+        }
+
+>>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
         // locations
         Multimap<String, String> locationsMap = getLocation();
         if (locationsMap != null) {
