@@ -27,8 +27,7 @@ DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "storage_volume" = "def_volume",
     "datacache.enable" = "true",
-    "datacache.partition_duration" = "1 MONTH",
-    "enable_async_write_back" = "false"
+    "datacache.partition_duration" = "1 MONTH"
 );
 ```
 
@@ -58,13 +57,6 @@ PROPERTIES (
 >
 > - 在 v3.0 版本中，该参数名称为 `storage_cache_ttl`。
 > - 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
-
-#### enable_async_write_back
-
-是否允许数据异步写入对象存储。默认值：`false`。
-
-- `true`：导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-- `false`：只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
 
 ### 查看表信息
 
