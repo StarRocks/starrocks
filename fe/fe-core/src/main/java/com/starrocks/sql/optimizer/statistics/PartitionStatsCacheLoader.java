@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -31,47 +30,39 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
-public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKey, Optional<Long>> {
+public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<PartitionStats>> {
+
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
-    public @NonNull CompletableFuture<Optional<Long>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
-            NonNull Executor executor) {
-
-        return asyncLoadAll(Lists.newArrayList(cacheKey), executor)
-                .thenApply(x -> x.get(cacheKey));
+    public @NonNull CompletableFuture<Optional<PartitionStats>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
+                                                                          @NonNull Executor executor) {
+        return asyncLoadAll(Lists.newArrayList(cacheKey), executor).thenApply(x -> x.get(cacheKey));
     }
 
     @Override
-    public @NonNull CompletableFuture<Map<@NonNull TableStatsCacheKey, @NonNull Optional<Long>>> asyncLoadAll(
-            @NonNull Iterable<? extends @NonNull TableStatsCacheKey> cacheKey,
-            @NonNull Executor executor) {
+    public @NonNull CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>>
+    asyncLoadAll(@NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> cacheKey, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
-                Map<TableStatsCacheKey, Optional<Long>> result = new HashMap<>();
-                List<Long> pids = Lists.newArrayList();
+                Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = new HashMap<>();
                 long tableId = -1;
-                for (TableStatsCacheKey statsCacheKey : cacheKey) {
-                    pids.add(statsCacheKey.getPartitionId());
-                    tableId = statsCacheKey.getTableId();
-                    if (pids.size() > Config.expr_children_limit / 2) {
-                        List<TStatisticData> statisticData =
-                                statisticExecutor.queryTableStats(connectContext, statsCacheKey.getTableId(), pids);
-
-                        statisticData.forEach(tStatisticData -> result.put(
-                                new TableStatsCacheKey(statsCacheKey.getTableId(), tStatisticData.partitionId),
-                                Optional.of(tStatisticData.rowCount)));
-                        pids.clear();
-                    }
+                List<String> columns = Lists.newArrayList();
+                for (ColumnStatsCacheKey statsCacheKey : cacheKey) {
+                    columns.add(statsCacheKey.column);
+                    tableId = statsCacheKey.tableId;
                 }
-                List<TStatisticData> statisticData = statisticExecutor.queryTableStats(connectContext, tableId, pids);
+                List<TStatisticData> statisticData = statisticExecutor.queryPartitionLevelColumnNDV(connectContext,
+                        tableId, Lists.newArrayList(), columns);
                 for (TStatisticData data : statisticData) {
-                    result.put(new TableStatsCacheKey(tableId, data.partitionId), Optional.of(data.rowCount));
+                    ColumnStatsCacheKey key = new ColumnStatsCacheKey(tableId, data.columnName);
+                    result.computeIfAbsent(key, (x) -> Optional.of(new PartitionStats()))
+                            .get().getDistinctCount().put(data.partitionId, (double) data.countDistinct);
                 }
-                for (TableStatsCacheKey key : cacheKey) {
+                for (ColumnStatsCacheKey key : cacheKey) {
                     if (!result.containsKey(key)) {
                         result.put(key, Optional.empty());
                     }
