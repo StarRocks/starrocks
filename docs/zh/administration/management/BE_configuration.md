@@ -3672,11 +3672,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- 默认值：1000
+- 默认值：500
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。从 v3.2.4 和 v3.1.10 版本开始，该参数默认值从 `5` 变更为 `1000`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
+- 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
 <!--
