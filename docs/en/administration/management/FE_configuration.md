@@ -4948,8 +4948,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: true
-- Description: The explain level of query plan in query detail. It can be COSTS/NORMAL/VERBOSE.
-- Introduced in: 3.2.12, 3.3.5
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
 
 <!--
 ##### max_varchar_length
