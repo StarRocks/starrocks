@@ -1521,6 +1521,10 @@ public class OlapTable extends Table {
         return partition;
     }
 
+    public Optional<Partition> mayGetPartition(long partitionId) {
+        return Optional.ofNullable(getPartition(partitionId));
+    }
+
     public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
         Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
         if (partitionId == null) {
@@ -2962,7 +2966,7 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
-                    new UniqueConstraint(this, getKeyColumns()
+                    new UniqueConstraint(null, null, null, getKeyColumns()
                             .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
@@ -3286,6 +3290,12 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // partition ttl
+        if (tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            properties.put(
+                    PropertyAnalyzer.PROPERTIES_PARTITION_TTL, tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL));
         }
 
         // compression type

@@ -633,7 +633,7 @@ public class Config extends ConfigBase {
      * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String bdbje_reset_election_group = "false";
+    public static boolean bdbje_reset_election_group = false;
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -2054,6 +2054,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
+    @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
+    public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
@@ -2074,6 +2077,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
+
+    @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
+            "we would use sample statistics instead of full statistics")
+    public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
     /**
      * default bucket size of histogram statistics
@@ -2422,6 +2429,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
+
+    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    public static String query_detail_explain_level = "COSTS";
 
     /**
      * StarRocks-manager pull queries every 1 second
@@ -3248,4 +3258,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long slow_query_analyze_threshold = 5000;
+
+    // whether to print sql before parser
+    @ConfField(mutable = true)
+    public static boolean enable_print_sql = false;
 }

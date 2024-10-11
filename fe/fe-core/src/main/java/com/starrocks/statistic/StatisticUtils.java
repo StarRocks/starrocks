@@ -17,7 +17,6 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
@@ -27,13 +26,11 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -46,9 +43,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
@@ -61,12 +56,11 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
-import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,13 +70,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -143,93 +131,20 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(
-            TransactionState txnState, Database db, Table table, boolean sync, boolean useLock) {
-        if (!Config.enable_statistic_collect_on_first_load) {
-            return;
-        }
-        if (statisticDatabaseBlackListCheck(db.getFullName())) {
-            return;
-        }
+    public static void triggerCollectionOnInsertOverwrite(InsertOverwriteJobStats stats,
+                                                          Database db,
+                                                          Table table,
+                                                          boolean sync,
+                                                          boolean useLock) {
+        StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, sync, useLock);
+    }
 
-        // check if it's first load.
-        if (txnState.getIdToTableCommitInfos() == null) {
-            return;
-        }
-        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
-        if (tableCommitInfo == null) {
-            return;
-        }
-        // collectPartitionIds contains partition that is first loaded.
-        Set<Long> collectPartitionIds = Sets.newHashSet();
-        Locker locker = new Locker();
-        if (useLock) {
-            locker.lockDatabase(db.getId(), LockType.READ);
-        }
-        try {
-            for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-                // partition commit info id is physical partition id.
-                // statistic collect granularity is logic partition.
-                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                if (physicalPartition != null) {
-                    Partition partition = table.getPartition(physicalPartition.getParentId());
-                    if (partition != null && partition.isFirstLoad()) {
-                        collectPartitionIds.add(partition.getId());
-                    }
-                }
-            }
-        } finally {
-            if (useLock) {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
-        }
-        if (collectPartitionIds.isEmpty()) {
-            return;
-        }
-        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
-        Map<String, String> properties = Maps.newHashMap();
-        if (SAMPLE == analyzeType) {
-            properties = StatsConstants.buildInitStatsProp();
-        }
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
-        Future<?> future;
-        try {
-            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> {
-                        StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                        // set session id for temporary table
-                        if (table.isTemporaryTable()) {
-                            statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
-                        }
-                        statsConnectCtx.setThreadLocalInfo();
-
-                        statisticExecutor.collectStatistics(statsConnectCtx,
-                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(collectPartitionIds), null, null,
-                                        analyzeType, StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties()), analyzeStatus, false);
-                    });
-        } catch (Throwable e) {
-            LOG.error("failed to submit statistic collect job", e);
-            return;
-        }
-
-        if (sync) {
-            long await = Config.semi_sync_collect_statistic_await_seconds;
-            try {
-                future.get(await, TimeUnit.SECONDS);
-            } catch (InterruptedException | ExecutionException e) {
-                LOG.error("failed to execute statistic collect job", e);
-            } catch (TimeoutException e) {
-                LOG.warn("await collect statistic failed after {} seconds", await);
-            }
-        }
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState,
+                                                    Database db,
+                                                    Table table,
+                                                    boolean sync,
+                                                    boolean useLock) {
+        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock);
     }
 
     // check database in black list
@@ -298,30 +213,13 @@ public class StatisticUtils {
             long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
-        } else if (table.isHiveTable()) {
-            // for external table, we get last modified time from other system, there may be a time inconsistency
-            // between the two systems, so we add 60 seconds to make sure table update time is later than
-            // statistics update time
-            HiveTable hiveTable = (HiveTable) table;
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
-            List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
-            long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
-                    orElse(0L);
-            if (lastModifiedTime != 0L) {
-                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime).plusSeconds(60),
-                        Clock.systemDefaultZone().getZone());
-            } else {
+        } else {
+            try {
+                return ConnectorPartitionTraits.build(table).getTableLastUpdateTime(60);
+            } catch (Exception e) {
+                // ConnectorPartitionTraits do not support all type of table, ignore exception
                 return null;
             }
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
-                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
-        } else {
-            return null;
         }
     }
 

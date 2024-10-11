@@ -80,6 +80,7 @@ usage() {
 Usage: $0 <options>
   Optional options:
      --be               build Backend
+     --format-lib       build StarRocks format library, only with shared-data mode cluster
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --hive-udf         build Hive UDF
@@ -102,10 +103,14 @@ Usage: $0 <options>
                         build without vector index tenann library
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+     --without-avx2     build Backend without avx2(instruction)    
      -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
+    $0 --format-lib                              build StarRocks format library without clean
     $0 --fe --clean                              clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
@@ -119,6 +124,7 @@ OPTS=$(getopt \
   -n $0 \
   -o 'hj:' \
   -l 'be' \
+  -l 'format-lib' \
   -l 'fe' \
   -l 'spark-dpp' \
   -l 'hive-udf' \
@@ -135,6 +141,8 @@ OPTS=$(getopt \
   -l 'output-compile-time' \
   -l 'without-tenann' \
   -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
+  -l 'without-avx2' \
   -l 'help' \
   -- "$@")
 
@@ -145,6 +153,7 @@ fi
 eval set -- "$OPTS"
 
 BUILD_BE=
+BUILD_FORMAT_LIB=
 BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
@@ -159,10 +168,12 @@ USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
+WITH_RELATIVE_SRC_PATH=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
 MSG_BE="Backend"
+MSG_FORMAT_LIB="Format Lib"
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -218,6 +229,7 @@ if [ $# == 1 ] ; then
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+    BUILD_FORMAT_LIB=0
     CLEAN=0
     RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
@@ -226,11 +238,13 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+    BUILD_FORMAT_LIB=0
     CLEAN=0
     RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
+    BUILD_FORMAT_LIB=0
     BUILD_FE=0
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
@@ -239,6 +253,7 @@ else
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
+            --format-lib) BUILD_FORMAT_LIB=1 ; shift ;;
             --fe) BUILD_FE=1 ; shift ;;
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
@@ -253,7 +268,9 @@ else
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -268,13 +285,22 @@ if [[ ${HELP} -eq 1 ]]; then
     exit
 fi
 
-if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
-    echo "--clean can not be specified without --fe or --be or --spark-dpp or --hive-udf"
+if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
+    echo "--clean can not be specified without --fe or --be or --format-lib or --spark-dpp or --hive-udf"
     exit 1
+fi
+if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "--format-lib can not be specified with --be"
+    exit 1
+fi
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "do not build java extendsions when build format-lib."
+    BUILD_JAVA_EXT=OFF
 fi
 
 echo "Get params:
     BUILD_BE                    -- $BUILD_BE
+    BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
     BE_CMAKE_TYPE               -- $BUILD_TYPE
     BUILD_FE                    -- $BUILD_FE
     BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
@@ -299,6 +325,7 @@ echo "Get params:
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
     WITH_TENANN                 -- $WITH_TENANN
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
 "
 
 check_tool()
@@ -341,10 +368,14 @@ else
 fi
 
 # Clean and build Backend
-if [ ${BUILD_BE} -eq 1 ] ; then
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
         echo "Error: cmake is not found"
         exit 1
+    fi
+    # When build starrocks format lib, USE_STAROS must be ON
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        USE_STAROS=ON
     fi
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
@@ -352,6 +383,9 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
         CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_gcov
+    fi
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_format-lib
     fi
 
     if [ ${CLEAN} -eq 1 ]; then
@@ -400,9 +434,13 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DBUILD_BE=${BUILD_BE}                                \
                   -DWITH_TENANN=${WITH_TENANN}                          \
                   -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
+                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
@@ -490,6 +528,27 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_HOME}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_DPP}"
     fi
+fi
+
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    rm -rf ${STARROCKS_OUTPUT}/format-lib/*
+    mkdir -p ${STARROCKS_OUTPUT}/format-lib
+    cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
+    # format $BUILD_TYPE to lower case
+    ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
+    if [ "${ibuildtype}" == "release" ] ; then
+        pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
+        FORMAT_LIB=libstarrocks_format.so
+        FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
+        echo "Split $FORMAT_LIB debug symbol to $FORMAT_LIB_DEBUGINFO ..."
+        # strip be binary
+        # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
+        objcopy --only-keep-debug $FORMAT_LIB $FORMAT_LIB_DEBUGINFO
+        strip --strip-debug $FORMAT_LIB
+        objcopy --add-gnu-debuglink=$FORMAT_LIB_DEBUGINFO $FORMAT_LIB
+        popd &>/dev/null
+    fi
+    MSG="${MSG} √ ${MSG_FORMAT_LIB}"
 fi
 
 if [ ${BUILD_BE} -eq 1 ]; then

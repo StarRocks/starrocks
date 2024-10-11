@@ -15,6 +15,7 @@
 #pragma once
 
 #include "exprs/array_functions.tpp"
+#include "exprs/function_context.h"
 
 namespace starrocks {
 
@@ -28,8 +29,35 @@ public:
 
     DEFINE_VECTORIZED_FN(array_remove);
 
-    DEFINE_VECTORIZED_FN(array_contains);
-    DEFINE_VECTORIZED_FN(array_position);
+    DEFINE_VECTORIZED_FN(array_contains_generic);
+
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> array_contains_specific(FunctionContext* context, const Columns& columns) {
+        return ArrayContains<LT, false, UInt8Column>::process(context, columns);
+    }
+    template <LogicalType LT>
+    static Status array_contains_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayContains<LT, false, UInt8Column>::prepare(context, scope);
+    }
+    template <LogicalType LT>
+    static Status array_contains_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayContains<LT, false, UInt8Column>::close(context, scope);
+    }
+
+    DEFINE_VECTORIZED_FN(array_position_generic);
+
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> array_position_specific(FunctionContext* context, const Columns& columns) {
+        return ArrayContains<LT, true, Int32Column>::process(context, columns);
+    }
+    template <LogicalType LT>
+    static Status array_position_specific_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayContains<LT, true, Int32Column>::prepare(context, scope);
+    }
+    template <LogicalType LT>
+    static Status array_position_specific_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayContains<LT, true, Int32Column>::close(context, scope);
+    }
 
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_distinct(FunctionContext* context, const Columns& columns) {
@@ -48,6 +76,16 @@ public:
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
         return ArrayOverlap<type>::process(context, columns);
+    }
+
+    template <LogicalType type>
+    static Status array_overlap_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayOverlap<type>::prepare(context, scope);
+    }
+
+    template <LogicalType type>
+    static Status array_overlap_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayOverlap<type>::close(context, scope);
     }
 
     template <LogicalType type>

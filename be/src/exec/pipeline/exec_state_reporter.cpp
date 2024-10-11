@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -146,56 +147,20 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     return res;
 }
 
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
-
 // including the final status when execution finishes.
 Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                              const TNetworkAddress& fe_addr) {
-    Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
-                                    &fe_status);
-    if (!fe_status.ok()) {
-        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
-        return fe_status;
-    }
-
     TReportExecStatusResult res;
     Status rpc_status;
 
-    try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
 
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->reportExecStatus(res, params);
-            } else {
-                (void)coord.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-                return rpc_status;
-            }
-        }
-
+    if (rpc_status.ok()) {
         rpc_status = Status(res.status);
-    } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
-        return rpc_status;
     }
+
     return rpc_status;
 }
 
@@ -269,46 +234,13 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
                                        const TNetworkAddress& fe_addr) {
     Status fe_status;
-    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
-                                    &fe_status);
-    if (!fe_status.ok()) {
-        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
-        return fe_status;
-    }
-
     TMVReportEpochResponse res;
     Status rpc_status;
 
-    try {
-        try {
-            coord->mvReport(res, params);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->mvReport(res, params); },
+            config::thrift_rpc_timeout_ms);
 
-                if (!rpc_status.ok()) {
-                    return rpc_status;
-                }
-                coord->mvReport(res, params);
-            } else {
-                (void)coord.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
-                rpc_status = Status::InternalError(msg.str());
-            }
-        }
-
-        rpc_status = Status::OK();
-    } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
-        std::stringstream msg;
-        msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
-    }
     return rpc_status;
 }
 

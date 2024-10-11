@@ -408,8 +408,8 @@ size_t TabletUpdates::data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return total_size;
     } else {
         return total_size + (*size_st).pindex_size + (*size_st).col_size;
@@ -473,8 +473,8 @@ std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return {total_row, total_size};
     } else {
         return {total_row, total_size + (*size_st).pindex_size + (*size_st).col_size};
@@ -1546,6 +1546,13 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
+    //   3. The rowset stats maybe invalid, need to recalculate
     span->AddEvent("gen_delvec");
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -1632,12 +1639,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
-    // NOTE:
-    // If the apply fails at the following stages, an intolerable error must be returned right now.
-    // Because the metadata may have already been persisted.
-    // If you need to return a tolerable error, please make sure the following:
-    //   1. The latest meta should be roll back.
-    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
@@ -3484,8 +3485,8 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
     } else {
         total_size += (*size_st).pindex_size + (*size_st).col_size;
     }
@@ -4666,8 +4667,8 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-                   << ", error: " << size_st.status();
+        VLOG(2) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
+                << ", error: " << size_st.status();
     } else {
         info.index_disk_usage = (*size_st).pindex_size;
     }
@@ -5634,24 +5635,6 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
-
-    // 3. reset rowset_stats
-    {
-        std::lock_guard lg(_rowset_stats_lock);
-        _rowset_stats.clear();
-        for (auto& [rsid, rowset] : _rowsets) {
-            auto stats = std::make_unique<RowsetStats>();
-            stats->num_segments = rowset->num_segments();
-            stats->num_rows = rowset->num_rows();
-            stats->byte_size = rowset->data_disk_size();
-            stats->num_dels = 0;
-            stats->partial_update_by_column = rowset->is_column_mode_partial_update();
-            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
-            _calc_compaction_score(stats.get());
-            _rowset_stats.emplace(rsid, std::move(stats));
-        }
-    }
-    _update_total_stats(version_info_apply.rowsets, nullptr, nullptr);
 }
 
 } // namespace starrocks

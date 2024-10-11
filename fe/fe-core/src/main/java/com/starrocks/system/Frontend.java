@@ -37,18 +37,13 @@ package com.starrocks.system;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.common.io.JsonWriter;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
-public class Frontend implements Writable {
+public class Frontend extends JsonWriter {
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -208,11 +203,6 @@ public class Frontend implements Writable {
         }
 
         return isChanged;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

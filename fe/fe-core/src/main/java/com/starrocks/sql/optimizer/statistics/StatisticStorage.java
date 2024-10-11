@@ -38,9 +38,26 @@ public interface StatisticStorage {
     default void refreshTableStatisticSync(Table table) {
     }
 
+    /**
+     * Overwrite the statistics of `targetPartition` with `sourcePartition`
+     */
+    default void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
+    }
+
+    default void updatePartitionStatistics(long tableId, long partition, long rows) {
+    }
+
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
+
+    /**
+     * Return partition-level column statistics, it may not exist
+     */
+    default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                 List<String> columns) {
+        return null;
+    }
 
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);

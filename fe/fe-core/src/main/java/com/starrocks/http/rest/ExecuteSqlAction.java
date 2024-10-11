@@ -130,6 +130,9 @@ public class ExecuteSqlAction extends RestBaseAction {
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
+                if (Config.enable_print_sql) {
+                    LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", context.getQueryId(), requestBody.query);
+                }
                 // parse the sql here, for the convenience of verification of http request
                 parsedStmt = parse(requestBody.query, context.getSessionVariable());
                 context.setStatement(parsedStmt);
@@ -287,6 +290,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             // for queryStatement, if some data already sent, we just close the channel
             if (parsedStmt instanceof QueryStatement && context.getSendDate()) {
                 context.getNettyChannel().close();
+                LOG.warn("http sql:Netty channel is closed, query id:{}, query:{}, reason:{}", context.getQueryId(),
+                        parsedStmt.getOrigStmt().getOrigStmt(), context.getState().getErrorMessage());
                 return;
             }
             // send error message

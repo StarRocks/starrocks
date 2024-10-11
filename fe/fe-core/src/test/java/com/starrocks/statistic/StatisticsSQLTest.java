@@ -214,8 +214,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, t0, Lists.newArrayList("b.a", "b.c", "d.c.a"),
-                Lists.newArrayList(Type.INT, Type.INT, Type.INT),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                Lists.newArrayList(Type.INT, Type.INT, Type.INT), StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",

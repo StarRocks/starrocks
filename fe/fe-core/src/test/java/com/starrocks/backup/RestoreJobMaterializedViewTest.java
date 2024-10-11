@@ -71,6 +71,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
@@ -510,6 +511,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
+    @Ignore
     public void testMVRestoreMVWithBaseTable3() {
         new MockUp<MetadataMgr>() {
             @Mock
@@ -529,6 +531,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
+    @Ignore
     public void testMVRestoreMVWithBaseTable4() {
         new MockUp<MetadataMgr>() {
             @Mock

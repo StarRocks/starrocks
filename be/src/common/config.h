@@ -163,6 +163,13 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
+// The replication max speed limit(KB/s).
+CONF_mInt32(replication_max_speed_limit_kbps, "50000");
+// The replication min speed limit(KB/s).
+CONF_mInt32(replication_min_speed_limit_kbps, "50");
+// The replication min speed time(seconds).
+CONF_mInt32(replication_min_speed_time_seconds, "300");
+// Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
@@ -862,6 +869,11 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
+
+// Retry strategy for read operation. The following two parameters are the default value of Aws
+// DefaultRetryStrategy
+CONF_Int64(object_storage_max_retries, "10");
+CONF_Int64(object_storage_retry_scale_factor, "25");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");

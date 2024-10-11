@@ -38,11 +38,11 @@
 
 namespace starrocks::lake {
 
-UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
+UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _compaction_cache(std::numeric_limits<size_t>::max()),
-          _location_provider(location_provider),
+          _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
     const int64_t update_mem_limit = _update_mem_tracker->limit();
@@ -71,10 +71,6 @@ UpdateManager::~UpdateManager() {
 
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
     return strings::Substitute("$0_$1", tablet_id, txn_id);
-}
-
-Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
-    return _update_mgr->get_del_vec(tsid, version, _pk_builder, _fill_cache, pdelvec);
 }
 
 PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
@@ -621,8 +617,11 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
                                           DelVector* delvec) {
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tsid.tablet_id, meta_ver, fill_cache));
-    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, delvec));
+    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.fill_data_cache = fill_cache;
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, lake_io_opts, delvec));
     return Status::OK();
 }
 
@@ -725,8 +724,9 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
 
     // 2. update primary index, and generate delete info.
-    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
-            &metadata, &output_rowset, this, builder, &index, txn_id, base_version, &segment_id_to_add_dels, &delvecs);
+    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(&metadata, &output_rowset, _tablet_mgr,
+                                                                               builder, &index, txn_id, base_version,
+                                                                               &segment_id_to_add_dels, &delvecs);
     RETURN_IF_ERROR(resolver->execute());
     _index_cache.update_object_size(index_entry, index.memory_usage());
     // 3. update TabletMeta and write to meta file

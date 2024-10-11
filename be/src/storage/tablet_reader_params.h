@@ -62,7 +62,7 @@ struct TabletReaderParams {
     bool use_page_cache = false;
 
     // Options only applies to cloud-native table r/w IO
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .fill_metadata_cache = true};
 
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;

@@ -1153,15 +1153,24 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
-            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT);
+            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
+                    parsedStmt.getExplainLevel());
             if (executeInFe) {
                 explainString = "EXECUTE IN FE\n" + explainString;
             }
             handleExplainStmt(explainString);
             return;
         }
+
+        // Generate a query plan for query detail
+        // Explaining internal table is very quick, we prefer to use EXPLAIN COSTS
+        // But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
+                    level));
         }
 
         List<PlanFragment> fragments = execPlan.getFragments();
@@ -1191,7 +1200,7 @@ public class StmtExecutor {
 
         RowBatch batch;
         if (context instanceof HttpConnectContext) {
-            batch = httpResultSender.sendQueryResult(coord, execPlan);
+            batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1431,8 +1440,7 @@ public class StmtExecutor {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(),
-                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
@@ -1780,7 +1788,8 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
+    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType,
+                                      StatementBase.ExplainLevel explainLevel) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
@@ -1808,7 +1817,7 @@ public class StmtExecutor {
                 if (optimizedRecord != null) {
                     explainString += optimizedRecord.getExplainString();
                 }
-                explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+                explainString += execPlan.getExplainString(explainLevel);
             }
         }
         return explainString;
@@ -2086,11 +2095,17 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
+                    parsedStmt.getExplainLevel()));
             return;
         }
+
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
+            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
+                    StatementBase.ExplainLevel.defaultValue() :
+                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
+                    level));
         }
 
         // special handling for delete of non-primary key table, using old handler
@@ -2107,6 +2122,7 @@ public class StmtExecutor {
             return;
         }
 
+        DmlType dmlType = DmlType.fromStmt(stmt);
         stmt.getTableName().normalization(context);
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
@@ -2125,8 +2141,7 @@ public class StmtExecutor {
                     "explain analyze only supports insert into olap native table");
         }
 
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
-                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+        if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
             handleInsertOverwrite((InsertStmt) parsedStmt);
             return;
@@ -2519,8 +2534,8 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
-                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtJobTransactionFinish(txnState, database,
-                        targetTable);
+                GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                        .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
         }
 

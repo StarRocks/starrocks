@@ -399,6 +399,13 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->upsert(chunk_index.first);
         }
+        size_t delete_size = _random_generator->random() % MaxUpsert;
+        for (int i = 0; i < delete_size; i++) {
+            auto chunk_index = gen_upsert_data(false);
+            RETURN_IF_ERROR(
+                    delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
+            _replayer->erase(chunk_index.first);
+        }
         RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
@@ -493,6 +500,13 @@ public:
                 RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
                                                     chunk_index.second.size()));
                 _replayer->upsert(chunk_index.first);
+            }
+            size_t delete_size = _random_generator->random() % MaxUpsert;
+            for (int i = 0; i < delete_size; i++) {
+                auto chunk_index = gen_upsert_data(false);
+                RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
+                                                    chunk_index.second.size()));
+                _replayer->erase(chunk_index.first);
             }
             RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
             delta_writer->close();

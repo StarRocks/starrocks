@@ -900,6 +900,10 @@ public class GlobalStateMgr {
         return statisticStorage;
     }
 
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
+    }
+
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
     }
@@ -1255,6 +1259,10 @@ public class GlobalStateMgr {
                 Preconditions.checkNotNull(self);
                 // OP_ADD_FIRST_FRONTEND is emitted, so it can write to BDBJE even if canWrite is false
                 editLog.logAddFirstFrontend(self);
+            }
+
+            if (Config.bdbje_reset_election_group) {
+                nodeMgr.resetFrontends();
             }
 
             // MUST set leader ip before starting checkpoint thread.
