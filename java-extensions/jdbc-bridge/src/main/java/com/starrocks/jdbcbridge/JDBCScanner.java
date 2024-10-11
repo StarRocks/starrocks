@@ -57,12 +57,17 @@ public class JDBCScanner {
     }
 
     public void open() throws Exception {
-        String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
+        String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
+<<<<<<< HEAD
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
                     driverURL,
             });
+=======
+        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
+>>>>>>> acce535baf ([BugFix] Fix jdbc catalog change password not effect (#51748))
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -105,6 +110,7 @@ public class JDBCScanner {
         }
     }
 
+<<<<<<< HEAD
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
             Boolean.class,
             Short.class,
@@ -119,6 +125,16 @@ public class JDBCScanner {
             LocalDateTime.class,
             String.class
     ));
+=======
+    private static String computeCacheKey(String username, String password, String jdbcUrl) {
+        return username + "/" + password + "/" + jdbcUrl;
+    }
+
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
+            Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
+                    BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
+                    LocalDateTime.class, Time.class, String.class));
+>>>>>>> acce535baf ([BugFix] Fix jdbc catalog change password not effect (#51748))
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
