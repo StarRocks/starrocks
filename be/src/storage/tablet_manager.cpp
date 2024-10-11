@@ -1012,6 +1012,7 @@ void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
     // The current thread has two references: _shutdown_tablets[i] and tablets_to_checks[i], check
     // if there is another thread has reference to the tablet, and if so, does not remove the tablet for now.
     if (tablet.use_count() > 2) {
+        LOG(INFO) << "tablet: " << tablet->tablet_id() << " use count: " << tablet.use_count() << ", can not delete right now";
         return;
     }
 
@@ -1812,6 +1813,7 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
             }
+            LOG(INFO) << "find same tablet: " << tablet_id << "in shutdown tablet, origin add: " << (iter->second).tablet.get() << ", new add: " << drop_info.tablet.get();
         }
         auto drop_info_redundant = iter->second;
         auto tablet_uid = (drop_info_redundant.tablet)->tablet_uid();
