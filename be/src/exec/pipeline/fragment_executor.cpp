@@ -485,7 +485,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (tcache_param.__isset.is_lake) {
             cache_param.is_lake = tcache_param.is_lake;
         }
-        cache_param.is_lake = tcache_param.is_lake;
+
         for (auto& [slot, remapped_slot] : tcache_param.slot_remapping) {
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
