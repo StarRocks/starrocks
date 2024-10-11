@@ -113,6 +113,7 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
+    arrow_flight_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
