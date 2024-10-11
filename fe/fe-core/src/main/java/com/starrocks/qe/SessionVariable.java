@@ -331,6 +331,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
+            "enable_partition_level_cardinality_estimation";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
@@ -1140,6 +1142,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionLevelCardinalityEstimation = true;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -2789,6 +2794,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRewriteGroupingSetsToUnionAll(boolean enableRewriteGroupingSetsToUnionAll) {
         this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
+    }
+
+    public boolean isEnablePartitionLevelCardinalityEstimation() {
+        return enablePartitionLevelCardinalityEstimation;
+    }
+
+    public void setEnablePartitionLevelCardinalityEstimation(boolean enablePartitionLevelCardinalityEstimation) {
+        this.enablePartitionLevelCardinalityEstimation = enablePartitionLevelCardinalityEstimation;
     }
 
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
