@@ -164,6 +164,10 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
     ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
     _tablet_schema = _tablet.get_schema();
+    LOG(WARNING) << "get_tablet, tablet_id: " << tablet_id << ", version: " << version
+                 << ", tablet schema id: " << _tablet_schema->id()
+                 << ", last column uid:" << _tablet_schema->columns().back().unique_id()
+                 << ", last column name: " << _tablet_schema->columns().back().name();
     return Status::OK();
 }
 
@@ -213,6 +217,10 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
             LOG(WARNING) << ss.str();
+            LOG(WARNING) << "tablet schema id: " << _tablet_schema->id() << ", columns: ";
+            for (const auto& c : _tablet_schema->columns()) {
+                LOG(WARNING) << c.name();
+            }
             return Status::InternalError(ss.str());
         }
         scanner_columns.push_back(index);
