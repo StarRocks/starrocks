@@ -14,9 +14,9 @@
 
 package com.starrocks.load.pipe.filelist;
 
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,19 +67,7 @@ public class RepoCreator {
     }
 
     public static boolean correctTable() {
-        int expectedReplicationNum =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
-        int replica = GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().mayGetTable(FileListTableRepo.FILE_LIST_DB_NAME, FileListTableRepo.FILE_LIST_TABLE_NAME)
-                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
-                .orElse((short) 1);
-        if (replica != expectedReplicationNum) {
-            String sql = FileListTableRepo.SQLBuilder.buildAlterTableSql(expectedReplicationNum);
-            RepoExecutor.getInstance().executeDDL(sql);
-            LOG.info("changed table {} replication_num from {} to {}",
-                    FileListTableRepo.FILE_LIST_FULL_NAME, replica, expectedReplicationNum);
-        }
-        return true;
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
     }
 
     public boolean isDatabaseExists() {

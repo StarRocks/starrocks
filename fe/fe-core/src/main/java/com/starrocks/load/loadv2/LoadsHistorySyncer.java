@@ -15,7 +15,6 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
@@ -23,7 +22,7 @@ import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,27 +96,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public static boolean correctTable() {
-        if (RunMode.isSharedDataMode()) {
-            return true;
-        }
-        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getRetainedBackendNumber();
-        int expectedReplication = Integer.max(1, Integer.min(Config.default_replication_num, numBackends));
-        int replica = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .mayGetTable(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME)
-                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
-                .orElse((short) 1);
-        // For scale-out, we may need to extend it to more replicas
-        // For scale-in, we may need to drop replicas
-        if (replica != expectedReplication) {
-            String sql = SQLBuilder.buildAlterTableSql(expectedReplication);
-            RepoExecutor.getInstance().executeDDL(sql);
-            LOG.info("changed table {} replication_num from {} to {}",
-                    LOADS_HISTORY_TABLE_NAME, replica, expectedReplication);
-        } else {
-            LOG.info("table {} already has {} replicas, no need to alter replication_num",
-                    LOADS_HISTORY_TABLE_NAME, replica);
-        }
-        return true;
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(LOADS_HISTORY_TABLE_NAME);
     }
 
     public void checkMeta() throws UserException {

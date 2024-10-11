@@ -482,7 +482,7 @@ public class StatisticUtils {
      * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
      * 3. When scale-in to less than 3 node, change it to retainedBackendNum
      */
-    public static void alterSystemTableReplicationNumIfNecessary(String tableName) {
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         int replica = GlobalStateMgr.getCurrentState()
@@ -498,7 +498,9 @@ public class StatisticUtils {
             }
             LOG.info("changed replication_number of table {} from {} to {}",
                     tableName, replica, expectedReplicationNum);
+            return true;
         }
+        return false;
     }
 
     // only support collect statistics for slotRef and subfield expr
