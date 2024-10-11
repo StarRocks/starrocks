@@ -252,7 +252,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
         // Delta versions are captured, several situations should be taken into consideration.
         auto& [tablet, rowsets, acq_rel] = status.value();
         base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
-        for (auto rowset_ptr : rowsets) {
+        for (auto const& rowset_ptr : rowsets) {
             base_rowsets.emplace_back(std::static_pointer_cast<BaseRowset>(rowset_ptr));
         }
         rowsets_acq_rel = std::move(acq_rel);
