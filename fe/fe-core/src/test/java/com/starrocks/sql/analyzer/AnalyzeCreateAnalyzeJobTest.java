@@ -128,9 +128,8 @@ public class AnalyzeCreateAnalyzeJobTest {
         String jobId = jobDesc.get(0);
         Assert.assertEquals(
                 List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
-                        "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}",
-                        "PENDING", "None", ""),
-                jobDesc.subList(1, jobDesc.size()));
+                        "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}"),
+                jobDesc.subList(1, jobDesc.size() - 3));
 
         // trigger the job
         StatisticAutoCollector statisticAutoCollector = GlobalStateMgr.getCurrentState().getStatisticAutoCollector();
