@@ -41,10 +41,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -212,23 +212,7 @@ public class Frontend implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, role.name());
-        Text.writeString(out, host);
-        out.writeInt(editLogPort);
-        Text.writeString(out, nodeName);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        role = FrontendNodeType.valueOf(Text.readString(in));
-        host = Text.readString(in);
-        editLogPort = in.readInt();
-        nodeName = Text.readString(in);
-    }
-
-    public static Frontend read(DataInput in) throws IOException {
-        Frontend frontend = new Frontend();
-        frontend.readFields(in);
-        return frontend;
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

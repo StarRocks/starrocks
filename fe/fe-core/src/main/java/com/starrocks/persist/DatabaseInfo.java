@@ -35,12 +35,11 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -86,36 +85,9 @@ public class DatabaseInfo implements Writable {
         return quota;
     }
 
-    public static DatabaseInfo read(DataInput in) throws IOException {
-        DatabaseInfo dbInfo = new DatabaseInfo();
-        dbInfo.readFields(in);
-        return dbInfo;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(dbName));
-        if (newDbName.isEmpty()) {
-            Text.writeString(out, newDbName);
-        } else {
-            Text.writeString(out, ClusterNamespace.getFullName(newDbName));
-        }
-        out.writeLong(quota);
-        Text.writeString(out, this.clusterName);
-        // compatible with dbState
-        Text.writeString(out, "NORMAL");
-        Text.writeString(out, this.quotaType.name());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        this.dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        newDbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        this.quota = in.readLong();
-        this.clusterName = Text.readString(in);
-        // Compatible with dbState
-        Text.readString(in);
-        this.quotaType = QuotaType.valueOf(Text.readString(in));
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public String getClusterName() {

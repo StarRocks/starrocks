@@ -20,8 +20,8 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -106,30 +106,6 @@ public class TableInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeLong(indexId);
-        out.writeLong(partitionId);
-
-        Text.writeString(out, newTableName);
-        Text.writeString(out, newRollupName);
-        Text.writeString(out, newPartitionName);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tableId = in.readLong();
-        indexId = in.readLong();
-        partitionId = in.readLong();
-
-        newTableName = Text.readString(in);
-        newRollupName = Text.readString(in);
-        newPartitionName = Text.readString(in);
-    }
-
-    public static TableInfo read(DataInput in) throws IOException {
-        TableInfo info = new TableInfo();
-        info.readFields(in);
-        return info;
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 }

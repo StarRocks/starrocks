@@ -39,7 +39,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -95,12 +94,6 @@ public class BackendTabletsInfo implements Writable {
         return tabletSchemaHash.isEmpty() && replicaPersistInfos.isEmpty();
     }
 
-    public static BackendTabletsInfo read(DataInput in) throws IOException {
-        BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo();
-        backendTabletsInfo.readFields(in);
-        return backendTabletsInfo;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(backendId);
@@ -121,28 +114,4 @@ public class BackendTabletsInfo implements Writable {
         // this is for further extension
         out.writeBoolean(false);
     }
-
-    public void readFields(DataInput in) throws IOException {
-        backendId = in.readLong();
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long tabletId = in.readLong();
-            int schemaHash = in.readInt();
-            tabletSchemaHash.add(Pair.create(tabletId, schemaHash));
-        }
-
-        bad = in.readBoolean();
-
-        if (in.readBoolean()) {
-            size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.read(in);
-                replicaPersistInfos.add(replicaPersistInfo);
-            }
-        } else {
-            replicaPersistInfos = Lists.newArrayList();
-        }
-    }
-
 }
