@@ -29,7 +29,8 @@ public class RewriteEquivalent {
             BitmapRewriteEquivalent.INSTANCE,
             ArrayRewriteEquivalent.INSTANCE,
             HLLRewriteEquivalent.INSTANCE,
-            PercentileRewriteEquivalent.INSTANCE
+            PercentileRewriteEquivalent.INSTANCE,
+            AggStateRewriteEquivalent.INSTANCE
     );
     public static final List<IRewriteEquivalent> PREDICATE_EQUIVALENTS = Lists.newArrayList(
             TimeSliceRewriteEquivalent.INSTANCE,
