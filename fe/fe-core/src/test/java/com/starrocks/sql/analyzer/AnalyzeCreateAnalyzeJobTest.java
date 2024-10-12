@@ -95,5 +95,50 @@ public class AnalyzeCreateAnalyzeJobTest {
         sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
         analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testCreateHistogram() throws Exception {
+        // mock execution
+        UtFrameUtils.mockQueryExecute(() -> {
+        });
+        UtFrameUtils.mockDML();
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("db", "tbl1");
+        UtFrameUtils.setPartitionVersion(table.getPartition("p1"), 3);
+        UtFrameUtils.setPartitionVersion(table.getPartition("p2"), 3);
+        PlanTestBase.setTableStatistics(table, 1000);
+        PlanTestBase.setPartitionStatistics(table, "p1", 500);
+        PlanTestBase.setPartitionStatistics(table, "p2", 500);
+
+        // create job
+        starRocksAssert.ddl("create analyze table db.tbl1 update histogram on c1,c2 with 128 buckets ");
+        List<List<String>> analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
+        List<String> jobDesc = analyzeJobs.get(0);
+        String jobId = jobDesc.get(0);
+        Assert.assertEquals(
+                List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
+                        "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}"),
+                jobDesc.subList(1, jobDesc.size() - 3));
+
+        // trigger the job
+        StatisticAutoCollector statisticAutoCollector = GlobalStateMgr.getCurrentState().getStatisticAutoCollector();
+        statisticAutoCollector.runJobs();
+        {
+            analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
+            jobDesc = analyzeJobs.get(0);
+            jobId = jobDesc.get(0);
+            Assert.assertEquals(
+                    List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
+                            "{histogram_sample_ratio=1, histogram_mcv_size=100, histogram_bucket_num=128}",
+                            "FINISH"),
+                    jobDesc.subList(1, jobDesc.size() - 2));
+        }
+
+        // drop analyze
+        starRocksAssert.ddl("drop analyze " + jobId);
+        analyzeJobs = starRocksAssert.show("show analyze job where `Type` = 'HISTOGRAM'");
+        Assert.assertEquals(0, analyzeJobs.size());
+>>>>>>> 97521f2796 ([UT] fix unstable AnalyzeCreateAnalyzeJobTest.testCreateHistogram (#51829))
     }
 }
