@@ -414,7 +414,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_prepare(RuntimeState* state) {
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::build(RuntimeState* state) {
-    _table_items->build_chunk->append_finished();
     BuildFunc().construct_hash_table(state, _table_items, _probe_state);
 }
 

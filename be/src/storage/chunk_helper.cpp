@@ -859,7 +859,7 @@ void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
     }
 }
 
-void SegmentedChunk::append_finished() {
+void SegmentedChunk::build_columns() {
     DCHECK(_segments.size() >= 1);
     size_t num_columns = _segments[0]->num_columns();
     for (int i = 0; i < num_columns; i++) {

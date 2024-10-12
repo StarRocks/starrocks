@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <queue>
 
 #include "column/column_visitor.h"
@@ -187,7 +188,7 @@ public:
     void append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots);
     void append_chunk(const ChunkPtr& chunk);
     void append(const SegmentedChunkPtr& chunk, size_t offset);
-    void append_finished();
+    void build_columns();
 
     size_t memory_usage() const;
     size_t num_rows() const;

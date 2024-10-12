@@ -486,6 +486,7 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
             _table_items->build_column_count++;
         }
     }
+    _table_items->build_chunk->build_columns();
 }
 
 void JoinHashTable::_init_mor_reader() {

@@ -98,6 +98,7 @@ SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
     auto* tuple_desc = _create_simple_desc();
     auto segmented_chunk = SegmentedChunk::create(1 << 16);
     segmented_chunk->append_column(Int32Column::create(), 0);
+    segmented_chunk->build_columns();
 
     // put 100 chunks into the segmented chunk
     int row_id = 0;
@@ -110,7 +111,6 @@ SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
 
         segmented_chunk->append_chunk(std::move(chunk));
     }
-    segmented_chunk->append_finished();
     return segmented_chunk;
 }
 
