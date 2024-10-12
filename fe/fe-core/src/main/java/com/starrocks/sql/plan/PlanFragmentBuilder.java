@@ -1375,15 +1375,6 @@ public class PlanFragmentBuilder {
                             case "JOB_ID":
                                 scanNode.setJobId(constantOperator.getBigint());
                                 break;
-<<<<<<< HEAD
-=======
-                            case "ID":
-                                if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
-                                        || scanNode.getTableName().equalsIgnoreCase(LoadsSystemTable.NAME)) {
-                                    scanNode.setJobId(constantOperator.getBigint());
-                                }
-                                break;
->>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
                             case "TYPE":
                                 scanNode.setType(constantOperator.getVarchar());
                                 break;
@@ -1437,11 +1428,7 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-<<<<<<< HEAD
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
-=======
             if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
->>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());

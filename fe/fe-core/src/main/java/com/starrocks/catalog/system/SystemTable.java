@@ -20,9 +20,6 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
@@ -36,10 +33,7 @@ import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
-import com.starrocks.catalog.system.information.TemporaryTablesTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
->>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -75,7 +69,6 @@ public class SystemTable extends Table {
                     .add(TablesConfigSystemTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)
-                    .add(TemporaryTablesTable.NAME)
                     .add(ViewsSystemTable.NAME)
                     .build();
 
@@ -166,30 +159,8 @@ public class SystemTable extends Table {
     public boolean isSupported() {
         return true;
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Whether this system table supports evaluation in FE
-     *
-     * @return true if it's supported
-     */
-    public boolean supportFeEvaluation() {
-        return false;
-    }
-
-    /**
-     * Evaluate the system table query with specified predicate
-     *
-     * @param predicate can only be conjuncts
-     * @return All columns and rows according to the schema of this table
-     */
-    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
-        throw new NotImplementedException("not supported");
-    }
 
     public static boolean needQueryFromLeader(String tableName) {
         return QUERY_FROM_LEADER_TABLES.contains(tableName);
     }
->>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
 }
