@@ -50,9 +50,6 @@ public class ExternalCooldownSchedule {
             return false;
         }
         String start = externalCooldownSchedule.getStart();
-        if (start == null) {
-            return false;
-        }
         if (start.compareTo("23:59") > 0 || start.compareTo("00:00") < 0) {
             return false;
         }
@@ -69,9 +66,6 @@ public class ExternalCooldownSchedule {
             case "MINUTE":
                 intervalSeconds = interval * 60;
                 break;
-            case "SECOND":
-                intervalSeconds = interval;
-                break;
             default:
                 intervalSeconds = interval;
                 break;
@@ -80,6 +74,9 @@ public class ExternalCooldownSchedule {
     }
 
     public static ExternalCooldownSchedule fromString(String schedule) {
+        if (schedule == null || schedule.isEmpty()) {
+            return null;
+        }
         Matcher matcher = SCHEDULE_PATTERN.matcher(schedule);
         if (!matcher.matches()) {
             return null;
@@ -121,8 +118,7 @@ public class ExternalCooldownSchedule {
         this.lastScheduleMs = lastScheduleMs;
     }
 
-    public boolean trySchedule() {
-        long currentMs = System.currentTimeMillis();
+    public boolean trySchedule(long currentMs) {
         String s = timeFormat.format(currentMs);
         if (end.compareTo(start) < 0) {
             // ex: [start=23:00, end=07:00)

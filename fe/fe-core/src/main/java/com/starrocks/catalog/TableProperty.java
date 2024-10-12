@@ -78,6 +78,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -1083,7 +1084,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (externalCoolDownConfig == null) {
             return 0;
         }
-        return externalCoolDownConfig.getWaitSecond();
+        Long waitSecond = externalCoolDownConfig.getWaitSecond();
+        return Objects.requireNonNullElse(waitSecond, 0L);
     }
 
     @Override

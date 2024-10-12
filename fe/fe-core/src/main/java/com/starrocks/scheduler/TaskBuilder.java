@@ -289,12 +289,12 @@ public class TaskBuilder {
         }
     }
 
-    public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt, ConnectContext context) {
+    public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt) {
         TableName tableName = externalCooldownStmt.getTableName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
         if (!(table instanceof OlapTable)) {
-            throw new SemanticException("only support cooldown for olap table, got " + table.getType());
+            throw new SemanticException("only support cooldown for olap table, got " + tableName);
         }
         OlapTable olapTable = (OlapTable) table;
 

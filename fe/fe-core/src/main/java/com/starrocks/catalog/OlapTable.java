@@ -498,7 +498,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             tableProperty = new TableProperty(Maps.newHashMap());
         }
-        tableProperty.modifyTableProperties(externalCoolDownConfig.getProperties());
+        tableProperty.modifyTableProperties(externalCoolDownConfig.getValidProperties());
         tableProperty.setExternalCoolDownConfig(externalCoolDownConfig);
     }
 
@@ -3367,7 +3367,7 @@ public class OlapTable extends Table {
         properties.putAll(getUniqueProperties());
 
         if (getCurExternalCoolDownConfig() != null) {
-            properties.putAll(getCurExternalCoolDownConfig().getProperties());
+            properties.putAll(getCurExternalCoolDownConfig().getValidProperties());
         }
 
         return properties;

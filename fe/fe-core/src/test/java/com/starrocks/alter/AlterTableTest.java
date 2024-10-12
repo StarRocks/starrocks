@@ -549,6 +549,27 @@ public class AlterTableTest {
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
         Assert.assertEquals((Long) 7200L, olapTable.getExternalCoolDownWaitSecond());
+
+        String sql4 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_wait_second\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
+
+        String sql5 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_schedule\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql5, ctx));
+
+        String sql6 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql6, ctx));
+
+        String sql7 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"a.b.c\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql7, ctx));
+
+        String sql8 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" "
+                + "= \"default_catalog.test.test_external_cooldown\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql8, ctx));
     }
 
     @Test
@@ -601,5 +622,14 @@ public class AlterTableTest {
                 rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200324").getId()));
         Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
                 rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200324").getId()));
+
+        String sql1 = "ALTER TABLE test_alter_external_cool_down_synced_time\n" +
+                "MODIFY PARTITION (p20200321) SET(\"external_cooldown_synced_time\" = \"\",\n" +
+                " \"external_cooldown_consistency_check_time\" = \"\");";
+        AlterTableStmt alterTableStmt1 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt1);
+        long partitionId = olapTable.getPartition("p20200321").getId();
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownSyncedTimeMs(partitionId));
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partitionId));
     }
 }

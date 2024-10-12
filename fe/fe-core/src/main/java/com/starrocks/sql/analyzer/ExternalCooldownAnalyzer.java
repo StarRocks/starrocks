@@ -31,10 +31,6 @@ public class ExternalCooldownAnalyzer {
         new ExternalCooldownAnalyzer.ExternalCooldownAnalyzerVisitor().visit(stmt, session);
     }
 
-    private ExternalCooldownAnalyzer() {
-        throw new IllegalStateException("creating an instance is illegal");
-    }
-
     static class ExternalCooldownAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateExternalCooldownStatement(CreateExternalCooldownStmt createExternalCooldownStmt,

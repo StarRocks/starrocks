@@ -54,12 +54,8 @@ public class ExternalCooldownJobExecutor extends FrontendDaemon {
 
         long startMillis = System.currentTimeMillis();
         for (ExternalCooldownMaintenanceJob job : jobs) {
-            if (!job.isRunnable()) {
-                LOG.warn("Job {} external cooldown config not satisfied ", job);
-                continue;
-            }
             try {
-                job.onSchedule();
+                job.onSchedule(System.currentTimeMillis());
             } catch (DdlException e) {
                 LOG.warn("[ExternalCooldownJobExecutor] execute job got exception", e);
             }

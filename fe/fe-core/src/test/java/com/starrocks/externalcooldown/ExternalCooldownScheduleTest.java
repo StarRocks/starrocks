@@ -31,4 +31,44 @@ public class ExternalCooldownScheduleTest {
         Assert.assertEquals("MINUTE", schedule.getUnit());
         Assert.assertEquals(60L, schedule.getIntervalSeconds());
     }
+
+    @Test
+    public void testPartitionStartEndHour() {
+        String scheduleStr = "START 01:00 END 07:59 EVERY INTERVAL 1 HOUR";
+        ExternalCooldownSchedule schedule = ExternalCooldownSchedule.fromString(scheduleStr);
+        Assert.assertNotNull(schedule);
+        Assert.assertEquals("01:00", schedule.getStart());
+        Assert.assertEquals("07:59", schedule.getEnd());
+        Assert.assertEquals(1L, schedule.getInterval());
+        Assert.assertEquals("HOUR", schedule.getUnit());
+        Assert.assertEquals(3600L, schedule.getIntervalSeconds());
+    }
+
+    @Test
+    public void testPartitionStartEndSecond() {
+        String scheduleStr = "START 01:00 END 07:59 EVERY INTERVAL 1 SECOND";
+        ExternalCooldownSchedule schedule = ExternalCooldownSchedule.fromString(scheduleStr);
+        Assert.assertNotNull(schedule);
+        Assert.assertEquals("01:00", schedule.getStart());
+        Assert.assertEquals("07:59", schedule.getEnd());
+        Assert.assertEquals(1L, schedule.getInterval());
+        Assert.assertEquals("SECOND", schedule.getUnit());
+        Assert.assertEquals(1L, schedule.getIntervalSeconds());
+    }
+
+    @Test
+    public void testPartitionStartEndDefault() {
+        String scheduleStr = "START 01:00 END 07:59 EVERY INTERVAL 23";
+        ExternalCooldownSchedule schedule = ExternalCooldownSchedule.fromString(scheduleStr);
+        Assert.assertNull(schedule);
+    }
+
+    @Test
+    public void testValidateScheduleString() {
+        Assert.assertFalse(ExternalCooldownSchedule.validateScheduleString("START 01:00 END 07:59"));
+        Assert.assertFalse(ExternalCooldownSchedule.validateScheduleString("START 25:00 END 07:59 EVERY INTERVAL 23"));
+        Assert.assertFalse(ExternalCooldownSchedule.validateScheduleString("START 01:00 EVERY INTERVAL 23"));
+        Assert.assertFalse(ExternalCooldownSchedule.validateScheduleString("START 01:00 END 07:59 EVERY INTERVAL 23"));
+        Assert.assertTrue(ExternalCooldownSchedule.validateScheduleString("START 01:00 END 07:59 EVERY INTERVAL 23 SECOND"));
+    }
 }
