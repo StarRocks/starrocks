@@ -1651,11 +1651,7 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-<<<<<<< HEAD
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
-=======
             if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
->>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
