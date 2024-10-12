@@ -621,10 +621,10 @@ template <typename T>
 struct has_value_type<T, std::void_t<typename T::ValueType>> : std::true_type {};
 
 template <class ColumnT>
-inline constexpr bool is_object =
-        std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
-        std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
-        (has_value_type<ColumnT>::value && std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>);
+inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
+                                  std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
+                                  (has_value_type<ColumnT>::value &&
+                                   std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>);
 
 template <class ColumnT>
 inline constexpr bool is_fixed_or_binary =
