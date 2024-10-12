@@ -193,7 +193,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
-    public static final String PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES = "excluded_refresh_base_tables";
+    public static final String PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES = "excluded_refresh_tables";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.

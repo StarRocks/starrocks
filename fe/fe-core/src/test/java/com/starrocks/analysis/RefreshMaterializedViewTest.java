@@ -109,7 +109,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n"
                 + "PROPERTIES (\n"
-                + "\"excluded_refresh_base_tables\" = \"t2\"\n"
+                + "\"excluded_refresh_tables\" = \"t2\"\n"
                 + ")\n"
                 + "DISTRIBUTED BY RANDOM\n" +
                 "REFRESH ASYNC\n" +
@@ -118,10 +118,13 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            boolean t1 = mv.shouldRefreshBaseTable("t1");
-            boolean t2 = mv.shouldRefreshBaseTable("t2");
-            Assert.assertTrue(t1);
-            Assert.assertFalse(t2);
+            Assert.assertTrue(mv.shouldRefreshBaseTable("t1"));
+            Assert.assertFalse(mv.shouldRefreshBaseTable("t2"));
+
+            // cleanup
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropTable("t2");
+            starRocksAssert.dropMaterializedView("mv1");
         });
     }
 
