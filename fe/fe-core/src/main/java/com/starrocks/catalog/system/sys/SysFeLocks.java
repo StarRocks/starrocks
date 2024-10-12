@@ -44,7 +44,6 @@ import java.util.Comparator;
 import java.util.List;
 
 public class SysFeLocks {
-
     public static final String NAME = "fe_locks";
 
     public static SystemTable create() {

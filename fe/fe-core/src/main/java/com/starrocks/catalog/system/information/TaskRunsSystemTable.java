@@ -23,10 +23,36 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
+<<<<<<< HEAD
 public class TaskRunsSystemTable {
     public static SystemTable create() {
         return new SystemTable(SystemId.TASK_RUNS_ID,
                 "task_runs",
+=======
+public class TaskRunsSystemTable extends SystemTable {
+    private static final Logger LOG = LogManager.getLogger(SystemTable.class);
+
+    private static final SystemTable TABLE = new TaskRunsSystemTable();
+
+    private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
+            ImmutableMap.<Byte, Type>builder()
+                    .put(TType.I16, Type.SMALLINT)
+                    .put(TType.I32, Type.INT)
+                    .put(TType.I64, Type.BIGINT)
+                    .put(TType.STRING, Type.STRING)
+                    .put(TType.BOOL, Type.BOOLEAN)
+                    .build();
+
+    public static final String NAME = "task_runs";
+
+    public static SystemTable getInstance() {
+        return TABLE;
+    }
+
+    public TaskRunsSystemTable() {
+        super(SystemId.TASK_RUNS_ID,
+                NAME,
+>>>>>>> da80492936 ([Enhancement] Make some system tables query from leader fe (#51763))
                 Table.TableType.SCHEMA,
                 builder()
                         .column("QUERY_ID", ScalarType.createVarchar(64))

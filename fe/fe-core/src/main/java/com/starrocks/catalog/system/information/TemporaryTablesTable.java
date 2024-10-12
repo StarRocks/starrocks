@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.PrimitiveType;
@@ -24,12 +25,12 @@ import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-public class TablesSystemTable {
+public class TemporaryTablesTable {
     public static final int MY_CS_NAME_SIZE = 32;
-    private static final String NAME = "tables";
+    public static final String NAME = "temp_tables";
 
-    public static SystemTable create(String catalogName) {
-        return new SystemTable(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
+    public static SystemTable create() {
+        return new SystemTable(SystemId.TEMP_TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
                 .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
                 .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -51,6 +52,8 @@ public class TablesSystemTable {
                 .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
                 .column("CREATE_OPTIONS", ScalarType.createVarchar(255))
                 .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
-                .build(), TSchemaTableType.SCH_TABLES);
+                .column("SESSION", ScalarType.createVarchar(128))
+                .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                .build(), TSchemaTableType.SCH_TEMP_TABLES);
     }
 }
