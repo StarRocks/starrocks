@@ -121,8 +121,7 @@ public class ExternalCooldownSchedule {
         this.lastScheduleMs = lastScheduleMs;
     }
 
-    public boolean trySchedule() {
-        long currentMs = System.currentTimeMillis();
+    public boolean trySchedule(long currentMs) {
         String s = timeFormat.format(currentMs);
         if (end.compareTo(start) < 0) {
             // ex: [start=23:00, end=07:00)

@@ -43,6 +43,6 @@ public class CancelExternalCooldownStmt extends DdlStmt {
 
     @Override
     public String toSql() {
-        return "CANCEL COOLDOWN " + tableName;
+        return "CANCEL COOLDOWN TABLE " + tableName;
     }
 }

@@ -601,5 +601,14 @@ public class AlterTableTest {
                 rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200324").getId()));
         Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
                 rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200324").getId()));
+
+        String sql1 = "ALTER TABLE test_alter_external_cool_down_synced_time\n" +
+                "MODIFY PARTITION (p20200321) SET(\"external_cooldown_synced_time\" = \"\",\n" +
+                " \"external_cooldown_consistency_check_time\" = \"\");";
+        AlterTableStmt alterTableStmt1 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt1);
+        long partitionId = olapTable.getPartition("p20200321").getId();
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownSyncedTimeMs(partitionId));
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partitionId));
     }
 }

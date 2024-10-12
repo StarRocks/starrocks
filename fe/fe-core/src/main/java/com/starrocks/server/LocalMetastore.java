@@ -3626,7 +3626,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 table.setCurExternalCoolDownConfig(newConfig);
                 ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(
-                        db.getId(), table.getId(), updateConfig.getProperties());
+                        db.getId(), table.getId(), updateConfig.getValidProperties());
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(info);
 
                 if (newConfig.isReadyForAutoCooldown()) {
@@ -3876,7 +3876,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
                 db.getId(),
                 table.getId(),
-                externalCoolDownConfig.getProperties());
+                externalCoolDownConfig.getValidProperties());
         GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(log);
 
         table.setCurExternalCoolDownConfig(externalCoolDownConfig);

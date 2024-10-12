@@ -404,7 +404,7 @@ public class DDLStmtExecutor {
         }
 
         public static ExecuteOption getCooldownExecuteOption(CreateExternalCooldownStmt externalCooldownStmt) {
-            boolean force = externalCooldownStmt.isForceRefresh();
+            boolean force = externalCooldownStmt.isForce();
             PartitionRangeDesc range = externalCooldownStmt.getPartitionRangeDesc();
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
@@ -430,7 +430,7 @@ public class DDLStmtExecutor {
                 }
                 final String cooldownTaskName = TaskBuilder.getExternalCooldownTaskName(table.getId());
                 if (!taskManager.containTask(cooldownTaskName)) {
-                    Task task = TaskBuilder.buildExternalCooldownTask(stmt, context);
+                    Task task = TaskBuilder.buildExternalCooldownTask(stmt);
                     taskManager.createTask(task, false);
                 }
                 ExecuteOption executeOption = getCooldownExecuteOption(stmt);
