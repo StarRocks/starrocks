@@ -87,7 +87,7 @@ Status TableFunctionTableSinkOperator::prepare(RuntimeState* state) {
 void TableFunctionTableSinkOperator::close(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
     Operator::close(state);
@@ -125,7 +125,7 @@ bool TableFunctionTableSinkOperator::is_finished() const {
 Status TableFunctionTableSinkOperator::set_finishing(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
 
