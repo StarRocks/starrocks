@@ -384,6 +384,8 @@ public:
         }
     }
 
+    void rewrite_rs_meta();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
