@@ -634,9 +634,7 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
         return false;
     }
 
-    if (rowset->rowset_meta()->tablet_schema() != nullptr &&
-        rowset->rowset_meta()->tablet_schema()->id() != TabletSchema::invalid_id() &&
-        rowset->rowset_meta()->tablet_schema()->id() == _max_version_schema->id()) {
+    if (rowset->rowset_meta()->check_schema_id(_max_version_schema->id())) {
         _committed_rs_map[rowset->rowset_id()] = rowset;
         return true;
     }
@@ -644,7 +642,9 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
 }
 
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
-    _committed_rs_map.erase(rowset->rowset_id());
+    if (rowset != nullptr) {
+        _committed_rs_map.erase(rowset->rowset_id());
+    }
 }
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {

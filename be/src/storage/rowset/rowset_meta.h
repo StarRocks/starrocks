@@ -281,6 +281,13 @@ public:
 
     void set_skip_tablet_schema(bool skip_tablet_schema) { _skip_tablet_schema = skip_tablet_schema; }
     bool skip_tablet_schema() { return _skip_tablet_schema; }
+    bool check_schema_id(int64_t latest_tablet_schema_id) {
+        if (_schema != nullptr && _schema->id() != TabletSchema::invalid_id() &&
+            _schema->id() == latest_tablet_schema_id) {
+            return true;
+        }
+        return false;
+    }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
