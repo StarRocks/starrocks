@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
@@ -47,6 +49,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     private SortPhase sortPhase;
     private TopNType topNType;
     private boolean isSplit;
+    private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
@@ -136,6 +139,11 @@ public class LogicalTopNOperator extends LogicalOperator {
             for (Ordering ordering : orderByElements) {
                 columns.union(ordering.getColumnRef());
             }
+
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                columns.union(entry.getKey());
+            }
+
             return columns;
         }
     }
@@ -149,6 +157,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         for (Ordering ordering : orderByElements) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        }
+
         return new RowOutputInfo(entryList);
     }
 
@@ -214,6 +227,7 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.isSplit = topNOperator.isSplit;
             builder.partitionLimit = topNOperator.partitionLimit;
             builder.partitionByColumns = topNOperator.partitionByColumns;
+            builder.partitionPreAggCall = topNOperator.partitionPreAggCall;
             return this;
         }
 
@@ -249,6 +263,12 @@ public class LogicalTopNOperator extends LogicalOperator {
 
         public LogicalTopNOperator.Builder setIsSplit(boolean isSplit) {
             builder.isSplit = isSplit;
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setPartitionPreAggCall(
+                Map<ColumnRefOperator, CallOperator> partitionPreAggCall) {
+            builder.partitionPreAggCall = ImmutableMap.copyOf(partitionPreAggCall);
             return this;
         }
     }

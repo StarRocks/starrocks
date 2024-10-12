@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
@@ -78,29 +79,75 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         }
 
         OptExpression childExpr = input.inputAt(0);
-        LogicalWindowOperator windowOperator = childExpr.getOp().cast();
+        LogicalWindowOperator firstWindowOperator = childExpr.getOp().cast();
 
-        if (windowOperator.getWindowCall().size() != 1) {
+        // in window tranform phase, if two window op in same sort group and have same partition exps, then rank-related window will be
+        // put on the top of the another window op
+        if (!isSingleRankRelatedAnalyticOperator(firstWindowOperator)) {
             return false;
         }
 
-        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
-        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
-
-        // TODO(hcf) we support dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equals(callOperator.getFnName())) {
-            return false;
+        // only one window op which is SingleRankRelatedAnalyticOperator
+        if (!(childExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
+            return true;
         }
 
-        if (!childExpr.getInputs().isEmpty() && childExpr.inputAt(0).getOp() instanceof LogicalWindowOperator) {
-            OptExpression grandChildExpr = childExpr.inputAt(0);
-            LogicalWindowOperator nextWindowOperator = grandChildExpr.getOp().cast();
+        LogicalWindowOperator secondWindowOperator = childExpr.inputAt(0).getOp().cast();
+        if (!(samePartitionWithRankRelatedWindow(secondWindowOperator, firstWindowOperator))) {
             // There might be a negative gain if we add a partitionTopN between two window operators that
-            // share the same sort group
-            return !Objects.equals(windowOperator.getEnforceSortColumns(), nextWindowOperator.getEnforceSortColumns());
+            // share the same sort group, because extra enforcer will add
+            return !Objects.equals(firstWindowOperator.getEnforceSortColumns(),
+                    secondWindowOperator.getEnforceSortColumns());
         }
 
+        if (childExpr.inputAt(0).inputAt(0) != null &&
+                childExpr.inputAt(0).inputAt(0).getOp() instanceof LogicalWindowOperator) {
+            LogicalWindowOperator thirdWindowOperator = childExpr.inputAt(0).inputAt(0).getOp().cast();
+            // There might be a negative gain if we add a partitionTopN between two window operators that
+            // share the same sort group, because extra enforcer will add
+            return !Objects.equals(secondWindowOperator.getEnforceSortColumns(),
+                    thirdWindowOperator.getEnforceSortColumns());
+        }
+
+        return true;
+    }
+
+    private boolean isSingleRankRelatedAnalyticOperator(LogicalWindowOperator operator) {
+        if (operator.getWindowCall().size() != 1) {
+            return false;
+        }
+
+        ColumnRefOperator windowCol = Lists.newArrayList(operator.getWindowCall().keySet()).get(0);
+        CallOperator callOperator = operator.getWindowCall().get(windowCol);
+
+        return FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) ||
+                FunctionSet.RANK.equals(callOperator.getFnName());
+    }
+
+    // actually if operator's window partition columns is subset of rankRelatedOperator's window partition columns and operator's window
+    // functions are all rollup agg function, we also can support this optimization. But this means rankRelatedOperator's partition columns
+    // maybe has high cardinality which is bad case, so we only support same partition columns case.
+    private boolean samePartitionWithRankRelatedWindow(LogicalWindowOperator operator,
+                                                       LogicalWindowOperator rankRelatedOperator) {
+        // same partition exprs
+        if (!operator.getPartitionExpressions().containsAll(rankRelatedOperator.getPartitionExpressions()) ||
+                !rankRelatedOperator.getPartitionExpressions().containsAll(operator.getPartitionExpressions())) {
+            return false;
+        }
+
+        // if operator has window clause, we can't support this optimization.
+        if (operator.getAnalyticWindow() != null) {
+            return false;
+        }
+
+        // if operator has order by elements, we can't support this optimization.
+        // because order by without window clause will have "Range between UNBOUNDED_PRECEDING and CURRENT_ROW"
+        if (operator.getOrderByElements() != null && !operator.getOrderByElements().isEmpty()) {
+            return false;
+        }
+
+        // same partition and without order by, so they are in same sort group and partition group, which means share the same sort Node and exchange Node
+        Preconditions.checkState(operator.getEnforceSortColumns().equals(rankRelatedOperator.getEnforceSortColumns()));
         return true;
     }
 
@@ -109,10 +156,10 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         LogicalFilterOperator filterOperator = input.getOp().cast();
         List<ScalarOperator> filters = Utils.extractConjuncts(filterOperator.getPredicate());
         OptExpression childExpr = input.inputAt(0);
-        LogicalWindowOperator windowOperator = childExpr.getOp().cast();
+        LogicalWindowOperator rankRelatedWindowOperator = childExpr.getOp().cast();
 
-        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
-        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
+        ColumnRefOperator windowCol = Lists.newArrayList(rankRelatedWindowOperator.getWindowCall().keySet()).get(0);
+        CallOperator callOperator = rankRelatedWindowOperator.getWindowCall().get(windowCol);
 
         List<BinaryPredicateOperator> lessPredicates =
                 filters.stream().filter(op -> op instanceof BinaryPredicateOperator)
@@ -132,7 +179,7 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         ConstantOperator rightChild = lessPredicate.getChild(1).cast();
         long limitValue = rightChild.getBigint();
 
-        List<ColumnRefOperator> partitionByColumns = windowOperator.getPartitionExpressions().stream()
+        List<ColumnRefOperator> partitionByColumns = rankRelatedWindowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
@@ -143,16 +190,25 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         final SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
         final long limit = partitionByColumns.isEmpty() ? limitValue : Operator.DEFAULT_LIMIT;
         final long partitionLimit = partitionByColumns.isEmpty() ? Operator.DEFAULT_LIMIT : limitValue;
-        OptExpression newTopNOptExp = OptExpression.create(new LogicalTopNOperator.Builder()
+
+        LogicalTopNOperator.Builder builder = new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
-                .setOrderByElements(windowOperator.getEnforceSortColumns())
+                .setOrderByElements(rankRelatedWindowOperator.getEnforceSortColumns())
                 .setLimit(limit)
                 .setTopNType(topNType)
-                .setSortPhase(sortPhase)
-                .build(), childExpr.getInputs());
+                .setSortPhase(sortPhase);
 
-        OptExpression newWindowOptExp = OptExpression.create(windowOperator, newTopNOptExp);
+        if ((childExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
+            LogicalWindowOperator secondWindowOperator = childExpr.inputAt(0).getOp().cast();
+            if (!(samePartitionWithRankRelatedWindow(secondWindowOperator, rankRelatedWindowOperator))) {
+                builder.setPartitionPreAggCall(secondWindowOperator.getWindowCall());
+            }
+        }
+
+        OptExpression newTopNOptExp = OptExpression.create(builder.build(), childExpr.getInputs());
+
+        OptExpression newWindowOptExp = OptExpression.create(rankRelatedWindowOperator, newTopNOptExp);
         return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
     }
 }
