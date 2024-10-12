@@ -24,11 +24,13 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class KeyColumnUsageSystemTable {
+    private static final String NAME = "key_column_usage";
+
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
                 SystemId.KEY_COLUMN_USAGE_ID,
-                "key_column_usage",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))

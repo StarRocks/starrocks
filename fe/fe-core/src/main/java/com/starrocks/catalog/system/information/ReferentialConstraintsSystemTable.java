@@ -23,11 +23,13 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class ReferentialConstraintsSystemTable {
+    private static final String NAME = "referential_constraints";
+
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
                 SystemId.REFERENTIAL_CONSTRAINTS_ID,
-                "referential_constraints",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
