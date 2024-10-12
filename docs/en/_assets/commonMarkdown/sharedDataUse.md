@@ -27,8 +27,7 @@ DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "storage_volume" = "def_volume",
     "datacache.enable" = "true",
-    "datacache.partition_duration" = "1 MONTH",
-    "enable_async_write_back" = "false"
+    "datacache.partition_duration" = "1 MONTH"
 );
 ```
 
@@ -60,12 +59,6 @@ The validity duration of the hot data. When the local disk cache is enabled, all
 > In version 3.0 this property was named `storage_cache_ttl`.
 >
 > This property is available only when `datacache.enable` is set to `true`.
-
-#### enable_async_write_back
-
-Whether to allow data to be written into object storage asynchronously. Default: `false`.
-- `true` When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
-- `false` (Default) When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
 ### View table information
 
