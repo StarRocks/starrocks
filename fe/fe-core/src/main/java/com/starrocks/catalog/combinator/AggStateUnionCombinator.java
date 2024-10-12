@@ -56,7 +56,15 @@ public final class AggStateUnionCombinator extends AggregateFunction {
                     new AggStateUnionCombinator(functionName, intermediateType);
             aggStateUnionFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateUnionFunc.setPolymorphic(aggFunc.isPolymorphic());
-            aggStateUnionFunc.setAggStateDesc(new AggStateDesc(aggFunc));
+            AggStateDesc aggStateDesc;
+            if (aggFunc.getAggStateDesc() != null) {
+                aggStateDesc = aggFunc.getAggStateDesc().clone();
+            } else {
+                aggStateDesc = new AggStateDesc(aggFunc);
+            }
+            aggStateUnionFunc.setAggStateDesc(aggStateDesc);
+            // use agg state desc's nullable as `agg_state` function's nullable
+            aggStateUnionFunc.setIsNullable(aggStateDesc.getResultNullable());
             LOG.info("Register agg state function: {}", aggStateUnionFunc.functionName());
             return Optional.of(aggStateUnionFunc);
         } catch (Exception e) {

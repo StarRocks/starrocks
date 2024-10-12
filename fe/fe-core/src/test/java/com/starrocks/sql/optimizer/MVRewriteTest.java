@@ -71,20 +71,15 @@ public class MVRewriteTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.alter_scheduler_interval_millisecond = 1;
-        FeConstants.runningUnitTest = true;
-
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-        Config.default_mv_refresh_immediate = true;
 
+        Config.alter_scheduler_interval_millisecond = 1;
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
+
         connectContext = UtFrameUtils.createDefaultCtx();
-
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        FeConstants.enablePruneEmptyOutputScan = false;
-
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
@@ -1758,5 +1753,120 @@ public class MVRewriteTest {
                 "  |  group by: 1: k1");
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite1() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+
+            String query = "SELECT k1, k2, avg(k3) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite2() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg(k3 * 2) as v1 from t1 group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg(k3 * 2) as v1 from t1 group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
+    public void testCreateMVWithAggStateRewrite3() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;");
+        {
+            String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg_merge(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg_merge(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k1, k2, avg(k3 * 4) as v1 from t1 where k1 != 'a' group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "SELECT k2, avg(k3 * 4) as v1 from t1 where k1 != 'a' group by k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("t1");
     }
 }
