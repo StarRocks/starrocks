@@ -26,6 +26,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -404,7 +405,12 @@ public class WindowTransformer {
          * to ensure that the Enforce operation can meet the conditions, and only one ExchangeNode will be generated
          */
         sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
-                .sort(Comparator.comparingInt(w -> w.getPartitionExpressions().size())));
+                .sort(Comparator
+                        .<LogicalWindowOperator>comparingInt(w -> w.getPartitionExpressions().size())
+                        .thenComparing(w -> {
+                            String fnName = w.getWindowCall().values().iterator().next().getFnName();
+                            return FunctionSet.RANK_RALATED_FUNCTIONS.contains(fnName) ? 1 : 0;
+                        })));
 
         /*
          * Step 3.
