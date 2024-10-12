@@ -601,8 +601,7 @@ To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.m
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>",
-    "enable_async_write_back" = "{ true | false }"
+    "datacache.partition_duration" = "<string_value>"
 )
 ```
 
@@ -622,11 +621,6 @@ PROPERTIES (
   > **NOTE**
   >
   > This property is available only when `datacache.enable` is set to `true`.
-
-- `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
-
-  - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
-  - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
 ## Examples
 
