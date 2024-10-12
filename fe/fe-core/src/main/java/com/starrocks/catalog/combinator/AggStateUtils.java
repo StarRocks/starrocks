@@ -157,7 +157,7 @@ public class AggStateUtils {
                 return null;
             }
             AggregateFunction aggFunc = (AggregateFunction) argFn;
-            if (aggFunc.getNumArgs() == 1 && argumentTypes[0].isDecimalOfAnyVersion()) {
+            if (aggFunc.getNumArgs() == 1) {
                 // only copy argument if it's a decimal type
                 AggregateFunction argFnCopy = (AggregateFunction) aggFunc.copy();
                 argFnCopy.setArgsType(argumentTypes);
@@ -209,7 +209,9 @@ public class AggStateUtils {
         if (!(fn instanceof AggregateFunction)) {
             return null;
         }
-        return (AggregateFunction) fn;
+        AggregateFunction result = (AggregateFunction) fn.copy();
+        result.setAggStateDesc(aggStateDesc);
+        return result;
     }
 
     private static Type[] getNewArgumentTypes(Type[] origArgTypes, String argFnName, Type arg0Type) {
