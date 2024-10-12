@@ -123,13 +123,13 @@ public:
     static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
-    void to_meta_pb(TabletMetaPB* tablet_meta_pb);
+    void to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema = false);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
     TabletTypePB tablet_type() const { return _tablet_type; }
@@ -164,7 +164,8 @@ public:
     const TabletSchema& tablet_schema() const;
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
-    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
+    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                            DataDir* data_dir);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
@@ -239,7 +240,7 @@ public:
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
-    Status _save_meta(DataDir* data_dir);
+    Status _save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);

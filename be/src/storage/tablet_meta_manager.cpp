@@ -1806,4 +1806,18 @@ Status TabletMetaManager::clear_pending_rowset(DataDir* store, WriteBatch* batch
     return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
 }
 
+Status TabletMetaManager::get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                          std::string* meta_value) {
+    std::string rowset_key = encode_meta_rowset_key(tablet_id, rowset_seg_id);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
+}
+
+Status TabletMetaManager::get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                                  std::string* meta_value) {
+    std::string rowset_key = encode_meta_pending_rowset_key(tablet_id, version);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
+}
+
 } // namespace starrocks
