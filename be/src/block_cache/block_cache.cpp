@@ -19,7 +19,6 @@
 #ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
 #endif
-#include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 

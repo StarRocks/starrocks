@@ -80,7 +80,7 @@ protected:
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
             char* src = _buffer.data();
 
-            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src, nullptr));
+            _populate_to_cache(src, read_offset_cursor, read_size, nullptr);
             read_offset_cursor += read_size;
         }
         return Status::OK();

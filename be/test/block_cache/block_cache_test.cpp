@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 
+#include "block_cache/datacache_utils.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
@@ -63,79 +64,6 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     memset(expect, 2, 50);
     memset(expect + 50, 3, 100);
     ASSERT_EQ(memcmp(result, expect, size), 0);
-}
-
-TEST_F(BlockCacheTest, parse_cache_space_size_str) {
-    const std::string cache_dir = "./block_disk_cache1";
-    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
-
-    uint64_t mem_size = 10;
-    ASSERT_EQ(parse_conf_datacache_mem_size("10", 0), mem_size);
-    mem_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_mem_size("10K", 0), mem_size);
-    mem_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_mem_size("10M", 0), mem_size);
-    mem_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_mem_size("10G", 0), mem_size);
-    mem_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_mem_size("10T", 0), mem_size);
-    ASSERT_EQ(parse_conf_datacache_mem_size("10%", 10 * 1024), 1024);
-
-    std::string disk_path = cache_dir;
-    const int64_t kMaxLimit = 20L * 1024 * 1024 * 1024 * 1024; // 20T
-    int64_t disk_size = 10;
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10", kMaxLimit), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10K", kMaxLimit), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10M", kMaxLimit), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10G", kMaxLimit), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10T", kMaxLimit), disk_size);
-
-    // The disk size exceed disk limit
-    ASSERT_EQ(parse_conf_datacache_disk_size(disk_path, "10T", 1024), 1024);
-
-    disk_size = parse_conf_datacache_disk_size(disk_path, "10%", kMaxLimit);
-    ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * kMaxLimit));
-
-    fs::remove_all(cache_dir).ok();
-}
-
-TEST_F(BlockCacheTest, parse_cache_space_paths) {
-    const std::string cache_dir = "./block_disk_cache2";
-    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
-
-    const std::string cwd = std::filesystem::current_path().string();
-    const std::string s_normal_path = fmt::format("{}/block_disk_cache2/cache1;{}/block_disk_cache2/cache2", cwd, cwd);
-    std::vector<std::string> paths;
-    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_normal_path, &paths, true).ok());
-    ASSERT_EQ(paths.size(), 2);
-
-    paths.clear();
-    const std::string s_space_path =
-            fmt::format(" {}/block_disk_cache2/cache3 ; {}/block_disk_cache2/cache4 ", cwd, cwd);
-    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_space_path, &paths, true).ok());
-    ASSERT_EQ(paths.size(), 2);
-
-    paths.clear();
-    const std::string s_empty_path = fmt::format("//;{}/block_disk_cache2/cache4 ", cwd);
-    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_empty_path, &paths, true).ok());
-    ASSERT_EQ(paths.size(), 1);
-
-    paths.clear();
-    const std::string s_invalid_path = fmt::format(" /block_disk_cache2/cache5;{}/+/cache6", cwd);
-    ASSERT_FALSE(parse_conf_datacache_disk_paths(s_invalid_path, &paths, true).ok());
-    ASSERT_EQ(paths.size(), 0);
-
-    paths.clear();
-    const std::string s_duplicated_path =
-            fmt::format(" {}/block_disk_cache2/cache7 ; {}/block_disk_cache2/cache7 ", cwd, cwd);
-    ASSERT_TRUE(parse_conf_datacache_disk_paths(s_duplicated_path, &paths, true).ok());
-    ASSERT_EQ(paths.size(), 1);
-
-    fs::remove_all(cache_dir).ok();
 }
 
 #ifdef WITH_STARCACHE
@@ -395,7 +323,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     }
 
     cache->shutdown();
-    clean_residual_datacache(cache_dir);
+    DataCacheUtils::clean_residual_datacache(cache_dir);
 
     {
         std::vector<std::string> files;

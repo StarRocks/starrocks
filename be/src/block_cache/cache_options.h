@@ -90,18 +90,4 @@ struct ReadCacheOptions {
         int64_t read_disk_bytes = 0;
     } stats;
 };
-
-int64_t parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit);
-
-int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
-                                       int64_t disk_limit);
-
-Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
-                                       bool ignore_broken_disk);
-
-Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
-                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces);
-
-void clean_residual_datacache(const std::string& disk_path);
-
 } // namespace starrocks
