@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.authorization.AuthorizationProviderEPack;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.authorization.PolicyPEntryObject;
 import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
@@ -1743,7 +1744,7 @@ public class AuthorizationMgr {
         // 1 json for myself
         AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
         ret.globalStateMgr = globalStateMgr;
-        ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
+        ret.provider = Objects.requireNonNullElseGet(provider, AuthorizationProviderEPack::new);
         ret.initBuiltinRolesAndUsers();
 
         LOG.info("loading users");
