@@ -122,7 +122,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         } else {
             if (result_null_column != nulltpr) {
                 data_column->empty_null_in_complex_column(result_null_column->get_data(),
-                                                      array_column->offsets().get_data());
+                                                          array_column->offsets().get_data());
             }
             elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
         }
