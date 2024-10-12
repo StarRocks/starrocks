@@ -181,7 +181,8 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         boolean hasPartitionEvolution = deleteSchemas.stream().map(x -> x.specId).distinct().count() > 1;
         if (hasPartitionEvolution && !context.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
-            throw new StarRocksConnectorException("Equality delete files are not supported for tables with partition evolution");
+            throw new StarRocksConnectorException("Equality delete files aren't supported for tables with partition evolution." +
+                    "You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it");
         }
 
         LogicalIcebergScanOperator newScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(

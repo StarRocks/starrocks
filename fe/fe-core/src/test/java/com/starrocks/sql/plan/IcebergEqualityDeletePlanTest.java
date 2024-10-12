@@ -483,7 +483,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
         String sql = "select k2 from iceberg_catalog.db.tbl";
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Equality delete files are not supported for tables with partition evolution",
+                "Equality delete files aren't supported for tables with partition evolution",
                 () -> UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql));
 
         starRocksAssert.getCtx().getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
