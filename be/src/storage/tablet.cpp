@@ -83,19 +83,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-
-    // if !_tablet_meta->all_rs_metas()[0]->tablet_schema(),
-    // that mean the tablet_meta is still no upgrade to support-light-schema-change versions.
-    // Before support-light-schema-change version, rowset metas don't have tablet schema.
-    // And when upgrade to starrocks support-light-schema-change version,
-    // all rowset metas will be set the tablet schema from tablet meta.
-    if (_tablet_meta->all_rs_metas().empty() || !_tablet_meta->all_rs_metas()[0]->tablet_schema()) {
-        _max_version_schema = BaseTablet::tablet_schema();
-    } else {
-        _max_version_schema =
-                TabletMeta::rowset_meta_with_max_rowset_version(_tablet_meta->all_rs_metas())->tablet_schema();
-    }
-
+    _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -171,8 +159,8 @@ Status Tablet::init() {
 
 // should save tablet meta to remote meta store
 // if it's a primary replica
-void Tablet::save_meta() {
-    auto st = _tablet_meta->save_meta(_data_dir);
+void Tablet::save_meta(bool skip_tablet_schema) {
+    auto st = _tablet_meta->save_meta(_data_dir, skip_tablet_schema);
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
@@ -572,7 +560,11 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     RowsetMetaPB rowset_meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    if (rowset->rowset_meta()->skip_tablet_schema()) {
+        rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    }
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
     // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
     // (RowsetStatePB = COMMITTED) saved in rocksdb. Here modify the rowset to visible, and save it again
@@ -621,6 +613,44 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
+        VLOG(1) << "tablet: " << tablet_id()
+                << " too many committed without schema rowset : " << _committed_rs_map.size();
+        return false;
+    }
+
+    if (rowset->rowset_meta()->check_schema_id(_max_version_schema->id())) {
+        _committed_rs_map[rowset->rowset_id()] = rowset;
+        return true;
+    }
+    return false;
+}
+
+void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
+    if (rowset != nullptr) {
+        _committed_rs_map.erase(rowset->rowset_id());
+    }
+}
+
+void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
+    std::unique_lock wrlock(_meta_lock);
+    vector<RowsetSharedPtr> origin_rowsets;
+    _pick_candicate_rowset_before_specify_version(&origin_rowsets, version);
+    if (VLOG_IS_ON(2)) {
+        for (auto& rs : origin_rowsets) {
+            VLOG(2) << "delete rowset, tablet_id: " << tablet_id() << ", schema_hash: " << schema_hash()
+                    << ", rowset_id: " << rs->rowset_id() << ", version: " << rs->version();
+        }
+    }
+    Version rowset_version(0, version);
+    rowset->make_visible(rowset_version);
+    modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
+}
+
+>>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
     // delete incremental rowset from map
     _inc_rs_version_map.erase(version);
@@ -1367,7 +1397,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         return;
     }
     LOG(INFO) << "start to do tablet meta checkpoint, tablet=" << full_name();
-    save_meta();
+    save_meta(config::skip_schema_in_rowset_meta);
     // if save meta successfully, then should remove the rowset meta existing in tablet
     // meta from rowset meta store
     for (auto& rs_meta : _tablet_meta->all_rs_metas()) {
@@ -1736,9 +1766,27 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
+// for non-pk tablet, all published rowset will be rewrite when save `tablet_meta`
+// for pk tablet, we need to get the rowset which without `tablet_schema` and rewrite
+// the rowsets in `_committed_rs_map` is committed success but not publish yet, so if we update the
+// tablet schema, we need to rewrite.
+void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs) {
+    for (auto& [_, rs] : _committed_rs_map) {
+        if (rs->rowset_meta()->skip_tablet_schema()) {
+            rewrite_meta_rs.emplace_back(rs);
+        }
+    }
+
+    if (_updates) {
+        _updates->rewrite_rs_meta();
+    }
+}
+
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);
+    DeferOp defer([&]() { _update_schema_running.store(false); });
+    _update_schema_running.store(true);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         if (tablet_schema->id() == TabletSchema::invalid_id()) {
@@ -1746,7 +1794,10 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
-        _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
+        std::vector<RowsetSharedPtr> rewrite_meta_rs;
+        _get_rewrite_meta_rs(rewrite_meta_rs);
+        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
+        _committed_rs_map.clear();
     }
 }
 
