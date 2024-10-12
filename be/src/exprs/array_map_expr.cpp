@@ -120,7 +120,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 }
             }
         } else {
-            if (result_null_column != nulltpr) {
+            if (result_null_column != nullptr) {
                 data_column->empty_null_in_complex_column(result_null_column->get_data(),
                                                           array_column->offsets().get_data());
             }
