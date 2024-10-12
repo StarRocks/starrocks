@@ -42,11 +42,9 @@ import java.util.Collection;
 import java.util.Optional;
 
 public class SysObjectDependencies {
-
-    public static final String NAME = "object_dependencies";
-
     private static final Logger LOG = LogManager.getLogger(SysObjectDependencies.class);
 
+    public static final String NAME = "object_dependencies";
 
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,

@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class LoadsSystemTable {
+    public static final String NAME = "loads";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.LOADS_ID,
-                "loads",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
