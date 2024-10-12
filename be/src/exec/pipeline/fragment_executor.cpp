@@ -376,7 +376,7 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     TTableId cache_table_id = -1;
-    const TableDescriptor* table = nullptr;
+    TableDescriptor* table = nullptr;
 
     for (const auto& scan_range_params : scan_ranges) {
         const TScanRange& scan_range = scan_range_params.scan_range;
@@ -391,8 +391,8 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
             cache_table_id = table_id;
         }
         if (table == nullptr) continue;
-        // only hive table supports this feature.
-        HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(const_cast<TableDescriptor*>(table));
+        // only HiveTableDescriptor(includes hive,iceberg,hudi,deltalake etc) supports this feature.
+        HiveTableDescriptor* hive_table = down_cast<HiveTableDescriptor*>(table);
         RETURN_IF_ERROR(hive_table->add_partition_value(runtime_state, obj_pool, hdfs_scan_range.partition_id,
                                                         hdfs_scan_range.partition_value));
     }
