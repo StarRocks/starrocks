@@ -119,4 +119,9 @@ ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 
 function: wait_optimize_table_finish()
 
-
+-- name: test_optimize_table_with_special_characters
+create table `t#t`(k int) distributed by hash(k) buckets 10;
+show create table `t#t`;
+alter table `t#t` distributed by hash(k) buckets 20;
+function: wait_optimize_table_finish()
+show create table `t#t`;
