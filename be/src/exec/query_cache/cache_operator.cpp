@@ -58,7 +58,9 @@ struct PerLaneBuffer {
         lane = -1;
         state = PLBS_INIT;
         tablet.reset();
-        rowsets_acq_rel.reset();
+        if (rowsets_acq_rel != nullptr) {
+            rowsets_acq_rel.reset();
+        }
         rowsets.clear();
         required_version = 0;
         cached_version = 0;
@@ -249,7 +251,6 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
             return;
         }
 
-        // Delta versions are captured, several situations should be taken into consideration.
         auto& [tablet, rowsets, acq_rel] = status.value();
         base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
         for (auto const& rowset_ptr : rowsets) {
@@ -276,16 +277,17 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     auto all_rs_empty = true;
     auto min_version = std::numeric_limits<int64_t>::max();
     auto max_version = std::numeric_limits<int64_t>::min();
-    for (const auto& rs : base_rowsets) {
-        all_rs_empty &= !rs->has_data_files();
-        if (!_cache_param.is_lake) {
+    if (!_cache_param.is_lake) {
+        for (const auto& rs : base_rowsets) {
+            all_rs_empty &= !rs->has_data_files();
             min_version = std::min(min_version, rs->start_version());
             max_version = std::max(max_version, rs->end_version());
-        } else {
-            min_version = cache_value.version + 1;
-            max_version = version;
         }
+    } else {
+        min_version = cache_value.version + 1;
+        max_version = version;
     }
+
     Version delta_versions(min_version, max_version);
     buffer->tablet = base_tablet;
     auto has_delete_predicates = base_tablet->has_delete_predicates(delta_versions);
@@ -293,6 +295,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     // the tablet has non-empty delta rowsets; then cache result is not reuse, so cache miss.
     if (!has_delete_predicates.ok() || has_delete_predicates.value() ||
         (!_cache_param.can_use_multiversion && !all_rs_empty)) {
+        LOG(INFO) << "has predicates";
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
@@ -309,6 +312,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
         return;
     }
 
+    LOG(INFO) << "partial hit";
     // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
@@ -327,30 +331,32 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
                                                      starrocks::query_cache::PerLaneBufferPtr& buffer,
                                                      int64_t version) {
     DCHECK(_cache_param.keys_type == TKeysType::PRIMARY_KEYS);
-    // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
-    // rowsets. Capturing delta rowsets is meaningless and unsupported, thus we capture all rowsets of the PK tablet.
-    std::shared_ptr<BaseTablet> base_tablet;
-    std::vector<BaseRowsetSharedPtr> base_rowsets;
-    RowsetsAcqRelPtr rowsets_acq_rel = nullptr;
-
     if (!_cache_param.is_lake) {
+        // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
+        // rowsets. Capturing delta rowsets is meaningless and unsupported, thus we capture all rowsets of the PK tablet.
         auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
         if (!status.ok()) {
             buffer->state = PLBS_MISS;
             buffer->cached_version = 0;
             return;
         }
-
-        // Delta versions are captured, several situations should be taken into consideration.
-        auto& [tablet, rowsets, acq_rel] = status.value();
-        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
-        for (auto rowset_ptr : rowsets) {
-            base_rowsets.emplace_back(std::static_pointer_cast<BaseRowset>(rowset_ptr));
+        auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
+        const auto snapshot_version = cache_value.version;
+        bool can_pickup_delta_rowsets = false;
+        bool exists_non_empty_delta_rowsets = false;
+        for (auto& rs : rowsets) {
+            can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
+            exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
         }
-        rowsets_acq_rel = std::move(acq_rel);
+        if (exists_non_empty_delta_rowsets || !can_pickup_delta_rowsets) {
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
 
     } else {
-        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
+        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(
+                tablet_id, cache_value.version + 1, version);
         // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
         if (!status.ok()) {
             buffer->state = PLBS_MISS;
@@ -359,24 +365,15 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
         }
 
         auto& [tablet, rowsets] = status.value();
-        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
-        base_rowsets = std::move(rowsets);
+        if (!rowsets.empty()) {
+            LOG(INFO) << "cache miss pk";
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
     }
 
-    const auto snapshot_version = cache_value.version;
-    bool can_pickup_delta_rowsets = false;
-    bool exists_non_empty_delta_rowsets = false;
-
-    for (auto& rs : base_rowsets) {
-        can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
-        exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
-    }
-    if (exists_non_empty_delta_rowsets || !can_pickup_delta_rowsets) {
-        buffer->state = PLBS_MISS;
-        buffer->cached_version = 0;
-        return;
-    }
-
+    LOG(INFO) << "cache hit pk";
     buffer->cached_version = cache_value.version;
     auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
     _update_probe_metrics(tablet_id, chunks);
