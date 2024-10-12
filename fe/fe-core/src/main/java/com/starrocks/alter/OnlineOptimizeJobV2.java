@@ -278,17 +278,11 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         for (int i = 0; i < tmpPartitionNames.size(); ++i) {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
-<<<<<<< HEAD
-            String rewriteSql = "insert into " + dbName + "." + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableColumnNames)
-                    + " from " + dbName + "." + tableName + " partition (" + partitionName + ")";
-=======
             String rewriteSql = "insert into " + ParseUtil.backquote(dbName) + "."
                         + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
                         + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
                         + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                         + " partition (" + ParseUtil.backquote(partitionName) + ")";
->>>>>>> 2a1a68bf28 ([BugFix] Fix optimize table fail with special characters (#51709))
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
             rewriteTask.setPartitionName(partitionName);
