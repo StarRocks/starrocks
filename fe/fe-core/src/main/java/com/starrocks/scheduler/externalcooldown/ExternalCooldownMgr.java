@@ -32,7 +32,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,10 +49,20 @@ public class ExternalCooldownMgr {
 
     private boolean initialized = false;
 
+    private boolean restoreOneJob(ExternalCooldownMaintenanceJob job) {
+        try {
+            job.restore();
+        } catch (IllegalStateException e) {
+            LOG.warn("reload external cooldown maintenance jobs failed", e);
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Reload jobs from meta store
      */
-    public long reload(DataInputStream input, long checksum) throws IOException {
+    public long reload(DataInputStream input, long checksum) {
         Preconditions.checkState(jobMap.isEmpty());
 
         try {
@@ -61,14 +70,16 @@ public class ExternalCooldownMgr {
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
             if (CollectionUtils.isNotEmpty(data.jobList)) {
                 for (ExternalCooldownMaintenanceJob job : data.jobList) {
-                    job.restore();
+                    if (!restoreOneJob(job)) {
+                        continue;
+                    }
                     jobMap.put(job.getTableId(), job);
                 }
                 LOG.info("reload external cooldown maintenance jobs: {}", data.jobList);
                 LOG.debug("reload external cooldown maintenance job details: {}", str);
             }
             checksum ^= data.jobList.size();
-        } catch (EOFException e) {
+        } catch (IOException e) {
             LOG.warn("reload external cooldown maintenance job details: {}", e.getMessage());
         }
         return checksum;
@@ -78,14 +89,11 @@ public class ExternalCooldownMgr {
      * Replay from journal
      */
     public void replay(ExternalCooldownMaintenanceJob job) {
-        try {
-            job.restore();
-            jobMap.put(job.getTableId(), job);
-            LOG.info("Replay external cooldown maintenance jobs: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay external cooldown maintenance job failed: {}", job);
-            LOG.warn("Failed to replay external cooldown maintenance job", e);
+        if (!restoreOneJob(job)) {
+            return;
         }
+        jobMap.put(job.getTableId(), job);
+        LOG.info("Replay external cooldown maintenance jobs: {}", job);
     }
 
     /**
@@ -103,7 +111,7 @@ public class ExternalCooldownMgr {
     public void prepareMaintenanceWork(long dbId, OlapTable olapTable) {
         ExternalCooldownMaintenanceJob job = jobMap.get(olapTable.getId());
         if (job != null) {
-            job.restore();
+            restoreOneJob(job);
             return;
         }
         try {
@@ -119,7 +127,7 @@ public class ExternalCooldownMgr {
         }
 
         if (job != null) {
-            job.restore();
+            restoreOneJob(job);
         }
     }
 
@@ -145,6 +153,10 @@ public class ExternalCooldownMgr {
         return this.jobMap.values().stream().filter(ExternalCooldownMaintenanceJob::isRunnable).collect(Collectors.toList());
     }
 
+    public List<ExternalCooldownMaintenanceJob> getJobs() {
+        return new ArrayList<>(this.jobMap.values());
+    }
+
     static class SerializedJobs {
         @SerializedName("jobList")
         List<ExternalCooldownMaintenanceJob> jobList;
@@ -165,7 +177,9 @@ public class ExternalCooldownMgr {
         int numJson = reader.readInt();
         for (int i = 0; i < numJson; ++i) {
             ExternalCooldownMaintenanceJob job = reader.readJson(ExternalCooldownMaintenanceJob.class);
-            job.restore();
+            if (!restoreOneJob(job)) {
+                continue;
+            }
             jobMap.put(job.getTableId(), job);
         }
     }
@@ -179,10 +193,7 @@ public class ExternalCooldownMgr {
 
     public void reloadJobs() {
         for (ExternalCooldownMaintenanceJob job : jobMap.values()) {
-            try {
-                job.restore();
-            } catch (IllegalStateException e) {
-                LOG.warn("restore job {} failed, will, ", job.getTableId(), e);
+            if (!restoreOneJob(job)) {
                 this.jobMap.remove(job.getTableId());
             }
         }

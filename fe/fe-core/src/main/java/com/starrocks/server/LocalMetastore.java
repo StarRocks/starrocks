@@ -3604,7 +3604,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 table.setCurExternalCoolDownConfig(newConfig);
                 ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(
-                        db.getId(), table.getId(), updateConfig.getProperties());
+                        db.getId(), table.getId(), updateConfig.getValidProperties());
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(info);
 
                 if (newConfig.isReadyForAutoCooldown()) {
@@ -3695,9 +3695,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
-            if (!table.isOlapTable()) {
-                throw new DdlException("Cannot set external cooldown property for non olap table");
-            }
             ExternalCooldownConfig config = PropertyAnalyzer.analyzeExternalCoolDownConfig(properties);
             results.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_CONFIG, config);
         }
@@ -3846,18 +3843,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             table.setBinlogTxnId(BinlogConfig.INVALID);
         }
         table.setCurBinlogConfig(binlogConfig);
-    }
-
-    public void modifyExternalCoolDownMeta(Database db, OlapTable table, ExternalCooldownConfig externalCoolDownConfig) {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
-                db.getId(),
-                table.getId(),
-                externalCoolDownConfig.getProperties());
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(log);
-
-        table.setCurExternalCoolDownConfig(externalCoolDownConfig);
     }
 
     // The caller need to hold the db write lock

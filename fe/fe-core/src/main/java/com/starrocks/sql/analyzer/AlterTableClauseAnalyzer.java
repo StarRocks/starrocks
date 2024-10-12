@@ -125,6 +125,7 @@ import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_EXTERNAL_COO
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
+    private static final String MUST_BE_LONG = " must be long";
     private final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
@@ -319,7 +320,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     } catch (NumberFormatException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                 "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_TTL +
-                                        " must be long");
+                                        MUST_BE_LONG);
                     }
                 }
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -328,7 +329,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     } catch (NumberFormatException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                 "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE +
-                                        " must be long");
+                                        MUST_BE_LONG);
                     }
                 }
             }
@@ -374,7 +375,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 } catch (NumberFormatException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND +
-                                    " must be long");
+                                    MUST_BE_LONG);
                 }
             }
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);

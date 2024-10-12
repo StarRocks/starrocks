@@ -27,7 +27,6 @@ import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.externalcooldown.ExternalCooldownPartitionSelector;
 import com.starrocks.externalcooldown.ExternalCooldownSchedule;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -35,10 +34,13 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -70,6 +72,13 @@ public class ExternalCooldownMaintenanceJob implements Writable {
         this.dbId = dbId;
     }
 
+    @TestOnly
+    public ExternalCooldownMaintenanceJob(long dbId, long tableId) {
+        this.jobId = tableId;
+        this.dbId = dbId;
+        this.tableId = tableId;
+    }
+
     public static ExternalCooldownMaintenanceJob read(DataInput input) throws IOException {
         return GsonUtils.GSON.fromJson(
                 Text.readString(input), ExternalCooldownMaintenanceJob.class);
@@ -81,12 +90,8 @@ public class ExternalCooldownMaintenanceJob implements Writable {
             Preconditions.checkState(table != null && table.isOlapTable());
             this.olapTable = (OlapTable) table;
         }
-        if (partitionSelector == null) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            Preconditions.checkState(db != null);
-            partitionSelector = new ExternalCooldownPartitionSelector(db, olapTable);
-            partitionSelector.init();
-        }
+
+        partitionSelector = new ExternalCooldownPartitionSelector(olapTable);
         if (schedule == null) {
             schedule = ExternalCooldownSchedule.fromString(olapTable.getExternalCoolDownSchedule());
         } else {
@@ -99,35 +104,41 @@ public class ExternalCooldownMaintenanceJob implements Writable {
     }
 
     public void stopJob() {
-        throw new UnsupportedOperationException("external cooldown maintenance job stopped");
+        if (lastRunTaskName != null) {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(lastRunTaskName);
+            if (task != null) {
+                taskManager.killTask(lastRunTaskName, true);
+            }
+        }
     }
 
-    public void onSchedule() throws DdlException {
-        if (lastRunTaskName != null) {
-            Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(lastRunTaskName);
-            if (task != null && task.getState() != Constants.TaskState.ACTIVE) {
-                return;
-            }
-        }
-        if (schedule == null || !schedule.trySchedule()) {
-            LOG.debug("current time not match external cooldown schedule, skip");
+    public void onSchedule(long currentMs) throws DdlException {
+        if (!isRunnable()) {
+            LOG.warn("Job {} external cooldown config not satisfied ", this);
             return;
         }
-        if (!partitionSelector.hasPartitionSatisfied()) {
-            partitionSelector.reloadSatisfiedPartitions();
-            if (!partitionSelector.hasPartitionSatisfied()) {
+        if (lastRunTaskName != null) {
+            Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(lastRunTaskName);
+            if (task != null && (currentMs - task.getCreateTime()) < schedule.getIntervalSeconds() * 1000) {
                 return;
             }
+        }
+        if (schedule == null || !schedule.trySchedule(currentMs)) {
+            LOG.debug("current time not match external cooldown schedule, skip");
+            return;
         }
         Partition partition = partitionSelector.getOneSatisfiedPartition();
         if (partition == null) {
             return;
         }
         LOG.info("create external cooldown task for partition {}", partition);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Task task = TaskBuilder.buildExternalCooldownTask(db, olapTable, partition);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        taskManager.killTask(task.getName(), false);
+        List<Long> taskIds = new ArrayList<>();
+        taskIds.add(task.getId());
+        taskManager.dropTasks(taskIds, false);
         taskManager.createTask(task, false);
         ExecuteOption executeOption = TaskBuilder.getCooldownExecuteOption(olapTable, partition);
         taskManager.executeTask(task.getName(), executeOption);
@@ -159,6 +170,18 @@ public class ExternalCooldownMaintenanceJob implements Writable {
 
     public long getDbId() {
         return dbId;
+    }
+
+    public String getLastRunTaskName() {
+        return lastRunTaskName;
+    }
+
+    public ExternalCooldownSchedule getSchedule() {
+        return schedule;
+    }
+
+    public ExternalCooldownPartitionSelector getPartitionSelector() {
+        return partitionSelector;
     }
 
     @Override

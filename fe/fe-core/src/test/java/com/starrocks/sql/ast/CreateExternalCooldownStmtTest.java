@@ -1,0 +1,62 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package com.starrocks.sql.ast;
+
+import com.starrocks.qe.ConnectContext;
+import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class CreateExternalCooldownStmtTest {
+    @Mocked
+    private ConnectContext ctx;
+
+    @Test
+    public void testNormal() throws Exception {
+        String sql = "COOLDOWN TABLE tbl";
+        CreateExternalCooldownStmt stmt = (CreateExternalCooldownStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, 32).get(0);
+
+        Assert.assertNull(stmt.getTableName().getDb());
+        Assert.assertEquals("tbl", stmt.getTableName().getTbl());
+        Assert.assertNull(stmt.getPartitionRangeDesc());
+        Assert.assertFalse(stmt.isForce());
+    }
+
+    @Test
+    public void testPartitionRange() {
+        String sql = "COOLDOWN TABLE tbl PARTITION START ('2022-04-18 00:00:00') END ('2022-04-19 00:00:00')";
+        CreateExternalCooldownStmt stmt = (CreateExternalCooldownStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, 32).get(0);
+
+        Assert.assertNull(stmt.getTableName().getDb());
+        Assert.assertEquals("tbl", stmt.getTableName().getTbl());
+        Assert.assertNotNull(stmt.getPartitionRangeDesc());
+        Assert.assertFalse(stmt.isForce());
+        Assert.assertEquals("2022-04-18 00:00:00", stmt.getPartitionRangeDesc().getPartitionStart());
+        Assert.assertEquals("2022-04-19 00:00:00", stmt.getPartitionRangeDesc().getPartitionEnd());
+    }
+
+    @Test
+    public void testForce() {
+        String sql = "COOLDOWN TABLE tbl FORCE";
+        CreateExternalCooldownStmt stmt = (CreateExternalCooldownStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, 32).get(0);
+
+        Assert.assertNull(stmt.getTableName().getDb());
+        Assert.assertEquals("tbl", stmt.getTableName().getTbl());
+        Assert.assertNull(stmt.getPartitionRangeDesc());
+        Assert.assertTrue(stmt.isForce());
+    }
+}

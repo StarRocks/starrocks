@@ -780,7 +780,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), ExternalCooldownMaintenanceJob.class);
+                data = ExternalCooldownMaintenanceJob.read(in);
                 break;
             }
             default: {

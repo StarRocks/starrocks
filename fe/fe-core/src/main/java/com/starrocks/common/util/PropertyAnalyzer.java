@@ -59,7 +59,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
@@ -1774,20 +1773,7 @@ public class PropertyAnalyzer {
         return sb.toString();
     }
 
-    public static long analyzeDatetimeProp(Map<String, String> properties,
-                                           String propKey, long defaultVal) throws AnalysisException {
-        String text = properties.get(propKey);
-        if (text == null) {
-            return defaultVal;
-        }
-        properties.remove(propKey);
-        if (text.trim().isEmpty()) {
-            return 0L;
-        }
-        return TimeUtils.parseDate(text, PrimitiveType.DATETIME).getTime();
-    }
-
-    public static long analyzeExternalCooldownSyncedTimeMs(Map<String, String> properties) throws AnalysisException {
+    public static long analyzeExternalCooldownSyncedTimeMs(Map<String, String> properties) throws SemanticException {
         long coldDownSyncedTimeMs = -1L;
         if (properties != null && properties.containsKey(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME)) {
             String coldDownSyncedTimeMsStr = properties.get(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME);
@@ -1796,7 +1782,7 @@ public class PropertyAnalyzer {
             } else {
                 coldDownSyncedTimeMs = TimeUtils.timeStringToLong(coldDownSyncedTimeMsStr);
                 if (coldDownSyncedTimeMs == -1) {
-                    throw new AnalysisException(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME + " format error.");
+                    throw new SemanticException(PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME + " format error.");
                 }
             }
         }
@@ -1804,7 +1790,7 @@ public class PropertyAnalyzer {
         return coldDownSyncedTimeMs;
     }
 
-    public static long analyzeExternalCooldownConsistencyCheckTimeMs(Map<String, String> properties) throws AnalysisException {
+    public static long analyzeExternalCooldownConsistencyCheckTimeMs(Map<String, String> properties) throws SemanticException {
         long coldDownConsistencyCheckTimeMs = -1L;
         if (properties != null && properties.containsKey(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME)) {
             String coldDownConsistencyCheckTimeMsStr = properties.get(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME);
@@ -1813,7 +1799,7 @@ public class PropertyAnalyzer {
             } else {
                 coldDownConsistencyCheckTimeMs = TimeUtils.timeStringToLong(coldDownConsistencyCheckTimeMsStr);
                 if (coldDownConsistencyCheckTimeMs == -1) {
-                    throw new AnalysisException(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME + " format error.");
+                    throw new SemanticException(PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME + " format error.");
                 }
             }
         }

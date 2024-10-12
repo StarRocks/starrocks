@@ -45,6 +45,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import mockit.Mock;
@@ -403,5 +404,43 @@ public class OlapTableTest {
             PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
             Assert.assertNull(partition);
         }
+    }
+
+    @Test
+    public void testGetExternalCooldownConfig() {
+        OlapTable olapTable = new OlapTable(1L, "tb1", null, null, null, null);
+        Assert.assertNull(olapTable.getCurExternalCoolDownConfig());
+        Assert.assertNull(olapTable.getExternalCoolDownSchedule());
+        Assert.assertNull(olapTable.getExternalCoolDownTarget());
+        Assert.assertNull(olapTable.getExternalCoolDownTable());
+        Assert.assertNull(olapTable.getExternalCoolDownWaitSecond());
+
+        ExternalCooldownConfig newConfig = new ExternalCooldownConfig();
+        olapTable.setCurExternalCoolDownConfig(newConfig);
+
+        TableProperty tableProperty = new TableProperty();
+        olapTable.setTableProperty(tableProperty);
+        Assert.assertNull(olapTable.getCurExternalCoolDownConfig());
+        Assert.assertNull(olapTable.getExternalCoolDownSchedule());
+        Assert.assertNull(olapTable.getExternalCoolDownTarget());
+        Assert.assertNull(olapTable.getExternalCoolDownTable());
+        Assert.assertEquals((Long) 0L, olapTable.getExternalCoolDownWaitSecond());
+
+        ExternalCooldownConfig config = new ExternalCooldownConfig();
+        olapTable.setCurExternalCoolDownConfig(config);
+        Assert.assertNotNull(olapTable.getCurExternalCoolDownConfig());
+        Assert.assertNull(olapTable.getExternalCoolDownSchedule());
+        Assert.assertNull(olapTable.getExternalCoolDownTarget());
+        Assert.assertNull(olapTable.getExternalCoolDownTable());
+        Assert.assertEquals((Long) 0L, olapTable.getExternalCoolDownWaitSecond());
+
+        ExternalCooldownConfig config1 = new ExternalCooldownConfig(
+                "iceberg0.partitioned_transforms_db.t0_day",
+                "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", 3600L);
+        olapTable.setCurExternalCoolDownConfig(config1);
+        Assert.assertNotNull(olapTable.getCurExternalCoolDownConfig());
+        Assert.assertNotNull(olapTable.getExternalCoolDownSchedule());
+        Assert.assertNotNull(olapTable.getExternalCoolDownTarget());
+        Assert.assertNotNull(olapTable.getExternalCoolDownWaitSecond());
     }
 }

@@ -24,7 +24,8 @@ public class ExternalCooldownSchedule {
             "\\s*START\\s+(?<start>\\d{2}:\\d{2})\\s+END\\s+(?<end>\\d{2}:\\d{2})\\s+EVERY\\s+" +
                     "INTERVAL\\s+(?<interval>\\d+)\\s+(?<unit>(HOUR|MINUTE|SECOND))\\s*",
             Pattern.CASE_INSENSITIVE);
-    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm");
+    public static final ThreadLocal<SimpleDateFormat> TIME_FORMAT = ThreadLocal.withInitial(
+            () -> new SimpleDateFormat("HH:mm"));
 
     private final String start;
     private final String end;
@@ -41,18 +42,11 @@ public class ExternalCooldownSchedule {
     }
 
     public static boolean validateScheduleString(String schedule) {
-        Matcher matcher = SCHEDULE_PATTERN.matcher(schedule);
-        if (!matcher.matches()) {
-            return false;
-        }
         ExternalCooldownSchedule externalCooldownSchedule = fromString(schedule);
         if (externalCooldownSchedule == null) {
             return false;
         }
         String start = externalCooldownSchedule.getStart();
-        if (start == null) {
-            return false;
-        }
         if (start.compareTo("23:59") > 0 || start.compareTo("00:00") < 0) {
             return false;
         }
@@ -69,9 +63,6 @@ public class ExternalCooldownSchedule {
             case "MINUTE":
                 intervalSeconds = interval * 60;
                 break;
-            case "SECOND":
-                intervalSeconds = interval;
-                break;
             default:
                 intervalSeconds = interval;
                 break;
@@ -80,6 +71,9 @@ public class ExternalCooldownSchedule {
     }
 
     public static ExternalCooldownSchedule fromString(String schedule) {
+        if (schedule == null || schedule.isEmpty()) {
+            return null;
+        }
         Matcher matcher = SCHEDULE_PATTERN.matcher(schedule);
         if (!matcher.matches()) {
             return null;
@@ -121,9 +115,8 @@ public class ExternalCooldownSchedule {
         this.lastScheduleMs = lastScheduleMs;
     }
 
-    public boolean trySchedule() {
-        long currentMs = System.currentTimeMillis();
-        String s = timeFormat.format(currentMs);
+    public boolean trySchedule(long currentMs) {
+        String s = TIME_FORMAT.get().format(currentMs);
         if (end.compareTo(start) < 0) {
             // ex: [start=23:00, end=07:00)
             if (!(s.compareTo(start) >= 0 || s.compareTo(end) < 0)) {

@@ -150,7 +150,6 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -410,7 +409,7 @@ public class DDLStmtExecutor {
         }
 
         public static ExecuteOption getCooldownExecuteOption(CreateExternalCooldownStmt externalCooldownStmt) {
-            boolean force = externalCooldownStmt.isForceRefresh();
+            boolean force = externalCooldownStmt.isForce();
             PartitionRangeDesc range = externalCooldownStmt.getPartitionRangeDesc();
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
@@ -432,11 +431,11 @@ public class DDLStmtExecutor {
                 Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(
                         tableName.getDb(), tableName.getTbl());
                 if (!(table instanceof OlapTable)) {
-                    throw new SemanticException("only support cooldown for olap table, got " + table.getType());
+                    throw new SemanticException("only support cooldown for olap table, table: " + tableName);
                 }
                 final String cooldownTaskName = TaskBuilder.getExternalCooldownTaskName(table.getId());
                 if (!taskManager.containTask(cooldownTaskName)) {
-                    Task task = TaskBuilder.buildExternalCooldownTask(stmt, context);
+                    Task task = TaskBuilder.buildExternalCooldownTask(stmt);
                     taskManager.createTask(task, false);
                 }
                 ExecuteOption executeOption = getCooldownExecuteOption(stmt);

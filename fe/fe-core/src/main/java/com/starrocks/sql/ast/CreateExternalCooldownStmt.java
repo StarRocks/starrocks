@@ -21,26 +21,21 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class CreateExternalCooldownStmt extends DdlStmt {
     private TableName tableName;
-    private final boolean forceRefresh;
+    private final boolean force;
     private PartitionRangeDesc partitionRangeDesc;
-    private Map<String, String> properties;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60)))
                     .build();
     public CreateExternalCooldownStmt(TableName tableName, PartitionRangeDesc partitionRangeDesc,
-                                      boolean forceRefresh, NodePosition pos) {
+                                      boolean force, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
         this.partitionRangeDesc = partitionRangeDesc;
-        this.forceRefresh = forceRefresh;
-        this.properties = new HashMap<>();
+        this.force = force;
     }
 
     public TableName getTableName() {
@@ -59,16 +54,8 @@ public class CreateExternalCooldownStmt extends DdlStmt {
         this.partitionRangeDesc = partitionRangeDesc;
     }
 
-    public boolean isForceRefresh() {
-        return forceRefresh;
-    }
-
-    public Map<String, String> getProperties() {
-        return properties;
-    }
-
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
+    public boolean isForce() {
+        return force;
     }
 
     @Override
@@ -78,11 +65,12 @@ public class CreateExternalCooldownStmt extends DdlStmt {
 
     @Override
     public String toSql() {
-        String sql = "COOLDOWN " + tableName;
+        String sql = "COOLDOWN TABLE " + tableName.toSql();
         if (partitionRangeDesc != null) {
-            sql += " " + partitionRangeDesc.toSql();
+            sql += " PARTITION START ('" + partitionRangeDesc.getPartitionStart()
+                    + "') END ('" + partitionRangeDesc.getPartitionEnd() + "')";
         }
-        if (isForceRefresh()) {
+        if (isForce()) {
             sql += " FORCE";
         }
 

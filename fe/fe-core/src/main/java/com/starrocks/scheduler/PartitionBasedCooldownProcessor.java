@@ -84,8 +84,7 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
             throw new DmlException(TABLE_PREFIX + table.getName() + "'s external table is not iceberg table");
         }
 
-        partitionSelector = new ExternalCooldownPartitionSelector(
-                db, olapTable, partitionStart, partitionEnd, isForce);
+        partitionSelector = new ExternalCooldownPartitionSelector(olapTable, partitionStart, partitionEnd, isForce);
         if (!partitionSelector.isTableSatisfied()) {
             throw new DmlException(TABLE_PREFIX + table.getName() + " don't satisfy external cool down condition");
         }
@@ -132,7 +131,7 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
             ConnectContext ctx = context.getCtx();
             String definition = generateInsertSql(ctx);
             context.setDefinition(definition);
-            ctx.getState().setOk();
+            ctx.getState().reset();
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())
@@ -164,8 +163,12 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
             }
 
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                String queryId = "";
+                if (ctx.getQueryId() != null) {
+                    queryId = DebugUtil.printId(ctx.getQueryId());
+                }
                 LOG.warn("[QueryId:{}] external cooldown task table {} partition {} failed, err: {}",
-                        DebugUtil.printId(ctx.getQueryId()), olapTable.getName(),
+                        queryId, olapTable.getName(),
                         partition.getName(), ctx.getState().getErrorMessage());
                 throw new DdlException(ctx.getState().getErrorMessage());
             }

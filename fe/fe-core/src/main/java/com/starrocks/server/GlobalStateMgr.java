@@ -2176,6 +2176,10 @@ public class GlobalStateMgr {
         return this.externalCooldownMgr;
     }
 
+    public ExternalCooldownJobExecutor getExternalCooldownJobExecutor() {
+        return this.externalCooldownJobExecutor;
+    }
+
     public SmallFileMgr getSmallFileMgr() {
         return this.smallFileMgr;
     }

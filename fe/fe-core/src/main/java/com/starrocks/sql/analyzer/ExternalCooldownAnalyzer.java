@@ -25,14 +25,16 @@ import com.starrocks.sql.ast.CancelExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.StatementBase;
 
+import javax.ws.rs.NotSupportedException;
+
 
 public class ExternalCooldownAnalyzer {
-    public static void analyze(StatementBase stmt, ConnectContext session) {
-        new ExternalCooldownAnalyzer.ExternalCooldownAnalyzerVisitor().visit(stmt, session);
+    ExternalCooldownAnalyzer() {
+        throw new NotSupportedException();
     }
 
-    private ExternalCooldownAnalyzer() {
-        throw new IllegalStateException("creating an instance is illegal");
+    public static void analyze(StatementBase stmt, ConnectContext session) {
+        new ExternalCooldownAnalyzer.ExternalCooldownAnalyzerVisitor().visit(stmt, session);
     }
 
     static class ExternalCooldownAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {

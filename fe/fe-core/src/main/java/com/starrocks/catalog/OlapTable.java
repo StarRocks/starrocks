@@ -500,18 +500,8 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             tableProperty = new TableProperty(Maps.newHashMap());
         }
-        tableProperty.modifyTableProperties(externalCoolDownConfig.getProperties());
+        tableProperty.modifyTableProperties(externalCoolDownConfig.getValidProperties());
         tableProperty.setExternalCoolDownConfig(externalCoolDownConfig);
-    }
-
-    public boolean containsExternalCoolDownConfig() {
-        if (tableProperty == null ||
-                tableProperty.getExternalCoolDownConfig() == null) {
-            return false;
-        }
-
-        return tableProperty.getExternalCoolDownConfig().getTarget() != null &&
-                !tableProperty.getExternalCoolDownConfig().getTarget().isEmpty();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -3467,7 +3457,7 @@ public class OlapTable extends Table {
         }
 
         if (getCurExternalCoolDownConfig() != null) {
-            properties.putAll(getCurExternalCoolDownConfig().getProperties());
+            properties.putAll(getCurExternalCoolDownConfig().getValidProperties());
         }
         return properties;
     }

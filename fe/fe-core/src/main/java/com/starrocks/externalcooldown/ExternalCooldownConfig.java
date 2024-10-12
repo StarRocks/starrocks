@@ -26,6 +26,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class ExternalCooldownConfig implements Writable {
     @SerializedName("target")
@@ -35,34 +36,35 @@ public class ExternalCooldownConfig implements Writable {
     private String schedule;
 
     @SerializedName("waitSecond")
-    private long waitSecond;
+    private Long waitSecond;
 
-    public ExternalCooldownConfig(String target, String schedule, long waitSecond) {
+    public ExternalCooldownConfig(String target, String schedule, Long waitSecond) {
         this.target = target;
         this.schedule = schedule;
         this.waitSecond = waitSecond;
     }
 
     public ExternalCooldownConfig(ExternalCooldownConfig externalCoolDownConfig) {
-        target = null;
-        schedule = null;
-        waitSecond = 0;
         if (externalCoolDownConfig != null) {
             target = externalCoolDownConfig.target;
             schedule = externalCoolDownConfig.schedule;
             waitSecond = externalCoolDownConfig.waitSecond;
+        } else {
+            target = null;
+            schedule = null;
+            waitSecond = null;
         }
     }
 
     public ExternalCooldownConfig() {
-        this(null, null, 0);
+        this(null, null, null);
     }
 
     public boolean isReadyForAutoCooldown() {
         if (target == null || target.isEmpty()) {
             return false;
         }
-        if (waitSecond <= 0) {
+        if (waitSecond == null || waitSecond <= 0) {
             return false;
         }
         return schedule != null && !schedule.isEmpty();
@@ -92,11 +94,17 @@ public class ExternalCooldownConfig implements Writable {
         this.waitSecond = waitSecond;
     }
 
-    public Map<String, String> getProperties() {
+    public Map<String, String> getValidProperties() {
         Map<String, String> properties = new HashMap<>();
-        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, target);
-        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE, schedule);
-        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, String.valueOf(waitSecond));
+        if (target != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, target);
+        }
+        if (schedule != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE, schedule);
+        }
+        if (waitSecond != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, String.valueOf(waitSecond));
+        }
         return properties;
     }
 
@@ -120,6 +128,25 @@ public class ExternalCooldownConfig implements Writable {
         if (externalCoolDownConfig.getTarget() != null) {
             this.setTarget(externalCoolDownConfig.getTarget());
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ExternalCooldownConfig that = (ExternalCooldownConfig) o;
+        return Objects.equals(target, that.target) &&
+                Objects.equals(schedule, that.schedule) &&
+                Objects.equals(waitSecond, that.waitSecond);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(target, schedule, waitSecond);
     }
 
     @Override

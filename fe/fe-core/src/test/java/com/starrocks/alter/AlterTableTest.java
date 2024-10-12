@@ -14,11 +14,8 @@
 
 package com.starrocks.alter;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -30,9 +27,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.ConnectorContext;
-import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -40,20 +36,22 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import org.apache.iceberg.BaseTable;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -75,6 +73,7 @@ public class AlterTableTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
 
         UtFrameUtils.setUpForPersistTest();
     }
@@ -481,29 +480,6 @@ public class AlterTableTest {
 
     @Test
     public void testAlterTableExternalCoolDownConfig() throws Exception {
-        new MockUp<IcebergMetadata>() {
-            @Mock
-            public Table getTable(String dbName, String tblName) {
-                return new IcebergTable(1, "table1", "iceberg_catalog",
-                        "iceberg_catalog", "iceberg_db",
-                        "table1", "", Lists.newArrayList(), new BaseTable(null, ""), Maps.newHashMap());
-            }
-        };
-        new MockUp<IcebergTable>() {
-            @Mock
-            public String getTableIdentifier() {
-                return "iceberg_catalog.iceberg_db.table1";
-            }
-        };
-
-        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
-        Map<String, String> properties = Maps.newHashMap();
-
-        properties.put("type", "iceberg");
-        properties.put("iceberg.catalog.type", "hive");
-        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-        connectorMgr.createConnector(new ConnectorContext("iceberg_catalog", "iceberg", properties), false);
-
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_external_cooldown (\n" +
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
@@ -521,7 +497,7 @@ public class AlterTableTest {
                 "DISTRIBUTED BY HASH(event_day, site_id)\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"external_cooldown_target\" = \"iceberg_catalog.db.external_iceberg_tbl\",\n" +
+                "\"external_cooldown_target\" = \"iceberg0.partitioned_transforms_db.t0_day_dt\",\n" +
                 "\"external_cooldown_schedule\" = \"START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE\"\n," +
                 "\"external_cooldown_wait_second\" = \"3600\"\n" +
                 ");");
@@ -531,13 +507,14 @@ public class AlterTableTest {
         OlapTable olapTable = (OlapTable) db.getTable("test_external_cooldown");
 
         Assert.assertNotNull(olapTable.getExternalCoolDownTarget());
-        Assert.assertEquals("iceberg_catalog.db.external_iceberg_tbl", olapTable.getExternalCoolDownTarget());
+        Assert.assertEquals("iceberg0.partitioned_transforms_db.t0_day_dt", olapTable.getExternalCoolDownTarget());
         Assert.assertEquals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", olapTable.getExternalCoolDownSchedule());
         Assert.assertEquals((Long) 3600L, olapTable.getExternalCoolDownWaitSecond());
-        String sql = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"iceberg_catalog.db.tbl\");";
+        String sql = "ALTER TABLE test_external_cooldown " +
+                "SET(\"external_cooldown_target\" = \"iceberg0.partitioned_transforms_db.t0_month_dt\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
-        Assert.assertEquals("iceberg_catalog.db.tbl", olapTable.getExternalCoolDownTarget());
+        Assert.assertEquals("iceberg0.partitioned_transforms_db.t0_month_dt", olapTable.getExternalCoolDownTarget());
 
         String sql2 = "ALTER TABLE test_external_cooldown " +
                 "SET(\"external_cooldown_schedule\" = \"START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE\");";
@@ -549,6 +526,55 @@ public class AlterTableTest {
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
         Assert.assertEquals((Long) 7200L, olapTable.getExternalCoolDownWaitSecond());
+
+        String sql4 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_wait_second\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
+
+        String sql5 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_schedule\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql5, ctx));
+
+        String sql6 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"abc\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql6, ctx));
+
+        String sql7 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"a.b.c\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql7, ctx));
+
+        String sql8 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" "
+                + "= \"default_catalog.test.test_external_cooldown\");";
+        Assert.assertThrows(AnalysisException.class, () ->
+                UtFrameUtils.parseStmtWithNewParser(sql8, ctx));
+
+        // ** test replay from edit log: alter to rack:*
+        ExternalCooldownConfig updateConfig = new ExternalCooldownConfig(
+                "a.b.c", "START 00:00 END 07:59 EVERY INTERVAL 12 SECOND", 300L);
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(
+                db.getId(), olapTable.getId(), updateConfig.getValidProperties());
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG, info);
+        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_external_cooldown");
+        Assert.assertEquals("a.b.c", olapTable.getExternalCoolDownTarget());
+        Assert.assertEquals("START 00:00 END 07:59 EVERY INTERVAL 12 SECOND", olapTable.getExternalCoolDownSchedule());
+        Assert.assertEquals((Long) 300L, olapTable.getExternalCoolDownWaitSecond());
+
+        // ** test replay from edit log: alter to nil
+        updateConfig = new ExternalCooldownConfig("", "", 0L);
+        info = new ModifyTablePropertyOperationLog(
+                db.getId(), olapTable.getId(), updateConfig.getValidProperties());
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG, info);
+        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_external_cooldown");
+        Assert.assertEquals("", olapTable.getExternalCoolDownTarget());
+        Assert.assertEquals("", olapTable.getExternalCoolDownSchedule());
+        Assert.assertEquals((Long) 0L, olapTable.getExternalCoolDownWaitSecond());
     }
 
     @Test
@@ -601,5 +627,53 @@ public class AlterTableTest {
                 rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200324").getId()));
         Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
                 rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200324").getId()));
+
+        String sql1 = "ALTER TABLE test_alter_external_cool_down_synced_time\n" +
+                "MODIFY PARTITION (p20200321) SET(\"external_cooldown_synced_time\" = \"\",\n" +
+                " \"external_cooldown_consistency_check_time\" = \"\");";
+        AlterTableStmt alterTableStmt1 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt1);
+        long partitionId = olapTable.getPartition("p20200321").getId();
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownSyncedTimeMs(partitionId));
+        Assert.assertEquals((Long) 0L, rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partitionId));
+    }
+
+    public void checkAlterExternalCooldownConfig(String key, String value) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(
+                "test", "test_alter_config_fail");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(key, value);
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        Assert.assertThrows(SemanticException.class, () -> analyzer.visitModifyTablePropertiesClause(clause, connectContext));
+    }
+
+    @Test
+    public void testAlterTableExternalCoolDownConfigFail() throws Exception {
+        Config.default_replication_num = 1;
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_config_fail (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id);");
+
+        checkAlterExternalCooldownConfig(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, "abc");
+        checkAlterExternalCooldownConfig(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, "a.b.c");
+        checkAlterExternalCooldownConfig(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET,
+                "default_catalog.test.test_alter_config_fail");
+
+        checkAlterExternalCooldownConfig(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE, "test");
+        checkAlterExternalCooldownConfig(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, "not number");
     }
 }

@@ -53,7 +53,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.scheduler.PartitionBasedCooldownProcessor.PARTITION_END;
 import static com.starrocks.scheduler.PartitionBasedCooldownProcessor.PARTITION_ID;
+import static com.starrocks.scheduler.PartitionBasedCooldownProcessor.PARTITION_START;
+import static com.starrocks.scheduler.PartitionBasedCooldownProcessor.TABLE_ID;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
@@ -289,12 +292,12 @@ public class TaskBuilder {
         }
     }
 
-    public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt, ConnectContext context) {
+    public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt) {
         TableName tableName = externalCooldownStmt.getTableName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
         if (!(table instanceof OlapTable)) {
-            throw new SemanticException("only support cooldown for olap table, got " + table.getType());
+            throw new SemanticException("only support cooldown for olap table, got " + tableName);
         }
         OlapTable olapTable = (OlapTable) table;
 
@@ -331,16 +334,16 @@ public class TaskBuilder {
     @NotNull
     private static Map<String, String> getExternalCooldownTaskProperties(OlapTable table, Partition partition) {
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        taskProperties.put(TABLE_ID, String.valueOf(table.getId()));
         PartitionInfo partitionInfo = table.getPartitionInfo();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Range<PartitionKey> range =  rangePartitionInfo.getRange(partition.getId());
         taskProperties.put(PARTITION_ID, String.valueOf(partition.getId()));
-        taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_START,
+        taskProperties.put(PARTITION_START,
                 String.valueOf(range.lowerEndpoint().getKeys().get(0).getStringValue()));
-        taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_END,
+        taskProperties.put(PARTITION_END,
                 String.valueOf(range.upperEndpoint().getKeys().get(0).getStringValue()));
-        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        taskProperties.put(TABLE_ID, String.valueOf(table.getId()));
         return taskProperties;
     }
 
@@ -363,14 +366,14 @@ public class TaskBuilder {
     @NotNull
     private static Map<String, String> getExternalCooldownTaskProperties(CreateExternalCooldownStmt stmt, Table table) {
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        taskProperties.put(TABLE_ID, String.valueOf(table.getId()));
         if (stmt.getPartitionRangeDesc() != null) {
-            taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_START,
+            taskProperties.put(PARTITION_START,
                     String.valueOf(stmt.getPartitionRangeDesc().getPartitionStart()));
-            taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_END,
+            taskProperties.put(PARTITION_END,
                     String.valueOf(stmt.getPartitionRangeDesc().getPartitionEnd()));
         }
-        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        taskProperties.put(TABLE_ID, String.valueOf(table.getId()));
         return taskProperties;
     }
 

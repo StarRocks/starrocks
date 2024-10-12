@@ -59,7 +59,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -146,7 +145,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.statistic.StatsConstants;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -1704,23 +1702,6 @@ public class AstToStringBuilder {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(olapTable.getProperties(), "=", true, true, hidePassword).toString());
-            if (table.getType() == Table.TableType.OLAP_EXTERNAL) {
-                ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
-                // properties
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"")
-                        .append(externalOlapTable.getSourceTableHost()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"")
-                        .append(externalOlapTable.getSourceTablePort()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"")
-                        .append(externalOlapTable.getSourceTableUser()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"")
-                        .append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
-                        .append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"")
-                        .append(externalOlapTable.getSourceTableDbName()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
-                        .append(externalOlapTable.getSourceTableName()).append("\"");
-            }
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;

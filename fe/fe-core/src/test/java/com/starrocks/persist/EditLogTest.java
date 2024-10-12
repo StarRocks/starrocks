@@ -14,6 +14,8 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.encryption.KeyMgr;
@@ -22,13 +24,19 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownMaintenanceJob;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,12 +46,18 @@ import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.starrocks.persist.OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE;
 
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
@@ -221,5 +235,68 @@ public class EditLogTest {
         } catch (JournalInconsistentException e) {
             Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
         }
+    }
+
+    @Test
+    public void testOpExternalCooldownJobState() throws Exception {
+        GlobalStateMgr mgr = mockGlobalStateMgr();
+
+        // 1. Write objects to file
+        String fileName = "./OpExternalCooldownJobStateTest";
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        OlapTable table = new OlapTable(2000L, "tb2", null, null, null, null);
+        ExternalCooldownMaintenanceJob job = new ExternalCooldownMaintenanceJob(table, 1001L);
+
+        out.writeShort(OP_EXTERNAL_COOLDOWN_JOB_STATE);
+        job.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        JournalEntity journalEntity = new JournalEntity();
+        journalEntity.readFields(in);
+        EditLog editLog = new EditLog(null);
+        editLog.loadJournal(mgr, journalEntity);
+        Assert.assertEquals(1, mgr.getKeyMgr().numKeys());
+        in.close();
+    }
+
+    @Test
+    public void testExternalCooldownMgr() throws Exception {
+        OlapTable table = new OlapTable(2000L, "tb2", null, null, null, null);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+
+        ExternalCooldownMaintenanceJob job = new ExternalCooldownMaintenanceJob(table, 1001L);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getExternalCooldownMgr().getJobs().size());
+        GlobalStateMgr.getCurrentState().getExternalCooldownMgr().replay(job);
+
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getExternalCooldownMgr().save(initialImage.getImageWriter());
+
+        SRMetaBlockReader srMetaBlockReader = initialImage.getMetaBlockReader();
+        GlobalStateMgr.getCurrentState().getExternalCooldownMgr().load(srMetaBlockReader);
+        srMetaBlockReader.close();
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getExternalCooldownMgr().getJobs().size());
+        GlobalStateMgr.getCurrentState().getExternalCooldownMgr().stopMaintainExternalCooldown(table);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getExternalCooldownMgr().getJobs().size());
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return null;
+            }
+        };
+        srMetaBlockReader = initialImage.getMetaBlockReader();
+        GlobalStateMgr.getCurrentState().getExternalCooldownMgr().load(srMetaBlockReader);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getExternalCooldownMgr().getJobs().size());
+        srMetaBlockReader.close();
     }
 }

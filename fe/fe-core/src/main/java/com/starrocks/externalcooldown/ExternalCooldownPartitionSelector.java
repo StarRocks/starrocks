@@ -17,7 +17,6 @@ package com.starrocks.externalcooldown;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -27,11 +26,10 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.PListCell;
-import org.apache.commons.lang3.StringUtils;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,29 +39,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.sql.common.SyncPartitionUtils.createRange;
 
 public class ExternalCooldownPartitionSelector {
     private static final Logger LOG = LogManager.getLogger(ExternalCooldownPartitionSelector.class);
-    private final Database db;
     private final OlapTable olapTable;
     private org.apache.iceberg.Table targetIcebergTable;
     private long externalCoolDownWaitSeconds;
     private boolean tableSatisfied;
-    private String fullTableName;
+    private String tableName;
     private final String partitionStart;
     private final String partitionEnd;
     private final boolean isForce;
     private PartitionInfo partitionInfo;
     private List<Partition> satisfiedPartitions;
 
-    public ExternalCooldownPartitionSelector(Database db, OlapTable olapTable) {
-        this(db, olapTable, null, null, false);
+    public ExternalCooldownPartitionSelector(OlapTable olapTable) {
+        this(olapTable, null, null, false);
     }
 
-    public ExternalCooldownPartitionSelector(Database db, OlapTable olapTable,
+    public ExternalCooldownPartitionSelector(OlapTable olapTable,
                                              String partitionStart, String partitionEnd, boolean isForce) {
-        this.db = db;
         this.olapTable = olapTable;
         this.partitionStart = partitionStart;
         this.partitionEnd = partitionEnd;
@@ -73,26 +68,31 @@ public class ExternalCooldownPartitionSelector {
     }
 
     public void init() {
-        fullTableName = db.getFullName() + "." + olapTable.getName();
+        tableName = olapTable.getName();
         reloadSatisfiedPartitions();
     }
 
     public void reloadSatisfiedPartitions() {
         tableSatisfied = true;
         partitionInfo = olapTable.getPartitionInfo();
-        if (olapTable.getExternalCoolDownWaitSecond() == null) {
+
+        // check table has external cool down wait second
+        Long waitSeconds = olapTable.getExternalCoolDownWaitSecond();
+        if (waitSeconds == null || waitSeconds <= 0) {
+            LOG.info("table[{}] has no set `{}` property or not satisfied. ignore", tableName,
+                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND);
             tableSatisfied = false;
             return;
         }
 
         Table targetTable = olapTable.getExternalCoolDownTable();
         if (targetTable == null) {
-            LOG.debug("table[{}]'s `{}` not found. ignore", fullTableName,
+            LOG.debug("table[{}]'s `{}` not found. ignore", tableName,
                     PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
             tableSatisfied = false;
         }
         if (!(targetTable instanceof IcebergTable)) {
-            LOG.debug("table[{}]'s `{}` property is not iceberg table. ignore", fullTableName,
+            LOG.debug("table[{}]'s `{}` property is not iceberg table. ignore", tableName,
                     PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
             tableSatisfied = false;
             return;
@@ -100,20 +100,12 @@ public class ExternalCooldownPartitionSelector {
         targetIcebergTable = ((IcebergTable) targetTable).getNativeTable();
         if (targetIcebergTable == null) {
             LOG.debug("table[{}]'s `{}` property related native iceberg table not found. ignore",
-                    fullTableName, PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+                    tableName, PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
             tableSatisfied = false;
         }
 
-        // check table has external cool down wait second
-        Long waitSeconds = olapTable.getExternalCoolDownWaitSecond();
-        if (waitSeconds == null || waitSeconds == 0) {
-            LOG.info("table[{}] has no set `{}` property. ignore", fullTableName,
-                    PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND);
-            tableSatisfied = false;
-        } else {
-            externalCoolDownWaitSeconds = waitSeconds;
-        }
-        satisfiedPartitions = this.getSatisfiedPartitions(-1);
+        externalCoolDownWaitSeconds = waitSeconds;
+        satisfiedPartitions = this.computeSatisfiedPartitions(-1);
     }
 
     public boolean isTableSatisfied() {
@@ -123,23 +115,37 @@ public class ExternalCooldownPartitionSelector {
     /**
      * check whether partition satisfy external cool down condition
      */
-    private boolean isPartitionSatisfied(Partition partition) {
-        long externalCoolDownWaitMillis = externalCoolDownWaitSeconds * 1000L;
-        // partition with init version has no data, doesn't need do external cool down
-        if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
-            LOG.debug("table[{}] partition[{}] is init version. ignore", fullTableName, partition.getName());
+    protected boolean isPartitionSatisfied(Partition partition) {
+        try {
+            return checkPartitionSatisfied(partition);
+        } catch (Exception e) {
+            LOG.warn("check partition [{}-{}] satisfy external cool down condition failed",
+                    tableName, partition.getName(), e);
             return false;
         }
+    }
 
-        // force cooldown don't need check cooldown state and consistency check result
+    protected boolean checkPartitionSatisfied(Partition partition) {
+        // force cooldown don't need check cooldown state and consistency check result,
+        // and initial partition could also be cooldown
         if (isForce) {
             return true;
+        }
+
+        long externalCoolDownWaitMillis = externalCoolDownWaitSeconds * 1000L;
+        if (externalCoolDownWaitSeconds <= 0) {
+            return false;
+        }
+        // partition with init version has no data, doesn't need do external cool down
+        if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
+            LOG.debug("table[{}] partition[{}] is init version. ignore", tableName, partition.getName());
+            return false;
         }
 
         // after partition update, should wait a while to avoid unnecessary duplicate external cool down
         long changedMillis = System.currentTimeMillis() - partition.getVisibleVersionTime();
         if (changedMillis <= externalCoolDownWaitMillis) {
-            LOG.info("partition[{}]'s changed time hasn't reach {} {}. ignore", partition.getId(),
+            LOG.debug("partition[{}]'s changed time hasn't reach {} {}. ignore", partition.getId(),
                     PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, externalCoolDownWaitSeconds);
             return false;
         }
@@ -151,18 +157,18 @@ public class ExternalCooldownPartitionSelector {
         if (partitionCoolDownSyncedTimeMs == null || partitionCoolDownSyncedTimeMs < partition.getVisibleVersionTime()) {
             return true;
         }
-        // wait consistency check if has done external cool down
+        // wait consistency check if has done external cooldown
         if (consistencyCheckTimeMs == null || partitionCoolDownSyncedTimeMs > consistencyCheckTimeMs) {
             // wait to do consistency check after external cool down
             LOG.debug("table [{}] partition[{}] external cool down time newer then consistency check time",
-                    fullTableName, partition.getName());
+                    tableName, partition.getName());
             return false;
         }
         Long diff = partitionInfo.getExternalCoolDownConsistencyCheckDifference(partition.getId());
         if (diff == null || diff == 0) {
             // has consistency check after external cool down, and check result ok
             LOG.debug("table [{}] partition[{}] external cool down consistency check result ok",
-                    fullTableName, partition.getName());
+                    tableName, partition.getName());
             return false;
         }
 
@@ -180,9 +186,6 @@ public class ExternalCooldownPartitionSelector {
     }
 
     public Partition getNextSatisfiedPartition(Partition currentPartition) {
-        if (satisfiedPartitions.isEmpty()) {
-            return null;
-        }
         for (Partition partition : satisfiedPartitions) {
             if (partition.getName().compareTo(currentPartition.getName()) <= 0) {
                 continue;
@@ -193,57 +196,57 @@ public class ExternalCooldownPartitionSelector {
     }
 
     public Set<String> getPartitionNamesByListWithPartitionLimit() {
-        boolean hasPartitionRange = StringUtils.isNoneEmpty(partitionStart) || StringUtils.isNoneEmpty(partitionEnd);
+        Set<String> result = Sets.newHashSet();
 
-        if (hasPartitionRange) {
-            Set<String> result = Sets.newHashSet();
-
-            Map<String, PListCell> listMap = olapTable.getValidListPartitionMap(-1);
-            for (Map.Entry<String, PListCell> entry : listMap.entrySet()) {
-                if (entry.getKey().compareTo(partitionStart) >= 0 && entry.getKey().compareTo(partitionEnd) <= 0) {
-                    result.add(entry.getKey());
-                }
+        Map<String, PListCell> listMap = olapTable.getValidListPartitionMap(-1);
+        for (Map.Entry<String, PListCell> entry : listMap.entrySet()) {
+            if (entry.getKey().compareTo(partitionStart) >= 0 && entry.getKey().compareTo(partitionEnd) <= 0) {
+                result.add(entry.getKey());
             }
-            return result;
         }
-
-        return olapTable.getValidListPartitionMap(-1).keySet();
+        return result;
     }
 
     public Set<String> getPartitionNamesByRangeWithPartitionLimit()
-            throws AnalysisException {
-        boolean hasPartitionRange = StringUtils.isNoneEmpty(partitionStart) || StringUtils.isNoneEmpty(partitionEnd);
-
-        if (hasPartitionRange) {
-            Set<String> result = Sets.newHashSet();
-            List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
-            Column partitionColumn = partitionColumns.get(0);
-            Range<PartitionKey> rangeToInclude = createRange(partitionStart, partitionEnd, partitionColumn);
-            Map<String, Range<PartitionKey>> rangeMap = olapTable.getValidRangePartitionMap(-1);
-            for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
-                Range<PartitionKey> rangeToCheck = entry.getValue();
-                int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-                int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-                if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                    result.add(entry.getKey());
-                }
-            }
-            return result;
+            throws SemanticException {
+        Set<String> result = Sets.newHashSet();
+        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
+        Column partitionColumn = partitionColumns.get(0);
+        Range<PartitionKey> rangeToInclude;
+        try {
+            rangeToInclude = SyncPartitionUtils.createRange(partitionStart, partitionEnd, partitionColumn);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage());
         }
-
-        return olapTable.getValidRangePartitionMap(-1).keySet();
+        Map<String, Range<PartitionKey>> rangeMap;
+        try {
+            rangeMap = olapTable.getValidRangePartitionMap(-1);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage());
+        }
+        for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
+            Range<PartitionKey> rangeToCheck = entry.getValue();
+            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
     }
 
     // get partition names in range [partitionStart, partitionEnd]
-    private Set<String> getPartitionsInRange() throws AnalysisException {
+    private Set<String> getPartitionsInRange() throws SemanticException {
         if (partitionStart == null && partitionEnd == null) {
             if (partitionInfo instanceof SinglePartitionInfo) {
                 return olapTable.getVisiblePartitionNames();
+            } else if (partitionInfo instanceof ListPartitionInfo) {
+                return olapTable.getValidListPartitionMap(-1).keySet();
             } else {
-                if (partitionInfo instanceof ListPartitionInfo) {
-                    return olapTable.getValidListPartitionMap(-1).keySet();
-                } else {
+                try {
                     return olapTable.getValidRangePartitionMap(-1).keySet();
+                } catch (Exception e) {
+                    throw new SemanticException(e.getMessage());
                 }
             }
         }
@@ -252,55 +255,46 @@ public class ExternalCooldownPartitionSelector {
             return olapTable.getVisiblePartitionNames();
         } else if (partitionInfo instanceof RangePartitionInfo) {
             return getPartitionNamesByRangeWithPartitionLimit();
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            return getPartitionNamesByListWithPartitionLimit();
         } else {
-            throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
+            // ListPartitionInfo
+            return getPartitionNamesByListWithPartitionLimit();
         }
     }
 
-    public List<Partition> getSatisfiedPartitions(int limit) {
-        List<Partition> chosenPartitions = new ArrayList<>();
-
+    public List<Partition> computeSatisfiedPartitions(int limit) {
         boolean isOlapTablePartitioned = olapTable.getPartitions().size() > 1 || olapTable.dynamicPartitionExists();
-        if (!isOlapTablePartitioned && targetIcebergTable.spec() != null && !targetIcebergTable.spec().fields().isEmpty()) {
-            LOG.warn("table: {} is a none partitioned table, cannot have partitionSpec fields",
-                    fullTableName);
-            return chosenPartitions;
+        if (!isOlapTablePartitioned && targetIcebergTable.spec() != null
+                && !targetIcebergTable.spec().fields().isEmpty()) {
+            LOG.warn("source table: {} is a none partitioned table, target table shouldn't partitionSpec fields",
+                    tableName);
+            return new ArrayList<>();
         }
 
-        boolean isSatisfied;
         Set<String> partitionNames;
         try {
             partitionNames = getPartitionsInRange();
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             LOG.warn("table: {} get partitions in range failed, {}", olapTable.getName(), e);
-            return chosenPartitions;
+            return new ArrayList<>();
         }
 
         List<String> sortedPartitionNames = new ArrayList<>(partitionNames);
         Collections.sort(sortedPartitionNames);
-
+        List<Partition> chosenPartitions = new ArrayList<>();
         for (String partitionName : sortedPartitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
-            if (partition != null) {
-                try {
-                    isSatisfied = isPartitionSatisfied(partition);
-                } catch (Exception e) {
-                    isSatisfied = false;
-                    String msg = String.format("check partition [%s-%s] satisfy external cool down condition failed",
-                            fullTableName, partition.getName());
-                    LOG.warn(msg, e);
-                }
-                if (isSatisfied) {
-                    LOG.info("choose partition[{}-{}] to external cool down", fullTableName, partition.getName());
-                    chosenPartitions.add(partition);
-                }
+            if (partition == null) {
+                continue;
+            }
 
-                if (limit > 0 && chosenPartitions.size() >= limit) {
-                    LOG.info("stop choose partition as no remain jobs");
-                    break;
-                }
+            boolean isSatisfied = isPartitionSatisfied(partition);
+            if (isSatisfied) {
+                LOG.info("choose partition[{}-{}] to external cool down", tableName, partition.getName());
+                chosenPartitions.add(partition);
+            }
+            if (limit > 0 && chosenPartitions.size() >= limit) {
+                LOG.info("stop choose partition as no remain jobs");
+                return chosenPartitions;
             }
         }
         return chosenPartitions;

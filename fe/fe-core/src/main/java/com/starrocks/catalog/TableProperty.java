@@ -78,6 +78,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -405,10 +406,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildExternalCoolDownProperties() {
-        return this;
-    }
-
     // TODO: refactor the postProcessing code into listener-based instead of procedure-oriented
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
@@ -447,7 +444,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String externalCoolDownSchedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
         long externalCoolDownWaitSecond = Long.parseLong(properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND,
-                String.valueOf(-1L)));
+                String.valueOf(0L)));
         externalCoolDownConfig = new ExternalCooldownConfig(
                 externalCoolDownTarget, externalCoolDownSchedule, externalCoolDownWaitSecond);
         return this;
@@ -1104,7 +1101,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (externalCoolDownConfig == null) {
             return 0;
         }
-        return externalCoolDownConfig.getWaitSecond();
+        Long waitSecond = externalCoolDownConfig.getWaitSecond();
+        return Objects.requireNonNullElse(waitSecond, 0L);
     }
 
     @Override

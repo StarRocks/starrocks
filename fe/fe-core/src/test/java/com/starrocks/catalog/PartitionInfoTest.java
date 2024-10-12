@@ -22,6 +22,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class PartitionInfoTest {
     private final long partitionId = 10086;
@@ -75,5 +78,37 @@ public class PartitionInfoTest {
         // with gsonPostProcess, the invalid partition id will be removed from idToStorageCacheInfo
         info.gsonPostProcess();
         Assert.assertEquals(1L, info.idToStorageCacheInfo.size());
+    }
+
+    @Test
+    public void testCouldUseExternalCoolDownPartition() throws ParseException {
+        RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+        PartitionKey partitionKey = new PartitionKey();
+        Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
+        info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+        Date time1 = dateFormat.parse("2024-10-23 12:00:00");
+        Date time2 = dateFormat.parse("2024-10-23 16:00:00");
+        Date time3 = dateFormat.parse("2024-10-23 18:00:00");
+
+        Partition partition = new Partition(partitionId, "p0", null, null);
+        partition.updateVisibleVersion(2, time2.getTime());
+
+        info.setExternalCoolDownSyncedTimeMs(partitionId, time2.getTime());
+        info.setExternalCoolDownConsistencyCheckTimeMs(partitionId, time3.getTime());
+        info.setCoolDownConsistencyCheckDifference(partitionId, 0L);
+
+        Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition));
+        Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition, time1.getTime()));
+
+        partition.updateVisibleVersion(3, time2.getTime());
+        Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition));
+        Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition, time1.getTime()));
+
+        String infoString = info.toString();
+        Assert.assertTrue(infoString.contains("external cool down time"));
+        Assert.assertTrue(infoString.contains("external cool down consistency check time"));
+        Assert.assertTrue(infoString.contains("external cool down consistency check result"));
     }
 }
