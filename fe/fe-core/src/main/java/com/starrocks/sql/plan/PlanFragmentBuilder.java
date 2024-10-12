@@ -58,7 +58,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
-import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
