@@ -131,7 +131,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     dbName, tableName, params.getPredicate());
         }
 
-        return scanTasks.stream().map(x -> new DeltaRemoteFileInfo(x)).collect(Collectors.toList());
+        return scanTasks.stream().map(DeltaRemoteFileInfo::new).collect(Collectors.toList());
     }
 
     @Override
