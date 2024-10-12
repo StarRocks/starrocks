@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
+
+import java.util.Map;
 
 public class EquivalentShuttleContext {
     private final RewriteContext rewriteContext;
@@ -22,6 +26,7 @@ public class EquivalentShuttleContext {
     private boolean isUseEquivalent;
     private boolean isRewrittenByEquivalent;
     private IRewriteEquivalent.RewriteEquivalentType rewriteEquivalentType;
+    private Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap;
 
     public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent,
                                     IRewriteEquivalent.RewriteEquivalentType type) {
@@ -45,6 +50,18 @@ public class EquivalentShuttleContext {
 
     public void setRewrittenByEquivalent(boolean rewrittenByEquivalent) {
         isRewrittenByEquivalent = rewrittenByEquivalent;
+    }
+
+    public boolean isRewrittenByRewriter() {
+        return newColumnRefToAggFuncMap != null;
+    }
+
+    public void setNewColumnRefToAggFuncMap(Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap) {
+        this.newColumnRefToAggFuncMap = newColumnRefToAggFuncMap;
+    }
+
+    public Map<ColumnRefOperator, CallOperator> getNewColumnRefToAggFuncMap() {
+        return newColumnRefToAggFuncMap;
     }
 
     public RewriteContext getRewriteContext() {
