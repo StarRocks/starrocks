@@ -422,18 +422,12 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
-<<<<<<< HEAD
-=======
     // Keep the rowsets committed but not publish which rowset meta without schema
     phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
                                   std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5,
                                   phmap::NullMutex, true>
             _committed_rs_map;
 
-    // gtid -> version
-    std::map<int64_t, int64_t> _gtid_to_version_map;
-
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 
