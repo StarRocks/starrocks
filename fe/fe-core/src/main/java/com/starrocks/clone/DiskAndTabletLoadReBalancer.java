@@ -1925,7 +1925,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 if (replica == null) {
                     continue;
                 }
-                int sortIndex = pathSortIndex.get(replica.getPathHash());
+                Integer sortIndex = pathSortIndex.get(replica.getPathHash());
+                if (sortIndex == null) {
+                    LOG.warn("Can not find path for tablet: {} on backend: {} by path hash: {}",
+                            tabletId, this.backendId, replica.getPathHash());
+                    continue;
+                }
                 if (sortIndex > lastHighLoadIndex) {
                     continue;
                 }
