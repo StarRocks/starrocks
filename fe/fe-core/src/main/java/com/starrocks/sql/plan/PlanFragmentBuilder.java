@@ -57,6 +57,9 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.catalog.system.information.FeMetricsSystemTable;
+import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1644,8 +1647,8 @@ public class PlanFragmentBuilder {
                                 scanNode.setJobId(constantOperator.getBigint());
                                 break;
                             case "ID":
-                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
-                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
+                                        || scanNode.getTableName().equalsIgnoreCase(LoadsSystemTable.NAME)) {
                                     scanNode.setJobId(constantOperator.getBigint());
                                 }
                                 break;
@@ -1697,19 +1700,18 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+            if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME) && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
-                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
+            if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+            if (scanNode.getTableName().equalsIgnoreCase(FeMetricsSystemTable.NAME)) {
                 scanNode.computeFeNodes();
             }
 

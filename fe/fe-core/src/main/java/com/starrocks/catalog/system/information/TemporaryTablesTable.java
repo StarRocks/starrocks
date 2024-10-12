@@ -26,11 +26,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class TemporaryTablesTable {
-
     public static final int MY_CS_NAME_SIZE = 32;
+    public static final String NAME = "temp_tables";
 
     public static SystemTable create() {
-        return new SystemTable(SystemId.TEMP_TABLES_ID, "temp_tables", Table.TableType.SCHEMA, builder()
+        return new SystemTable(SystemId.TEMP_TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
                 .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
                 .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                 .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

@@ -23,9 +23,11 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class MaterializedViewsSystemTable {
+    public static final String NAME = "materialized_views";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.MATERIALIZED_VIEWS_ID,
-                "materialized_views",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("MATERIALIZED_VIEW_ID", ScalarType.createVarchar(50))

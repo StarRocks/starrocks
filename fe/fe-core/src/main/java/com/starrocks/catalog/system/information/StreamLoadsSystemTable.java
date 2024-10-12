@@ -25,9 +25,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class StreamLoadsSystemTable {
+    public static final String NAME = "stream_loads";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.STREAM_LOADS_ID,
-                "stream_loads",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))

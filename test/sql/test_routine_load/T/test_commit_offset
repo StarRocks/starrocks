@@ -26,3 +26,4 @@ FROM KAFKA (
 SELECT sleep(30);
 
 SHOW ROUTINE LOAD FOR rl_commit_offset;
+select state from information_schema.routine_load_jobs where name = "rl_commit_offset" order by id desc limit 1;

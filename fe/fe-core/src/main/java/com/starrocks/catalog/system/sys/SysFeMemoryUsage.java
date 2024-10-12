@@ -33,8 +33,6 @@ import org.apache.thrift.TException;
 
 
 public class SysFeMemoryUsage {
-
-
     public static final String NAME = "fe_memory_usage";
 
     public static SystemTable create() {

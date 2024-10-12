@@ -22,7 +22,6 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 
 public class PipeFileSystemTable {
-
     public static final String NAME = "pipe_files";
 
     public static SystemTable create() {

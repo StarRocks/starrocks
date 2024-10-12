@@ -24,9 +24,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class FeTabletSchedulesSystemTable {
+    public static final String NAME = "fe_tablet_schedules";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.FE_SCHEDULES_ID,
-                "fe_tablet_schedules",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
