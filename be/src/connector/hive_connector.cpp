@@ -291,12 +291,6 @@ Status HiveDataSource::_init_extended_values() {
     RETURN_IF_ERROR(Expr::prepare(_extended_column_values, _runtime_state));
     RETURN_IF_ERROR(Expr::open(_extended_column_values, _runtime_state));
 
-    for (int i = 0; i < _extended_slots.size(); i++) {
-        int32_t index = _index_in_extended_column[i];
-        ASSIGN_OR_RETURN(auto extended_value_col, _extended_column_values[index]->evaluate(nullptr));
-        DCHECK(extended_value_col->is_constant());
-    }
-
     return Status::OK();
 }
 

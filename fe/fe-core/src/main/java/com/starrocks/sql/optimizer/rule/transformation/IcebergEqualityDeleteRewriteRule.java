@@ -180,7 +180,11 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         long limit = scanOperator.getLimit();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         boolean hasPartitionEvolution = deleteSchemas.stream().map(x -> x.specId).distinct().count() > 1;
-        LogicalIcebergScanOperator newScanOp = buildNewScanOperatorWithUnselectedField(
+        if (hasPartitionEvolution && !context.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
+            throw new StarRocksConnectorException("Equality delete files are not supported for tables with partition evolution");
+        }
+
+        LogicalIcebergScanOperator newScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
                 deleteSchemas, scanOperator, columnRefFactory, hasPartitionEvolution);
         OptExpression optExpression = OptExpression.create(newScanOp);
 
@@ -248,10 +252,11 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, onOps);
     }
 
-    private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedField(Set<DeleteSchema> deleteSchemas,
-                                                                               LogicalIcebergScanOperator scanOperator,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               boolean hasPartitionEvolution) {
+    private LogicalIcebergScanOperator buildNewScanOperatorWithUnselectedAndExtendedField(
+            Set<DeleteSchema> deleteSchemas,
+            LogicalIcebergScanOperator scanOperator,
+            ColumnRefFactory columnRefFactory,
+            boolean hasPartitionEvolution) {
         IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
         Table nativeTable = icebergTable.getNativeTable();
         List<Column> deleteColumns = deleteSchemas.stream()

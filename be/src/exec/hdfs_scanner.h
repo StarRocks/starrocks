@@ -321,6 +321,8 @@ struct HdfsScannerContext {
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
+                                          const std::vector<ColumnPtr>& values);
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();

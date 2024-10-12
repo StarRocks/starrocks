@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -481,6 +482,11 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         };
 
         String sql = "select k2 from iceberg_catalog.db.tbl";
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Equality delete files are not supported for tables with partition evolution",
+                () -> UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql));
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
         assertContains(plan, "4:Project\n" +
                 "  |  <slot 2> : 2: k2\n" +
@@ -543,5 +549,4 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
             }
         }
     }
-
 }

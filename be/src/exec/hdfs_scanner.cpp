@@ -559,47 +559,35 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
-    ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
-        ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-
-        if (row_count > 0) {
-            if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
-            } else {
-                chunk_part_column->append(*data_column, 0, 1);
-            }
-            chunk_part_column->assign(row_count, 0);
-        }
-        ck->append_or_update_column(std::move(chunk_part_column), slot_desc->id());
-    }
-    ck->set_num_rows(row_count);
+    append_or_update_column_to_chunk(chunk, row_count, partition_columns, partition_values);
 }
 
 void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (extended_columns.size() == 0) return;
+    append_or_update_column_to_chunk(chunk, row_count, extended_columns, extended_values);
+}
+
+void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
+                                                          const std::vector<ColumnInfo>& columns,
+                                                          const std::vector<ColumnPtr>& values) {
+    if (columns.size() == 0) return;
+
     ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < extended_columns.size(); i++) {
-        SlotDescriptor* slot_desc = extended_columns[i].slot_desc;
-        DCHECK(extended_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(extended_values[i]);
+    for (size_t i = 0; i < columns.size(); i++) {
+        SlotDescriptor* slot_desc = columns[i].slot_desc;
+        DCHECK(values[i]->is_constant());
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(values[i]);
         ColumnPtr data_column = const_column->data_column();
-        auto chunk_extended_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        auto chunk_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
 
         if (row_count > 0) {
             if (data_column->is_nullable()) {
-                chunk_extended_column->append_nulls(1);
+                chunk_column->append_nulls(1);
             } else {
-                chunk_extended_column->append(*data_column, 0, 1);
+                chunk_column->append(*data_column, 0, 1);
             }
-            chunk_extended_column->assign(row_count, 0);
+            chunk_column->assign(row_count, 0);
         }
-        ck->append_or_update_column(std::move(chunk_extended_column), slot_desc->id());
+        ck->append_or_update_column(std::move(chunk_column), slot_desc->id());
     }
     ck->set_num_rows(row_count);
 }
