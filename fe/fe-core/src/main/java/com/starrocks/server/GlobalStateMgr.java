@@ -2093,6 +2093,10 @@ public class GlobalStateMgr {
         return localMetastore.getDb(dbId);
     }
 
+    public Database getDb(String name) {
+        return localMetastore.getDb(name);
+    }
+
     public EditLog getEditLog() {
         return editLog;
     }
