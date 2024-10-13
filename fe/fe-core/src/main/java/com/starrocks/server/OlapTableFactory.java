@@ -374,25 +374,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-<<<<<<< HEAD
-                    
-=======
-
-            try {
-                long mutableBucketNum = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, 0);
-                if (mutableBucketNum >= 0) {
-                    table.setMutableBucketNum(mutableBucketNum);
-                } else {
-                    throw new DdlException("Illegal mutable bucket num: " + mutableBucketNum);
-                }
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-
-            if (PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, false)) {
-                table.setEnableLoadProfile(true);
-            }
 
             try {
                 table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
@@ -416,7 +397,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));

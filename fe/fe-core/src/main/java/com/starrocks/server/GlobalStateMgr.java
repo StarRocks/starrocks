@@ -552,14 +552,10 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionMgr compactionMgr;
 
-<<<<<<< HEAD
-    private WarehouseManager warehouseMgr;
-=======
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
 
-    private final WarehouseManager warehouseMgr;
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
+    private WarehouseManager warehouseMgr;
 
     private ConfigRefreshDaemon configRefreshDaemon;
 

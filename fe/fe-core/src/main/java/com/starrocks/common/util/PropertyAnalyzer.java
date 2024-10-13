@@ -166,15 +166,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
 
-<<<<<<< HEAD
-=======
-    public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
-
-    public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
-
     public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
@@ -429,33 +422,6 @@ public class PropertyAnalyzer {
         }
     }
 
-<<<<<<< HEAD
-=======
-    public static long analyzeMutableBucketNum(Map<String, String> properties) {
-        long mutableBucketNum = 0;
-        if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
-            try {
-                mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
-            } catch (NumberFormatException e) {
-                throw new SemanticException("Mutable bucket num: " + e.getMessage());
-            }
-            if (mutableBucketNum < 0) {
-                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
-            }
-            return mutableBucketNum;
-        } else {
-            throw new SemanticException("Mutable bucket num is not set");
-        }
-    }
-
-    public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
-        boolean enableLoadProfile = false;
-        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
-            enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
-        }
-        return enableLoadProfile;
-    }
-
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
@@ -464,7 +430,6 @@ public class PropertyAnalyzer {
         return "";
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
         if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
             throw new SemanticException(

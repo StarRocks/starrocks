@@ -194,16 +194,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default automatic bucket size
     private long bucketSize = 0;
 
-<<<<<<< HEAD
-=======
-    // the default mutable bucket number
-    private long mutableBucketNum = 0;
-
-    private boolean enableLoadProfile = false;
-
     private String baseCompactionForbiddenTimeRanges = "";
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -303,18 +295,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BUCKET_SIZE:
                 buildBucketSize();
                 break;
-<<<<<<< HEAD
-=======
-            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
-                buildMutableBucketNum();
-                break;
-            case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
-                buildEnableLoadProfile();
-                break;
             case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 buildBaseCompactionForbiddenTimeRanges();
                 break;
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
                 break;
@@ -570,29 +553,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
-=======
-    public TableProperty buildMutableBucketNum() {
-        if (properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) != null) {
-            mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
-        }
-        return this;
-    }
-
-    public TableProperty buildEnableLoadProfile() {
-        if (properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE) != null) {
-            enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
-        }
-        return this;
-    }
-
     public TableProperty buildBaseCompactionForbiddenTimeRanges() {
         baseCompactionForbiddenTimeRanges = properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, "");
         return this;
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -827,21 +793,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return bucketSize;
     }
 
-<<<<<<< HEAD
-=======
-    public long getMutableBucketNum() {
-        return mutableBucketNum;
-    }
-
-    public boolean enableLoadProfile() {
-        return enableLoadProfile;
-    }
-
     public String getBaseCompactionForbiddenTimeRanges() {
         return baseCompactionForbiddenTimeRanges;
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public String getStorageVolume() {
         return storageVolume;
     }

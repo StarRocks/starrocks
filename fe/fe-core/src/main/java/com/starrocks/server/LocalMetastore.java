@@ -4053,42 +4053,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logModifyBucketSize(info);
     }
 
-<<<<<<< HEAD
-=======
-    public void modifyTableMutableBucketNum(Database db, OlapTable table, Map<String, String> properties) {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        TableProperty tableProperty = table.getTableProperty();
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(properties);
-            table.setTableProperty(tableProperty);
-        } else {
-            tableProperty.modifyTableProperties(properties);
-        }
-        tableProperty.buildMutableBucketNum();
-
-        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
-                properties);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyMutableBucketNum(info);
-    }
-
-    public void modifyTableEnableLoadProfile(Database db, OlapTable table, Map<String, String> properties) {
-        Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        TableProperty tableProperty = table.getTableProperty();
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(properties);
-            table.setTableProperty(tableProperty);
-        } else {
-            tableProperty.modifyTableProperties(properties);
-        }
-        tableProperty.buildEnableLoadProfile();
-
-        ModifyTablePropertyOperationLog info =
-                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyEnableLoadProfile(info);
-    }
-
     public void modifyTableBaseCompactionForbiddenTimeRanges(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
@@ -4106,7 +4070,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logModifyBaseCompactionForbiddenTimeRanges(info);
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
         TableProperty tableProperty = table.getTableProperty();
@@ -4135,13 +4098,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             modifyTableReplicatedStorage(db, table, properties);
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             modifyTableAutomaticBucketSize(db, table, properties);
-<<<<<<< HEAD
-=======
-        } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
-            modifyTableMutableBucketNum(db, table, properties);
         } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
             modifyTableBaseCompactionForbiddenTimeRanges(db, table, properties);
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
         }

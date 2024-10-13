@@ -684,8 +684,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
-<<<<<<< HEAD
-=======
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_MUTABLE_BUCKET_NUM = 11141;
 
@@ -695,7 +693,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 11143;
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     // external table analyze
 
     @IgnorableOnReplayFailed

@@ -1999,21 +1999,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
-<<<<<<< HEAD
-=======
-    public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
-    }
-
-    public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
-    }
-
     public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
         logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }

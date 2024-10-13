@@ -242,7 +242,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseVisitor.java
             try {
                 PropertyAnalyzer.analyzeBucketSize(properties);
             } catch (AnalysisException e) {
@@ -250,12 +249,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
-=======
-            PropertyAnalyzer.analyzeBucketSize(properties);
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
-            PropertyAnalyzer.analyzeMutableBucketNum(properties);
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
-            PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -267,7 +260,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseAnalyzer.java
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {

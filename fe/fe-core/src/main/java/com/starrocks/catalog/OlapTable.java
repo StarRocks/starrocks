@@ -2541,15 +2541,6 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
-<<<<<<< HEAD
-=======
-    public Long getMutableBucketNum() {
-        if (tableProperty != null) {
-            return tableProperty.getMutableBucketNum();
-        }
-        return (long) 0;
-    }
-
     public String getBaseCompactionForbiddenTimeRanges() {
         if (tableProperty != null) {
             return tableProperty.getBaseCompactionForbiddenTimeRanges();
@@ -2557,7 +2548,6 @@ public class OlapTable extends Table {
         return "";
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2566,35 +2556,6 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
-    }
-
-<<<<<<< HEAD
-=======
-    public void setMutableBucketNum(long bucketNum) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM,
-                        String.valueOf(bucketNum));
-        tableProperty.buildMutableBucketNum();
-    }
-
-    public Boolean enableLoadProfile() {
-        if (tableProperty != null) {
-            return tableProperty.enableLoadProfile();
-        }
-        return false;
-    }
-
-    public void setEnableLoadProfile(boolean enableLoadProfile) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
-                        Boolean.valueOf(enableLoadProfile).toString());
-        tableProperty.buildEnableLoadProfile();
     }
 
     public void setBaseCompactionForbiddenTimeRanges(String baseCompactionForbiddenTimeRanges) {
@@ -2607,7 +2568,6 @@ public class OlapTable extends Table {
         tableProperty.buildBaseCompactionForbiddenTimeRanges();
     }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -3225,7 +3185,6 @@ public class OlapTable extends Table {
             } // end for indices
         } // end for partitions
 
-<<<<<<< HEAD
         int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
         for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
             AgentBatchTask originTasks = entry.getValue();
@@ -3247,66 +3206,13 @@ public class OlapTable extends Table {
                 }
             } else {
                 AgentTaskExecutor.submit(originTasks);
-=======
-        // bloom filter
-        Set<String> bfColumnNames = getBfColumnNames();
-        if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
-        }
-
-        // colocate group
-        String colocateGroup = getColocateGroup();
-        if (colocateGroup != null) {
-            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
-        }
-
-        // dynamic partition
-        if (dynamicPartitionExists()) {
-            properties.putAll(tableProperty.getDynamicPartitionProperty().getProperties());
-        }
-
-        // automatic bucket
-        Long bucketSize = getAutomaticBucketSize();
-        if (bucketSize > 0) {
-            properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
-        }
-
-        // mutable bucket num
-        Long mutableBucketNum = getMutableBucketNum();
-        if (mutableBucketNum > 0) {
-            properties.put(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, mutableBucketNum.toString());
-        }
-
-        // enable load profile
-        Boolean enableLoadProfile = enableLoadProfile();
-        if (enableLoadProfile) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+            }
         }
 
         // base compaction forbidden time ranges
         if (!getBaseCompactionForbiddenTimeRanges().isEmpty()) {
             properties.put(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
                     getBaseCompactionForbiddenTimeRanges());
-        }
-
-        // locations
-        Multimap<String, String> locationsMap = getLocation();
-        if (locationsMap != null) {
-            String locations = PropertyAnalyzer.convertLocationMapToString(locationsMap);
-            properties.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
-        }
-
-        // primary key
-        if (keysType == KeysType.PRIMARY_KEYS) {
-            // persistent index
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
-
-            // index cache expire
-            int indexCacheExpireSec = primaryIndexCacheExpireSec();
-            if (indexCacheExpireSec > 0) {
-                properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
-            }
         }
     }
 
