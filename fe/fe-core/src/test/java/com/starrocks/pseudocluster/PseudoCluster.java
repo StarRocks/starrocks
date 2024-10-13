@@ -312,7 +312,7 @@ public class PseudoCluster {
     }
 
     public long getTableRowCount(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return -1;
         }
