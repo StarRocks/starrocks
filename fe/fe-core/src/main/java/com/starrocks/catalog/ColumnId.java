@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 
+import com.starrocks.common.util.ParseUtil;
 import java.util.Comparator;
 import java.util.Objects;
 
@@ -71,6 +72,13 @@ public class ColumnId {
     @Override
     public String toString() {
         return getId();
+    }
+
+    public String toSql(boolean isBackQuoted) {
+        if (isBackQuoted) {
+            return ParseUtil.backquote(id);
+        }
+        return id;
     }
 
     public static final Comparator<ColumnId> CASE_INSENSITIVE_ORDER =
