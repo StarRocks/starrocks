@@ -75,8 +75,6 @@ public class CreateTableAnalyzerTest {
                 .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testAnalyzeMaxBucket() throws Exception {
@@ -120,5 +118,4 @@ public class CreateTableAnalyzerTest {
                 .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyze(createTableStmt, connectContext);
     }
->>>>>>> db005eba61 ([Refactor] Add max column table limit max_column_number_per_table for table (#47869))
 }

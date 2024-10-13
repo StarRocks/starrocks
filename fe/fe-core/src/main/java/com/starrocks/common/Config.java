@@ -362,6 +362,12 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
@@ -2054,6 +2060,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
+    @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
+    public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
@@ -3174,6 +3183,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
     @ConfField
     public static boolean enable_parser_context_cache = true;
 
@@ -3192,7 +3202,6 @@ public class Config extends ConfigBase {
     public static int thrift_max_message_size = 1024 * 1024 * 1024;
 
     @ConfField(mutable = true)
-<<<<<<< HEAD
     public static int thrift_max_frame_size = 16384000;
 
     @ConfField(mutable = true)
@@ -3201,10 +3210,10 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
-=======
+
+    @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
 
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
->>>>>>> db005eba61 ([Refactor] Add max column table limit max_column_number_per_table for table (#47869))
 }
