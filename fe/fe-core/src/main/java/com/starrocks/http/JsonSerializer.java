@@ -129,6 +129,7 @@ public class JsonSerializer {
         long scanRows = 0;
         long scanBytes = 0;
         long returnRows = 0;
+        String scanPartitions = "";
         if (null != queryStatistics && null != queryStatistics.statsItems) {
             for (QueryStatisticsItemPB item : queryStatistics.statsItems) {
                 scanRows += item.scanRows;
