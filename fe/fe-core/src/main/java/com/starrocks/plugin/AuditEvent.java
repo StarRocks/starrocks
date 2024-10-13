@@ -97,6 +97,8 @@ public class AuditEvent {
     public long scanBytes = -1;
     @AuditField(value = "ScanRows")
     public long scanRows = -1;
+    @AuditField(value = "ScanPartitions")
+    public String scanPartitions = "";
     @AuditField(value = "ReturnRows")
     public long returnRows = -1;
     @AuditField(value = "CpuCostNs", ignore_zero = true)
@@ -216,6 +218,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setScanRows(long scanRows) {
             auditEvent.scanRows = scanRows;
+            return this;
+        }
+
+        public AuditEventBuilder setScanPartitions(String scanPartitions) {
+            auditEvent.scanPartitions = scanPartitions;
             return this;
         }
 

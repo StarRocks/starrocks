@@ -771,6 +771,7 @@ struct TAuditStatistics {
     7: optional i64 mem_cost_bytes
     8: optional i64 spill_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+    10: optional string scan_partitions
 }
 
 struct TReportAuditStatisticsParams {

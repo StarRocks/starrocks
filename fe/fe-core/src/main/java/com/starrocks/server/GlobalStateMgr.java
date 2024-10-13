@@ -2085,6 +2085,10 @@ public class GlobalStateMgr {
         };
     }
 
+    public List<Long> getDbIds() {
+        return localMetastore.getDbIds();
+    }
+
     public EditLog getEditLog() {
         return editLog;
     }

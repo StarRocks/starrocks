@@ -142,6 +142,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_SCAN_PARTITIONS_AUDIT = "enable_scan_partitions_audit";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -938,6 +939,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_PARTITIONS_AUDIT)
+    private boolean enableScanPartitionsAudit = false;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -2604,6 +2608,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableScanPartitionsAudit() {
+        return enableScanPartitionsAudit;
+    }
+
+    public void setEnableScanPartitionsAudit(boolean enableScanPartitionsAudit) {
+        this.enableScanPartitionsAudit = enableScanPartitionsAudit;
     }
 
     public boolean isEnableLoadProfile() {
