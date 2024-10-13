@@ -317,7 +317,7 @@ public class PseudoCluster {
             return -1;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -326,7 +326,7 @@ public class PseudoCluster {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getRowCount();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
