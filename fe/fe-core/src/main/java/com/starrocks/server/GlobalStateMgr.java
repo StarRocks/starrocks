@@ -2085,18 +2085,6 @@ public class GlobalStateMgr {
         };
     }
 
-    public List<Long> getDbIds() {
-        return localMetastore.getDbIds();
-    }
-
-    public Database getDb(long dbId) {
-        return localMetastore.getDb(dbId);
-    }
-
-    public Database getDb(String name) {
-        return localMetastore.getDb(name);
-    }
-
     public EditLog getEditLog() {
         return editLog;
     }
