@@ -91,9 +91,9 @@ public class MetaUtils {
     }
 
     public static Database getDatabaseByTableId(long tableId) {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState()..getLocalMetastore().getDb(dbId);
             Table table = db.getTable(tableId);
             if (table != null) {
                 return db;
