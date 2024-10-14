@@ -57,6 +57,9 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.catalog.system.information.FeMetricsSystemTable;
+import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -85,6 +88,7 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
+import com.starrocks.planner.IcebergEqualityDeleteScanNode;
 import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
@@ -159,8 +163,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
@@ -1416,8 +1420,17 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
+            return buildIcebergScanNode(optExpression, context);
+        }
 
+        @Override
+        public PlanFragment visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, ExecPlan context) {
+            return buildIcebergScanNode(optExpression, context);
+        }
+
+
+        public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
+            PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -1425,13 +1438,18 @@ public class PlanFragmentBuilder {
 
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
+            boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
+            IcebergScanNode icebergScanNode;
+            if (!isEqDeleteScan) {
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+            } else {
+                PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
+                icebergScanNode = new IcebergEqualityDeleteScanNode(context.getNextNodeId(), tupleDescriptor,
+                        "IcebergEqualityDeleteScanNode", op.getEqualityIds(), op.isHitMutableIdentifierColumns());
+            }
 
-            TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
-            IcebergScanNode icebergScanNode =
-                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode",
-                            equalityDeleteTupleDesc);
-            icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
             try {
                 // set predicate
@@ -1443,12 +1461,15 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
-                icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
+                ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
+                        ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
+                icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
                 icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
-
-                HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                if (!isEqDeleteScan) {
+                    HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
+                    prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                }
             } catch (UserException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1644,8 +1665,8 @@ public class PlanFragmentBuilder {
                                 scanNode.setJobId(constantOperator.getBigint());
                                 break;
                             case "ID":
-                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
-                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME)
+                                        || scanNode.getTableName().equalsIgnoreCase(LoadsSystemTable.NAME)) {
                                     scanNode.setJobId(constantOperator.getBigint());
                                 }
                                 break;
@@ -1697,19 +1718,18 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+            if (scanNode.getTableName().equalsIgnoreCase(LoadTrackingLogsSystemTable.NAME) && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
-                    || scanNode.getTableName().equalsIgnoreCase("loads")) {
+            if (SystemTable.needQueryFromLeader(scanNode.getTableName())) {
                 Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                 scanNode.setFrontendIP(ipPort.first);
                 scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
-            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+            if (scanNode.getTableName().equalsIgnoreCase(FeMetricsSystemTable.NAME)) {
                 scanNode.computeFeNodes();
             }
 

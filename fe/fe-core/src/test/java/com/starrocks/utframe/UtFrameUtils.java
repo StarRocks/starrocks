@@ -554,18 +554,17 @@ public class UtFrameUtils {
             Tracers.register(connectContext);
             Tracers.init(connectContext, Tracers.Mode.LOGS, module);
             try {
-
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
                 Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
                 return Pair.create(planPair.first, planAndTrace);
             } catch (Exception e) {
+                throw e;
+            } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
                     System.out.println(pr);
                 }
-                throw e;
-            } finally {
                 Tracers.close();
             }
         }
@@ -1325,6 +1324,15 @@ public class UtFrameUtils {
         };
 
         mockDML();
+    }
+
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
     }
 
     public static void mockDML() {

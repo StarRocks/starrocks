@@ -74,9 +74,10 @@ public class StatisticAutoCollector extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    protected List<StatisticsCollectJob> runJobs() {
+    public List<StatisticsCollectJob> runJobs() {
         List<StatisticsCollectJob> result = Lists.newArrayList();
 
+        // TODO: define the priority in the job instead
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
         allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
@@ -102,12 +103,8 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         if (Config.enable_collect_full_statistic) {
             LOG.info("auto collect full statistic on all databases start");
-            List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                    new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
-                            AnalyzeType.FULL, ScheduleType.SCHEDULE,
-                            Maps.newHashMap(),
-                            ScheduleStatus.PENDING,
-                            LocalDateTime.MIN));
+            List<StatisticsCollectJob> allJobs =
+                    StatisticsCollectJobFactory.buildStatisticsCollectJob(createDefaultJobAnalyzeAll());
             for (StatisticsCollectJob statsJob : allJobs) {
                 // user-created analyze job has a higher priority
                 if (statsJob.isAnalyzeTable() && analyzeTableSet.contains(statsJob.getTable().getId())) {
@@ -149,18 +146,28 @@ public class StatisticAutoCollector extends FrontendDaemon {
         return result;
     }
 
+    /**
+     * Choose user-created jobs first, fallback to default job if it doesn't exist
+     */
     private void initDefaultJob() {
-        // Add a default sample job if wasn't collect
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
         if (allNativeAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
             return;
         }
 
-        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
-                Collections.emptyList(), Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE,
+        NativeAnalyzeJob job = createDefaultJobAnalyzeAll();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+    }
+
+    /**
+     * Create a default job to analyze all tables in the system
+     */
+    private NativeAnalyzeJob createDefaultJobAnalyzeAll() {
+        AnalyzeType analyzeType = Config.enable_collect_full_statistic ? AnalyzeType.FULL : AnalyzeType.SAMPLE;
+        return new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+                Collections.emptyList(), Collections.emptyList(), analyzeType, ScheduleType.SCHEDULE,
                 Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
     }
 
     private boolean checkoutAnalyzeTime(LocalTime now) {

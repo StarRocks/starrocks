@@ -50,13 +50,19 @@ public final class AggStateCombinator extends ScalarFunction  {
 
     public static Optional<AggStateCombinator> of(AggregateFunction aggFunc) {
         try {
-            Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
+            Type intermediateType = aggFunc.getIntermediateTypeOrReturnType().clone();
             FunctionName funcName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_SUFFIX);
             AggStateCombinator aggStateFunc = new AggStateCombinator(funcName, Arrays.asList(aggFunc.getArgs()),
                     intermediateType);
             aggStateFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateFunc.setPolymorphic(aggFunc.isPolymorphic());
-            aggStateFunc.setAggStateDesc(new AggStateDesc(aggFunc));
+
+            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc);
+            aggStateFunc.setAggStateDesc(aggStateDesc);
+            // `agg_state` function's type will contain agg state desc.
+            intermediateType.setAggStateDesc(aggStateDesc);
+            // use agg state desc's nullable as `agg_state` function's nullable
+            aggStateFunc.setIsNullable(aggStateDesc.getResultNullable());
             LOG.info("Register agg state function: {}", aggStateFunc.functionName());
             return Optional.of(aggStateFunc);
         } catch (Exception e) {
