@@ -97,13 +97,17 @@ public class ColumnRangePredicate extends RangePredicate {
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
-                    if (range.isConnected(otherRange)) {
-                        Range<ConstantOperator> intersection = range.intersection(otherRange);
-                        if (!intersection.isEmpty()) {
-                            ranges.add(intersection);
-                        }
+                    // once there is a range that is not connected with the range, the result is null
+                    if (!range.isConnected(otherRange)) {
+                        return null;
+                    }
+                    Range<ConstantOperator> intersection = range.intersection(otherRange);
+                    if (!intersection.isEmpty()) {
+                        ranges.add(intersection);
                     }
                 }
+            } else {
+                return null;
             }
         }
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));

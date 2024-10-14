@@ -17,11 +17,16 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -38,12 +43,19 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.ReplaceShuttle;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -53,11 +65,20 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.WEEK;
+import static com.starrocks.sql.common.TimeUnitUtils.DAY;
+import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
+import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
+import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
+import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
+import static com.starrocks.sql.common.TimeUnitUtils.SECOND;
+import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.isSupportedAggFunctionPushDown;
@@ -87,13 +108,26 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
     private boolean isEnableTimeGranularityRollup(Table refBaseTable,
                                                   MaterializedView mv,
                                                   OptExpression queryExpression) {
-        if (!mv.isPartitionedTable()) {
-            return false;
-        }
         // if mv rewrite generates the table, skip it
         if (refBaseTable instanceof MaterializedView && mv.equals(refBaseTable)) {
             return false;
         }
+
+        // check mv is partitioned table
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!partitionInfo.isRangePartition()) {
+            return false;
+        }
+        Expr mvPartitionExpr = mv.getPartitionExpr();
+        if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
+        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return false;
+        }
+
+        // check ref base table is partitioned or not
         if (refBaseTable instanceof OlapTable) {
             OlapTable refBaseOlapTable = (OlapTable) refBaseTable;
             if (!refBaseOlapTable.getPartitionInfo().isRangePartition()) {
@@ -142,6 +176,10 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         }
         Table refBaseTable = baseTables.get(0);
         MaterializedView mv = mvContext.getMv();
+        FunctionCallExpr mvPartitionExpr = getMVPartitionExpr(mv);
+        if (mvPartitionExpr == null) {
+            return null;
+        }
         OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         if (!isEnableTimeGranularityRollup(refBaseTable, mv, queryExpression)) {
             return null;
@@ -165,8 +203,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         ColumnRefOperator refPartitionColRef = refPartitionColRefOpt.get();
 
         // split partition predicates into mv-rewritten predicates and non-rewritten predicates
-        Pair<ScalarOperator, ScalarOperator> splitPartitionPredicates = getSplitPartitionPredicates(mvContext, mv,
-                scanOp, refPartitionColRef);
+        Pair<ScalarOperator, ScalarOperator> splitPartitionPredicates = getSplitPartitionPredicates(mvContext,
+                mvPartitionExpr, scanOp, refPartitionColRef);
+        if (splitPartitionPredicates == null) {
+            return null;
+        }
 
         // why generate push-down aggregate opt rather to use the original aggregate operator?
         // 1. aggregate's predicates/projects cannot be pushed down.
@@ -255,8 +296,46 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .setGroupingKeys(groupBys)
                 .setPartitionByColumns(groupBys)
                 .build();
-        OptExpression optAggOp = OptExpression.create(newAggOp, queryExpression.inputAt(0));
+        // copy scan operator to avoid polluting the original query expression
+        LogicalScanOperator scanOperator = (LogicalScanOperator) queryExpression.inputAt(0).getOp();
+        LogicalScanOperator newScanOperator = buildLogicalScanOperator(scanOperator);
+        if (newScanOperator == null) {
+            return null;
+        }
+        OptExpression optAggOp = OptExpression.create(newAggOp, OptExpression.create(newScanOperator));
         return optAggOp;
+    }
+
+    private LogicalScanOperator buildLogicalScanOperator(LogicalScanOperator scanOperator) {
+        LogicalScanOperator newScanOperator;
+        if (scanOperator instanceof LogicalOlapScanOperator) {
+            newScanOperator = new LogicalOlapScanOperator.Builder()
+                    .withOperator((LogicalOlapScanOperator) scanOperator)
+                    .build();
+        } else if (scanOperator instanceof LogicalHiveScanOperator) {
+            newScanOperator = new LogicalHiveScanOperator.Builder()
+                    .withOperator((LogicalHiveScanOperator) scanOperator)
+                    .build();
+        } else if (scanOperator instanceof LogicalIcebergScanOperator) {
+            newScanOperator = new LogicalIcebergScanOperator.Builder()
+                    .withOperator((LogicalIcebergScanOperator) scanOperator)
+                    .build();
+        } else if (scanOperator instanceof LogicalPaimonScanOperator) {
+            newScanOperator = new LogicalPaimonScanOperator.Builder()
+                    .withOperator((LogicalPaimonScanOperator) scanOperator)
+                    .build();
+        } else if (scanOperator instanceof LogicalJDBCScanOperator) {
+            newScanOperator = new LogicalJDBCScanOperator.Builder()
+                    .withOperator((LogicalJDBCScanOperator) scanOperator)
+                    .build();
+        } else if (scanOperator instanceof LogicalHudiScanOperator) {
+            newScanOperator = new LogicalHudiScanOperator.Builder()
+                    .withOperator((LogicalHudiScanOperator) scanOperator)
+                    .build();
+        } else {
+            return null;
+        }
+        return newScanOperator;
     }
 
     /**
@@ -286,6 +365,16 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         OptExpression rewritten = doRewritePushDownAgg(mvRewriteContext, ctx, queryExpression, rule);
         if (rewritten == null) {
             logMVRewrite(mvRewriteContext, "Rewrite table scan node by mv failed");
+            return null;
+        }
+        // if mv contains no rows after rewrite, return it directly.
+        rewritten = postRewrite(optimizerContext, mvRewriteContext, rewritten);
+        if (rewritten == null) {
+            return null;
+        }
+        List<LogicalScanOperator> rewrittenScanOperators = MvUtils.getScanOperator(rewritten);
+        if (rewrittenScanOperators.size() == 1 && rewrittenScanOperators.get(0).isEmptyOutputRows()) {
+            logMVRewrite(optimizerContext, rule, "AggTimeSeriesRewriter: mv contains no rows after rewrite");
             return null;
         }
 
@@ -343,24 +432,22 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                                                                                       ScalarOperator newPredicate,
                                                                                       List<ColumnRefOperator> origOutputColumns) {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
-        // TODO: use aggregate push down context to generate related push-down aggregation functions
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         LogicalScanOperator logicalOlapScanOp = scanOperators.get(0);
         logicalOlapScanOp.setPredicate(newPredicate);
         Utils.resetOpAppliedRule(logicalOlapScanOp, Operator.OP_PARTITION_PRUNE_BIT);
-
         LogicalAggregationOperator aggregateOp = (LogicalAggregationOperator) queryExpression.getOp();
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         Map<ColumnRefOperator, ColumnRefOperator> aggColRefMapping = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> e : aggregateOp.getAggregations().entrySet()) {
             ColumnRefOperator aggColRef = e.getKey();
             CallOperator aggCall = e.getValue();
+            // use aggregate push down context to generate related push-down aggregation functions
             CallOperator newAggCall = getRollupPartialAggregate(mvRewriteContext, ctx, aggCall);
             if (newAggCall == null) {
                 logMVRewrite(optimizerContext, rule, "AggTimeSeriesRewriter: cannot find partial agg remapping for " + aggCall);
                 return null;
             }
-
             ColumnRefOperator newAggColRef = queryColumnRefFactory.create(newAggCall,
                     newAggCall.getType(), newAggCall.isNullable());
             newAggregations.put(newAggColRef, newAggCall);
@@ -392,6 +479,25 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         outputColumns.addAll(aggOperator.getGroupingKeys());
         outputColumns.addAll(aggOperator.getAggregations().keySet());
         return outputColumns;
+    }
+
+    private FunctionCallExpr getMVPartitionExpr(MaterializedView mv) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!partitionInfo.isExprRangePartitioned()) {
+            return null;
+        }
+        Expr partitionExpr = mv.getPartitionExpr();
+        if (partitionExpr == null || !(partitionExpr instanceof FunctionCallExpr)) {
+            return null;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return null;
+        }
+        if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
+            return null;
+        }
+        return functionCallExpr;
     }
 
     /**
@@ -433,50 +539,158 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
      * non-rewritten predicates : predicates which are left beside rewritten predicates
      */
     public Pair<ScalarOperator, ScalarOperator> getSplitPartitionPredicates(MaterializationContext mvContext,
-                                                                            MaterializedView mv,
+                                                                            FunctionCallExpr mvPartitionExpr,
                                                                             LogicalScanOperator scanOperator,
                                                                             ColumnRefOperator refPartitionColRef) {
         ScalarOperator queryScanPredicate = scanOperator.getPredicate();
         List<ScalarOperator> queryScanPredicates = Utils.extractConjuncts(queryScanPredicate);
-        List<ScalarOperator> queryRewrittenPredicates = Lists.newArrayList();
-        List<ScalarOperator> queryNonRewrittenPredicates = Lists.newArrayList(queryScanPredicate);
+
+        // part1 is used  for mv's rewrite, part2 is left for query's rewrite, part1 and part2 should be disjoint and union
+        // for all the time-series of input predicate.
+        List<ScalarOperator> queryPartitionPredicates = Lists.newArrayList();
+        List<ScalarOperator> queryNonPartitionPredicates = Lists.newArrayList();
+        List<ScalarOperator> rewrittenPartitionPredicates = Lists.newArrayList();
+
+        StringLiteral timeUnit = (StringLiteral) mvPartitionExpr.getChild(0);
         for (ScalarOperator predicate : queryScanPredicates) {
+            // collect all column references in the predicate
             List<ColumnRefOperator> colRefs = Lists.newArrayList();
             predicate.getColumnRefs(colRefs);
-            if (colRefs.stream().anyMatch(col -> col.equals(refPartitionColRef))) {
+            List<ColumnRefOperator> refPartitionColRefs = colRefs.stream()
+                    .filter(col -> col.equals(refPartitionColRef))
+                    .collect(Collectors.toList());
+            // only can push down partition predicate if there is only one partition column reference
+            if (refPartitionColRefs.size() > 1) {
+                return null;
+            }
+
+            if (refPartitionColRefs.size() == 1) {
+                // TODO: only can handle binary predicate, maybe we can loose this restriction in the future
+                if (!(predicate instanceof BinaryPredicateOperator)) {
+                    return null;
+                }
+                BinaryPredicateOperator binaryPredicate =
+                        normalizePartitionPredicate((BinaryPredicateOperator) predicate);
+                if (binaryPredicate == null) {
+                    return null;
+                }
+                BinaryType binaryType = binaryPredicate.getBinaryType();
+                // for not range predicates, it makes no sense to rewrite, return directly
+                if (binaryType == BinaryType.EQ || binaryType == BinaryType.NE) {
+                    return null;
+                }
+                // because date_trunc function will take down the input time to the beginning of the time unit,
+                // so it's not safe to rewrite the range predicate.
+                // queryNonRewrittenPredicates.add(predicate);
+                if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
+                    binaryPredicate = getLowerPartitionPredicate(binaryPredicate, timeUnit);
+                    if (binaryPredicate == null) {
+                        return null;
+                    }
+                }
                 ScalarOperator rewrittenPartitionPredicate = rewritePartitionPredicateToMVPartitionExpr(mvContext,
-                        mv, scanOperator, predicate, refPartitionColRef);
+                        mvPartitionExpr, binaryPredicate, refPartitionColRef);
                 if (rewrittenPartitionPredicate == null) {
                     return null;
                 }
-                queryRewrittenPredicates.add(rewrittenPartitionPredicate);
-                ScalarOperator rewrittenNotPartitionPredicate = CompoundPredicateOperator.not(rewrittenPartitionPredicate);
-                queryNonRewrittenPredicates.add(rewrittenNotPartitionPredicate);
+                // rewritten predicates
+                rewrittenPartitionPredicates.add(rewrittenPartitionPredicate);
+                queryPartitionPredicates.add(predicate);
             } else {
-                queryRewrittenPredicates.add(predicate);
+                queryNonPartitionPredicates.add(predicate);
             }
         }
-        return Pair.create(Utils.compoundAnd(queryRewrittenPredicates), Utils.compoundAnd(queryNonRewrittenPredicates));
+        // if there is no predicate that can be pushed down into mv, return null directly
+        if (rewrittenPartitionPredicates.isEmpty()) {
+            return null;
+        }
+        rewrittenPartitionPredicates.addAll(queryNonPartitionPredicates);
+
+        // non-rewritten predicates
+        List<ScalarOperator> leftQueryPartitionPredicates = Lists.newArrayList(queryNonPartitionPredicates);
+        List<ScalarOperator> notQueryPartitionPredicates = rewrittenPartitionPredicates.stream()
+                .map(CompoundPredicateOperator::not)
+                .collect(Collectors.toList());
+        leftQueryPartitionPredicates.add(Utils.compoundOr(notQueryPartitionPredicates));
+        leftQueryPartitionPredicates.addAll(queryPartitionPredicates);
+        logMVRewrite(optimizerContext, rule, "rewritten predicates={}, non-rewritten predicates:{}",
+                rewrittenPartitionPredicates, leftQueryPartitionPredicates);
+
+        return Pair.create(Utils.compoundAnd(rewrittenPartitionPredicates), Utils.compoundAnd(leftQueryPartitionPredicates));
+    }
+
+    /**
+     * Normalize binary predicate to make sure the constant is on the right side.
+     */
+    private BinaryPredicateOperator normalizePartitionPredicate(BinaryPredicateOperator binaryPredicate) {
+        ScalarOperator child0 = binaryPredicate.getChild(0);
+        ScalarOperator child1 = binaryPredicate.getChild(1);
+        if (child0 instanceof ConstantOperator) {
+            binaryPredicate.swap();
+        } else if (child1 instanceof ConstantOperator) {
+            // do nothing.
+        } else {
+            return null;
+        }
+        return binaryPredicate;
+    }
+
+    private BinaryPredicateOperator getLowerPartitionPredicate(BinaryPredicateOperator binaryPredicate,
+                                                               StringLiteral timeUnit) {
+        ScalarOperator child0 = binaryPredicate.getChild(0);
+        ScalarOperator child1 = binaryPredicate.getChild(1);
+        ConstantOperator constantOp = (ConstantOperator) child1;
+        // if the constant is not a date, return null directly
+        if (!constantOp.getType().isDatetime()) {
+            return null;
+        }
+        LocalDateTime lowerDateTime = getLowerDateTime(constantOp.getDatetime(), timeUnit.getStringValue());
+        ConstantOperator newConstOp = ConstantOperator.createDatetimeOrNull(lowerDateTime);
+        BinaryPredicateOperator newBinaryPredicate = new BinaryPredicateOperator(binaryPredicate.getBinaryType(),
+                child0, newConstOp);
+        return newBinaryPredicate;
+    }
+
+    private LocalDateTime getLowerDateTime(LocalDateTime lowerDateTime, String granularity) {
+        LocalDateTime truncLowerDateTime;
+        switch (granularity) {
+            case SECOND:
+                truncLowerDateTime = lowerDateTime.minusSeconds(1);
+                break;
+            case MINUTE:
+                truncLowerDateTime = lowerDateTime.minusMinutes(1);
+                break;
+            case HOUR:
+                truncLowerDateTime = lowerDateTime.minusHours(1);
+                break;
+            case DAY:
+                truncLowerDateTime = lowerDateTime.minusDays(1);
+                break;
+            case WEEK:
+                truncLowerDateTime = lowerDateTime.minusWeeks(1);
+                break;
+            case MONTH:
+                truncLowerDateTime = lowerDateTime.minusMonths(1);
+                break;
+            case QUARTER:
+                truncLowerDateTime = lowerDateTime.minusMonths(3);
+                break;
+            case YEAR:
+                truncLowerDateTime = lowerDateTime.minusYears(1);
+                break;
+            default:
+                return null;
+        }
+        return truncLowerDateTime;
     }
 
     /**
      * Rewrite the partition predicate to the partition expression of the specific mv so can be rewritten by mv's outputs.
-     * @param mvContext
-     * @param mv
-     * @param logicalScanOp
-     * @param refPartitionColPredicate
-     * @return
      */
     private ScalarOperator rewritePartitionPredicateToMVPartitionExpr(MaterializationContext mvContext,
-                                                                      MaterializedView mv,
-                                                                      LogicalScanOperator logicalScanOp,
+                                                                      FunctionCallExpr mvPartitionExpr,
                                                                       ScalarOperator refPartitionColPredicate,
                                                                       ColumnRefOperator refPartitionColRef) {
-        Map<Table, Expr> refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
-        if (!refBaseTablePartitionExprs.containsKey(logicalScanOp.getTable())) {
-            return null;
-        }
-        Expr mvPartitionExpr = refBaseTablePartitionExprs.get(logicalScanOp.getTable());
         List<SlotRef> slotRefs = Lists.newArrayList();
         mvPartitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);

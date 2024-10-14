@@ -237,6 +237,10 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 if (columnRangePredicateMap.containsKey(columnRangePredicate.getExpression())) {
                     ColumnRangePredicate newRangePredicate = columnRangePredicateMap.get(columnRangePredicate.getExpression());
                     newRangePredicate = mergeOp.apply(newRangePredicate, columnRangePredicate);
+                    if (newRangePredicate == null) {
+                        rangePredicates.add(new ConstRangePredicate(false));
+                        return;
+                    }
                     if (newRangePredicate.isUnbounded()) {
                         columnRangePredicateMap.remove(columnRangePredicate.getExpression());
                     } else {
