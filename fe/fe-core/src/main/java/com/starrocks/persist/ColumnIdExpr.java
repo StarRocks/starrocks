@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -135,9 +136,9 @@ public class ColumnIdExpr {
         @Override
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {
-                return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnId().getId();
+                return node.getTblNameWithoutAnalyzed().toSql() + "." + ParseUtil.backquote(node.getColumnId().getId());
             } else {
-                return node.getColumnId().getId();
+                return node.getColumnId().toSql(node.isBackQuoted());
             }
         }
     }

@@ -28,6 +28,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -592,4 +593,111 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
     }
 
+    @Test
+    public void testExpressionRangePartitionInfoWithReservedKeywordSerialized() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE table_reserverd_keyword_partition (\n" +
+                "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                "tableName varchar(200) NULL COMMENT \"\",\n" +
+                "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                "queryId varchar(50) NULL COMMENT \"\",\n" +
+                "partitionHitSum int(11) NULL COMMENT \"\",\n" +
+                "partitionSum int(11) NULL COMMENT \"\",\n" +
+                "tabletHitNum int(11) NULL COMMENT \"\",\n" +
+                "tabletSum int(11) NULL COMMENT \"\",\n" +
+                "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
+                "`partition` date NULL COMMENT \"\",\n" +
+                "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
+                "costTime int(11) NULL COMMENT \"\",\n" +
+                "tableQueryCount int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(databaseName, tableName)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY date_trunc('day', `partition`)\n" +
+                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        ExpressionPartitionDesc exprPartitiondesc = (ExpressionPartitionDesc) createTableStmt.getPartitionDesc();
+        FunctionCallExpr funExpr = (FunctionCallExpr) exprPartitiondesc.getExpr();
+        SlotRef slotRef = (SlotRef) funExpr.getChild(1);
+        Assert.assertTrue(slotRef.isBackQuoted());
+
+
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = db.getTable("table_reserverd_keyword_partition");
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                (ExpressionRangePartitionInfo) ((OlapTable) table).getPartitionInfo();
+        String exprToSql = expressionRangePartitionInfo.getPartitionExprs().get(0).toSql();
+        Assert.assertEquals("date_trunc('day', `partition`)", exprToSql);
+        // serialize
+        String json = GsonUtils.GSON.toJson(table);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+        expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<ColumnIdExpr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        Function fn = readPartitionExprs.get(0).getExpr().getFn();
+        Assert.assertNotNull(fn);
+    }
+
+    @Test
+    public void testExpressionRangePartitionInfoWithReservedKeywordSerializedWrong() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE table_reserverd_keyword_partition1 (\n" +
+                "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                "tableName varchar(200) NULL COMMENT \"\",\n" +
+                "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                "queryId varchar(50) NULL COMMENT \"\",\n" +
+                "partitionHitSum int(11) NULL COMMENT \"\",\n" +
+                "partitionSum int(11) NULL COMMENT \"\",\n" +
+                "tabletHitNum int(11) NULL COMMENT \"\",\n" +
+                "tabletSum int(11) NULL COMMENT \"\",\n" +
+                "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
+                "`partition` date NULL COMMENT \"\",\n" +
+                "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
+                "costTime int(11) NULL COMMENT \"\",\n" +
+                "tableQueryCount int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(databaseName, tableName)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY date_trunc('day', `partition`)\n" +
+                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        ExpressionPartitionDesc exprPartitiondesc = (ExpressionPartitionDesc) createTableStmt.getPartitionDesc();
+        FunctionCallExpr funExpr = (FunctionCallExpr) exprPartitiondesc.getExpr();
+        SlotRef slotRef = (SlotRef) funExpr.getChild(1);
+        Assert.assertTrue(slotRef.isBackQuoted());
+        slotRef.setBackQuoted(false);
+
+        try {
+            // serialize in OnCrete Function will throw err,because of "date_trunc('day', partition)".
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 10. " +
+                    "Detail message: Unexpected input '(', the most similar input is {<EOF>}."));
+        }
+
+        //the table still create successfully.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = db.getTable("table_reserverd_keyword_partition1");
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                (ExpressionRangePartitionInfo) ((OlapTable) table).getPartitionInfo();
+        String exprToSql = expressionRangePartitionInfo.getPartitionExprs().get(0).toSql();
+        Assert.assertEquals("date_trunc('day', partition)", exprToSql);
+    }
 }
