@@ -2438,7 +2438,7 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
                         topN.getPartitionLimit(), topN.getOrderSpec(),
-                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), inputFragment);
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), inputFragment);
             } else {
                 return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
                         inputFragment, optExpr);
@@ -2484,11 +2484,14 @@ public class PlanFragmentBuilder {
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       List<ColumnRefOperator> partitionByColumns, long partitionLimit,
                                                       OrderSpec orderSpec, TopNType topNType, long limit, long offset,
+                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls,
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
             List<Expr> partitionExprs = Lists.newArrayList();
             List<Expr> sortExprs = Lists.newArrayList();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
+
+            ColumnRefSet outputColumnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns().clone();
 
             if (CollectionUtils.isNotEmpty(partitionByColumns)) {
                 for (ColumnRefOperator partitionByColumn : partitionByColumns) {
@@ -2513,29 +2516,48 @@ public class PlanFragmentBuilder {
                         .put(ordering.getColumnRef(), new SlotRef(ordering.getColumnRef().toString(), slotDesc));
                 resolvedTupleExprs.add(sortExpr);
                 sortExprs.add(new SlotRef(slotDesc));
+
+                outputColumnRefSet.except(List.of(ordering.getColumnRef()));
             }
 
-            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
-            for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
+            List<Expr> preAggFnCallExprs = new ArrayList<>();
+            if (preAggFnCalls != null) {
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
+                    Expr preAggFunction = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                    preAggFnCallExprs.add(preAggFunction);
+
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(entry.getKey().getId()));
+                    slotDesc.initFromExpr(preAggFunction);
+                    slotDesc.setIsMaterialized(true);
+                    slotDesc.setIsNullable(preAggFunction.isNullable());
+                    slotDesc.setType(preAggFunction.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDesc));
+
+                    resolvedTupleExprs.add(preAggFunction);
+                    outputColumnRefSet.except(List.of(entry.getKey()));
+                }
+            }
+
+            for (int i = 0; i < outputColumnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
                  */
-                ColumnRefOperator columnRef = columnRefFactory.getColumnRef(columnRefSet.getColumnIds()[i]);
-                if (orderSpec.getOrderDescs().stream().map(Ordering::getColumnRef)
-                        .noneMatch(c -> c.equals(columnRef))) {
-                    Expr outputExpr = ScalarOperatorToExpr.buildExecExpression(columnRef,
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                ColumnRefOperator columnRef = columnRefFactory.getColumnRef(outputColumnRefSet.getColumnIds()[i]);
+                Expr outputExpr = ScalarOperatorToExpr.buildExecExpression(columnRef,
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-                    SlotDescriptor slotDesc =
-                            context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(columnRef.getId()));
-                    slotDesc.initFromExpr(outputExpr);
-                    slotDesc.setIsMaterialized(true);
-                    slotDesc.setIsNullable(outputExpr.isNullable());
-                    slotDesc.setType(outputExpr.getType());
+                SlotDescriptor slotDesc =
+                        context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(columnRef.getId()));
+                slotDesc.initFromExpr(outputExpr);
+                slotDesc.setIsMaterialized(true);
+                slotDesc.setIsNullable(outputExpr.isNullable());
+                slotDesc.setType(outputExpr.getType());
 
-                    context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDesc));
-                    resolvedTupleExprs.add(outputExpr);
-                }
+                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDesc));
+                resolvedTupleExprs.add(outputExpr);
             }
 
             sortTuple.computeMemLayout();
@@ -2552,6 +2574,7 @@ public class PlanFragmentBuilder {
                     limit == Operator.DEFAULT_LIMIT,
                     0);
             sortNode.setTopNType(topNType);
+            sortNode.setPreAggFnCalls(preAggFnCallExprs);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
@@ -2962,6 +2985,11 @@ public class PlanFragmentBuilder {
             for (Map.Entry<ColumnRefOperator, CallOperator> analyticCall : node.getAnalyticCall().entrySet()) {
                 Expr analyticFunction = ScalarOperatorToExpr.buildExecExpression(analyticCall.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                // if local partition topn can preAgg, then it's output is binary format
+                // which means analytic node should call function's merge method instead of update
+                if (node.isInputIsBinary()) {
+                    ((FunctionCallExpr) analyticFunction).setMergeAggFn();
+                }
                 analyticFnCalls.add(analyticFunction);
 
                 SlotDescriptor slotDesc = context.getDescTbl()

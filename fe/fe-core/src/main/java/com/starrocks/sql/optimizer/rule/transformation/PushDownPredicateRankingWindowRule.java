@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -39,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -146,6 +149,15 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
             return false;
         }
 
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : operator.getWindowCall().entrySet()) {
+            CallOperator callOperator = entry.getValue();
+            AggregateFunction function = (AggregateFunction) callOperator.getFunction();
+            // if any function is only window function, we can't support this optimization.
+            if (!function.isAggregateFn()) {
+                return false;
+            }
+        }
+
         // same partition and without order by, so they are in same sort group and partition group, which means share the same sort Node and exchange Node
         Preconditions.checkState(operator.getEnforceSortColumns().equals(rankRelatedOperator.getEnforceSortColumns()));
         return true;
@@ -155,8 +167,8 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filterOperator = input.getOp().cast();
         List<ScalarOperator> filters = Utils.extractConjuncts(filterOperator.getPredicate());
-        OptExpression childExpr = input.inputAt(0);
-        LogicalWindowOperator rankRelatedWindowOperator = childExpr.getOp().cast();
+        OptExpression childOptExpr = input.inputAt(0);
+        LogicalWindowOperator rankRelatedWindowOperator = childOptExpr.getOp().cast();
 
         ColumnRefOperator windowCol = Lists.newArrayList(rankRelatedWindowOperator.getWindowCall().keySet()).get(0);
         CallOperator callOperator = rankRelatedWindowOperator.getWindowCall().get(windowCol);
@@ -191,7 +203,7 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         final long limit = partitionByColumns.isEmpty() ? limitValue : Operator.DEFAULT_LIMIT;
         final long partitionLimit = partitionByColumns.isEmpty() ? Operator.DEFAULT_LIMIT : limitValue;
 
-        LogicalTopNOperator.Builder builder = new LogicalTopNOperator.Builder()
+        LogicalTopNOperator.Builder topNBuilder = new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
                 .setOrderByElements(rankRelatedWindowOperator.getEnforceSortColumns())
@@ -199,16 +211,64 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase);
 
-        if ((childExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
-            LogicalWindowOperator secondWindowOperator = childExpr.inputAt(0).getOp().cast();
-            if (!(samePartitionWithRankRelatedWindow(secondWindowOperator, rankRelatedWindowOperator))) {
-                builder.setPartitionPreAggCall(secondWindowOperator.getWindowCall());
+        if ((childOptExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
+            LogicalWindowOperator secondWindowOperator = childOptExpr.inputAt(0).getOp().cast();
+            if (samePartitionWithRankRelatedWindow(secondWindowOperator, rankRelatedWindowOperator)) {
+                topNBuilder.setPartitionPreAggCall(createNormalAgg(false, rankRelatedWindowOperator.getWindowCall()));
+                Map<ColumnRefOperator, CallOperator> newRankRelatedWindowCall =
+                        createNormalAgg(true, rankRelatedWindowOperator.getWindowCall());
+                // change rankRelated window call's input column and mark this window op's input is binary
+                rankRelatedWindowOperator = new LogicalWindowOperator.Builder().withOperator(rankRelatedWindowOperator)
+                        .setWindowCall(newRankRelatedWindowCall)
+                        .setInputIsBinary(true)
+                        .build();
             }
         }
 
-        OptExpression newTopNOptExp = OptExpression.create(builder.build(), childExpr.getInputs());
+        OptExpression newTopNOptExp = OptExpression.create(topNBuilder.build(), childOptExpr.getInputs());
 
         OptExpression newWindowOptExp = OptExpression.create(rankRelatedWindowOperator, newTopNOptExp);
         return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
+    }
+
+    public Map<ColumnRefOperator, CallOperator> createNormalAgg(boolean isGlobal,
+                                                                Map<ColumnRefOperator, CallOperator> aggregationMap) {
+        Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
+            ColumnRefOperator column = entry.getKey();
+            CallOperator aggregation = entry.getValue();
+
+            CallOperator callOperator;
+            Type intermediateType = getIntermediateType(aggregation);
+            // For merge agg function, we need to replace the agg input args to the update agg function result
+            if (isGlobal) {
+                List<ScalarOperator> arguments = Lists.newArrayList(
+                        new ColumnRefOperator(column.getId(), intermediateType, column.getName(), column.isNullable()));
+                appendConstantColumns(arguments, aggregation);
+                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
+                        aggregation.getFunction());
+            } else {
+                callOperator = new CallOperator(aggregation.getFnName(), intermediateType, aggregation.getChildren(),
+                        aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());
+            }
+
+            newAggregationMap.put(
+                    new ColumnRefOperator(column.getId(), column.getType(), column.getName(), column.isNullable()),
+                    callOperator);
+        }
+
+        return newAggregationMap;
+    }
+
+    protected Type getIntermediateType(CallOperator aggregation) {
+        AggregateFunction af = (AggregateFunction) aggregation.getFunction();
+        Preconditions.checkState(af != null);
+        return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
+    }
+
+    protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
+        if (aggregation.getChildren().size() > 1) {
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+        }
     }
 }
