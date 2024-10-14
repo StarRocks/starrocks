@@ -1288,7 +1288,7 @@ public class StmtExecutor {
                     scanPartitionsList.add(GSON.toJson(scanPartitionsMap));
                 }
             }
-            statisticsForAuditLog.scanPartitions = GSON.toJson(scanPartitionsList.toString().replace("\"", ""));
+            statisticsForAuditLog.scanPartitions = scanPartitionsList.toString().replace("\"", "");
         }
     }
 
