@@ -1003,6 +1003,11 @@ else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
+if (NOT BUILD_FORMAT_LIB)
+    # skip the STARROCKS_MEMORY_DEPENDENCIES_LIBS only when BUILD_FORMAT_LIB=ON
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_MEMORY_DEPENDENCIES_LIBS})
+endif()
+
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
