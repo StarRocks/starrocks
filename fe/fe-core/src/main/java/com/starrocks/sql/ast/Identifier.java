@@ -22,6 +22,8 @@ public class Identifier implements ParseNode {
 
     private final NodePosition pos;
 
+    private boolean isBackQuoted = false;
+
     public Identifier(String value) {
         this(value, NodePosition.ZERO);
     }
@@ -38,6 +40,14 @@ public class Identifier implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+    public void setBackQuoted(boolean isBackQuoted) {
+        this.isBackQuoted = isBackQuoted;
+    }
+
+    public boolean isBackQuoted() {
+        return isBackQuoted;
     }
 
     @Override
