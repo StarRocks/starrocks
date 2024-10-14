@@ -543,7 +543,6 @@ public class ListPartitionInfo extends PartitionInfo {
         idToMultiValues.remove(partitionId);
         idToMultiLiteralExprValues.remove(partitionId);
         idToIsTempPartition.remove(partitionId);
-        idToStorageCacheInfo.remove(partitionId);
     }
 
     @Override
