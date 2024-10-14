@@ -65,6 +65,15 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
+    public static ColumnRangePredicate FALSE = new ColumnRangePredicate(TreeRangeSet.create());
+
+    public ColumnRangePredicate(TreeRangeSet<ConstantOperator> columnRanges) {
+        this.columnRanges = columnRanges;
+        this.expression = null;
+        this.columnRef = null;
+        this.canonicalColumnRanges = columnRanges;
+    }
+
     public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
         this.expression = expression;
         List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
@@ -99,7 +108,7 @@ public class ColumnRangePredicate extends RangePredicate {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
                     // once there is a range that is not connected with the range, the result is null
                     if (!range.isConnected(otherRange)) {
-                        return null;
+                        return FALSE;
                     }
                     Range<ConstantOperator> intersection = range.intersection(otherRange);
                     if (!intersection.isEmpty()) {
@@ -107,7 +116,7 @@ public class ColumnRangePredicate extends RangePredicate {
                     }
                 }
             } else {
-                return null;
+                return FALSE;
             }
         }
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));

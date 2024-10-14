@@ -86,6 +86,21 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.co
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.getPushDownRollupFinalAggregateOpt;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.getRollupPartialAggregate;
 
+/**
+ * In time-series business scenarios, metrics are aggregated based on the time dimension, with historical
+ * data continuously being archived (rolled up, compressed), while new data flows in real-time.
+ * By using Materialized Views (MVs) to speed up, different time granularity of MVs can be constructed,
+ * the most common being day, month, and year. However, when querying the base table (original table),
+ * it is hoped that the archived year, month, and day data can be used to speed up time slicing.
+ *
+ * <p> Implementation </p>
+ * Place the logic of splitting time predicates in time-series scenarios + the logic of aggregation push-down into a Rule. When
+ * it can be rewritten, rewrite the output; otherwise, do not change the original Query.
+ * Reuse the aggregation push-down + rewriting capabilities, and implement aggregation push-down + rolling up based on the
+ * aggregation status defined by the materialized view (later, general aggregation status can be used).
+ * Reuse the capability of nested MV rewriting, recursively call this Rule,
+ * and rewrite the scope of granularity as much as possible in one go.
+ */
 public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
     private static final Logger LOG = LogManager.getLogger(AggregatedTimeSeriesRewriter.class);
 
