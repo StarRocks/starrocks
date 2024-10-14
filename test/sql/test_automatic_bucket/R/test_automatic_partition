@@ -517,7 +517,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY date_trunc('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -549,7 +549,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY date_trunc('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
