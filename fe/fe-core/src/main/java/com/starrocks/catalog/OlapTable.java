@@ -3206,6 +3206,7 @@ public class OlapTable extends Table {
         analyzeRollupIndexMeta();
         tryToAssignIndexId();
         updateBaseCompactionForbiddenTimeRanges(false);
+        tableProperty.buildPartitionLiveNumber();
 
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
