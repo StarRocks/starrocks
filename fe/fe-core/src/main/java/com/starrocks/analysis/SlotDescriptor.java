@@ -36,10 +36,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
-import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -270,6 +270,15 @@ public class SlotDescriptor {
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
             }
         }
+        // set column unique id or physical name
+        if (column != null) {
+            if (column.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+            if (!Strings.isNullOrEmpty(column.getPhysicalName())) {
+                tSlotDescriptor.setCol_physical_name(column.getPhysicalName());
+            }
+        }
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
@@ -283,11 +292,6 @@ public class SlotDescriptor {
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
         tSlotDescriptor.setIsNullable(isNullable);
-
-        if (parent.getTable() != null && column != null && parent.getTable().isDeltalakeTable()) {
-            DeltaLakeTable table = (DeltaLakeTable) parent.getTable();
-            table.doColumnMapping(tSlotDescriptor, column);
-        }
         return tSlotDescriptor;
     }
 

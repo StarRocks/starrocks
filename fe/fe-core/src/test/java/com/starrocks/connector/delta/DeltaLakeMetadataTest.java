@@ -102,7 +102,7 @@ public class DeltaLakeMetadataTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), snapshot,
+                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
                         "s3://bucket/path/to/table", null, 0);
             }
         };
@@ -189,7 +189,7 @@ public class DeltaLakeMetadataTest {
             @mockit.Mock
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
-                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(), new StructType(),
+                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, "path/to/table", null, 0);
             }
         };

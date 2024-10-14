@@ -205,16 +205,9 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                const THdfsPartition& thrift_partition);
-=======
-    const TPhysicalSchema* get_physical_schema() const { return &_physical_schema; }
->>>>>>> 307e09b8a0 ([Feature] Support column mapping for delta lake)
 
-=======
->>>>>>> 8e1a676c72 (use slot desc)
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;

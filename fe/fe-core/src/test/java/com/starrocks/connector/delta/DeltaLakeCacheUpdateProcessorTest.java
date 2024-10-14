@@ -28,7 +28,6 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.types.StructType;
 import mockit.Expectations;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -79,7 +78,7 @@ public class DeltaLakeCacheUpdateProcessorTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), null,
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
             }
         };
@@ -113,7 +112,7 @@ public class DeltaLakeCacheUpdateProcessorTest {
             public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                         Engine deltaEngine, long createTime) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), new StructType(), Lists.newArrayList("ts"), null,
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
                         "s3://bucket/path/to/table", null, 0);
             }
         };

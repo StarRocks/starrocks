@@ -304,7 +304,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             List<String> partitionNames = new ArrayList<>();
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
-                    columns, structType, partitionNames, null, null, null, createTime);
+                    columns, partitionNames, null, null, null, createTime);
 
             MOCK_TABLE_MAP.put(MOCKED_TABLE_NAME, table);
         }

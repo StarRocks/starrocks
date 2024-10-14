@@ -34,6 +34,7 @@ import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
+import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
@@ -42,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
+import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
@@ -77,24 +79,41 @@ public class DeltaUtils {
                     "%s.%s.%s", catalog, dbName, tblName));
         }
 
+        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshot.getMetadata().getConfiguration());
         List<Column> fullSchema = Lists.newArrayList();
         for (StructField field : deltaSchema.fields()) {
             DataType dataType = field.getDataType();
             Type type;
             try {
-                type = ColumnTypeConverter.fromDeltaLakeType(dataType);
+                type = ColumnTypeConverter.fromDeltaLakeType(dataType, columnMappingMode);
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.toString(), catalog, dbName, tblName, e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(field.getName(), type, true);
+            Column column = buildColumnWithColumnMapping(field, type, columnMappingMode);
             fullSchema.add(column);
         }
 
-        checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
-                deltaSchema, Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
+                Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
                 deltaEngine, createTime);
+    }
+
+    public static Column buildColumnWithColumnMapping(StructField field, Type type, String columnMappingMode) {
+        String columnName = field.getName();
+        int columnUniqueId = COLUMN_UNIQUE_ID_INIT_VALUE;
+        String physicalName = "";
+
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+            columnUniqueId = ((Long)  field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
+        }
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+            physicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+        }
+        return new Column(columnName, type, false, null, null, true,
+                null, "", columnUniqueId, physicalName);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {
