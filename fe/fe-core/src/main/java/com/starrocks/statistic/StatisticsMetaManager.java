@@ -21,11 +21,7 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
@@ -38,7 +34,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
@@ -52,9 +47,6 @@ import java.util.Map;
 
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
-
-    // If all replicas are lost more than 3 times in a row, rebuild the statistics table
-    private int lossTableCount = 0;
 
     public StatisticsMetaManager() {
         super("statistics meta manager", 60L * 1000L);
@@ -83,6 +75,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return db.getTable(tableName) != null;
     }
 
+<<<<<<< HEAD
     private boolean checkReplicateNormal(String tableName) {
         int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
         int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
@@ -119,6 +112,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return lossTableCount < 3;
     }
 
+=======
+>>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     private static final List<String> KEY_COLUMN_NAMES = ImmutableList.of(
             "table_id", "column_name", "db_id"
     );
@@ -324,6 +319,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     private boolean dropTable(String tableName) {
         LOG.info("drop statistics table start");
         DropTableStmt stmt = new DropTableStmt(true,
@@ -339,6 +335,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return !checkTableExist(tableName);
     }
 
+=======
+>>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     private void trySleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -349,39 +347,33 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createTable(String tableName) {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setThreadLocalInfo();
-
-        if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
-            return createSampleStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
-            return createFullStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createHistogramStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
-            return createExternalFullStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createExternalHistogramStatisticsTable(context);
-        } else {
-            throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
+                return createSampleStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
+                return createFullStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                return createHistogramStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
+                return createExternalFullStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                return createExternalHistogramStatisticsTable(context);
+            } else {
+                throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+            }
         }
     }
 
     private void refreshStatisticsTable(String tableName) {
-        while (checkTableExist(tableName) && !checkReplicateNormal(tableName)) {
-            LOG.info("statistics table " + tableName + " replicate is not normal, will drop table and rebuild");
-            if (dropTable(tableName)) {
-                break;
-            }
-            LOG.warn("drop statistics table " + tableName + " failed");
-            trySleep(10000);
-        }
-
         while (!checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
+        }
+        if (checkTableExist(tableName)) {
+            StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
     }
 
