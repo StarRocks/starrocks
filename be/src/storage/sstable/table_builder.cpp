@@ -162,7 +162,7 @@ static Status CompressBlock(CompressionTypePB compression_type, const char* inpu
     size_t output_length = codec->max_compressed_len(length);
 
     // Resize the output string to accommodate the uncompressed length and the maximum compressed data length.
-    output->resize(sizeof(uint64_t) + output_length);
+    starrocks::raw::stl_string_resize_uninitialized(output, sizeof(uint64_t) + output_length);
 
     // Store the length of the uncompressed data in the first 64 bits of the output string.
     EncodeFixed64(output->data(), length);

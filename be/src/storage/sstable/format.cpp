@@ -94,7 +94,11 @@ static Status DecompressBlock(CompressionTypePB compression_type, const char* in
     Slice input_slice(input + sizeof(uint64_t), length - sizeof(uint64_t));
 
     // Decompress the input data into the output slice.
-    RETURN_IF_ERROR(codec->decompress(input_slice, &output_slice));
+    Status status = codec->decompress(input_slice, &output_slice);
+    if (!status.ok()) {
+        delete[] output;
+        return status;
+    }
 
     // Save the decompressed result in the result structure.
     result->data = output_slice;
@@ -162,13 +166,13 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
         size_t ulength = 0;
         if (!snappy::GetUncompressedLength(data, n, &ulength)) {
             delete[] buf;
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (snappy) contents");
         }
         char* ubuf = new char[ulength];
         if (!snappy::RawUncompress(data, n, ubuf)) {
             delete[] buf;
             delete[] ubuf;
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (snappy) contents");
         }
         delete[] buf;
         result->data = Slice(ubuf, ulength);
@@ -181,7 +185,7 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
         delete[] buf;
         if (!st.ok()) {
             LOG(ERROR) << st.to_string();
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (lz4) contents");
         }
         break;
     }
@@ -190,13 +194,15 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
         delete[] buf;
         if (!st.ok()) {
             LOG(ERROR) << st.to_string();
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (zstd) contents");
         }
         break;
     }
     default:
+        std::string error_msg = "bad compression type: " + std::to_string(data[n]);
         delete[] buf;
-        return Status::Corruption("bad block type");
+        LOG(ERROR) << error_msg;
+        return Status::Corruption(error_msg);
     }
 
     return Status::OK();
