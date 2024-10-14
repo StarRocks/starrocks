@@ -392,6 +392,11 @@ struct THdfsScanRange {
 
     // for extended column like iceberg data_seq_num or spec_id
     28: optional map<Types.TSlotId, Exprs.TExpr> extended_columns;
+    
+    // attached partition value.
+    29: optional Descriptors.THdfsPartition partition_value;
+
+    30: optional Types.TTableId table_id;
 }
 
 struct TBinlogScanRange {
