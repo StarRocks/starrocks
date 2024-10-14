@@ -3217,12 +3217,6 @@ public class OlapTable extends Table {
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
-        // base compaction forbidden time ranges
-        if (!getBaseCompactionForbiddenTimeRanges().isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
-                    getBaseCompactionForbiddenTimeRanges());
-        }
-
         Map<String, String> tableProperty = getTableProperty().getProperties();
         if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,

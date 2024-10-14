@@ -2815,6 +2815,14 @@ public class GlobalStateMgr {
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
             }
 
+            // base compaction forbidden time ranges
+            if (!olapTable.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)
+                        .append("\" = \"")
+                        .append(olapTable.getBaseCompactionForbiddenTimeRanges()).append("\"");
+            }
+
             // locations
             if (olapTable.getLocation() != null) {
                 String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
