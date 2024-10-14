@@ -287,6 +287,13 @@ public class DecimalV3FunctionAnalyzer {
             return true;
         }
 
+        if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            return argumentTypes[0].isArrayType() &&
+                    (((ArrayType) argumentTypes[0]).getItemType().isDecimalV3() || argumentTypes[1].isDecimalV3());
+        }
+
+
         if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
             return true;
         }
