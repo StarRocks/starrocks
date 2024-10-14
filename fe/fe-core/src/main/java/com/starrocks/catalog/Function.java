@@ -225,7 +225,7 @@ public class Function implements Writable {
         id = other.id;
         name = other.name;
         retType = other.retType;
-        argTypes = other.argTypes;
+        argTypes = Arrays.copyOf(other.argTypes, other.argTypes.length);
         argNames = other.argNames;
         hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
