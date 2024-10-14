@@ -38,6 +38,7 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <ostream>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -162,11 +163,7 @@ private:
 
 class HdfsPartitionDescriptor {
 public:
-    HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
-
+    HdfsPartitionDescriptor(const THdfsPartition& thrift_partition);
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
     std::string& location() { return _location; }
@@ -206,10 +203,14 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
+    Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
+                               const THdfsPartition& thrift_partition);
+
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
+    mutable std::shared_mutex _map_mutex;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
 };

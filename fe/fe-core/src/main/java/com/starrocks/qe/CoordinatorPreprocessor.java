@@ -263,7 +263,7 @@ public class CoordinatorPreprocessor {
     public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws UserException {
         execFragment.getScanRangeAssignment().clear();
         for (FragmentInstance instance : execFragment.getInstances()) {
-            instance.getNode2ScanRanges().clear();
+            instance.resetAllScanRanges();
         }
         fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
     }
