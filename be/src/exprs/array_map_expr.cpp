@@ -99,8 +99,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         auto array_column = down_cast<const ArrayColumn*>(data_column.get());
         auto elements_column = array_column->elements_column();
         UInt32Column::Ptr offsets_column = array_column->offsets_column();
-        if constexpr (!all_const_input) {
-            if (input_elements[i]->is_constant()) {
+
+        if (input_elements[i]->is_constant()) {
+            if (!all_const_input || !capture_slot_ids.empty()) {
+                // if not all input columns are constant,
+                // or all input columns are constant but lambda expr depends on other capture columns(e.g. array_map(x->x+k,[1,2,3])),
+                // we should unpack the const column before evaluation
                 size_t elements_num = array_column->get_element_size(0);
                 elements_column = elements_column->clone();
                 offsets_column = UInt32Column::create();
@@ -114,13 +118,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                     offset += elements_num;
                     offsets_column->append(offset);
                 }
-            } else {
-                if (result_null_column != nullptr) {
-                    data_column->empty_null_in_complex_column(result_null_column->get_data(),
-                                                              array_column->offsets().get_data());
-                }
-                elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
             }
+        } else {
+            if (result_null_column != nullptr) {
+                data_column->empty_null_in_complex_column(result_null_column->get_data(),
+                                                          array_column->offsets().get_data());
+            }
+            elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
         }
 
         if (aligned_offsets == nullptr) {
@@ -173,8 +177,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         column = tmp_col->replicate(aligned_offsets->get_data());
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
     } else {
-        // if all input arguments are const,
-        if constexpr (all_const_input) {
+        // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
+        // we can evaluate it based on const column
+        if (all_const_input && capture_slot_ids.empty()) {
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
@@ -200,8 +205,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     DCHECK(column != nullptr);
     column = ColumnHelper::cast_to_nullable_column(column);
 
-    if constexpr (all_const_input) {
-        // if all input arguments are const, we can return a const column
+    if (all_const_input && capture_slot_ids.empty()) {
+        // if all input arguments are const and lambdaexpr doesn't depend on other capture columns,
+        // we can return a const column
         auto data_column = FunctionHelper::get_data_column_of_const(column);
 
         aligned_offsets = UInt32Column::create();

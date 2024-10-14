@@ -130,9 +130,9 @@ None
 select array_map((x,y)->k, [1,2],[2,3]) from t order by k;
 -- result:
 [1,1]
-[1,1]
-[1,1]
-[1,1]
+[2,2]
+[3,3]
+[4,4]
 -- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,3],[3,4]) from t;
 -- result:
