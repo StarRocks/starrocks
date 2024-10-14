@@ -392,6 +392,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
         COUNTER_UPDATE(profile->datacache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
+        COUNTER_UPDATE(profile->datacache_skip_write_counter, stats.skip_write_cache_count);
+        COUNTER_UPDATE(profile->datacache_skip_write_bytes, stats.skip_write_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
 
