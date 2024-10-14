@@ -24,6 +24,8 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 
 The level of execution plan detail returned: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS.
 
+From v3.3.5, the default detail level is changed to `COSTS`. You can configure the level of details returned by EXPLAIN using the dynamic FE parameter `query_detail_explain_level`.
+
 In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS will print a lot of internal information, which is mainly used for debugging the execution plan.
 
 :::
@@ -34,8 +36,12 @@ In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS wi
 | ------------- | ---------------------------------------------------------- |
 | LOGICAL       | Shows the simple logical execution plans.                  |
 | VERBOSE       | Shows the detailed logical execution plans, including data types, nullable information, and optimization strategy. |
-| COSTS         | Shows the detailed logical execution plans, including column statisitics. |
+| COSTS (Default) | Shows the detailed logical execution plans, including column statistics. |
 | query         | The query statement whose execution plan you want to view. |
+
+> **NOTE**
+>
+> You can configure the level of details returned by EXPLAIN using the dynamic FE parameter `query_detail_explain_level`.
 
 ## Return value
 
