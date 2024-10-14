@@ -41,8 +41,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -75,6 +77,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
@@ -112,6 +115,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
@@ -151,6 +155,9 @@ import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileScanTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -485,6 +492,67 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
         return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalIcebergEqualityDeleteScan(LogicalIcebergEqualityDeleteScanOperator node, ExpressionContext context) {
+        return computeIcebergEqualityDeleteScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergEqualityDeleteScan(PhysicalIcebergEqualityDeleteScanOperator node,
+                                                       ExpressionContext context) {
+        return computeIcebergEqualityDeleteScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeIcebergEqualityDeleteScanNode(Operator node, ExpressionContext context, Table table,
+                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        if (context.getStatistics() == null) {
+            TableVersionRange version;
+            ScalarOperator predicate;
+            List<Integer> equalityIds;
+            boolean needCheckEqualityIds;
+            if (node.isLogical()) {
+                version = ((LogicalIcebergEqualityDeleteScanOperator) node).getTableVersionRange();
+                predicate = ((LogicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
+                equalityIds = ((LogicalIcebergEqualityDeleteScanOperator) node).getEqualityIds();
+                needCheckEqualityIds = ((LogicalIcebergEqualityDeleteScanOperator) node).isHitMutableIdentifierColumns();
+            } else {
+                version = ((PhysicalIcebergEqualityDeleteScanOperator) node).getTableVersionRange();
+                predicate = ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
+                equalityIds = ((PhysicalIcebergEqualityDeleteScanOperator) node).getEqualityIds();
+                needCheckEqualityIds = ((PhysicalIcebergEqualityDeleteScanOperator) node).isHitMutableIdentifierColumns();
+            }
+            GetRemoteFilesParams params =
+                    GetRemoteFilesParams.newBuilder().setTableVersionRange(version).setPredicate(predicate).build();
+            IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr().getRemoteFiles(table, params).get(0).getFiles().get(0);
+
+            double rowCount = 0;
+            Set<String> seenFiles = new HashSet<>();
+            for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
+                for (DeleteFile deleteFile : fileScanTask.deletes()) {
+                    if (deleteFile.content() != FileContent.EQUALITY_DELETES) {
+                        continue;
+                    }
+
+                    if (needCheckEqualityIds && !deleteFile.equalityFieldIds().equals(equalityIds)) {
+                        continue;
+                    }
+
+                    if (seenFiles.add(deleteFile.path().toString())) {
+                        rowCount += deleteFile.recordCount();
+                    }
+                }
+            }
+            Statistics.Builder statisticsBuilder = Statistics.builder();
+            statisticsBuilder.setOutputRowCount(rowCount);
+            statisticsBuilder.addColumnStatistics(colRefToColumnMetaMap.keySet().stream()
+                    .collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
+            context.setStatistics(statisticsBuilder.build());
+        }
+
+        return visitOperator(node, context);
     }
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,

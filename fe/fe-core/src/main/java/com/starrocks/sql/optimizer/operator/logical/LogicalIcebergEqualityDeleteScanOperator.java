@@ -21,22 +21,26 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-public class LogicalIcebergScanOperator extends LogicalScanOperator {
-    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperator {
+    // Origin query predicate may have some filters that don't belong to delete scan table.
+    // Therefore, we cannot use origin predicate as delete table predicate because it does not conform to semantics.
+    // Because we need to use the origin predicate to get iceberg scan task in the query level cache, we record it in here.
+    private ScalarOperator originPredicate;
 
-    private boolean hasUnknownColumn = true;
+    // for filtering delete schema when query hit mutable delete schemas.
+    private List<Integer> equalityIds;
 
-    // record if this scan is derived from IcebergEqualityDeleteRewriteRule.
-    private boolean fromEqDeleteRewriteRule;
+    // Getting equalityIds from delete file takes some time when there are many delete files.
+    // So we set a flat to avoid getting it when only one delete schema is hit.
+    private boolean hitMutableIdentifierColumns;
 
-    public LogicalIcebergScanOperator(Table table,
+    public LogicalIcebergEqualityDeleteScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
@@ -44,13 +48,13 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
     }
 
-    public LogicalIcebergScanOperator(Table table,
+    public LogicalIcebergEqualityDeleteScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
                                       ScalarOperator predicate,
                                       TableVersionRange versionRange) {
-        super(OperatorType.LOGICAL_ICEBERG_SCAN,
+        super(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
@@ -58,64 +62,57 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 predicate, null, versionRange);
 
         Preconditions.checkState(table instanceof IcebergTable);
-        IcebergTable icebergTable = (IcebergTable) table;
-        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(Column::getName).collect(Collectors.toList()));
     }
 
-    private LogicalIcebergScanOperator() {
-        super(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public ScalarOperator getOriginPredicate() {
+        return originPredicate;
     }
 
-    @Override
-    public ScanOperatorPredicates getScanOperatorPredicates() {
-        return this.predicates;
+    public void setOriginPredicate(ScalarOperator originPredicate) {
+        this.originPredicate = originPredicate;
     }
 
-    @Override
-    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
-        this.predicates = predicates;
+    public List<Integer> getEqualityIds() {
+        return equalityIds;
     }
 
-    public boolean isFromEqDeleteRewriteRule() {
-        return fromEqDeleteRewriteRule;
+    public void setEqualityIds(List<Integer> equalityIds) {
+        this.equalityIds = equalityIds;
     }
 
-    public void setFromEqDeleteRewriteRule(boolean fromEqDeleteRewriteRule) {
-        this.fromEqDeleteRewriteRule = fromEqDeleteRewriteRule;
+    public boolean isHitMutableIdentifierColumns() {
+        return hitMutableIdentifierColumns;
     }
 
-    @Override
-    public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() &&
-                !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
-                predicates.getSelectedPartitionIds().isEmpty();
+    public void setHitMutableIdentifierColumns(boolean hitMutableIdentifierColumns) {
+        this.hitMutableIdentifierColumns = hitMutableIdentifierColumns;
     }
 
-    public boolean hasUnknownColumn() {
-        return hasUnknownColumn;
-    }
-
-    public void setHasUnknownColumn(boolean hasUnknownColumn) {
-        this.hasUnknownColumn = hasUnknownColumn;
+    private LogicalIcebergEqualityDeleteScanOperator() {
+        super(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
     }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLogicalIcebergScan(this, context);
+        return visitor.visitLogicalIcebergEqualityDeleteScan(this, context);
     }
 
     public static class Builder
-            extends LogicalScanOperator.Builder<LogicalIcebergScanOperator, LogicalIcebergScanOperator.Builder> {
+            extends LogicalScanOperator.Builder<LogicalIcebergEqualityDeleteScanOperator,
+            LogicalIcebergEqualityDeleteScanOperator.Builder> {
 
         @Override
-        protected LogicalIcebergScanOperator newInstance() {
-            return new LogicalIcebergScanOperator();
+        protected LogicalIcebergEqualityDeleteScanOperator newInstance() {
+            return new LogicalIcebergEqualityDeleteScanOperator();
         }
 
         @Override
-        public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
+        public LogicalIcebergEqualityDeleteScanOperator.Builder withOperator(
+                LogicalIcebergEqualityDeleteScanOperator scanOperator) {
             super.withOperator(scanOperator);
-            builder.predicates = scanOperator.predicates.clone();
+            builder.originPredicate = scanOperator.originPredicate;
+            builder.equalityIds = scanOperator.equalityIds;
+            builder.hitMutableIdentifierColumns = scanOperator.hitMutableIdentifierColumns;
             return this;
         }
     }
