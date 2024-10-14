@@ -1134,7 +1134,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return;
         }
 
-        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
+        if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(true);
         }
 
