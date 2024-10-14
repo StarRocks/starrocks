@@ -10,4 +10,14 @@ namespace starrocks::sstable {
 
 Options::Options() : comparator(BytewiseComparator()) {}
 
+void Options::set_compression(CompressionTypePB type) {
+    if (type == CompressionTypePB::LZ4_FRAME || type == CompressionTypePB::LZ4) {
+        compression = kLz4FrameCompression;
+    } else if (type == CompressionTypePB::ZSTD) {
+        compression = kZstdCompression;
+    } else {
+        // use default snappy.
+    }
+}
+
 } // namespace starrocks::sstable
