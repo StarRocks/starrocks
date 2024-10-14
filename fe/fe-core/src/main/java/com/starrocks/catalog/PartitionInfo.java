@@ -152,11 +152,13 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     }
 
     public short getReplicationNum(long partitionId) {
-        if (!idToReplicationNum.containsKey(partitionId)) {
+        // Perform the op under no lock, the formal containsKey() call can't guarantee the later get() op success.
+        Short replicationNum = idToReplicationNum.get(partitionId);
+        if (replicationNum == null) {
             LOG.debug("failed to get replica num for partition: {}", partitionId);
             return (short) -1;
         }
-        return idToReplicationNum.get(partitionId);
+        return replicationNum;
     }
 
     public short getMinReplicationNum() {
