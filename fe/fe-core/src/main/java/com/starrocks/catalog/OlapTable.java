@@ -844,16 +844,16 @@ public class OlapTable extends Table {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
-                rangePartitionInfo.idToDataProperty.put(newPartId,
-                        rangePartitionInfo.idToDataProperty.remove(entry.getValue()));
-                rangePartitionInfo.idToReplicationNum.remove(entry.getValue());
-                rangePartitionInfo.idToReplicationNum.put(newPartId,
-                        (short) restoreReplicationNum);
-                rangePartitionInfo.getIdToRange(false).put(newPartId,
-                        rangePartitionInfo.getIdToRange(false).remove(entry.getValue()));
+                // preserve existing info
+                DataProperty dataProperty = rangePartitionInfo.getDataProperty(entry.getValue());
+                boolean inMemory = rangePartitionInfo.getIsInMemory(entry.getValue());
+                DataCacheInfo dataCacheInfo = rangePartitionInfo.getDataCacheInfo(entry.getValue());
+                Range<PartitionKey> range = rangePartitionInfo.getIdToRange(false).get(entry.getValue());
+                // replace with new info
+                rangePartitionInfo.dropPartition(entry.getValue());
+                rangePartitionInfo.addPartition(newPartId, false, range, dataProperty, (short) restoreReplicationNum,
+                        inMemory, dataCacheInfo);
 
-                rangePartitionInfo.idToInMemory
-                        .put(newPartId, rangePartitionInfo.idToInMemory.remove(entry.getValue()));
                 idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
                     physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
                     physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
@@ -876,10 +876,13 @@ public class OlapTable extends Table {
             // Single partitioned
             long newPartId = globalStateMgr.getNextId();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                partitionInfo.idToDataProperty.put(newPartId, partitionInfo.idToDataProperty.remove(entry.getValue()));
-                partitionInfo.idToReplicationNum.remove(entry.getValue());
-                partitionInfo.idToReplicationNum.put(newPartId, (short) restoreReplicationNum);
-                partitionInfo.idToInMemory.put(newPartId, partitionInfo.idToInMemory.remove(entry.getValue()));
+                DataProperty dataProperty = partitionInfo.getDataProperty(entry.getValue());
+                boolean inMemory = partitionInfo.getIsInMemory(entry.getValue());
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(entry.getValue());
+                partitionInfo.dropPartition(entry.getValue());
+                partitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum, inMemory,
+                        dataCacheInfo);
+
                 idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
                     physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
                     physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
