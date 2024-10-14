@@ -52,7 +52,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "testDb", "select * from table1 limit 1",
                 "root", "", "default_catalog");
         startQueryDetail.setScanRows(100);
-        startQueryDetail.setscanPartitions("\"[{catalogName:default_catalog,databaseName:testDb," + 
+        startQueryDetail.setScanPartitions("\"[{catalogName:default_catalog,databaseName:testDb," + 
                                            "tableName:table1,partitionIds:[table1]}]\"");
         startQueryDetail.setScanBytes(10001);
         startQueryDetail.setReturnRows(1);
