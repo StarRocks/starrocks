@@ -56,6 +56,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
@@ -935,6 +936,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setTxn_id(transactionId);
             if (!loadIds.isEmpty()) {
                 info.setLoad_id(Joiner.on(", ").join(loadIds));
+
+                List<String> profileIds = Lists.newArrayList();
+                for (String loadId : loadIds) {
+                    if (ProfileManager.getInstance().hasProfile(loadId)) {
+                        profileIds.add(loadId);
+                    }
+                }
+                if (!profileIds.isEmpty()) {
+                    info.setProfile_id(Joiner.on(", ").join(loadIds));
+                }
             }
             try {
                 info.setTable(getTableNames(true).stream().collect(Collectors.joining(",")));
