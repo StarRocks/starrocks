@@ -694,22 +694,24 @@ public class Lattice {
             recBuilder.add(mvRec);
         }
         TieredList<MVRecommendation> collocateMVs = recBuilder.build();
-        collocateMVs.forEach(candiMV -> BenefitTable.computeTentativeBenefit(candiMV, queryBenefits));
-        collocateMVs.forEach(candiMV -> {
-            double mvCost = candiMV.getLatticeNode().getCard().getCardinality();
-            double totalBenefit = 0;
-            int numQueriesAccelerated = 0;
-            for (TentativeQueryBenefit tBenefit : candiMV.getTentativeBenefits()) {
-                QueryBenefit qBenefit = queryBenefits.get(tBenefit.getIndex());
-                double prevCost = qBenefit.getCost();
-                if (mvCost < prevCost) {
-                    totalBenefit += (prevCost - mvCost) * qBenefit.getWeight();
+        if (queryBenefits != null) {
+            collocateMVs.forEach(candiMV -> BenefitTable.computeTentativeBenefit(candiMV, queryBenefits));
+            collocateMVs.forEach(candiMV -> {
+                double mvCost = candiMV.getLatticeNode().getCard().getCardinality();
+                double totalBenefit = 0;
+                int numQueriesAccelerated = 0;
+                for (TentativeQueryBenefit tBenefit : candiMV.getTentativeBenefits()) {
+                    QueryBenefit qBenefit = queryBenefits.get(tBenefit.getIndex());
+                    double prevCost = qBenefit.getCost();
+                    if (mvCost < prevCost) {
+                        totalBenefit += (prevCost - mvCost) * qBenefit.getWeight();
+                    }
+                    numQueriesAccelerated += Double.valueOf(qBenefit.getWeight()).intValue();
                 }
-                numQueriesAccelerated += Double.valueOf(qBenefit.getWeight()).intValue();
-            }
-            candiMV.setTotalBenefit(totalBenefit);
-            candiMV.setNumQueriesAccelerated(numQueriesAccelerated);
-        });
+                candiMV.setTotalBenefit(totalBenefit);
+                candiMV.setNumQueriesAccelerated(numQueriesAccelerated);
+            });
+        }
         return collocateMVs;
     }
 

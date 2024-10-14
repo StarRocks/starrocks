@@ -120,7 +120,7 @@ public class MVRecommendation implements Comparable<MVRecommendation> {
 
         TieredList.Builder<String> nodeInfoListBuilder = TieredList.<String>newGenesisTier();
 
-        if (latticeNode != null) {
+        if (latticeNode != null && latticeNode.getOptionalCard().isPresent()) {
             nodeInfoListBuilder.add("" + latticeNode.getCard().getRowCount());
             nodeInfoListBuilder.add("" + latticeNode.getCard().getCardinality());
             nodeInfoListBuilder.add("" + latticeNode.getCard().getCardRowCountRatio());

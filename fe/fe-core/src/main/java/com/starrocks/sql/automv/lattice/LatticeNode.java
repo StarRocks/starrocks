@@ -553,6 +553,10 @@ public class LatticeNode {
         this.card = Objects.requireNonNull(card);
     }
 
+    public Optional<CardRecord> getOptionalCard() {
+        return Optional.ofNullable(this.card);
+    }
+
     private AggregatePiece extendDimensions(Lattice lattice, LatticeNodeId targetId, LatticeNodeId id,
                                             AggregatePiece aggPiece) {
         Preconditions.checkArgument(targetId.isCoveringStrictly(id));

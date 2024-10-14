@@ -89,4 +89,58 @@ public class AutoMVTPCHTest {
                             "[`tpch`.`lineitem`.l_orderkey])[1]))"));
                 });
     }
+
+    @Test
+    public void testL2ColocateMVRecommend() {
+        String q = "select\n" +
+                "    MIN(date_trunc('day', from_unixtime(cast(concat(unix_timestamp(o_orderdate),'000') " +
+                "as bigint)  / 1000))) as start_activity_ts,\n" +
+                "    n_name,\n" +
+                "    r_name,\n" +
+                "    c_name,\n" +
+                "    c_address,\n" +
+                "    s_name,\n" +
+                "    s_address,\n" +
+                "    o_orderstatus,\n" +
+                "    l_returnflag\n" +
+                "from\n" +
+                "    customer,\n" +
+                "    orders,\n" +
+                "    lineitem,\n" +
+                "    supplier,\n" +
+                "    nation,\n" +
+                "    region\n" +
+                "where\n" +
+                "      c_custkey = o_custkey\n" +
+                "  and l_orderkey = o_orderkey\n" +
+                "  and l_suppkey = s_suppkey\n" +
+                "  and c_nationkey = s_nationkey\n" +
+                "  and s_nationkey = n_nationkey\n" +
+                "  and n_regionkey = r_regionkey\n" +
+                "  and r_name = 'AFRICA'\n" +
+                "  and o_orderdate >= date '1995-01-01'\n" +
+                "  and o_orderdate < date '1996-01-01'\n" +
+                "group by\n" +
+                "    n_name,\n" +
+                "    r_name,\n" +
+                "    c_name,\n" +
+                "    c_address,\n" +
+                "    s_name,\n" +
+                "    s_address,\n" +
+                "    o_orderstatus,\n" +
+                "    l_returnflag";
+
+        AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), Arrays.asList(Pair.create("q", q)),
+                sv -> {
+                    sv.setAutoMVUseCardinalityEstimation(false);
+                },
+                results -> {
+                    Assert.assertEquals(results.size(), 1);
+                    String mv = results.get(0).get(2);
+                    Assert.assertTrue(mv, mv.contains("(date_trunc(\"day\", from_unixtime(" +
+                            "(CAST(concat(unix_timestamp(`tpch`.`orders`.o_orderdate), \"000\") " +
+                            "AS bigint) / 1000)))) AS _ca0002"));
+                    Assert.assertTrue(mv, mv.contains("\"colocate_with\" = \"_mv_"));
+                });
+    }
 }

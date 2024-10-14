@@ -166,8 +166,8 @@ public class OpTest {
                 "WHEN `test_db`.`t`.c0 in (\"B\", \"C\") THEN \"b\" " +
                 "WHEN (`test_db`.`t`.c0 like \"%E%\") THEN `test_db`.`t`.c1 " +
                 "ELSE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
-                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
-                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int) + CAST(`test_db`.`t`.c5 AS int)) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int) % CAST(`test_db`.`t`.c7 AS int)) AS varchar)) " +
                 "END)");
 
     }
@@ -213,8 +213,8 @@ public class OpTest {
         CaseWhenOperator caseWhen =
                 new CaseWhenOperator(Type.VARCHAR, caseClause, null, whenThens);
         testHelper(caseWhen, "(CASE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
-                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
-                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int) + CAST(`test_db`.`t`.c5 AS int)) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int) % CAST(`test_db`.`t`.c7 AS int)) AS varchar)) " +
                 "WHEN \"A\" THEN \"a\" " +
                 "WHEN concat(\"B\", \"C\") THEN \"b\" " +
                 "WHEN coalesce(`test_db`.`t`.c1, `test_db`.`t`.c2, " +
@@ -265,8 +265,8 @@ public class OpTest {
                 "WHEN concat(\"B\", \"C\") THEN \"b\" " +
                 "WHEN substr(`test_db`.`t`.c8, 2, 4) THEN `test_db`.`t`.c1 " +
                 "ELSE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
-                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
-                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int) + CAST(`test_db`.`t`.c5 AS int)) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int) % CAST(`test_db`.`t`.c7 AS int)) AS varchar)) " +
                 "END)");
 
     }
@@ -354,14 +354,14 @@ public class OpTest {
                 {mapOp, "map{\"abcd\": `test_db`.`t`.c0, \"defg\": `test_db`.`t`.c1}"},
                 {arrayElem, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1][3]"},
                 {subFieldOp, "`test_db`.`t`.c0.a.b.c"},
-                {simpleLambda, "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11)))"},
+                {simpleLambda, "(x_0, x_1)->(CAST(x_0 AS int) + CAST(x_1 AS int))"},
                 {arrayMapSimpleLambda,
                         "array_map(" +
-                                "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11))), " +
+                                "(x_0, x_1)->(CAST(x_0 AS int) + CAST(x_1 AS int)), " +
                                 "[`test_db`.`t`.c0], [`test_db`.`t`.c1])"},
                 {ndvOp, "ndv(array_map((x_0)->left(concat(x_0, \"0000000\"), 10), " +
                         "array_map(" +
-                        "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11))), " +
+                        "(x_0, x_1)->(CAST(x_0 AS int) + CAST(x_1 AS int)), " +
                         "[`test_db`.`t`.c0], [`test_db`.`t`.c1]))[1])"},
                 {isNotNullOp, "(`test_db`.`t`.c0 IS NOT NULL)"},
                 {isNullOp, "(`test_db`.`t`.c0 IS NULL)"},

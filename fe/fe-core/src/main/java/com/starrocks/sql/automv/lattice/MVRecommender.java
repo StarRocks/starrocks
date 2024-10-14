@@ -266,20 +266,16 @@ public class MVRecommender {
     }
 
     private List<MVRecommendation> recommendSimply(Collection<List<PlanPiece>> pieceGroups, int limit) {
-        List<QueryGenerateResult> resultList = Lists.newArrayList();
+        List<MVRecommendation> resultList = Lists.newArrayList();
         Preconditions.checkArgument(limit >= 0);
         for (List<PlanPiece> pieceGroup : pieceGroups) {
-            if (pieceGroup.size() == 1) {
-                recommendOneMv(pieceGroup.get(0)).ifPresent(resultList::add);
-            } else {
-                resultList.addAll(recommendMVBasedLattice(pieceGroup));
-            }
+            resultList.addAll(recommendMVBasedLattice(pieceGroup));
             if (resultList.size() >= limit) {
                 break;
             }
         }
         limit = Math.min(limit, resultList.size());
-        return resultList.subList(0, limit).stream().map(MVRecommendation::new).collect(Collectors.toList());
+        return resultList.subList(0, limit);
     }
 
     private Optional<QueryGenerateResult> recommendOneMv(PlanPiece piece) {
@@ -295,13 +291,27 @@ public class MVRecommender {
         return AggregateMVGenerator.generate(aggPiece, mvGenerateContext);
     }
 
-    private List<QueryGenerateResult> recommendMVBasedLattice(List<PlanPiece> pieces) {
+    private List<MVRecommendation> recommendMVBasedLattice(List<PlanPiece> pieces) {
         Lattice lattice = Lattice.createLattice(pieces, false);
+        lattice.getNodes().forEach(LatticeNode::hoist);
         lattice.consolidateFully(options.isPruneRollupAbleWithConjuncts());
-        return lattice.getAllPieces().stream()
-                .map(this::recommendOneMv)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+        lattice.rearrange();
+        Predicate<LatticeNode> partitioner = node -> node.getFinalAggPiece().getDimensions().size()
+                >= GlobalVariable.getAutoMVColocateMVDimensionsLimit();
+        Map<Boolean, List<LatticeNode>> nodeGroups = lattice.getNodes().stream()
+                .collect(Collectors.partitioningBy(partitioner));
+
+        TieredList<MVRecommendation> colocatedMVs =
+                lattice.pickupCollocateMVRecommendations(nodeGroups.get(true), null);
+        TieredList<MVRecommendation> nonColocatedMVs = nodeGroups.get(false)
+                .stream()
+                .map(MVRecommendation::new)
+                .collect(TieredList.<MVRecommendation>toList());
+
+        return colocatedMVs.concat(nonColocatedMVs)
+                .stream()
+                .peek(rec -> rec.setMvResult(recommendOneMv(rec.getLatticeNode().getFinalAggPiece()).orElse(null)))
+                .filter(rec -> rec.getMvResult() != null)
                 .collect(Collectors.toList());
     }
 

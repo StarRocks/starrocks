@@ -225,7 +225,7 @@ public class Transcriptase {
                 }
             } else if (apply.isCast()) {
                 String a = context.arg(0);
-                String t = apply.getType().toSql();
+                String t = apply.getType().toTypeString();
                 return Result.of(String.format("CAST(%s AS %s)", a, t));
             } else if (apply.isAnd()) {
                 return Result.of("(" + String.join(" AND ", context.args()) + ")");
