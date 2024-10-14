@@ -66,14 +66,44 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         initDefaultJob();
 
+<<<<<<< HEAD
+=======
+        runJobs();
+    }
+
+    @VisibleForTesting
+    public List<StatisticsCollectJob> runJobs() {
+        List<StatisticsCollectJob> result = Lists.newArrayList();
+
+        // TODO: define the priority in the job instead
+        List<NativeAnalyzeJob> allNativeAnalyzeJobs =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
+        allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+        String analyzeJobIds = allNativeAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+                .collect(Collectors.joining(", "));
+        Set<Long> analyzeTableSet = Sets.newHashSet();
+
+        LOG.info("auto collect statistic on analyze job[{}] start", analyzeJobIds);
+        for (NativeAnalyzeJob nativeAnalyzeJob : allNativeAnalyzeJobs) {
+            List<StatisticsCollectJob> jobs = nativeAnalyzeJob.instantiateJobs();
+            result.addAll(jobs);
+            ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+            statsConnectCtx.setThreadLocalInfo();
+            nativeAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
+
+            for (StatisticsCollectJob job : jobs) {
+                if (job.isAnalyzeTable()) {
+                    analyzeTableSet.add(job.getTable().getId());
+                }
+            }
+        }
+        LOG.info("auto collect statistic on analyze job[{}] end", analyzeJobIds);
+
+>>>>>>> 62232d7355 ([BugFix] unify the behavior of default AutoCollector (#51723))
         if (Config.enable_collect_full_statistic) {
             LOG.info("auto collect full statistic on all databases start");
-            List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                    new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
-                            AnalyzeType.FULL, ScheduleType.SCHEDULE,
-                            Maps.newHashMap(),
-                            ScheduleStatus.PENDING,
-                            LocalDateTime.MIN));
+            List<StatisticsCollectJob> allJobs =
+                    StatisticsCollectJobFactory.buildStatisticsCollectJob(createDefaultJobAnalyzeAll());
             for (StatisticsCollectJob statsJob : allJobs) {
                 AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                         statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
@@ -116,17 +146,33 @@ public class StatisticAutoCollector extends FrontendDaemon {
         }
     }
 
+    /**
+     * Choose user-created jobs first, fallback to default job if it doesn't exist
+     */
     private void initDefaultJob() {
+<<<<<<< HEAD
         // Add a default sample job if wasn't collect
         List<NativeAnalyzeJob> allNativeAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllNativeAnalyzeJobList();
+=======
+        List<NativeAnalyzeJob> allNativeAnalyzeJobs =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
+>>>>>>> 62232d7355 ([BugFix] unify the behavior of default AutoCollector (#51723))
         if (allNativeAnalyzeJobs.stream().anyMatch(j -> j.getScheduleType() == ScheduleType.SCHEDULE)) {
             return;
         }
 
-        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
-                Collections.emptyList(), Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE,
+        NativeAnalyzeJob job = createDefaultJobAnalyzeAll();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(job);
+    }
+
+    /**
+     * Create a default job to analyze all tables in the system
+     */
+    private NativeAnalyzeJob createDefaultJobAnalyzeAll() {
+        AnalyzeType analyzeType = Config.enable_collect_full_statistic ? AnalyzeType.FULL : AnalyzeType.SAMPLE;
+        return new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+                Collections.emptyList(), Collections.emptyList(), analyzeType, ScheduleType.SCHEDULE,
                 Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(nativeAnalyzeJob);
     }
 
     private boolean checkoutAnalyzeTime(LocalTime now) {
