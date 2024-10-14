@@ -194,6 +194,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default automatic bucket size
     private long bucketSize = 0;
 
+    private String baseCompactionForbiddenTimeRanges = "";
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -292,6 +294,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_BUCKET_SIZE:
                 buildBucketSize();
+                break;
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
+                buildBaseCompactionForbiddenTimeRanges();
                 break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
@@ -548,6 +553,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildBaseCompactionForbiddenTimeRanges() {
+        baseCompactionForbiddenTimeRanges = properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, "");
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -782,6 +793,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return bucketSize;
     }
 
+    public String getBaseCompactionForbiddenTimeRanges() {
+        return baseCompactionForbiddenTimeRanges;
+    }
+
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -901,5 +916,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageType();
         buildMvProperties();
         buildLocation();
+        buildBaseCompactionForbiddenTimeRanges();
     }
 }

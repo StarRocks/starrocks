@@ -4053,6 +4053,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logModifyBucketSize(info);
     }
 
+    public void modifyTableBaseCompactionForbiddenTimeRanges(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildBaseCompactionForbiddenTimeRanges();
+
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyBaseCompactionForbiddenTimeRanges(info);
+    }
+
     public void modifyTablePrimaryIndexCacheExpireSec(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
         TableProperty tableProperty = table.getTableProperty();
@@ -4081,6 +4097,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             modifyTableReplicatedStorage(db, table, properties);
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             modifyTableAutomaticBucketSize(db, table, properties);
+        } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+            modifyTableBaseCompactionForbiddenTimeRanges(db, table, properties);
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
         }

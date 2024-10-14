@@ -697,6 +697,7 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
@@ -721,6 +722,9 @@ public class AlterJobMgr {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BUCKET_SIZE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);

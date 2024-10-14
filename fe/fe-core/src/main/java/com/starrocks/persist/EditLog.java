@@ -865,6 +865,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
+                case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1991,6 +1992,10 @@ public class EditLog {
 
     public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
+    }
+
+    public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

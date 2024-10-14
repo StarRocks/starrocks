@@ -327,6 +327,9 @@ public class LeaderImpl {
                 case COMPACTION:
                     finishCompactionTask(task, request);
                     break;
+                case COMPACTION_CONTROL:
+                    finishCompactionControlTask(task, request);
+                    break;
                 case REMOTE_SNAPSHOT:
                     finishRemoteSnapshotTask(task, request);
                     break;
@@ -438,6 +441,10 @@ public class LeaderImpl {
     }
 
     private void finishCompactionTask(AgentTask task, TFinishTaskRequest request) {
+        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+    }
+
+    private void finishCompactionControlTask(AgentTask task, TFinishTaskRequest request) {
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 

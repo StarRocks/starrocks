@@ -166,6 +166,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
 
+    public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
+
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
@@ -418,6 +420,14 @@ public class PropertyAnalyzer {
         } else {
             throw new AnalysisException("Bucket size is not set");
         }
+    }
+
+    public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+            String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            return forbiddenTimeRanges;
+        }
+        return "";
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
