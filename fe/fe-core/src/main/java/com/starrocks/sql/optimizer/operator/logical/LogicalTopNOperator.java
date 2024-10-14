@@ -146,8 +146,10 @@ public class LogicalTopNOperator extends LogicalOperator {
                 columns.union(ordering.getColumnRef());
             }
 
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
-                columns.union(entry.getKey());
+            if (partitionPreAggCall != null) {
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                    columns.union(entry.getKey());
+                }
             }
 
             return columns;
@@ -164,8 +166,10 @@ public class LogicalTopNOperator extends LogicalOperator {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
-            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        if (partitionPreAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
         }
 
         return new RowOutputInfo(entryList);

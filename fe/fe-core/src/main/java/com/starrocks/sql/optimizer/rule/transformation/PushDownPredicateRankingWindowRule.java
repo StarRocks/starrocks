@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -211,17 +212,23 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase);
 
-        if ((childOptExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
-            LogicalWindowOperator secondWindowOperator = childOptExpr.inputAt(0).getOp().cast();
+        OptExpression grandChildOptExpr = childOptExpr.inputAt(0);
+        if ((grandChildOptExpr.getOp() instanceof LogicalWindowOperator)) {
+            LogicalWindowOperator secondWindowOperator = grandChildOptExpr.getOp().cast();
             if (samePartitionWithRankRelatedWindow(secondWindowOperator, rankRelatedWindowOperator)) {
-                topNBuilder.setPartitionPreAggCall(createNormalAgg(false, rankRelatedWindowOperator.getWindowCall()));
-                Map<ColumnRefOperator, CallOperator> newRankRelatedWindowCall =
-                        createNormalAgg(true, rankRelatedWindowOperator.getWindowCall());
+                topNBuilder.setPartitionPreAggCall(createNormalAgg(false, secondWindowOperator.getWindowCall()));
+                Map<ColumnRefOperator, CallOperator> newWindowCall =
+                        createNormalAgg(true, secondWindowOperator.getWindowCall());
                 // change rankRelated window call's input column and mark this window op's input is binary
-                rankRelatedWindowOperator = new LogicalWindowOperator.Builder().withOperator(rankRelatedWindowOperator)
-                        .setWindowCall(newRankRelatedWindowCall)
+                secondWindowOperator = new LogicalWindowOperator.Builder().withOperator(secondWindowOperator)
+                        .setWindowCall(newWindowCall)
                         .setInputIsBinary(true)
                         .build();
+
+                OptExpression newTopNOptExp = OptExpression.create(topNBuilder.build(), grandChildOptExpr.getInputs());
+                OptExpression secondWindowOptExp = OptExpression.create(secondWindowOperator, newTopNOptExp);
+                OptExpression rankRelatedOptExp = OptExpression.create(rankRelatedWindowOperator, secondWindowOptExp);
+                return Collections.singletonList(OptExpression.create(filterOperator, rankRelatedOptExp));
             }
         }
 
@@ -245,8 +252,10 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 List<ScalarOperator> arguments = Lists.newArrayList(
                         new ColumnRefOperator(column.getId(), intermediateType, column.getName(), column.isNullable()));
                 appendConstantColumns(arguments, aggregation);
+                Function newFn = aggregation.getFunction().copy();
+                newFn.getArgs()[0] = intermediateType;
                 callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
-                        aggregation.getFunction());
+                        newFn);
             } else {
                 callOperator = new CallOperator(aggregation.getFnName(), intermediateType, aggregation.getChildren(),
                         aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());

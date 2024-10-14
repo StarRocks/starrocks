@@ -119,8 +119,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggCall.entrySet()) {
-            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        if (preAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
         }
 
         return new RowOutputInfo(entryList);
