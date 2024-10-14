@@ -73,6 +73,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 + "\"sql\":\"select * from table1 limit 1\","
                 + "\"user\":\"root\","
                 + "\"scanRows\":100,"
+                + "\"scanPartitions\":\"\","
                 + "\"scanBytes\":10001,"
                 + "\"returnRows\":1,"
                 + "\"cpuCostNs\":1002,"
