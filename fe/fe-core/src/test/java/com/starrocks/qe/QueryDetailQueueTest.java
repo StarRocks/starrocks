@@ -75,8 +75,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 + "\"sql\":\"select * from table1 limit 1\","
                 + "\"user\":\"root\","
                 + "\"scanRows\":100,"
-                + "\"scanPartitions\":\"[{catalogName:default_catalog,databaseName:testDb," + 
-                                    "tableName:table1,partitionIds:[table1]}]\","
+                + "\"scanPartitions\":\"\"[{catalogName:default_catalog,databaseName:testDb," + 
+                                    "tableName:table1,partitionIds:[table1]}]\"\","
                 + "\"scanBytes\":10001,"
                 + "\"returnRows\":1,"
                 + "\"cpuCostNs\":1002,"
