@@ -49,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import javax.validation.constraints.NotNull;
@@ -200,6 +201,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
@@ -256,6 +258,17 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // NOTE: clean dirty data in idToStorageCacheInfo due to historic bugs.
+        // Taking idToReplicationNum as reference, remove all the items of idToStorageCacheInfo
+        // that doesn't have the corresponding key in idToReplicationNum, ASSUMING that all valid
+        // partitions should have a record in idToReplicationNum.
+        //
+        // Can be removed after several major releases.
+        if (idToStorageCacheInfo.size() > idToReplicationNum.size()) {
+            HashSet<Long> keyToDelete = new HashSet<>(idToStorageCacheInfo.keySet());
+            keyToDelete.removeAll(idToReplicationNum.keySet());
+            keyToDelete.forEach(idToStorageCacheInfo::remove);
+        }
     }
 
     @Override
