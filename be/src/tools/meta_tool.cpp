@@ -590,13 +590,19 @@ void verify_page_checksum(const std::string& file_name, const PagePointer& page_
     std::unique_ptr<char[]> page(new char[page_size + starrocks::Column::APPEND_OVERFLOW_MAX_SIZE]);
     Slice page_slice(page.get(), page_size);
 
-    input_file->read_at_fully(page_pointer.offset, page_slice.data, page_slice.size);
+    auto status = input_file->read_at_fully(page_pointer.offset, page_slice.data, page_slice.size);
+    if (!status.ok()) {
+        std::cout << "Failed to read file at offset " << page_pointer.offset << ", size " << page_slice.size
+                  << ", reason" << status.message() << std::endl;
+        return;
+    }
 
     uint32_t expect = starrocks::decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
     uint32_t actual = starrocks::crc32c::Value(page_slice.data, page_slice.size - 4);
+    std::cout << "Read PagePointer(" << page_pointer.offset << ", " << page_pointer.size << ") checksum, expect is "
+              << expect << ", actual is " << actual << std::endl;
     if (expect != actual) {
         std::cout << "Bad page: checksum mismatch (actual=" << actual << " vs expect=" << expect << ")";
-        return;
     }
 }
 
@@ -609,7 +615,6 @@ void dump_ordinal_index(const ColumnMetaPB& column_meta, RandomAccessFile* input
             starrocks::IndexReadOptions opts;
             starrocks::OlapReaderStatistics stats;
             opts.use_page_cache = false;
-            opts.kept_in_memory = false;
             opts.read_file = input_file;
             opts.stats = &stats;
 
