@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
+keywords: ['materialized', 'view', 'views']
 ---
 
 # Asynchronous materialized views
