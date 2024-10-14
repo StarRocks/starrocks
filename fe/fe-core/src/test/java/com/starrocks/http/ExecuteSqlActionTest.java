@@ -71,7 +71,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
                         "{\"name\":\"Comment\",\"type\":\"varchar(30)\"}]," +
                         "\"data\":[{\"Catalog\":\"default_catalog\",\"Type\":\"Internal\"," +
                         "\"Comment\":\"An internal catalog contains this cluster's self-managed tables.\"}]," +
-                        "\"statistics\":{\"scanRows\":0,\"scanBytes\":0,\"scanPartitions\":\"\"，\"returnRows\":1}}";
+                        "\"statistics\":{\"scanRows\":0,\"scanBytes\":0,\"scanPartitions\":\"\",\"returnRows\":1}}";
         Assert.assertEquals(respStr, expected);
 
         body = RequestBody.create(JSON,
