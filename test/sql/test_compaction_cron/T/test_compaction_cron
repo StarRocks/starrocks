@@ -21,7 +21,7 @@ select sleep(3);
 select min(NUM_VERSION) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='test_disable_compaction';
 
 -- name: test_primary_key
-create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
-create table t(k int, v int) primary key(k);
+create table t(k int, v int) primary key(k) distributed by hash(k) properties('base_compaction_forbidden_time_ranges'='* * * * *');
+create table t(k int, v int) primary key(k) distributed by hash(k);
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 

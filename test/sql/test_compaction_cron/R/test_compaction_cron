@@ -11,12 +11,12 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
+"replication_num" = "3",
 "base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"replication_num" = "3"
+"compression" = "LZ4"
 );
 -- !result
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
@@ -31,12 +31,12 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"base_compaction_forbidden_time_ranges" = "* 7-20 * * *",
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
+"replication_num" = "3",
+"base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"replication_num" = "3"
+"compression" = "LZ4"
 );
 -- !result
 alter table t set ('base_compaction_forbidden_time_ranges'='');
@@ -51,17 +51,14 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
+"replication_num" = "3",
+"base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"replication_num" = "3"
+"compression" = "LZ4"
 );
 -- !result
-
-
-
-
 -- name: test_disable_compaction
 create database test_disable_compaction;
 -- result:
@@ -106,12 +103,15 @@ select min(NUM_VERSION) from information_schema.be_tablets t1, information_schem
 
 
 
+
+
+
 -- name: test_primary_key
-create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
+create table t(k int, v int) primary key(k) distributed by hash(k) properties('base_compaction_forbidden_time_ranges'='* * * * *');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
+E: (1064, 'Unexpected exception: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table')
 -- !result
-create table t(k int, v int) primary key(k);
+create table t(k int, v int) primary key(k) distributed by hash(k);
 -- result:
 -- !result
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
