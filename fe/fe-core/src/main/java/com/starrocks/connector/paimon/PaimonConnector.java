@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
@@ -50,9 +51,10 @@ public class PaimonConnector implements Connector {
     private Catalog paimonNativeCatalog;
     private final String catalogName;
     private final Options paimonOptions;
+    private final Map<String, String> properties;
 
     public PaimonConnector(ConnectorContext context) {
-        Map<String, String> properties = context.getProperties();
+        this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
@@ -139,6 +141,7 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog());
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(),
+                new ConnectorProperties("paimon", properties));
     }
 }
