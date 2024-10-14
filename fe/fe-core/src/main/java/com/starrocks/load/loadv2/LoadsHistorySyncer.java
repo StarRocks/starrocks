@@ -79,7 +79,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     private boolean firstSync = true;
 
     private static final TableKeeper KEEPER =
-            new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE, 3,
+            new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
                     () -> Math.max(1, Config.loads_history_retained_days));
 
     public static TableKeeper createKeeper() {
