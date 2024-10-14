@@ -16,7 +16,6 @@ package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
@@ -64,7 +63,7 @@ public class FileListTableRepo extends FileListRepo {
                     "properties('replication_num' = '%d') ";
 
     protected static final String CORRECT_FILE_LIST_REPLICATION_NUM =
-            "ALTER TABLE %s SET ('replication_num'='3')";
+            "ALTER TABLE %s SET ('replication_num'='%d')";
 
     protected static final String ALL_COLUMNS =
             "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
@@ -155,15 +154,14 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class SQLBuilder {
 
-        public static String buildCreateTableSql() throws UserException {
-            int replica = AutoInferUtil.calDefaultReplicationNum();
+        public static String buildCreateTableSql(int replicationNum) throws UserException {
             return String.format(FILE_LIST_TABLE_CREATE,
-                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replica);
+                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replicationNum);
         }
 
-        public static String buildAlterTableSql() {
+        public static String buildAlterTableSql(int replicationNum) {
             return String.format(CORRECT_FILE_LIST_REPLICATION_NUM,
-                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME));
+                    CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replicationNum);
         }
     }
 
