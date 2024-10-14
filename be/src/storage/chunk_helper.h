@@ -166,13 +166,15 @@ public:
     bool has_null() const;
     size_t size() const;
     void upgrade_to_nullable();
-    const std::vector<ColumnPtr>& columns() const;
     size_t segment_size() const;
+    std::vector<ColumnPtr> columns() const;
 
 private:
-    SegmentedChunkPtr _chunk;        // The chunk it belongs to
-    std::vector<ColumnPtr> _columns; // All segmented columns
-    size_t _segment_size;
+    SegmentedChunkPtr _chunk; // The chunk it belongs to
+    size_t _column_index;     // The index in original chunk
+    const size_t _segment_size;
+
+    std::vector<ColumnPtr> _cached_columns; // Only used for SelectiveCopy
 };
 
 // A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory

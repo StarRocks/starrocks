@@ -614,22 +614,20 @@ bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
-template <typename T, typename = void>
-struct has_value_type : std::false_type {};
-
-template <typename T>
-struct has_value_type<T, std::void_t<typename T::ValueType>> : std::true_type {};
+template <class ColumnT>
+inline constexpr bool has_value_type =
+        !std::is_same_v<ColumnT, ConstColumn> && !std::is_same_v<ColumnT, NullableColumn>;
 
 template <class ColumnT>
 inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
                                   std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
-                                  (has_value_type<ColumnT>::value &&
-                                   std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>);
+                                  std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
 
 template <class ColumnT>
 inline constexpr bool is_fixed_or_binary =
-        std::is_base_of_v<FixedLengthColumnBase<typename ColumnT::ValueType>, ColumnT> ||
-        std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>;
+        has_value_type<ColumnT> &&
+        (std::is_base_of_v<FixedLengthColumnBase<typename ColumnT::ValueType>, ColumnT> ||
+         std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>);
 
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
@@ -649,7 +647,7 @@ public:
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
 
-        auto& columns = _segment_column->columns();
+        auto columns = _segment_column->columns();
         size_t segment_size = _segment_column->segment_size();
         std::vector<ContainerT> buffers;
         for (auto& seg_column : columns) {
@@ -689,7 +687,7 @@ public:
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         output->reserve(_size);
 
-        auto& columns = _segment_column->columns();
+        auto columns = _segment_column->columns();
         for (uint32_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
             auto [segment_id, segment_offset] = _segment_address(idx);
@@ -737,18 +735,14 @@ private:
 };
 
 SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index)
-        : _chunk(std::move(chunk)), _segment_size(_chunk->segment_size()) {
-    for (auto& segment : _chunk->segments()) {
-        _columns.push_back(segment->get_column_by_index(column_index));
-    }
-}
+        : _chunk(std::move(chunk)), _column_index(column_index), _segment_size(_chunk->segment_size()) {}
 
 SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size)
-        : _columns(std::move(columns)), _segment_size(segment_size) {}
+        : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
     SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
-    (void)_columns[0]->accept(&visitor);
+    (void)columns()[0]->accept(&visitor);
     return visitor.result();
 }
 
@@ -761,11 +755,11 @@ size_t SegmentedChunk::segment_size() const {
 }
 
 bool SegmentedColumn::is_nullable() const {
-    return _columns[0]->is_nullable();
+    return columns()[0]->is_nullable();
 }
 
 bool SegmentedColumn::has_null() const {
-    for (auto& column : _columns) {
+    for (auto& column : columns()) {
         RETURN_IF(column->has_null(), true);
     }
     return false;
@@ -773,20 +767,28 @@ bool SegmentedColumn::has_null() const {
 
 size_t SegmentedColumn::size() const {
     size_t result = 0;
-    for (auto& column : _columns) {
+    for (auto& column : columns()) {
         result += column->size();
     }
     return result;
 }
 
-const std::vector<ColumnPtr>& SegmentedColumn::columns() const {
-    return _columns;
+std::vector<ColumnPtr> SegmentedColumn::columns() const {
+    if (!_cached_columns.empty()) {
+        return _cached_columns;
+    }
+    std::vector<ColumnPtr> columns;
+    for (auto& segment : _chunk->segments()) {
+        columns.push_back(segment->get_column_by_index(_column_index));
+    }
+    return columns;
 }
 
 void SegmentedColumn::upgrade_to_nullable() {
-    for (auto& column : _columns) {
-        column = NullableColumn::wrap_if_necessary(column);
-    }
+    // TODO
+    // for (auto& column : _columns) {
+    //     column = NullableColumn::wrap_if_necessary(column);
+    // }
 }
 
 SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size) {
@@ -850,9 +852,8 @@ void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
         if (i == segment_index && segment_offset > 0) {
             auto cutoff = input_segments[i]->clone_empty();
             size_t count = input_segments[i]->num_rows() - segment_offset;
-            cutoff->append(*cutoff, segment_offset, count);
-            ChunkPtr shared(std::move(cutoff));
-            append_chunk(std::move(shared));
+            cutoff->append(*input_segments[i], segment_offset, count);
+            append_chunk(std::move(cutoff));
         } else {
             append_chunk(input_segments[i]);
         }
