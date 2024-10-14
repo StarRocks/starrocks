@@ -382,7 +382,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         OlapTable olapTable = (OlapTable) table;
                         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
                                 || olapTable.isCloudNativeTableOrMaterializedView()) {
-                            throw new SemanticException("Property " +
+                            throw new DdlException("Property " +
                                     PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
                                     " not support primary keys table or cloud native table");
                         }
