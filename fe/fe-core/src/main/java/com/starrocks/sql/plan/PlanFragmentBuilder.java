@@ -1251,11 +1251,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
-                deltaLakeScanNode.preProcessDeltaLakePredicate(node.getPredicate());
                 List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                         .map(ColumnRefOperator::getName)
                         .collect(Collectors.toList());
-                deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl(), fieldNames);
+                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames,
+                        context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
