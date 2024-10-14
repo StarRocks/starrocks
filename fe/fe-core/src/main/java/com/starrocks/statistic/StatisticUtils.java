@@ -44,9 +44,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.load.EtlStatus;
-import com.starrocks.load.loadv2.LoadJobFinalOperation;
-import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,9 +54,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.transaction.InsertOverwriteJobStats;
-import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,7 +69,6 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
-import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
@@ -112,23 +106,6 @@ public class StatisticUtils {
         context.setStartTime();
 
         return context;
-    }
-
-    private static StatsConstants.AnalyzeType parseAnalyzeType(TransactionState txnState, Table table) {
-        Long loadRows = null;
-        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
-        if (attachment instanceof LoadJobFinalOperation) {
-            EtlStatus loadingStatus = ((LoadJobFinalOperation) attachment).getLoadingStatus();
-            loadRows = loadingStatus.getLoadedRows(table.getId());
-        } else if (attachment instanceof InsertTxnCommitAttachment) {
-            loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
-        } else if (attachment instanceof StreamLoadTxnCommitAttachment) {
-            loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
-        }
-        if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
-            return SAMPLE;
-        }
-        return StatsConstants.AnalyzeType.FULL;
     }
 
     public static void triggerCollectionOnInsertOverwrite(InsertOverwriteJobStats stats,
