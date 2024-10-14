@@ -395,13 +395,7 @@ public class ListPartitionInfo extends PartitionInfo {
                     long partitionId = partition.getId();
                     PartitionDesc partitionDesc = entry.second;
                     Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
-<<<<<<< HEAD
                     Preconditions.checkArgument(((SinglePartitionDesc) partitionDesc).isAnalyzed());
-                    this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
-                    this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
-                    this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
-=======
->>>>>>> 543e3614dd ([Refactor] refactor PartitionInfo property access (#51855))
                     if (partitionDesc instanceof MultiItemListPartitionDesc) {
                         MultiItemListPartitionDesc multiItemListPartitionDesc =
                                 (MultiItemListPartitionDesc) partitionDesc;
@@ -519,16 +513,4 @@ public class ListPartitionInfo extends PartitionInfo {
         info.automaticPartition = this.automaticPartition;
         return info;
     }
-<<<<<<< HEAD
 }
-=======
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        super.gsonPostProcess();
-        if (partitionColumnIds.size() <= 0) {
-            partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
-        }
-    }
-}
->>>>>>> 543e3614dd ([Refactor] refactor PartitionInfo property access (#51855))
