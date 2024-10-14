@@ -71,6 +71,7 @@ public:
         return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
+    int32_t extended_column_index(SlotId id) const;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -96,6 +97,7 @@ private:
     void _init_rf_counters();
 
     Status _init_partition_values();
+    Status _init_extended_values();
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
@@ -133,6 +135,7 @@ private:
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
     std::vector<ExprContext*> _partition_values;
+
     bool _has_partition_conjuncts = false;
     bool _filter_by_eval_partition_conjuncts = false;
     bool _no_data = false;
@@ -147,11 +150,14 @@ private:
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
 
-    // iceberg equality delete column slots.
-    std::vector<SlotDescriptor*> _equality_delete_slots;
-
-    // iceberg equality delete column tuple desc.
-    TupleDescriptor* _delete_column_tuple_desc;
+    std::vector<ExprContext*> _extended_column_values;
+    // extended columns.
+    std::vector<SlotDescriptor*> _extended_slots;
+    // extended column index in `tuple_desc`
+    std::vector<int> _extended_index_in_chunk;
+    // index in extended columns
+    std::vector<int> _index_in_extended_column;
+    bool _has_extended_columns = false;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;
