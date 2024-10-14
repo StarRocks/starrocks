@@ -487,7 +487,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildExcludedTriggerTables() {
         excludedTriggerTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
-        excludedRefreshBaseTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES);
+        excludedRefreshBaseTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
         return this;
     }
 

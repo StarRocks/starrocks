@@ -193,7 +193,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
-    public static final String PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES = "excluded_refresh_tables";
+    public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -1459,13 +1459,13 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
             // exclude refresh base tables
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
-                        PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
                         materializedView);
                 String tableSb = getExcludeString(tables);
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_BASE_TABLES, tableSb);
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, tableSb);
                 materializedView.getTableProperty().setExcludedRefreshBaseTables(tables);
             }
             // resource_group
