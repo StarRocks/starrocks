@@ -14,9 +14,9 @@
 
 package com.starrocks.load.pipe.filelist;
 
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +30,6 @@ public class RepoCreator {
 
     private static boolean databaseExists = false;
     private static boolean tableExists = false;
-    private static boolean tableCorrected = false;
 
     public static RepoCreator getInstance() {
         return INSTANCE;
@@ -50,10 +49,7 @@ public class RepoCreator {
                 LOG.info("table created: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
                 tableExists = true;
             }
-            if (!tableCorrected && correctTable()) {
-                LOG.info("table corrected: " + FileListTableRepo.FILE_LIST_TABLE_NAME);
-                tableCorrected = true;
-            }
+            correctTable();
         } catch (Exception e) {
             LOG.error("error happens in RepoCreator: ", e);
         }
@@ -64,11 +60,14 @@ public class RepoCreator {
     }
 
     public static void createTable() throws UserException {
-        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql();
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        String sql = FileListTableRepo.SQLBuilder.buildCreateTableSql(expectedReplicationNum);
         RepoExecutor.getInstance().executeDDL(sql);
     }
 
     public static boolean correctTable() {
+<<<<<<< HEAD
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
                 .mayGetDb(FileListTableRepo.FILE_LIST_DB_NAME)
@@ -87,6 +86,9 @@ public class RepoCreator {
                     FileListTableRepo.FILE_LIST_FULL_NAME, replica);
         }
         return true;
+=======
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
+>>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     }
 
     public boolean isDatabaseExists() {
@@ -95,9 +97,5 @@ public class RepoCreator {
 
     public boolean isTableExists() {
         return tableExists;
-    }
-
-    public boolean isTableCorrected() {
-        return tableCorrected;
     }
 }

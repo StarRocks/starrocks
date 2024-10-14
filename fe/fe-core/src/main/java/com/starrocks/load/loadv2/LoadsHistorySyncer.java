@@ -15,13 +15,13 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,7 +67,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_LOADS_HISTORY_REPLICATION_NUM =
-            "ALTER TABLE %s SET ('default.replication_num'='3')";
+            "ALTER TABLE %s SET ('default.replication_num'='%d')";
 
     private static final String LOADS_HISTORY_SYNC =
             "INSERT INTO %s " +
@@ -77,10 +77,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "AND load_finish_time > ( " +
             "SELECT COALESCE(MAX(load_finish_time), '0001-01-01 00:00:00') " +
             "FROM %s);";
-    
+
     private boolean databaseExists = false;
     private boolean tableExists = false;
-    private boolean tableCorrected = false;
 
     public LoadsHistorySyncer() {
         super("Load history syncer", Config.loads_history_sync_interval_second * 1000L);
@@ -96,6 +95,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public static boolean correctTable() {
+<<<<<<< HEAD
         int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
                 .mayGetDb(LOADS_HISTORY_DB_NAME)
@@ -114,6 +114,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                     LOADS_HISTORY_TABLE_NAME, replica);
         }
         return true;
+=======
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(LOADS_HISTORY_TABLE_NAME);
+>>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     }
 
     public void checkMeta() throws UserException {
@@ -129,10 +132,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             LOG.info("table created: " + LOADS_HISTORY_TABLE_NAME);
             tableExists = true;
         }
-        if (!tableCorrected && correctTable()) {
-            LOG.info("table corrected: " + LOADS_HISTORY_TABLE_NAME);
-            tableCorrected = true;
-        }
+
+        correctTable();
 
         if (getInterval() != Config.loads_history_sync_interval_second * 1000L) {
             setInterval(Config.loads_history_sync_interval_second * 1000L);
@@ -168,9 +169,9 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                     CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME), replica);
         }
 
-        public static String buildAlterTableSql() {
+        public static String buildAlterTableSql(int replica) {
             return String.format(CORRECT_LOADS_HISTORY_REPLICATION_NUM,
-                    CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME));
+                    CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME), replica);
         }
 
         public static String buildSyncSql() {
