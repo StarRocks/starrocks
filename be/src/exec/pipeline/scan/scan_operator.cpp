@@ -515,20 +515,26 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
 
     if (_lane_arbiter != nullptr) {
+        LOG(INFO) << "_lane_arbiter != nullptr";
         while (morsel != nullptr) {
             auto [lane_owner, version] = morsel->get_lane_owner_and_version();
             auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
             if (acquire_result == query_cache::AR_BUSY) {
+                LOG(INFO) << "query_cache::AR_BUSY";
                 _morsel_queue->unget(std::move(morsel));
                 return Status::OK();
             } else if (acquire_result == query_cache::AR_PROBE) {
+                LOG(INFO) << "acquire_result == query_cache::AR_PROBE";
                 auto hit = _cache_operator->probe_cache(lane_owner, version);
                 RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
                 if (!hit) {
+                    LOG(INFO) << "not hit";
                     break;
                 }
+                LOG(INFO) << "hit";
                 auto [delta_version, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
+                    LOG(INFO) << "delta_rowsets not empty";
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
@@ -540,16 +546,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     morsel->set_delta_rowsets(std::move(drs));
                     break;
                 } else {
+                    LOG(INFO) << "delta_rowsets empty";
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
                 }
             } else if (acquire_result == query_cache::AR_SKIP) {
+                LOG(INFO) << "acquire_result == query_cache::AR_SKIP";
                 ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
             } else if (acquire_result == query_cache::AR_IO) {
+                LOG(INFO) << "acquire_result == query_cache::AR_IO";
                 // When both intra-tablet parallelism and multi-version cache mechanisms take effects, we must
                 // use delta rowsets instead of the ensemble of rowsets to fetch rows from disk for all of the
                 // morsels originated from the identical tablet.
                 auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
+                    LOG(INFO) << "delta_rowsets not empty in ar io";
                     morsel->set_from_version(delta_verrsion);
                     std::vector<BaseRowsetSharedPtr> drs;
                     for (auto& rs : delta_rowsets) {
