@@ -132,6 +132,9 @@ public class DataCacheStmtAnalyzer {
             Analyzer.analyze(queryStatement, context);
 
             SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            if (!(selectRelation.getRelation() instanceof TableRelation)) {
+                throw new SemanticException("Cache select only support olap table, external table or materialized view.");
+            }
             TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
             TableName tableName = tableRelation.getResolveTableName();
             if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
