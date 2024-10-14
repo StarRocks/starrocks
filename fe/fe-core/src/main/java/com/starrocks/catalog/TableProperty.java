@@ -205,7 +205,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views,
     // Indicates which tables do not refresh the base table when auto refresh
-    private List<TableName> excludedRefreshBaseTables;
+    private List<TableName> excludedRefreshTables;
 
     // This property only applies to materialized views
     private List<String> mvSortKeys;
@@ -487,7 +487,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildExcludedTriggerTables() {
         excludedTriggerTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
-        excludedRefreshBaseTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
+        excludedRefreshTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
         return this;
     }
 
@@ -845,12 +845,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
-    public List<TableName> getExcludedRefreshBaseTables() {
-        return excludedRefreshBaseTables;
+    public List<TableName> getExcludedRefreshTables() {
+        return excludedRefreshTables;
     }
 
-    public void setExcludedRefreshBaseTables(List<TableName> excludedRefreshBaseTables) {
-        this.excludedRefreshBaseTables = excludedRefreshBaseTables;
+    public void setExcludedRefreshTables(List<TableName> excludedRefreshTables) {
+        this.excludedRefreshTables = excludedRefreshTables;
     }
 
     public List<String> getMvSortKeys() {

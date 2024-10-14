@@ -1187,7 +1187,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return matchTable(excludedTriggerTables, dbName, tableName);
     }
 
-    public boolean shouldRefreshBaseTable(String tableName) {
+    public boolean shouldRefreshTable(String tableName) {
         long dbId = this.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -1203,8 +1203,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (tableProperty == null) {
             return true;
         }
-        List<TableName> excludedRefreshBaseTables = tableProperty.getExcludedRefreshBaseTables();
-        return matchTable(excludedRefreshBaseTables, dbName, tableName);
+        List<TableName> excludedRefreshTables = tableProperty.getExcludedRefreshTables();
+        return matchTable(excludedRefreshTables, dbName, tableName);
     }
 
     private boolean matchTable(List<TableName> excludedRefreshBaseTables, String dbName, String tableName) {

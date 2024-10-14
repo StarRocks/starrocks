@@ -1466,7 +1466,7 @@ public class PropertyAnalyzer {
                 String tableSb = getExcludeString(tables);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, tableSb);
-                materializedView.getTableProperty().setExcludedRefreshBaseTables(tables);
+                materializedView.getTableProperty().setExcludedRefreshTables(tables);
             }
             // resource_group
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {

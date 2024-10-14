@@ -127,7 +127,11 @@ public class MvRefreshArbiter {
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
-            if (!baseUpdatedPartitionNames.isEmpty() && mv.shouldRefreshBaseTable(baseTable.name)) {
+            boolean refreshTable = true;
+            if (baseTable.isMaterializedView()){
+                refreshTable = mv.shouldRefreshTable(baseTable.name);
+            }
+            if (!baseUpdatedPartitionNames.isEmpty() && refreshTable) {
                 return Optional.of(true);
             }
 

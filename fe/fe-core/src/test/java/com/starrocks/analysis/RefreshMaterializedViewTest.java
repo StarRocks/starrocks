@@ -118,8 +118,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-            Assert.assertTrue(mv.shouldRefreshBaseTable("t1"));
-            Assert.assertFalse(mv.shouldRefreshBaseTable("t2"));
+            Assert.assertTrue(mv.shouldRefreshTable("t1"));
+            Assert.assertFalse(mv.shouldRefreshTable("t2"));
 
             // cleanup
             starRocksAssert.dropTable("t1");
