@@ -52,10 +52,12 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
         : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           bool need_split, bool could_split_physically)
+                           bool need_split, bool could_split_physically, std::vector<BaseRowsetSharedPtr> base_rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _rowsets_inited(true),
+          _rowsets(std::move(rowsets)),
           _need_split(need_split),
           _could_split_physically(could_split_physically) {}
 

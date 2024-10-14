@@ -77,10 +77,10 @@ public:
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
-    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema,
-                                                       std::vector<BaseRowsetSharedPtr>* base_rowsets = nullptr);
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
-    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically);
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically,
+                                                       std::vector<BaseRowsetSharedPtr> base_rowsets);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 

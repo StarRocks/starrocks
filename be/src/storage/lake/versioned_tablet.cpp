@@ -65,8 +65,7 @@ StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer_with_schema(
     }
 }
 
-StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema,
-                                                                    std::vector<BaseRowsetSharedPtr>* base_rowsets) {
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
     //    if (base_rowsets != nullptr) {
     //        std::vector<std::shared_ptr<Rowset>> rowsets;
     //        for (auto& rowset : *base_rowsets) {
@@ -78,7 +77,16 @@ StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schem
 }
 
 StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema, bool could_split,
-                                                                    bool could_split_physically) {
+                                                                    bool could_split_physically,
+                                                                    std::vector<BaseRowsetSharedPtr> base_rowsets) {
+    if (!base_rowsets.empty()) {
+        std::vector<std::shared_ptr<Rowset>> rowsets;
+        for (auto& rowset : base_rowsets) {
+            rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+        }
+        return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                              could_split_physically, rowsets);
+    }
     return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
                                           could_split_physically);
 }
