@@ -251,6 +251,10 @@ struct TCompactionReq {
     2: optional bool is_base_compaction
 }
 
+struct TCompactionControlReq {
+    1: optional map<Types.TTableId, i64> table_to_disable_deadline
+}
+
 struct TUpdateSchemaReq {
     1: optional i64 index_id
     2: optional i64 schema_id
@@ -415,7 +419,13 @@ enum TTabletMetaType {
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
     STORAGE_TYPE,
+<<<<<<< HEAD
     MUTABLE_BUCKET_NUM
+=======
+    MUTABLE_BUCKET_NUM,
+    ENABLE_LOAD_PROFILE,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES
+>>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
 }
 
 struct TTabletMetaInfo {
@@ -479,6 +489,7 @@ struct TAgentTaskRequest {
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
+    32: optional TCompactionControlReq compaction_control_req
 }
 
 struct TAgentResult {

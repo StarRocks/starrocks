@@ -2095,6 +2095,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (mutableBucketNum == olapTable.getMutableBucketNum()) {
                 return;
             }
+<<<<<<< HEAD
+=======
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+            if (enableLoadProfile == olapTable.enableLoadProfile()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+            String baseCompactionForbiddenTimeRanges = properties.get(
+                    PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            if (baseCompactionForbiddenTimeRanges.equals(olapTable.getBaseCompactionForbiddenTimeRanges())) {
+                return;
+            }
+>>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
