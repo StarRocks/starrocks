@@ -75,7 +75,7 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
-    void set_rowsets(const std::vector<BaseRowsetSharedPtr>* rowsets) { _rowsets = rowsets; }
+    //void set_rowsets(const std::vector<BaseRowsetSharedPtr>* rowsets) { _rowsets = rowsets; }
     Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
@@ -101,7 +101,7 @@ protected:
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
-    const std::vector<BaseRowsetSharedPtr>* _rowsets = nullptr;
+    //const std::vector<BaseRowsetSharedPtr>* _rowsets = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
         *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
