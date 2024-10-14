@@ -88,6 +88,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private boolean withRuntimeFilters = false;
 
+    private List<Expr> preAggFnCalls;
+
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
@@ -133,6 +135,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     public SortInfo getSortInfo() {
         return info;
+    }
+
+    public void setPreAggFnCalls(List<Expr> preAggFnCalls) {
+        this.preAggFnCalls = preAggFnCalls;
     }
 
     @Override
@@ -242,6 +248,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
+        }
+        if (preAggFnCalls != null) {
+            msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
         }
     }
 

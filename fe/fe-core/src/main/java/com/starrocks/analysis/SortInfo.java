@@ -72,6 +72,8 @@ public class SortInfo {
     // sortTupleDesc_.
     private List<Expr> sortTupleSlotExprs_;
 
+    List<Expr> preAggFnCalls_;
+
     public SortInfo(List<Expr> partitionExprs, long partitionLimit, List<Expr> orderingExprs, List<Boolean> isAscOrder,
                     List<Boolean> nullsFirstParams) {
         Preconditions.checkArgument(orderingExprs.size() == isAscOrder.size());

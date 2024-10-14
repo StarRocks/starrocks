@@ -49,6 +49,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     private SortPhase sortPhase;
     private TopNType topNType;
     private boolean isSplit;
+
     private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
@@ -85,6 +86,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
+        this.partitionPreAggCall = ImmutableMap.of();
         Preconditions.checkState(limit != 0);
     }
 
@@ -126,6 +128,10 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public List<Ordering> getOrderByElements() {
         return orderByElements;
+    }
+
+    public ImmutableMap<ColumnRefOperator, CallOperator> getPartitionPreAggCall() {
+        return partitionPreAggCall;
     }
 
     @Override
@@ -197,12 +203,13 @@ public class LogicalTopNOperator extends LogicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                sortPhase == that.sortPhase && topNType == that.topNType;
+                sortPhase == that.sortPhase && topNType == that.topNType &&
+                Objects.equals(partitionPreAggCall, that.partitionPreAggCall);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit);
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit, partitionPreAggCall);
     }
 
     public static Builder builder() {

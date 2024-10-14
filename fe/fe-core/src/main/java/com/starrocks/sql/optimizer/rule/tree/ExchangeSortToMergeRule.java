@@ -50,7 +50,7 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                 OptExpression.Builder partialSortOptBuilder = OptExpression.builder()
                         .setOp(new PhysicalTopNOperator(topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
                                 topN.getPartitionByColumns(), topN.getPartitionLimit(), SortPhase.PARTIAL,
-                                topN.getTopNType(), false, topN.isEnforced(), null, null))
+                                topN.getTopNType(), false, topN.isEnforced(), null, null, null))
                         .setInputs(optExpr.inputAt(0).getInputs())
                         .setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
                         .setStatistics(optExpr.getStatistics())
@@ -61,7 +61,7 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                                         topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
                                         topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true,
                                         topN.isEnforced(), null,
-                                        topN.getProjection()))
+                                        topN.getProjection(), null))
                         .setInputs(Lists.newArrayList(partialSortOptBuilder.build()))
                         .setLogicalProperty(optExpr.getLogicalProperty())
                         .setStatistics(optExpr.getStatistics())
