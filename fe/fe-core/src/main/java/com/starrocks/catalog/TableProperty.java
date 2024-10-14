@@ -1049,11 +1049,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionLiveNumber();
         buildReplicatedStorage();
         buildBucketSize();
-<<<<<<< HEAD
         buildMutableBucketNum();
-=======
         buildEnableLoadProfile();
->>>>>>> 2a31794679 ([Feature] Unify load profile through analyze profile & support session/table profile collect granularity (#47548))
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
