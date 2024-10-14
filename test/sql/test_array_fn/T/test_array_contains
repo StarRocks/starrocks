@@ -45,3 +45,26 @@ set @arr = array_repeat("abcdefg", 1000000);
 select sum(array_contains(@arr, "abcdefg")) from t;
 select sum(array_contains(@arr, str)) from t;
 
+-- name: test_array_contains_with_decimal
+create table t (
+    k bigint,
+    v1 array<decimal(38,5)>,
+    v2 array<array<decimal(38,5)>>,
+    v3 array<array<array<decimal(38,5)>>>
+) duplicate key (`k`)
+distributed by random buckets 1
+properties('replication_num'='1');
+
+insert into t values (1,[1.1], [[1.1]],[[[1.1]]]);
+
+select array_contains(v1, 1.1) from t;
+select array_contains(v2, [1.1]) from t;
+select array_contains(v3, [[1.1]]) from t;
+select array_contains(v2, v1) from t;
+select array_contains(v3, v2) from t;
+
+select array_position(v1, 1.1) from t;
+select array_position(v2, [1.1]) from t;
+select array_position(v3, [[1.1]]) from t;
+select array_position(v2, v1) from t;
+select array_position(v3, v2) from t;
