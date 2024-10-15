@@ -31,6 +31,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/del_vector.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -38,6 +41,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
+#include "util/url_coding.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -287,6 +291,22 @@ public:
             return nullptr;
         }
         return ptr;
+    }
+
+    static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
+        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        RETURN_IF(nullptr == tablet_manager, "");
+        auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
+        RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
+        return proto_to_json(*meta_st.value());
+    }
+
+    static std::string decode_encryption_meta(const std::string& meta_base64) {
+        EncryptionMetaPB pb;
+        std::string meta_bytes;
+        RETURN_IF(!base64_decode(meta_base64, &meta_bytes), "bad base64 string");
+        RETURN_IF(!pb.ParseFromString(meta_bytes), "parse encryption meta failed");
+        return proto_to_json(pb);
     }
 
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
@@ -563,6 +583,8 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
+            REG_STATIC_METHOD(StorageEngineRef, get_lake_tablet_metadata_json);
+            REG_STATIC_METHOD(StorageEngineRef, decode_encryption_meta);
             REG_STATIC_METHOD(StorageEngineRef, reset_delvec);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
