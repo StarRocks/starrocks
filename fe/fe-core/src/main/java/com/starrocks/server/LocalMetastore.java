@@ -1623,6 +1623,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + "(" + db.getId() + ") has been dropped");
         }
         try {
+            olapTable = checkTable(db, table.getId());
             // check if meta changed
             checkIfMetaChange(olapTable, copiedTable, table.getName());
 
