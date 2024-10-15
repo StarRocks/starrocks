@@ -237,7 +237,6 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
 
 void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, CacheValue& cache_value,
                                                          PerLaneBufferPtr& buffer, int64_t version) {
-    LOG(INFO) << "_handle_stale_cache_value_for_non_pk";
     // Try to reuse partial cache result when cached version is less than required version, delta versions
     // should be captured at first.
     std::shared_ptr<BaseTablet> base_tablet;
@@ -261,12 +260,10 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
         rowsets_acq_rel = std::move(acq_rel);
 
     } else {
-        LOG(INFO) << "here to capture tablet rowset";
         auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(
                 tablet_id, cache_value.version + 1, version);
         // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
         if (!status.ok()) {
-            LOG(INFO) << "status not ok " << status.status().message();
             buffer->state = PLBS_MISS;
             buffer->cached_version = 0;
             return;
@@ -300,7 +297,6 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     // the tablet has non-empty delta rowsets; then cache result is not reuse, so cache miss.
     if (!has_delete_predicates.ok() || has_delete_predicates.value() ||
         (!_cache_param.can_use_multiversion && !all_rs_empty)) {
-        LOG(INFO) << "has predicates";
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
@@ -316,8 +312,6 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
         buffer->chunks.back()->owner_info().set_last_chunk(true);
         return;
     }
-
-    LOG(INFO) << "partial hit";
     // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
@@ -335,7 +329,6 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
 void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrocks::query_cache::CacheValue& cache_value,
                                                      starrocks::query_cache::PerLaneBufferPtr& buffer,
                                                      int64_t version) {
-    LOG(INFO) << "_handle_stale_cache_value_for_pk";
     DCHECK(_cache_param.keys_type == TKeysType::PRIMARY_KEYS);
     if (!_cache_param.is_lake) {
         // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
@@ -372,14 +365,12 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
 
         auto& [tablet, rowsets] = status.value();
         if (!rowsets.empty()) {
-            LOG(INFO) << "cache miss pk";
             buffer->state = PLBS_MISS;
             buffer->cached_version = 0;
             return;
         }
     }
 
-    LOG(INFO) << "cache hit pk";
     buffer->cached_version = cache_value.version;
     auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
     _update_probe_metrics(tablet_id, chunks);
@@ -402,7 +393,6 @@ void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<C
 }
 
 bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
-    LOG(INFO) << "probe cache";
     _all_tablets.insert(tablet_id);
     // allocate lane and PerLaneBuffer for tablet_id
     int64_t lane = _lane_arbiter->must_acquire_lane(tablet_id);
@@ -414,7 +404,6 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
     buffer->required_version = version;
 
     if (_cache_param.force_populate || !_cache_param.cache_key_prefixes.count(tablet_id)) {
-        LOG(INFO) << "aaaaaaa";
         buffer->state = PLBS_MISS;
         return false;
     }
@@ -430,7 +419,6 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
 
     auto& cache_value = probe_status.value();
     if (cache_value.version == version) {
-        LOG(INFO) << "cache_value.version == version";
         // Cache HIT_TOTAL when cached version equals to required version
         buffer->state = PLBS_HIT_TOTAL;
         buffer->cached_version = cache_value.version;
@@ -438,7 +426,6 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
         _update_probe_metrics(tablet_id, chunks);
         buffer->chunks = std::move(chunks);
     } else if (cache_value.version > version) {
-        LOG(INFO) << "cache_value.version > version";
         // It rarely happens that required version is less that cached version, the required version become
         // stale when the query is postponed to be processed because of some reasons, for examples, non-deterministic
         // query scheduling, network congestion etc. make queries be executed out-of-order. so we must prevent stale
@@ -446,7 +433,6 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
     } else {
-        LOG(INFO) << "handle stale cache value dddddd";
         // Incremental updating cause the cached value become stale, It is a very critical and complex situation.
         // here we support a multi-version cache mechanism.
         _handle_stale_cache_value(tablet_id, cache_value, buffer, version);
