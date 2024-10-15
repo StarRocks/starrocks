@@ -940,6 +940,7 @@ public class AnalyzerUtils {
         }
     }
 
+    // The conception is not very clear, be careful when use it.
     private static class ExternalTableCollector extends TableCollector {
         List<Table> tables;
         Predicate<Table> predicate;
@@ -952,9 +953,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            boolean internal = CatalogMgr.isInternalCatalog(table.getCatalogName())
-                    || table.isNativeTableOrMaterializedView()
-                    || table.isOlapView();
+            boolean internal = table.isNativeTableOrMaterializedView() || table.isOlapView();
             if (!internal && predicate.test(table)) {
                 tables.add(table);
             }
