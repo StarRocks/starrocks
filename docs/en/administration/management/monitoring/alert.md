@@ -211,7 +211,7 @@ Use the following commands to check for directories occupying large amounts of s
 du -sh /${meta_dir} --max-depth=1
 ```
 
-If the metadata directory occupies a lot of space, it is usually because the **bdb** directory is large, possibly due to CheckPoint failure. Refer to the [CheckPoint Failure Alert]() for troubleshooting. If this method does not solve the issue, contact the technical support team.
+If the metadata directory occupies a lot of space, it is usually because the **bdb** directory is large, possibly due to CheckPoint failure. Refer to the [CheckPoint Failure Alert](#checkpoint-failure-alert) for troubleshooting. If this method does not solve the issue, contact the technical support team.
 
 ## Cluster Service Exception Alerts
 
@@ -570,7 +570,7 @@ SELECT stmt FROM starrocks_audit_db__.starrocks_audit_tbl__ WHERE state='ERR';
 
 Note that queries that fail due to syntax errors or timeouts are also recorded in `starrocks_fe_query_err_rate`.
 
-For query failures caused by kernel issues, search the `fe.log` for the error and obtain the complete stack trace and [Query Dump](), and contact the support team for troubleshooting.
+For query failures caused by kernel issues, search the `fe.log` for the error and obtain the complete stack trace and [Query Dump](../../../faq/Dump_query.md), and contact the support team for troubleshooting.
 
 #### Query Overload Alert
 
