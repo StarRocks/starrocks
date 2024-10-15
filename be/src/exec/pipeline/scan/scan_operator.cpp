@@ -449,8 +449,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                            << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
                 _set_scan_status(start_status);
             }
+            Status status;
 
-            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            if (start_status.ok()) {
+                status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            }
 
             if (!status.ok() && !status.is_end_of_file()) {
                 LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
