@@ -15,12 +15,12 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' 
-          | '/jobs' | '/statistic' | '/tasks' | '/frontends' 
-          | '/brokers' | '/resources' | '/load_error_hub' 
-          | '/transactions' | '/monitor' | '/current_queries' 
-          | '/current_backend_instances' | '/cluster_balance' 
-          | '/routine_loads' | '/colocation_group' | '/catalog' }
+SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs' 
+          | '/statistic' | '/tasks' | '/frontends' | '/brokers' 
+          | '/resources' | '/load_error_hub' | '/transactions' 
+          | '/monitor' | '/current_queries' | '/current_backend_instances' 
+          | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
+          | '/catalog' | '/replications' }
 ```
 
 ## 参数说明
@@ -45,6 +45,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs'
 | '/routine_loads'             | 查看当前集群的 Routine Load 导入信息。                       |
 | '/colocation_group'          | 查看当前集群的 Colocate Join Group 信息。                    |
 | '/catalog'                   | 查看当前集群的 Catalog 信息。                                |
+| '/replications'              | 查看当前集群的数据迁移任务信息。                               |
 
 ## 示例
 
@@ -440,3 +441,31 @@ mysql> SHOW PROC '/catalog';
 | Catalog  | Catalog 名称。 |
 | Type     | Catalog 类型。 |
 | Comment  | Catalog 描述。 |
+
+示例十四：查看当前集群的数据迁移任务信息。
+
+```Plain
+mysql> SHOW PROC '/replications';
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| JobID                                           | DatabaseID | TableID | TxnID | CreatedTime         | FinishedTime        | State     | Progress | Error |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+| FAILOVER_GROUP_group1-11006-11010-1725593360156 | 11006      | 11010   | 99    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11009-1725593360161 | 11006      | 11009   | 98    | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11074-1725593360161 | 11006      | 11074   | 100   | 2024-09-06 11:29:20 | 2024-09-06 11:29:21 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-12474-1725593360250 | 11006      | 12474   | 102   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-11024-1725593360293 | 11006      | 11024   | 101   | 2024-09-06 11:29:20 | 2024-09-06 11:29:24 | COMMITTED |          |       |
+| FAILOVER_GROUP_group1-11006-13861-1725607270963 | 11006      | 13861   | 627   | 2024-09-06 15:21:10 | 2024-09-06 15:21:14 | COMMITTED |          |       |
++-------------------------------------------------+------------+---------+-------+---------------------+---------------------+-----------+----------+-------+
+```
+
+| **返回**      | **说明**                        |
+| ------------ | ------------------------------- |
+| JobID        | 作业 ID。                        |
+| DatabaseID   | 数据库 ID。                      |
+| TableID      | 表 ID。                          |
+| TxnID        | 事务 ID。                        |
+| CreatedTime  | 任务创建时间。                    |
+| FinishedTime | 任务完成时间。                    |
+| State        | 任务状态。有效值：INITIALIZING、SNAPSHOTING、REPLICATING、COMMITTED、ABORTED。 |
+| Progress     | 任务进度。                       |
+| Error        | 错误信息（如有）。                 |
