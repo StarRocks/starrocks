@@ -39,7 +39,6 @@ import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -550,7 +549,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                         if (colocateTableIndex.isColocateTable(olapTable.getId())) {
-                            throw new DdlException("table " + olapTable.getName() + " is colocate table, loc label cannot be changed!");
+                            throw new DdlException("table " + olapTable.getName() +
+                                    " is colocate table, loc label cannot be changed!");
                         }
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else {

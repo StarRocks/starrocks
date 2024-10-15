@@ -707,11 +707,11 @@ public class ColocateTableIndex implements Writable {
                 ColocateGroupSchema groupSchema = group2Schema.get(groupId);
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
-                info.add(String.valueOf(groupSchema.getLocationMap()));
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
                         Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!isGroupUnstable(groupId)));
+                info.add(String.valueOf(groupSchema.getLocationMap()));
                 infos.add(info);
             }
         } finally {

@@ -35,6 +35,7 @@
 package com.starrocks.clone;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -53,7 +54,9 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -74,6 +77,7 @@ import org.junit.runners.MethodSorters;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +97,11 @@ public class ColocateTableBalancerTest {
     private Backend backend7;
     private Backend backend8;
     private Backend backend9;
+
+    private Backend be1InRack1;
+    private Backend be2InRack1;
+    private Backend be1InRack2;
+    private Backend be2InRack2;
 
     private Map<Long, Double> mixLoadScores;
 
@@ -122,6 +131,20 @@ public class ColocateTableBalancerTest {
         backend7 = new Backend(7L, "192.168.1.8", 9050);
         backend8 = new Backend(8L, "192.168.1.8", 9050);
         backend9 = new Backend(9L, "192.168.1.8", 9050);
+
+        be1InRack1 = new Backend(1L, "192.168.1.1", 9050);
+        Map<String, String> rack1 = new HashMap<>();
+        rack1.put("rack", "rack1");
+        be1InRack1.setLocation(rack1);
+        be2InRack1 = new Backend(2L, "192.168.1.2", 9050);
+        be2InRack1.setLocation(rack1);
+
+        be1InRack2 = new Backend(3L, "192.168.1.3", 9050);
+        Map<String, String> rack2 = new HashMap<>();
+        rack2.put("rack", "rack2");
+        be1InRack2.setLocation(rack2);
+        be2InRack2 = new Backend(4L, "192.168.1.4", 9050);
+        be2InRack2.setLocation(rack2);
 
         mixLoadScores = Maps.newHashMap();
         mixLoadScores.put(1L, 0.1);
@@ -427,6 +450,272 @@ public class ColocateTableBalancerTest {
         System.out.println(balancedBackendsPerBucketSeq);
         Assert.assertFalse(changed);
         Assert.assertTrue(balancedBackendsPerBucketSeq.isEmpty());
+
+        try {
+            Thread.sleep(1000L);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+    }
+
+    @Test
+    public void testPerGroupRepairWithLocationLabel1(@Mocked SystemInfoService infoService,
+                                                     @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
+        new Expectations() {
+            {
+                Thread.sleep(2000);
+                infoService.getBackend(1L);
+                result = be1InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(2L);
+                result = be2InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(3L);
+                result = be1InRack2;
+                minTimes = 0;
+
+                infoService.getBackend(4L);
+                result = be2InRack2;
+                minTimes = 0;
+
+                statistic.getBackendLoadStatistic(anyLong);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 2,
+                PropertyAnalyzer.analyzeLocationStringToMap("rack:rack2"));
+        Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
+        group2Schema.put(groupId, groupSchema);
+
+        // 1. Repair location balance
+        FeConstants.runningUnitTest = true;
+        // All current BEs
+        ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
+                Lists.newArrayList(1L, 2L, 2L, 3L, 1L, 2L, 2L, 3L, 2L, 4L), 2);
+        Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
+
+        List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+        List<Long> allAvailableBackends = Lists.newArrayList(3L, 4L);
+        Set<Long> unavailableBEIds = new HashSet<Long>();
+        unavailableBEIds.add(1L);
+        unavailableBEIds.add(2L);
+
+        boolean changed = (Boolean) Deencapsulation
+                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBEIds, allAvailableBackends,
+                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+        Assert.assertTrue(changed);
+        Assert.assertFalse(balancedBackendsPerBucketSeq.isEmpty());
+
+        balancedBackendsPerBucketSeq.forEach((List<Long> besByBucket) -> {
+            Assert.assertTrue(besByBucket.contains(3L) || besByBucket.contains(4L));
+            Assert.assertFalse(besByBucket.contains(1L) || besByBucket.contains(2L));
+        });
+
+        try {
+            Thread.sleep(1000L);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+    }
+
+    @Test
+    public void testPerGroupRepairWithLocationLabel2(@Mocked SystemInfoService infoService,
+                                                     @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
+        new Expectations() {
+            {
+                Thread.sleep(2000);
+                infoService.getBackend(1L);
+                result = be1InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(2L);
+                result = be2InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(3L);
+                result = be1InRack2;
+                minTimes = 0;
+
+                statistic.getBackendLoadStatistic(anyLong);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 2,
+                PropertyAnalyzer.analyzeLocationStringToMap("rack:rack1"));
+        Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
+        group2Schema.put(groupId, groupSchema);
+
+        // 1. Repair location balance
+        FeConstants.runningUnitTest = true;
+        // All current BEs
+        ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
+                Lists.newArrayList(1L, 2L, 3L, 1L, 3L, 1L, 2L, 3L, 1L, 3L), 2);
+        Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
+
+        List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+        List<Long> allAvailableBackends = Lists.newArrayList(1L, 2L);
+        Set<Long> unavailableBEIds = new HashSet<Long>();
+        unavailableBEIds.add(3L);
+
+        boolean changed = (Boolean) Deencapsulation
+                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBEIds, allAvailableBackends,
+                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+        Assert.assertTrue(changed);
+        Assert.assertFalse(balancedBackendsPerBucketSeq.isEmpty());
+
+        balancedBackendsPerBucketSeq.forEach((List<Long> besByBucket) -> {
+            Assert.assertFalse(besByBucket.contains(3L));
+        });
+
+        try {
+            Thread.sleep(1000L);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+    }
+
+    // To check even distribution across labels
+    @Test
+    public void testPerGroupRepairWithLocationLabel3(@Mocked SystemInfoService infoService,
+                                                     @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
+        new Expectations() {
+            {
+                Thread.sleep(2000);
+                infoService.getBackend(1L);
+                result = be1InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(2L);
+                result = be2InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(3L);
+                result = be1InRack2;
+                minTimes = 0;
+
+                statistic.getBackendLoadStatistic(anyLong);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 2,
+                PropertyAnalyzer.analyzeLocationStringToMap("rack:rack1,rack:rack2"));
+        Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
+        group2Schema.put(groupId, groupSchema);
+
+        // 1. Repair location balance
+        FeConstants.runningUnitTest = true;
+        // All current BEs
+        ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
+                Lists.newArrayList(1L, 2L, 1L, 2L, 1L, 2L, 1L, 2L, 1L, 2L), 2);
+        Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
+
+        List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+        List<Long> allAvailableBackends = Lists.newArrayList(1L, 2L, 3L);
+
+        boolean changed = (Boolean) Deencapsulation
+                .invoke(balancer, "doRelocateAndBalance", groupId, new HashSet<Long>(), allAvailableBackends,
+                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+        Assert.assertTrue(changed);
+        Assert.assertFalse(balancedBackendsPerBucketSeq.isEmpty());
+
+        balancedBackendsPerBucketSeq.forEach((List<Long> besByBucket) -> {
+            // Replica in each bucket must be assigned to rack2
+            Assert.assertTrue(besByBucket.contains(3L));
+        });
+
+        try {
+            Thread.sleep(1000L);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
+    }
+
+    @Test
+    public void testPerGroupRepairWithLocationLabel4(@Mocked SystemInfoService infoService,
+                                                     @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
+        new Expectations() {
+            {
+                Thread.sleep(2000);
+                infoService.getBackend(1L);
+                result = be1InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(2L);
+                result = be2InRack1;
+                minTimes = 0;
+
+                infoService.getBackend(3L);
+                result = be1InRack2;
+                minTimes = 0;
+
+                statistic.getBackendLoadStatistic(anyLong);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 2,
+                PropertyAnalyzer.analyzeLocationStringToMap("rack:rack1,rack:rack2"));
+        Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
+        group2Schema.put(groupId, groupSchema);
+
+        // 1. Repair location balance
+        FeConstants.runningUnitTest = true;
+        // All current BEs
+        ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
+                Lists.newArrayList(1L, 3L, 2L, 3L, 1L, 3L, 2L, 3L, 1L, 3L), 2);
+        Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
+
+        List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+        List<Long> allAvailableBackends = Lists.newArrayList(1L, 2L);
+        Set<Long> unavailableBEIds = new HashSet<Long>();
+        unavailableBEIds.add(3L);
+
+        boolean changed = (Boolean) Deencapsulation
+                .invoke(balancer, "doRelocateAndBalance", groupId, unavailableBEIds, allAvailableBackends,
+                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+        Assert.assertTrue(changed);
+        Assert.assertFalse(balancedBackendsPerBucketSeq.isEmpty());
+
+        balancedBackendsPerBucketSeq.forEach((List<Long> besByBucket) -> {
+            Assert.assertFalse(besByBucket.contains(3L));
+        });
 
         try {
             Thread.sleep(1000L);
@@ -881,6 +1170,7 @@ public class ColocateTableBalancerTest {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
         SystemInfoService infoService = new SystemInfoService();
         colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+        setGroup2Schema(groupId, colocateTableIndex, 4, (short) 3);
 
         Backend be2 = new Backend(2L, "", 2002);
         be2.setAlive(true);
@@ -978,8 +1268,109 @@ public class ColocateTableBalancerTest {
         };
 
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
-        List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", infoService);
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds",
+                infoService, groupSchema);
         Assert.assertArrayEquals(new long[] {2L, 4L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
+    }
+
+    @Test
+    public void testGetAvailableBeIdsWithLocation(@Mocked SystemInfoService infoService,
+                                      @Mocked Backend myBackend1,
+                                      @Mocked Backend myBackend2,
+                                      @Mocked Backend myBackend3,
+                                      @Mocked Backend myBackend4) {
+        List<Long> clusterBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L);
+
+        Map<String, String> rack1 = Maps.newHashMap();
+        rack1.put("rack", "rack1");
+        Pair<String, String> singleLevelLocation1 = new Pair<>("rack", "rack1");
+        Map<String, String> rack2 = Maps.newHashMap();
+        rack2.put("rack", "rack2");
+        Pair<String, String> singleLevelLocation2 = new Pair<>("rack", "rack2");
+
+        new Expectations() {
+            {
+                infoService.getBackendIds(false);
+                result = clusterBackendIds;
+                minTimes = 0;
+
+                infoService.getBackend(1L);
+                result = myBackend1;
+                minTimes = 0;
+                myBackend1.isAvailable();
+                result = true;
+                minTimes = 0;
+                myBackend1.getLocation();
+                result = rack1;
+                minTimes = 0;
+                myBackend1.getSingleLevelLocationKV();
+                result = singleLevelLocation1;
+                minTimes = 0;
+
+                // backend2 is available
+                infoService.getBackend(2L);
+                result = myBackend2;
+                minTimes = 0;
+                myBackend2.isAvailable();
+                result = true;
+                minTimes = 0;
+                myBackend2.getLocation();
+                result = rack1;
+                minTimes = 0;
+                myBackend2.getSingleLevelLocationKV();
+                result = singleLevelLocation1;
+                minTimes = 0;
+
+                infoService.getBackend(3L);
+                result = myBackend3;
+                minTimes = 0;
+                myBackend3.isAvailable();
+                result = true;
+                minTimes = 0;
+                myBackend3.getLocation();
+                result = rack2;
+                minTimes = 0;
+                myBackend3.getSingleLevelLocationKV();
+                result = singleLevelLocation2;
+                minTimes = 0;
+
+                infoService.getBackend(4L);
+                result = myBackend4;
+                minTimes = 0;
+                myBackend4.isAvailable();
+                result = true;
+                minTimes = 0;
+                myBackend4.getLocation();
+                result = rack2;
+                minTimes = 0;
+                myBackend4.getSingleLevelLocationKV();
+                result = singleLevelLocation2;
+                minTimes = 0;
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        Multimap<String, String> locationMap = HashMultimap.create();
+        locationMap.put("rack", "rack1");
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols,
+                5, (short) 3, locationMap);
+        List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds",
+                infoService, groupSchema);
+        Assert.assertArrayEquals(new long[] {1L, 2L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
+
+        availableBeIds.clear();
+        locationMap.clear();
+        locationMap.put("rack", "rack2");
+        groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3, locationMap);
+        availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", infoService, groupSchema);
+        Assert.assertArrayEquals(new long[] {3L, 4L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
 
     @Test
