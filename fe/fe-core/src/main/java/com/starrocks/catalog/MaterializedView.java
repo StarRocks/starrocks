@@ -1196,9 +1196,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         String dbName = db.getFullName();
 
-        if (!isLoadTriggeredRefresh()) {
-            return false;
-        }
         TableProperty tableProperty = getTableProperty();
         if (tableProperty == null) {
             return true;
