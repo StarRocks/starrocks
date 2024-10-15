@@ -288,6 +288,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
             max_version = std::max(max_version, rs->end_version());
         }
     } else {
+        all_rs_empty = base_rowsets.empty();
         min_version = cache_value.version + 1;
         max_version = version;
     }
