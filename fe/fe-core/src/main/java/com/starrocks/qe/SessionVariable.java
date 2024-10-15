@@ -1846,7 +1846,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewPushDownRewrite = false;
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE)
-    private boolean enableMaterializedViewTimeSeriesPushDownRewrite = false;
+    private boolean enableMaterializedViewTimeSeriesPushDownRewrite = true;
 
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
     private boolean enableForceRuleBasedMvRewrite = true;
