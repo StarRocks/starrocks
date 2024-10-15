@@ -153,6 +153,10 @@ public class ScalarOperationToDeltaLakeExpr {
                 return null;
             }
             Column column = context.getColumn(columnName);
+            // For struct subfield, cannot get the column for now, just return null
+            if (column == null) {
+                return null;
+            }
 
             DeltaDataType resultType = getResultType(columnName, context);
             Literal literal = getLiteral(operator.getChild(1), resultType, context.isPartitionColumn(columnName));
