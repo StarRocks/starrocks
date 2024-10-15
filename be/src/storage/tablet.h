@@ -424,8 +424,8 @@ private:
 
     // Keep the rowsets committed but not publish which rowset meta without schema
     phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
-                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5,
-                                  std::mutex, true>
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
             _committed_rs_map;
 
     // States used for updatable tablets only
