@@ -638,11 +638,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
-
-    //    if (!morsel->rowsets().empty()) {
-    //        _data_source->set_rowsets(&(morsel->rowsets()));
-    //    }
-
     _data_source->set_split_context(split_context);
 
     _data_source->set_morsel(scan_morsel);
