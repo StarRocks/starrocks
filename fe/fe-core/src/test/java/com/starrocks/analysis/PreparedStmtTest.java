@@ -30,6 +30,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashSet;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -95,6 +97,22 @@ public class PreparedStmtTest{
         StatementBase statement = SqlParser.parse(prepareSql, ctx.getSessionVariable()).get(0);
         StmtExecutor executor = new StmtExecutor(ctx, statement);
         Assert.assertFalse(executor.isForwardToLeader());
+    }
+
+    @Test
+    public void testPrepareWithSelectConst() throws Exception {
+        String sql = "PREPARE stmt1 FROM select ?, ?, ?;";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(3, stmt.getParameters().size());
+
+        HashSet<Integer> idSet = new HashSet<Integer>();
+        for (Expr expr : stmt.getParameters()) {
+            Assert.assertEquals(true, idSet.add(expr.hashCode()));
+        }
+
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
+        Assert.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
     }
 
     @Test
