@@ -590,6 +590,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
+    @ConfField
+    public static long checkpoint_timeout_seconds = 24 * 3600;
+
     /**
      * the max txn number which bdbje can roll back when trying to rejoin the group
      */

@@ -107,4 +107,8 @@ public class RestBaseResult {
     public String getMessage() {
         return message;
     }
+
+    public ActionStatus getStatus() {
+        return status;
+    }
 }
