@@ -1038,7 +1038,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
         size_t build_index = _probe_state->next[i];
         if (build_index != 0) {
-            do {
+            if (_table_items->used_buckets == _table_items->row_count) {
                 if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
@@ -1051,9 +1051,24 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                     RETURN_IF_CHUNK_FULL()
                 }
                 probe_cont++;
-                auto next_index = _table_items->next[build_index];
-                build_index = next_index;
-            } while (build_index != 0);
+            } else {
+                do {
+                    if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                        _probe_state->probe_index[match_count] = i;
+                        _probe_state->build_index[match_count] = build_index;
+                        match_count++;
+
+                        if constexpr (first_probe) {
+                            _probe_state->cur_row_match_count++;
+                            _probe_state->probe_match_filter[i] = 1;
+                        }
+                        RETURN_IF_CHUNK_FULL()
+                    }
+                    probe_cont++;
+                    auto next_index = _table_items->next[build_index];
+                    build_index = next_index;
+                } while (build_index != 0);
+            }
 
             if constexpr (first_probe) {
                 if (_probe_state->cur_row_match_count > 1) {
