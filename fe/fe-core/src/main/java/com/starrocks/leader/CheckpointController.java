@@ -37,21 +37,35 @@ package com.starrocks.leader;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.http.meta.MetaService;
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
-import org.apache.commons.io.output.NullOutputStream;
+import com.starrocks.thrift.TDoCheckpointRequest;
+import com.starrocks.thrift.TDoCheckpointResponse;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import io.trino.hive.$internal.com.google.common.base.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -62,17 +76,19 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Checkpoint daemon is running on master node. handle the checkpoint work for starrocks.
+ * CheckpointController daemon is running on master node. handle the checkpoint work for starrocks.
  */
-public class Checkpoint extends FrontendDaemon {
-    public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
+public class CheckpointController extends FrontendDaemon {
+    public static final Logger LOG = LogManager.getLogger(CheckpointController.class);
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
     private static final int READ_TIMEOUT_SECOND = 1;
 
-    private GlobalStateMgr globalStateMgr;
     private final String imageDir;
     private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
@@ -81,30 +97,30 @@ public class Checkpoint extends FrontendDaemon {
 
     private final Set<String> nodesToPushImage;
 
-    public Checkpoint(Journal journal) {
-        this("leaderCheckpointer", journal, "" /* subDir */, true /* belongToGlobalStateMgr */);
-    }
+    private volatile String workerNodeName;
+    private volatile long journalId;
+    private volatile BlockingQueue<Pair<Boolean, String>> result;
 
-    public Checkpoint(String name, Journal journal, String subDir, boolean belongToGlobalStateMgr) {
+    public CheckpointController(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
         this.journal = journal;
         this.subDir = subDir;
-        this.belongToGlobalStateMgr = belongToGlobalStateMgr;
+        this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
         nodesToPushImage = new HashSet<>();
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        long imageVersion = 0;
-        long logVersion = 0;
+        long imageJournalId = 0;
+        long maxJournalId = 0;
         try {
             Storage storage = new Storage(imageDir);
             // get max image version
-            imageVersion = storage.getImageJournalId();
+            imageJournalId = storage.getImageJournalId();
             // get max finalized journal id
-            logVersion = journal.getFinalizedJournalId();
-            LOG.info("checkpoint imageVersion {}, logVersion {}", imageVersion, logVersion);
+            maxJournalId = journal.getFinalizedJournalId();
+            LOG.info("checkpoint imageVersion {}, logVersion {}", imageJournalId, maxJournalId);
         } catch (IOException e) {
             LOG.error("Failed to get storage info", e);
             return;
@@ -112,8 +128,9 @@ public class Checkpoint extends FrontendDaemon {
 
         // Step 1: create image
         boolean newImageCreated = false;
-        if (imageVersion < logVersion) {
-            newImageCreated = createImage(logVersion);
+        if (imageJournalId < maxJournalId) {
+            this.journalId = maxJournalId;
+            newImageCreated = createImage();
         }
         if (newImageCreated) {
             // Push the image file to all other nodes
@@ -125,7 +142,7 @@ public class Checkpoint extends FrontendDaemon {
 
         // Step2: push image
         int needToPushCnt = nodesToPushImage.size();
-        long newImageVersion = newImageCreated ? logVersion : imageVersion;
+        long newImageVersion = newImageCreated ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
             pushImage(newImageVersion);
         }
@@ -136,7 +153,7 @@ public class Checkpoint extends FrontendDaemon {
         //             2. needToPushCnt > 0 means there are other nodes in the cluster,
         //                we must make sure all the other nodes have got the new image and then delete old journals.
         if ((newImageCreated && needToPushCnt == 0)
-                || (needToPushCnt > 0 && nodesToPushImage.size() == 0)) {
+                || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
             deleteOldJournals(newImageVersion);
         }
 
@@ -154,6 +171,147 @@ public class Checkpoint extends FrontendDaemon {
                     LOG.error("Leader delete old image file from dir {} fail.", dirsToClean, e);
                 }
             }
+        }
+    }
+
+    private boolean createImage() {
+        result = new ArrayBlockingQueue<>(1);
+        workerNodeName = selectWorker();
+        if (workerNodeName == null) {
+            LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
+            return false;
+        }
+
+        // check the worker node is available
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
+        if (frontend == null || !frontend.isAlive()) {
+            LOG.warn("worker node: {} is not available", workerNodeName);
+            return false;
+        }
+
+        try {
+            Pair<Boolean, String> ret = result.poll(Config.checkpoint_timeout_s, TimeUnit.SECONDS);
+            if (ret == null) {
+                LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
+                return false;
+            }
+            if (!ret.first) {
+                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.second);
+                return false;
+            }
+
+            // download Image
+            downloadImage();
+
+        } catch (Exception e) {
+            LOG.warn("create image failed", e);
+            return false;
+        } finally {
+            workerNodeName = null;
+        }
+
+        return true;
+    }
+
+    private void downloadImage() throws IOException {
+        try {
+            downloadImage(ImageFormatVersion.v1, imageDir);
+        } catch (IOException e) {
+            if (belongToGlobalStateMgr && e instanceof FileNotFoundException) {
+                LOG.warn("download image of v1 version failed, ignore", e);
+            } else {
+                throw e;
+            }
+        }
+
+        if (belongToGlobalStateMgr) {
+            downloadImage(ImageFormatVersion.v2, imageDir + "/v2");
+        }
+    }
+
+    private void downloadImage(ImageFormatVersion imageFormatVersion, String imageDir) throws IOException {
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
+        if (frontend == null || !frontend.isAlive()) {
+            String errMessage = String.format("worker node: %s not available", workerNodeName);
+            LOG.warn(errMessage);
+            throw new IOException(errMessage);
+        }
+        File dir = new File(imageDir);
+        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), frontend.getRpcPort()) +
+                "/image?version=" + journalId
+                + "&subdir=" + subDir
+                + "&image_format_version=" + imageFormatVersion;
+        MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir);
+    }
+
+    private String selectWorker() {
+        List<Frontend> frontends = GlobalStateMgr.getServingState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
+        frontends.sort((fe1, fe2) -> {
+            if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
+                return 0;
+            } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
+                return 1;
+            } else {
+                return -1;
+            }
+        });
+
+        for (Frontend frontend : frontends) {
+            if (doCheckpoint(frontend)) {
+                return frontend.getNodeName();
+            }
+        }
+
+        return null;
+    }
+
+    private boolean doCheckpoint(Frontend frontend) {
+        String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
+        long epoch = GlobalStateMgr.getCurrentState().getEpoch();
+        if (selfName.equals(frontend.getNodeName())) {
+            CheckpointWorker worker = getCheckpointWorker();
+            try {
+                worker.setNextCheckpoint(epoch, journalId);
+                return true;
+            } catch (CheckpointException e) {
+                LOG.warn("set next checkpoint failed", e);
+                return false;
+            }
+        } else {
+            try {
+                // call doCheckpoint rpc
+                TDoCheckpointRequest request = new TDoCheckpointRequest();
+                request.setEpoch(epoch);
+                request.setJournal_id(journalId);
+                TDoCheckpointResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(frontend.getHost(), frontend.getRpcPort()),
+                        Config.thrift_rpc_timeout_ms,
+                        client -> client.doCheckpoint(request));
+                TStatus status = response.getStatus();
+                if (status.getStatus_code() != TStatusCode.OK) {
+                    String errMessage = "";
+                    if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
+                        errMessage = String.join(",", status.getError_msgs());
+                    }
+                    LOG.warn("call doCheckpoint failed from node: {}, error message: {}",
+                            frontend.getNodeName(), errMessage);
+                    return false;
+                } else {
+                    return true;
+                }
+            } catch (TException e) {
+                LOG.warn("call doCheckpoint failed for node: {}", frontend.getNodeName(), e);
+                return false;
+            }
+        }
+    }
+
+    private CheckpointWorker getCheckpointWorker() {
+        if (belongToGlobalStateMgr) {
+            return GlobalStateMgr.getCurrentState().getCheckpointWorker();
+        } else {
+            return StarMgrServer.getCurrentState().getCheckpointWorker();
         }
     }
 
@@ -190,7 +348,8 @@ public class Checkpoint extends FrontendDaemon {
                         + "&for_global_state=" + belongToGlobalStateMgr
                         + "&image_format_version=" + formatVersion.toString();
                 try {
-                    MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
+                    MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+
                     LOG.info("push image successfully, url = {}", url);
                     if (MetricRepo.hasInit) {
                         MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
@@ -223,59 +382,6 @@ public class Checkpoint extends FrontendDaemon {
             result.add(ImageFormatVersion.v1);
         }
         return result;
-    }
-
-    private boolean createImage(long logVersion) {
-        if (belongToGlobalStateMgr) {
-            return replayAndGenerateGlobalStateMgrImage(logVersion);
-        } else {
-            return replayAndGenerateStarMgrImage(logVersion);
-        }
-    }
-
-    private boolean replayAndGenerateGlobalStateMgrImage(long logVersion) {
-        assert belongToGlobalStateMgr;
-        long replayedJournalId = -1;
-        // generate new image file
-        LOG.info("begin to generate new image: image.{}", logVersion);
-        globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.setEditLog(new EditLog(null));
-        globalStateMgr.setJournal(journal);
-        try {
-            globalStateMgr.loadImage(imageDir);
-            globalStateMgr.initDefaultWarehouse();
-            globalStateMgr.replayJournal(logVersion);
-            globalStateMgr.clearExpiredJobs();
-            globalStateMgr.saveImage();
-            replayedJournalId = globalStateMgr.getReplayedJournalId();
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
-            }
-            GlobalStateMgr.getServingState().setImageJournalId(logVersion);
-            LOG.info("checkpoint finished save image.{}", replayedJournalId);
-            return true;
-        } catch (Exception e) {
-            LOG.error("Exception when generate new image file", e);
-            return false;
-        } finally {
-            // destroy checkpoint globalStateMgr, reclaim memory
-            globalStateMgr = null;
-            GlobalStateMgr.destroyCheckpoint();
-        }
-    }
-
-    private boolean replayAndGenerateStarMgrImage(long logVersion) {
-        assert !belongToGlobalStateMgr;
-        StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
-        try {
-            return starMgrServer.replayAndGenerateImage(imageDir, logVersion);
-        } catch (Exception e) {
-            LOG.error("Exception when generate new star mgr image file", e);
-            return false;
-        } finally {
-            // destroy checkpoint, reclaim memory
-            StarMgrServer.destroyCheckpoint();
-        }
     }
 
     private long getMinReplayedJournalId() {
@@ -314,5 +420,29 @@ public class Checkpoint extends FrontendDaemon {
         }
 
         return minReplayedJournalId;
+    }
+
+    public void finishCheckpoint(long journalId, String nodeName) throws CheckpointException {
+        if (nodeName.equals(workerNodeName)) {
+            throw new CheckpointException(String.format("worker node name node match, current worker is: %s, param worker is: %s",
+                    workerNodeName, nodeName));
+        }
+        if (journalId != this.journalId) {
+            throw new CheckpointException(String.format("journalId not match, current journalId is: %d, param journalId is: %d",
+                    this.journalId, journalId));
+        }
+
+        if (result.offer(Pair.create(true, ""))) {
+            LOG.info("finish checkpoint successfully, journalId: {}, nodeName: {}", journalId, nodeName);
+        } else {
+            LOG.warn("There are already other values in the result queue");
+        }
+    }
+
+    public void cancelCheckpoint(String nodeName, String reason) {
+        if (nodeName.equals(workerNodeName)) {
+            result.offer(Pair.create(false, reason));
+            LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
+        }
     }
 }

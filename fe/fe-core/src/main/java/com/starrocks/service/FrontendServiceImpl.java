@@ -99,9 +99,12 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
@@ -154,6 +157,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -178,6 +182,8 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TDoCheckpointRequest;
+import com.starrocks.thrift.TDoCheckpointResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -186,6 +192,8 @@ import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishCheckpointRequest;
+import com.starrocks.thrift.TFinishCheckpointResponse;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -2881,5 +2889,58 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
         return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
+    }
+
+    @Override
+    public TDoCheckpointResponse doCheckpoint(TDoCheckpointRequest request) throws TException {
+        CheckpointWorker worker;
+        if (request.is_global_state_mgr) {
+            worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
+        } else {
+            worker = StarMgrServer.getCurrentState().getCheckpointWorker();
+        }
+
+        TDoCheckpointResponse response = new TDoCheckpointResponse();
+        try {
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            response.setStatus(new TStatus(OK));
+            return response;
+        } catch (CheckpointException e) {
+            LOG.warn("set next checkpoint failed", e);
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs(e.getMessage());
+            response.setStatus(status);
+            return response;
+        }
+    }
+
+    @Override
+    public TFinishCheckpointResponse finishCheckpoint(TFinishCheckpointRequest request) throws TException {
+        TFinishCheckpointResponse response = new TFinishCheckpointResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+
+        CheckpointController controller;
+        if (request.is_global_state_mgr) {
+            controller = GlobalStateMgr.getCurrentState().getCheckpointController();
+        } else {
+            controller = StarMgrServer.getCurrentState().getCheckpointController();
+        }
+
+        try {
+            controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            response.setStatus(new TStatus(OK));
+            return response;
+        } catch (CheckpointException e) {
+            LOG.warn("finishCheckpoint failed", e);
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs(e.getMessage());
+            response.setStatus(status);
+            return response;
+        }
     }
 }
