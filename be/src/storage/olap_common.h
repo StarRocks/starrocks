@@ -149,10 +149,11 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+    READER_BYPASS_QUERY = 5,
 };
 
 inline bool is_query(ReaderType reader_type) {
-    return reader_type == READER_QUERY;
+    return reader_type == READER_QUERY || reader_type == READER_BYPASS_QUERY;
 }
 
 inline bool is_compaction(ReaderType reader_type) {
@@ -400,6 +401,16 @@ struct RowsetId {
     friend std::ostream& operator<<(std::ostream& out, const RowsetId& rowset_id) {
         out << rowset_id.to_string();
         return out;
+    }
+};
+
+struct HashOfRowsetId {
+    size_t operator()(const RowsetId& rowset_id) const {
+        size_t seed = 0;
+        seed = HashUtil::hash64(&rowset_id.hi, sizeof(rowset_id.hi), seed);
+        seed = HashUtil::hash64(&rowset_id.mi, sizeof(rowset_id.mi), seed);
+        seed = HashUtil::hash64(&rowset_id.lo, sizeof(rowset_id.lo), seed);
+        return seed;
     }
 };
 

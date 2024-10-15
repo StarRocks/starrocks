@@ -862,6 +862,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -950,6 +951,7 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();

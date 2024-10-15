@@ -73,16 +73,14 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
                                              source_masks.get(), cancel_func));
     }
+
+    RETURN_IF_ERROR(writer->finish());
+
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
     _context->progress.update(100);
-
-    RETURN_IF_ERROR(writer->finish());
-
-    // update writer stats
-    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -120,9 +118,9 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
-        auto fill_meta_cache = true;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = true};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 auto uid = _tablet_schema->column(column_index).unique_id();
@@ -164,6 +162,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                   config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
+    CompactionTaskStats prev_stats;
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
     std::vector<uint64_t> rssid_rowids;
@@ -172,7 +171,6 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
-    int64 reader_time_ns = 0;
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
@@ -185,7 +183,6 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
         {
-            SCOPED_RAW_TIMER(&reader_time_ns);
             auto st = Status::OK();
             // Collect rssid & rowid only when compact primary key columns
             if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key && enable_light_pk_compaction_publish) {
@@ -218,13 +215,18 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
         _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
                                   column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
+        CompactionTaskStats temp_stats;
+        temp_stats.collect(reader.stats());
+        CompactionTaskStats diff_stats = temp_stats - prev_stats;
+        *_context->stats = *_context->stats + diff_stats;
+        prev_stats = temp_stats;
     }
     RETURN_IF_ERROR(writer->flush_columns());
 
-    // add reader stats
-    _context->stats->reader_time_ns += reader_time_ns;
-    _context->stats->accumulate(reader.stats());
+    CompactionTaskStats temp_stats;
+    temp_stats.collect(reader.stats());
+    CompactionTaskStats diff_stats = temp_stats - prev_stats;
+    *_context->stats = *_context->stats + diff_stats;
 
     if (is_key) {
         RETURN_IF_ERROR(mask_buffer->flush());

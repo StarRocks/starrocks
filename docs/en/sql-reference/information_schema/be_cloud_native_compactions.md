@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # be_cloud_native_compactions
 
-`be_cloud_native_compactions` provides information on compaction transactions running on CNs (or BEs for v3.0) of a shared-data cluster. A compaction transaction is divided into multiple tasks on the tablet level, and each row in `be_cloud_native_compactions` corresponds to a task in the compaction transaction.
+`be_cloud_native_compactions` provides information on compaction transactions running on CNs (or BEs for v3.0) of a shared-data cluster. A compaction transaction is divided into multiple tasks on the partition level, and each row in `be_cloud_native_compactions` corresponds to a task in the compaction transaction.
 
 The following fields are provided in `be_cloud_native_compactions`:
 
@@ -20,4 +20,4 @@ The following fields are provided in `be_cloud_native_compactions`:
 | FINISH_TIME | Task finish time. `NULL` is returned if the task is still in progress. |
 | PROGRESS    | Percentage of progress, ranging from 0 to 100.               |
 | STATUS      | Task status.                                                 |
-
+| PROFILE     | Real time profile, including data read time、data write time、in-queue time, etc. |

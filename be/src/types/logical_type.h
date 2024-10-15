@@ -162,6 +162,18 @@ inline bool is_scalar_field_type(LogicalType type) {
     }
 }
 
+inline bool is_semi_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_JSON:
+        return true;
+    default:
+        return false;
+    }
+}
+
 inline bool is_complex_metric_type(LogicalType type) {
     switch (type) {
     case TYPE_OBJECT:
@@ -258,8 +270,6 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
-    case TYPE_JSON:
-    case TYPE_MAP:
     case TYPE_STRUCT:
         return true;
     default:

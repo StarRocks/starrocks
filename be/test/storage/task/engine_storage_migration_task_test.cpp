@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include "butil/file_util.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
@@ -663,7 +662,6 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     starrocks::fs::remove_all(storage_root.value());
-    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();
     delete engine;

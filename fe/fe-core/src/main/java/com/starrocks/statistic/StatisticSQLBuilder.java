@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Type;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -35,6 +37,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
 public class StatisticSQLBuilder {
@@ -43,6 +46,13 @@ public class StatisticSQLBuilder {
                     + " FROM " + FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY partition_id";
+
+    private static final String QUERY_PARTITION_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_PARTITION_VERSION + " as INT), " +
+                    " `partition_id`, `column_name`, hll_cardinality(hll_union(`ndv`)) as distinct_count"
+                    + " FROM " + FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY `partition_id`, `column_name`";
 
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
@@ -95,6 +105,20 @@ public class StatisticSQLBuilder {
                     partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")");
         }
         return build(context, QUERY_TABLE_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildQueryPartitionStatisticsSQL(Long tableId, List<Long> partitionIds, List<String> columns) {
+        VelocityContext context = new VelocityContext();
+        String tablePredicate = "table_id=" + tableId;
+        String partitionPredicate = CollectionUtils.isEmpty(partitionIds) ? "" :
+                " AND `partition_id` in (" +
+                        partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
+        String columnPredicate = CollectionUtils.isEmpty(columns) ? "" :
+                " AND `column_name` in (" +
+                        columns.stream().map(Strings::quote).collect(Collectors.joining(",")) + ")";
+        context.put("predicate", tablePredicate + partitionPredicate + columnPredicate);
+
+        return build(context, QUERY_PARTITION_STATISTIC_TEMPLATE);
     }
 
     public static String buildQueryTableStatisticsSQL(Long tableId, Long partitionId) {
@@ -190,6 +214,11 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
     }
 
+    public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE CATALOG_NAME = '" + catalogName + "'" +
+                " AND DB_NAME = '" + dbName + "' AND TABLE_NAME = '" + tableName + "'";
+    }
+
     public static String buildDropPartitionSQL(List<Long> pids) {
         return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
                 " PARTITION_ID IN (" +
@@ -253,6 +282,13 @@ public class StatisticSQLBuilder {
         return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
                 + tableUUID + "' and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+    public static String buildDropExternalHistogramSQL(String catalogName, String dbName, String tableName,
+                                                       List<String> columnNames) {
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where catalog_name = '"
+                + catalogName + "' and db_name = '" + dbName + "' and table_name = '" + tableName + "' and column_name in ("
+                + Joiner.on(", ").join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
     private static String build(VelocityContext context, String template) {

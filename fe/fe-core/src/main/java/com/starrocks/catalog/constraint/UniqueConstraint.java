@@ -40,11 +40,9 @@ public class UniqueConstraint extends Constraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     private final List<ColumnId> uniqueColumns;
 
-    private String catalogName;
-    private String dbName;
+    private final String catalogName;
+    private final String dbName;
     private String tableName;
-
-    private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
         super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
@@ -54,23 +52,17 @@ public class UniqueConstraint extends Constraint {
         this.uniqueColumns = uniqueColumns;
     }
 
-    // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
-    public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
-        super(ConstraintType.UNIQUE, TABLE_PROPERTY_CONSTRAINT);
-        this.referencedTable = referencedTable;
-        this.uniqueColumns = uniqueColumns;
-    }
-
-    public List<String> getUniqueColumnNames() {
+    public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
-        if (referencedTable != null) {
-            targetTable = referencedTable;
-        } else {
+        if (selfTable.isMaterializedView()) {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
             if (targetTable == null) {
-                throw new SemanticException("Table %s is not found", tableName);
+                throw new SemanticException("Table %s.%s.%s is not found", catalogName, dbName, tableName);
             }
+        } else {
+            targetTable = selfTable;
         }
+
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
             Column column = targetTable.getColumn(columnId);
@@ -99,7 +91,7 @@ public class UniqueConstraint extends Constraint {
                 return false;
             }
         }
-        Set<String> uniqueColumnSet = getUniqueColumnNames().stream().map(String::toLowerCase)
+        Set<String> uniqueColumnSet = getUniqueColumnNames(parentTable).stream().map(String::toLowerCase)
                 .collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }
@@ -119,7 +111,7 @@ public class UniqueConstraint extends Constraint {
         return sb.toString();
     }
 
-    public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints) {
+    public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
         List<String> constraintStrs = Lists.newArrayList();
         for (UniqueConstraint constraint : constraints) {
             StringBuilder constraintSb = new StringBuilder();
@@ -132,7 +124,7 @@ public class UniqueConstraint extends Constraint {
             if (constraint.tableName != null) {
                 constraintSb.append(constraint.tableName).append(".");
             }
-            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames()));
+            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames(selfTable)));
             constraintStrs.add(constraintSb.toString());
         }
 

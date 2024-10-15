@@ -94,7 +94,6 @@ import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -555,18 +554,17 @@ public class UtFrameUtils {
             Tracers.register(connectContext);
             Tracers.init(connectContext, Tracers.Mode.LOGS, module);
             try {
-
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
                 Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
                 return Pair.create(planPair.first, planAndTrace);
             } catch (Exception e) {
+                throw e;
+            } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
                     System.out.println(pr);
                 }
-                throw e;
-            } finally {
                 Tracers.close();
             }
         }
@@ -1328,6 +1326,15 @@ public class UtFrameUtils {
         mockDML();
     }
 
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
+    }
+
     public static void mockDML() {
         new MockUp<StmtExecutor>() {
             /**
@@ -1368,7 +1375,7 @@ public class UtFrameUtils {
                     clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
                 }
                 for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
                                 new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
                 }
             } else if (hint instanceof UserVariableHint) {

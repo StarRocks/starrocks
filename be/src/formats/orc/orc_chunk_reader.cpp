@@ -35,7 +35,7 @@
 #include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
-#include "util/stack_util.cpp"
+#include "util/stack_util.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {

@@ -281,7 +281,7 @@ struct TQueryOptions {
   103: optional i32 interleaving_group_size;
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
-  105: optional bool use_column_pool = true;
+  105: optional bool use_column_pool = true; // Deprecated
   // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
@@ -326,12 +326,13 @@ struct TQueryOptions {
   152: optional double k_factor;
 }
 
-
 // A scan range plus the parameters needed to execute that scan.
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
-  3: optional bool placeholder = false
+  // if this is just a placeholder and no `scan_range` data in it.
+  3: optional bool empty = false;
+  // if there is no more scan range from this scan node.
   4: optional bool has_more = false;
 }
 
@@ -485,6 +486,8 @@ struct TExecPlanFragmentParams {
   59: optional i32 group_execution_scan_dop
 
   60: optional TPredicateTreeParams pred_tree_params
+
+  61: optional list<i32> exec_stats_node_ids;
 }
 
 struct TExecPlanFragmentResult {

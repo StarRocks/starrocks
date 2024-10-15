@@ -25,8 +25,8 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
-import com.starrocks.credential.aws.AWSCloudConfiguration;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -95,10 +95,10 @@ public class PaimonConnector implements Connector {
 
     public void initFsOption(CloudConfiguration cloudConfiguration) {
         if (cloudConfiguration.getCloudType() == CloudType.AWS) {
-            AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
+            AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
             paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
-            AWSCloudCredential awsCloudCredential = awsCloudConfiguration.getAWSCloudCredential();
+            AwsCloudCredential awsCloudCredential = awsCloudConfiguration.getAwsCloudCredential();
             if (!awsCloudCredential.getEndpoint().isEmpty()) {
                 paimonOptions.set("s3.endpoint", awsCloudCredential.getEndpoint());
             }

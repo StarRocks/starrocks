@@ -317,9 +317,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
 }
 
 Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
-    auto status = _close_internal(state, fragment_ctx);
-    state->log_error(status); // Lock only when status is not ok.
-    return status;
+    return _close_internal(state, fragment_ctx);
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(

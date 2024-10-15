@@ -366,8 +366,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
-        scanContext.setLocalParallelism(icebergProperties.getIcebergJobPlanningThreadNum());
-        scanContext.setLocalPlanningMaxSlotSize(icebergProperties.getLocalPlanningMaxSlotBytes());
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
@@ -438,12 +436,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .collect(Collectors.toList()),
                 databases.size());
 
-        Pair<List<Object>, Long> tableSamples = Pair.create(tables.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList()),
-                tables.size());
-
         List<Object> partitions = partitionNames.asMap().values()
                 .stream()
                 .flatMap(List::stream)
@@ -475,7 +467,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .sum();
         Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
 
-        return Lists.newArrayList(dbSamples, tableSamples, partitionSamples, dataFileSamples, deleteFileSamples);
+        return Lists.newArrayList(dbSamples, partitionSamples, dataFileSamples, deleteFileSamples);
     }
 
     @Override

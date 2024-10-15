@@ -119,6 +119,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
     std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
     std::unique_ptr<ThreadPool> _thread_pool_compaction;
+    std::unique_ptr<ThreadPool> _thread_pool_compaction_control;
     std::unique_ptr<ThreadPool> _thread_pool_update_schema;
 
     std::unique_ptr<ThreadPool> _thread_pool_upload;
@@ -128,7 +129,8 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
-    std::unique_ptr<ThreadPool> _thread_pool_replication;
+    std::unique_ptr<ThreadPool> _thread_pool_remote_snapshot;
+    std::unique_ptr<ThreadPool> _thread_pool_replicate_snapshot;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -213,6 +215,9 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_compaction);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL("compaction_control", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction_control);
+
         BUILD_DYNAMIC_TASK_THREAD_POOL("update_schema", 0, config::update_schema_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_update_schema);
 
@@ -250,8 +255,12 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, calc_max_replication_threads(config::replication_threads),
-                                       std::numeric_limits<int>::max(), _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("remote_snapshot", 0, calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_remote_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replicate_snapshot", 0,
+                                       calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_replicate_snapshot);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -291,6 +300,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_storage_medium_migrate->shutdown();
         _thread_pool_check_consistency->shutdown();
         _thread_pool_compaction->shutdown();
+        _thread_pool_compaction_control->shutdown();
         _thread_pool_update_schema->shutdown();
         _thread_pool_upload->shutdown();
         _thread_pool_download->shutdown();
@@ -302,7 +312,8 @@ void AgentServer::Impl::stop() {
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
-        _thread_pool_replication->shutdown();
+        _thread_pool_remote_snapshot->shutdown();
+        _thread_pool_replicate_snapshot->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -362,6 +373,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
             HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
             HANDLE_TYPE(TTaskType::COMPACTION, compaction_req);
+            HANDLE_TYPE(TTaskType::COMPACTION_CONTROL, compaction_control_req);
             HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
             HANDLE_TYPE(TTaskType::UPDATE_SCHEMA, update_schema_req);
             HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
@@ -473,6 +485,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::COMPACTION:
             HANDLE_TASK(TTaskType::COMPACTION, all_tasks, run_compaction_task, CompactionTaskRequest, compaction_req,
                         _exec_env);
+            break;
+        case TTaskType::COMPACTION_CONTROL:
+            HANDLE_TASK(TTaskType::COMPACTION_CONTROL, all_tasks, run_compaction_control_task,
+                        CompactionControlTaskRequest, compaction_control_req, _exec_env);
             break;
         case TTaskType::UPDATE_SCHEMA:
             HANDLE_TASK(TTaskType::UPDATE_SCHEMA, all_tasks, run_update_schema_task, UpdateSchemaTaskRequest,
@@ -590,8 +606,10 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         st = _thread_pool_clone->update_max_threads(new_val);
         break;
     case TTaskType::REMOTE_SNAPSHOT:
+        st = _thread_pool_remote_snapshot->update_max_threads(calc_max_replication_threads(new_val));
+        break;
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(calc_max_replication_threads(new_val));
+        st = _thread_pool_replicate_snapshot->update_max_threads(calc_max_replication_threads(new_val));
         break;
     default:
         break;
@@ -667,6 +685,9 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     case TTaskType::COMPACTION:
         ret = _thread_pool_compaction.get();
         break;
+    case TTaskType::COMPACTION_CONTROL:
+        ret = _thread_pool_compaction_control.get();
+        break;
     case TTaskType::UPDATE_SCHEMA:
         ret = _thread_pool_update_schema.get();
         break;
@@ -692,8 +713,10 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         ret = _thread_pool_drop_auto_increment_map.get();
         break;
     case TTaskType::REMOTE_SNAPSHOT:
+        ret = _thread_pool_remote_snapshot.get();
+        break;
     case TTaskType::REPLICATE_SNAPSHOT:
-        ret = _thread_pool_replication.get();
+        ret = _thread_pool_replicate_snapshot.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

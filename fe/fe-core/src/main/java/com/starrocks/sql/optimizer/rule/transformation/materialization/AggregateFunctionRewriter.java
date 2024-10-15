@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
@@ -39,26 +40,20 @@ import java.util.Map;
  * eg: AVG -> SUM / COUNT
  */
 public class AggregateFunctionRewriter {
-    final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-    final ColumnRefFactory queryColumnRefFactory;
+    private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+    private final Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap = Maps.newHashMap();
 
+    private final EquationRewriter equationRewriter;
+    private final ColumnRefFactory queryColumnRefFactory;
     // new rewrite agg can reuse old agg functions if it has existed.
-    final Map<ColumnRefOperator, CallOperator> oldAggregations;
+    private final Map<ColumnRefOperator, CallOperator> oldAggregations;
 
-    Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap;
-
-    public AggregateFunctionRewriter(ColumnRefFactory queryColumnRefFactory,
+    public AggregateFunctionRewriter(EquationRewriter equationRewriter,
+                                     ColumnRefFactory queryColumnRefFactory,
                                      Map<ColumnRefOperator, CallOperator> oldAggregations) {
+        this.equationRewriter = equationRewriter;
         this.queryColumnRefFactory = queryColumnRefFactory;
         this.oldAggregations = oldAggregations;
-    }
-
-    public AggregateFunctionRewriter(ColumnRefFactory queryColumnRefFactory,
-                                     Map<ColumnRefOperator, CallOperator> oldAggregations,
-                                     Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap) {
-        this.queryColumnRefFactory = queryColumnRefFactory;
-        this.oldAggregations = oldAggregations;
-        this.newColumnRefToAggFuncMap = newColumnRefToAggFuncMap;
     }
 
     public boolean canRewriteAggFunction(ScalarOperator op) {
@@ -74,10 +69,10 @@ public class AggregateFunctionRewriter {
         return false;
     }
 
-    public CallOperator rewriteAggFunction(CallOperator aggFunc) {
+    public ScalarOperator rewriteAggFunction(CallOperator aggFunc, boolean isRollup) {
         String aggFuncName = aggFunc.getFnName();
         if (aggFuncName.equals(FunctionSet.AVG)) {
-            return rewriteAvg(aggFunc);
+            return rewriteAvg(aggFunc, isRollup);
         } else {
             return null;
         }
@@ -87,19 +82,23 @@ public class AggregateFunctionRewriter {
                                                                         List<ScalarOperator> args) {
         Preconditions.checkState(newFn != null);
         CallOperator newCallOp = new CallOperator(newFn.functionName(), newFn.getReturnType(), args, newFn);
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : oldAggregations.entrySet()) {
-            if (entry.getValue().equals(newCallOp)) {
-                return Pair.create(entry.getKey(), newCallOp);
-            }
-        }
         ColumnRefOperator newColRef =
                 queryColumnRefFactory.create(newCallOp, newCallOp.getType(), newCallOp.isNullable());
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : oldAggregations.entrySet()) {
+            if (entry.getValue().equals(newCallOp)) {
+                return Pair.create(newColRef, newCallOp);
+            }
+        }
         return Pair.create(newColRef, newCallOp);
     }
 
-    private CallOperator rewriteAvg(CallOperator aggFunc) {
-        Type argType = aggFunc.getChild(0).getType();
-
+    /**
+     * For avg with rollup, return div(sum_col_ref, count_col_ref) and new sum/count call operator with newColumnRefToAggFuncMap.
+     * For avg without rollup, return rewritten div(sum_call_op, count_call_op).
+     * @param aggFunc  input avg function
+     * @param isRollup whether the avg function is with rollup
+     */
+    private ScalarOperator rewriteAvg(CallOperator aggFunc, boolean isRollup) {
         // construct `sum` agg
         Function sumFn = ScalarOperatorUtil.findSumFn(aggFunc.getFunction().getArgs());
         Pair<ColumnRefOperator, CallOperator> sumCallOp =
@@ -108,15 +107,38 @@ public class AggregateFunctionRewriter {
         Function countFn = ScalarOperatorUtil.findArithmeticFunction(aggFunc.getFunction().getArgs(), FunctionSet.COUNT);
         Pair<ColumnRefOperator, CallOperator> countCallOp = createNewCallOperator(countFn, aggFunc.getChildren());
 
-        // add sum/count into projection
+        CallOperator newAvg = getNewAVGBySumCount(aggFunc, sumCallOp, countCallOp, isRollup);
+        if (isRollup) {
+            // add sum/count agg into aggregations map
+            CallOperator sumRollupCall = getRollupFunction(sumCallOp.second);
+            if (sumRollupCall == null) {
+                return null;
+            }
+            CallOperator cntRollupCall = getRollupFunction(countCallOp.second);
+            if (cntRollupCall == null) {
+                return null;
+            }
+            newColumnRefToAggFuncMap.put(sumCallOp.first, sumRollupCall);
+            newColumnRefToAggFuncMap.put(countCallOp.first, cntRollupCall);
+            return newAvg;
+        } else {
+            return rewriteAggFunction(newAvg);
+        }
+    }
+
+    private CallOperator getNewAVGBySumCount(CallOperator aggFunc,
+                                             Pair<ColumnRefOperator, CallOperator> sumCallOp,
+                                             Pair<ColumnRefOperator, CallOperator> countCallOp,
+                                             boolean isRollup) {
         CallOperator newAvg;
-        if (newColumnRefToAggFuncMap != null) {
+        if (isRollup) {
             newAvg = new CallOperator(FunctionSet.DIVIDE, aggFunc.getType(),
                     Lists.newArrayList(sumCallOp.first, countCallOp.first));
         } else {
             newAvg = new CallOperator(FunctionSet.DIVIDE, aggFunc.getType(),
                     Lists.newArrayList(sumCallOp.second, countCallOp.second));
         }
+        Type argType = aggFunc.getChild(0).getType();
         if (argType.isDecimalV3()) {
             // There is not need to apply ImplicitCastRule to divide operator of decimal types.
             // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
@@ -125,12 +147,27 @@ public class AggregateFunctionRewriter {
         } else {
             newAvg = (CallOperator) scalarRewriter.rewrite(newAvg, Lists.newArrayList(new ImplicitCastRule()));
         }
-
-        // add sum/count agg into aggregations map
-        if (newColumnRefToAggFuncMap != null) {
-            newColumnRefToAggFuncMap.put(sumCallOp.first, sumCallOp.second);
-            newColumnRefToAggFuncMap.put(countCallOp.first, countCallOp.second);
-        }
         return newAvg;
+    }
+
+    private ScalarOperator rewriteAggFunction(CallOperator aggFunc) {
+        ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(aggFunc);
+        if (rewritten == null || aggFunc.equals(rewritten)) {
+            return null;
+        }
+        return rewritten;
+    }
+
+    private CallOperator getRollupFunction(CallOperator aggFunc) {
+        ScalarOperator rewritten = rewriteAggFunction(aggFunc);
+        if (rewritten == null || !(rewritten instanceof ColumnRefOperator)) {
+            return null;
+        }
+        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc,
+                (ColumnRefOperator) rewritten, false);
+    }
+
+    public Map<ColumnRefOperator, CallOperator> getNewColumnRefToAggFuncMap() {
+        return newColumnRefToAggFuncMap;
     }
 }

@@ -67,6 +67,8 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP SNAPSHOT snapshot_pk_label TO `repo` ON ( tprimary ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t3, T3 ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t0 ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t1 ) " +

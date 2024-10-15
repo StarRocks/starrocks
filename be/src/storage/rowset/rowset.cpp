@@ -93,6 +93,7 @@ Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
     if (_rowset_state_machine.rowset_state() == ROWSET_LOADED) {
+        warmup_lrucache();
         return Status::OK();
     }
     // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
@@ -178,9 +179,12 @@ Status Rowset::do_load() {
         auto res = Segment::open(fs, seg_info, seg_id, _schema, &footer_size_hint,
                                  rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
-            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            auto st = res.status().clone_and_prepend(fmt::format(
+                    "Load rowset failed tablet:{} rowset:{} rssid:{} seg:{} path:{}", _rowset_meta->tablet_id(),
+                    rowset_id().to_string(), _rowset_meta->get_rowset_seg_id(), seg_id, seg_path));
+            LOG(WARNING) << st.message();
             _segments.clear();
-            return res.status();
+            return st;
         }
         _segments.push_back(std::move(res).value());
     }
@@ -192,6 +196,16 @@ Status Rowset::do_load() {
     }
 #endif
     return Status::OK();
+}
+
+void Rowset::warmup_lrucache() {
+#ifndef BE_TEST
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+        // Move this item to newest item in lru cache.
+        // ONLY support non-pk table now.
+        MetadataCache::instance()->warmup_rowset(this);
+    }
+#endif
 }
 
 // this function is only used for partial update so far

@@ -172,8 +172,11 @@ Status TabletUpdates::_load_rowsets_and_check_consistency(std::set<uint32_t>& un
     _rowsets.clear();
     RETURN_IF_ERROR(TabletMetaManager::rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(), [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
+                if (!rowset_meta->tablet_schema()) {
+                    rowset_meta->set_tablet_schema(_tablet.tablet_schema());
+                    rowset_meta->set_skip_tablet_schema(true);
+                }
                 RowsetSharedPtr rowset;
-
                 auto st = RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(), rowset_meta,
                                                        &rowset);
                 if (st.ok()) {
@@ -408,8 +411,8 @@ size_t TabletUpdates::data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return total_size;
     } else {
         return total_size + (*size_st).pindex_size + (*size_st).col_size;
@@ -473,8 +476,8 @@ std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
         return {total_row, total_size};
     } else {
         return {total_row, total_size + (*size_st).pindex_size + (*size_st).col_size};
@@ -659,7 +662,12 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 _ignore_rowset_commit(version, rowset);
             } else {
                 RowsetMetaPB meta_pb;
-                rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+                bool skip_schema = !_tablet.is_update_schema_running() && rowset->rowset_meta()->skip_tablet_schema();
+                if (skip_schema) {
+                    meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+                } else {
+                    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+                }
                 st = TabletMetaManager::pending_rowset_commit(
                         _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
                         RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
@@ -668,6 +676,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                                  << " version:" << version << " txn_id: " << rowset->txn_id() << " " << st << " "
                                  << _debug_string(false, true);
                     return st;
+                }
+                if (!skip_schema) {
+                    rowset->rowset_meta()->set_skip_tablet_schema(false);
                 }
                 VLOG(2) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
                         << " txn_id: " << rowset->txn_id() << " #pending:" << _pending_commits.size();
@@ -740,7 +751,12 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     rowset->make_commit(version, rowsetid);
     span->AddEvent("save_meta_begin");
     RowsetMetaPB meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    bool skip_schema = !_tablet.is_update_schema_running() && rowset->rowset_meta()->skip_tablet_schema();
+    if (skip_schema) {
+        meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+    }
     auto st = TabletMetaManager::rowset_commit(
             _tablet.data_dir(), _tablet.tablet_id(), _next_log_id, &edit, meta_pb,
             RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
@@ -748,6 +764,9 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     if (!st.ok()) {
         LOG(WARNING) << "rowset commit failed: " << st << " " << _debug_string(false, false);
         return st;
+    }
+    if (!skip_schema) {
+        rowset->rowset_meta()->set_skip_tablet_schema(false);
     }
     // apply in-memory state after commit success
     _next_log_id++;
@@ -1546,6 +1565,13 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
+    //   3. The rowset stats maybe invalid, need to recalculate
     span->AddEvent("gen_delvec");
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -1632,12 +1658,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
-    // NOTE:
-    // If the apply fails at the following stages, an intolerable error must be returned right now.
-    // Because the metadata may have already been persisted.
-    // If you need to return a tolerable error, please make sure the following:
-    //   1. The latest meta should be roll back.
-    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
@@ -2608,6 +2628,13 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         }
     }
 
+    // rewrite rowset meta which without tablet schema to avoid `update_tablet_schema` cost
+    // too much time.
+    {
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        rewrite_rs_meta();
+    }
+
     // GC works that can be done outside of lock
     if (num_version_removed > 0) {
         {
@@ -3484,8 +3511,8 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
-                   << " status: " << size_st.status();
+        VLOG(2) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                << " status: " << size_st.status();
     } else {
         total_size += (*size_st).pindex_size + (*size_st).col_size;
     }
@@ -3866,7 +3893,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         // use src_rowset's meta as base, change some fields to new tablet
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         // reset rowset schema to the latest one
-        src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, _tablet.tablet_schema());
+        src_rowset.rowset_meta()->get_full_meta_pb(&rowset_meta_pb, false, _tablet.tablet_schema());
         rowset_meta_pb.set_deprecated_rowset_id(0);
         rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
@@ -4666,8 +4693,8 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     if (!size_st.ok()) {
         // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
         // So just print error log and keep going.
-        LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-                   << ", error: " << size_st.status();
+        VLOG(2) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
+                << ", error: " << size_st.status();
     } else {
         info.index_disk_usage = (*size_st).pindex_size;
     }
@@ -5634,24 +5661,52 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
+}
 
-    // 3. reset rowset_stats
+void TabletUpdates::rewrite_rs_meta() {
+    std::unordered_map<int64_t, RowsetSharedPtr> pending_rs;
+    std::vector<RowsetSharedPtr> published_rs;
     {
-        std::lock_guard lg(_rowset_stats_lock);
-        _rowset_stats.clear();
-        for (auto& [rsid, rowset] : _rowsets) {
-            auto stats = std::make_unique<RowsetStats>();
-            stats->num_segments = rowset->num_segments();
-            stats->num_rows = rowset->num_rows();
-            stats->byte_size = rowset->data_disk_size();
-            stats->num_dels = 0;
-            stats->partial_update_by_column = rowset->is_column_mode_partial_update();
-            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
-            _calc_compaction_score(stats.get());
-            _rowset_stats.emplace(rsid, std::move(stats));
+        std::lock_guard lg(_lock);
+        for (auto& [_, rs] : _rowsets) {
+            if (rs->rowset_meta()->skip_tablet_schema()) {
+                published_rs.emplace_back(rs);
+            }
+        }
+
+        for (auto& [version, rs] : _pending_commits) {
+            if (rs->rowset_meta()->skip_tablet_schema()) {
+                pending_rs[version] = rs;
+            }
         }
     }
-    _update_total_stats(version_info_apply.rowsets, nullptr, nullptr);
+
+    for (auto& [version, rs] : _pending_commits) {
+        RowsetMetaPB meta_pb;
+        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        Status st = TabletMetaManager::pending_rowset_commit(
+                _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
+                RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
+        LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                                << ", rowset_id=" << rs->rowset_id();
+        rs->rowset_meta()->set_skip_tablet_schema(false);
+    }
+
+    auto kv_store = _tablet.data_dir()->get_meta();
+    rocksdb::WriteBatch wb;
+    for (auto& rs : published_rs) {
+        RowsetMetaPB meta_pb;
+        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+        Status st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
+        LOG_IF(FATAL, !st.ok()) << "fail to put published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                                << ", rowset_id=" << rs->rowset_id();
+    }
+    Status st = kv_store->write_batch(&wb);
+    LOG_IF(FATAL, !st.ok()) << "fail to write published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
+                            << ", rowset nul=" << published_rs.size();
+    for (auto& rs : published_rs) {
+        rs->rowset_meta()->set_skip_tablet_schema(false);
+    }
 }
 
 } // namespace starrocks

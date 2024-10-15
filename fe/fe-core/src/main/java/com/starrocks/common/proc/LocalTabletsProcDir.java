@@ -72,6 +72,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             .add("DataSize").add("RowCount").add("State")
             .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
             .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
+            .add("DiskRootPath")
             .build();
 
     private final Database db;
@@ -144,18 +145,22 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         Backend backend = backendMap.get(replica.getBackendId());
                         String metaUrl;
                         String compactionUrl;
+                        String diskRootPath;
                         if (backend != null) {
                             String hostPort = hideIpPort ? "*:0" :
                                     NetUtils.getHostPortInAccessibleFormat(backend.getHost(), backend.getHttpPort());
                             metaUrl = String.format("http://" + hostPort + "/api/meta/header/%d", tabletId);
                             compactionUrl = String.format(
                                     "http://" + hostPort + "/api/compaction/show?tablet_id=%d", tabletId);
+                            diskRootPath = backend.getDiskRootPath(replica.getPathHash());
                         } else {
                             metaUrl = "N/A";
                             compactionUrl = "N/A";
+                            diskRootPath = "N/A";
                         }
                         tabletInfo.add(metaUrl);
                         tabletInfo.add(compactionUrl);
+                        tabletInfo.add(diskRootPath);
 
                         tabletInfos.add(tabletInfo);
                     }

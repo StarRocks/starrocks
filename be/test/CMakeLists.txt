@@ -6,7 +6,6 @@ set(EXEC_FILES
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
-        ./column/column_pool_test.cpp
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
@@ -36,6 +35,7 @@ set(EXEC_FILES
         ./fs/encrypt_file_test.cpp
         ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
+        ./fs/poco_http_client_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
+        ./exec/workgroup/pipeline_executor_set_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
@@ -450,6 +451,7 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
         ./util/bit_packing_test.cpp
+        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp

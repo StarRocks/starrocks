@@ -110,7 +110,6 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -1740,12 +1739,6 @@ public class RestoreJob extends AbstractJob {
                 olapTbl.setState(OlapTableState.NORMAL);
             }
         }
-    }
-
-    public static RestoreJob read(DataInput in) throws IOException {
-        RestoreJob job = new RestoreJob();
-        job.readFields(in);
-        return job;
     }
 
     @Override

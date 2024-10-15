@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['zhujian']
+sidebar_position: 20
 ---
 
 # 主键表
@@ -18,7 +19,7 @@ import TabItem from '@theme/TabItem';
 - 自 3.0 版本起，主键表解耦了排序键与主键，支持单独指定排序键，提供更灵活的建表能力。
 - 自 3.1 版本起，存算分离模式支持创建主键表
   - 自 3.1.4 版本起，支持持久化主键索引至**本地磁盘**。
-  - 自 3.3.0 版本起，支持持久化主键索引至**对象存储**。
+  - 自 3.3.2 版本起，支持持久化主键索引至**对象存储**。
 
 :::
 
@@ -105,7 +106,7 @@ DISTRIBUTED BY HASH (order_id)
 
 并且自 3.0 起主键表解耦了主键和排序键，因此您可以选择经常作为查询过滤条件的列去构成排序键。假设经常根据订单日期和商户组合维度查询商品销售情况，则您可以通过 `ORDER BY (dt,merchant_id)` 指定排序键为 `dt` 和 `merchant_id` 。
 
-注意，如果您使用了[数据分布策略](../Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
+注意，如果您使用了[数据分布策略](../data_distribution/Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
 
 综上所述，该订单表的建表语句可以为：
 
@@ -153,11 +154,7 @@ PROPERTIES (
 
 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
 
-:::info
-
-自 3.1.4 版本起，支持基于本地磁盘上的持久化索引。
-
-:::
+自 3.1.4 版本起，StarRocks 存算分离集群支持基于本地磁盘上的持久化索引。自 3.3.2 版本起，存算分离集群进一步支持基于对象存储上的持久化索引。您可以通过将主键表 Property `persistent_index_type` 设置为 `CLOUD_NATIVE` 启用该功能。
 
 </TabItem>
 <TabItem value="example2" label="全内存主键索引">
@@ -199,7 +196,7 @@ PROPERTIES (
 
 ## 更多信息
 
-- 建表后导入数据，您可以参考[导入概览](../../loading/loading_introduction/Loading_intro.md)选择合适的导入方式。
+- 建表后导入数据，您可以参考[导入概览](../../loading/Loading_intro.md)选择合适的导入方式。
 - 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）。
 - 如果您需要进一步加速查询，则可以参考[查询加速](../../cover_pages/query_acceleration.mdx)。
 - 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。

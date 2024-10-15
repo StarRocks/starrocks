@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
@@ -70,6 +71,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -734,6 +736,15 @@ public class AnalyzerUtils {
         return tables.values().stream().anyMatch(t -> t.isTemporaryTable());
     }
 
+    /**
+     * Whether this statement access external tables
+     */
+    public static boolean hasExternalTables(StatementBase statementBase) {
+        List<Table> tables = Lists.newArrayList();
+        collectSpecifyExternalTables(statementBase, tables, Predicates.alwaysTrue());
+        return !tables.isEmpty();
+    }
+
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
@@ -935,6 +946,7 @@ public class AnalyzerUtils {
         }
     }
 
+    // The conception is not very clear, be careful when use it.
     private static class ExternalTableCollector extends TableCollector {
         List<Table> tables;
         Predicate<Table> predicate;
@@ -947,7 +959,8 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            if (predicate.test(table)) {
+            boolean internal = table.isNativeTableOrMaterializedView() || table.isOlapView();
+            if (!internal && predicate.test(table)) {
                 tables.add(table);
             }
             return null;
@@ -1320,8 +1333,9 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 50) {
-                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
+                if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
+                    partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
+                            + "_" + Integer.toHexString(partitionName.hashCode());
                 }
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,

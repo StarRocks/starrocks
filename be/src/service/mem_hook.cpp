@@ -80,7 +80,7 @@
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
     starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
-#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
+#define IS_BAD_ALLOC_CATCHED() starrocks::tls_is_catched
 #else
 std::atomic<int64_t> g_mem_usage(0);
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)

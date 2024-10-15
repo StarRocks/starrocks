@@ -233,6 +233,28 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "to_days", argTypes = {DATETIME}, returnType = INT, isMonotonic = true),
+            @ConstantFunction(name = "to_days", argTypes = {DATE}, returnType = INT, isMonotonic = true)
+    })
+    public static ConstantOperator to_days(ConstantOperator first) {
+        ConstantOperator second = ConstantOperator.createDatetime(LocalDateTime.of(0000, 01, 01, 00, 00, 00));
+        return ConstantOperator.createInt((int) Duration.between(
+                second.getDatetime().truncatedTo(ChronoUnit.DAYS),
+                first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "dayofweek", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "dayofweek", argTypes = {DATE}, returnType = INT),
+            @ConstantFunction(name = "dayofweek", argTypes = {INT}, returnType = INT)
+    })
+    public static ConstantOperator dayofweek(ConstantOperator date) {
+        // LocalDateTime.getDayOfWeek is return day of the week, such as monday is 1 and sunday is 7.
+        // function of dayofweek in starrocks monday is 2 and sunday is 1, so need mod 7 and plus 1.
+        return ConstantOperator.createInt((date.getDatetime().getDayOfWeek().getValue()) % 7 + 1);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "years_add", argTypes = {DATETIME,
                     INT}, returnType = DATETIME, isMonotonic = true),
             @ConstantFunction(name = "years_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)

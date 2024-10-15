@@ -27,7 +27,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -208,16 +207,16 @@ public class UserProperty {
         }
         // check whether the variable exists
         SystemVariable variable = new SystemVariable(sessionKey, new StringLiteral(value));
-        VariableMgr.checkSystemVariableExist(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
 
         // check whether the value is valid
-        Field field = VariableMgr.getField(sessionKey);
+        Field field = GlobalStateMgr.getCurrentState().getVariableMgr().getField(sessionKey);
         if (field == null || !canAssignValue(field, value)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, value);
         }
 
         // check flags of the variable, e.g. whether the variable is read-only
-        VariableMgr.checkUpdate(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkUpdate(variable);
     }
 
     // check whether the catalog exist

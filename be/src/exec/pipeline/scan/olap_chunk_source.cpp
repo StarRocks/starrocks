@@ -102,6 +102,20 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
+    if (state->query_ctx()) {
+        auto* ctx = _runtime_state->query_ctx();
+        int32_t node_id = _scan_op->get_plan_node_id();
+        int64_t total_index_filter = _reader->stats().rows_bf_filtered + _reader->stats().rows_bitmap_index_filtered +
+                                     _reader->stats().segment_stats_filtered +
+                                     _reader->stats().rows_key_range_filtered + _reader->stats().rows_stats_filtered;
+        ctx->update_index_filter_stats(node_id, total_index_filter);
+        ctx->update_rf_filter_stats(node_id, _reader->stats().runtime_stats_filtered);
+        ctx->update_pred_filter_stats(node_id, _reader->stats().rows_vec_cond_filtered);
+        ctx->update_push_rows_stats(node_id, _reader->stats().raw_rows_read + total_index_filter);
+    }
+}
+
 TCounterMinMaxType::type OlapChunkSource::_get_counter_min_max_type(const std::string& metric_name) {
     const auto& skip_min_max_metrics = _morsel->skip_min_max_metrics();
     if (skip_min_max_metrics.find(metric_name) != skip_min_max_metrics.end()) {
@@ -527,8 +541,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
-                                               _runtime_state->use_column_pool()));
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
@@ -673,6 +686,8 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
     COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
     COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);

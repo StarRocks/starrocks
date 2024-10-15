@@ -47,6 +47,7 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -266,6 +267,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private boolean enableLoadProfile = false;
 
+    private String baseCompactionForbiddenTimeRanges = "";
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -365,6 +368,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
                 buildEnableLoadProfile();
                 break;
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
+                buildBaseCompactionForbiddenTimeRanges();
+                break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
                 break;
@@ -372,6 +378,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildBinlogAvailableVersion();
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
+                buildPartitionTTL();
                 buildPartitionLiveNumber();
                 buildDataCachePartitionDuration();
                 buildLocation();
@@ -450,6 +457,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPartitionTTL() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTLNumber = Integer.parseInt(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER));
+        }
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, false);
+            if (ttlDuration != null) {
+                partitionTTL = ttlDuration.second;
+            }
         }
         return this;
     }
@@ -661,6 +675,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE) != null) {
             enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
         }
+        return this;
+    }
+
+    public TableProperty buildBaseCompactionForbiddenTimeRanges() {
+        baseCompactionForbiddenTimeRanges = properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, "");
         return this;
     }
 
@@ -924,6 +944,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableLoadProfile;
     }
 
+    public String getBaseCompactionForbiddenTimeRanges() {
+        return baseCompactionForbiddenTimeRanges;
+    }
+
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -1048,5 +1072,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageType();
         buildMvProperties();
         buildLocation();
+        buildBaseCompactionForbiddenTimeRanges();
     }
 }

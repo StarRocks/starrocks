@@ -51,7 +51,6 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
     private final OptimizerContext optimizerContext;
     private final MaterializedView mv;
     private final Map<Table, BaseCompensation<?>> compensations;
-    private final Map<Table, Column> partitionTableAndColumns;
     // for olap table
     public OptCompensator(OptimizerContext optimizerContext,
                           MaterializedView mv,
@@ -59,16 +58,12 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.compensations = compensations;
-        this.partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
     }
 
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
         LogicalScanOperator scanOperator = optExpression.getOp().cast();
         Table refBaseTable = scanOperator.getTable();
-        if (partitionTableAndColumns == null || !partitionTableAndColumns.containsKey(refBaseTable)) {
-            return optExpression;
-        }
 
         // reset the partition prune flag to be pruned again.
         Utils.resetOpAppliedRule(scanOperator, Operator.OP_PARTITION_PRUNE_BIT);
@@ -117,6 +112,10 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
 
         // NOTE: This is necessary because iceberg's physical plan will not use selectedPartitionIds to
         // prune partitions.
+        final Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        if (partitionTableAndColumns == null || !partitionTableAndColumns.containsKey(refBaseTable)) {
+            return scanOperator;
+        }
         Column refBaseTablePartitionCol = partitionTableAndColumns.get(refBaseTable);
         Preconditions.checkState(refBaseTablePartitionCol != null);
         ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(refBaseTablePartitionCol);
