@@ -18,8 +18,10 @@
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(schema_scan_rpc_failed);
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
@@ -56,11 +58,19 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     }
     var_params.__set_threadId(_param->thread_id);
 
+<<<<<<< HEAD
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::show_varialbes(*(_param->ip), _param->port, var_params, &_var_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
+=======
+    // init schema scanner state
+    FAIL_POINT_TRIGGER_RETURN_ERROR(schema_scan_rpc_failed);
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::show_variables(_ss_state, var_params, &_var_result));
+
+>>>>>>> b2a4c8aa84 ([BugFix] Fix BE crash when schema scan rpc failed (#51889))
     if (_type != TVarType::VERBOSE) {
         _begin = _var_result.variables.begin();
     } else {
