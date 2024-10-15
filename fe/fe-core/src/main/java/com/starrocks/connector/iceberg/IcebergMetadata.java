@@ -791,8 +791,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        TableScan scan = icebergCatalog.getTableScan(nativeTbl, new StarRocksIcebergTableScanContext(
-                        catalogName, dbName, tableName, planMode(connectContext), connectContext))
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, dbName, tableName, planMode(connectContext), connectContext);
+        scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
+
+        TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
