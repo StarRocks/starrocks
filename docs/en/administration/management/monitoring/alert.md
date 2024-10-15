@@ -1,430 +1,469 @@
-# StarRocks cluster alarm rules and handling methods
+---
+displayed_sidebar: docs
+---
 
-This article introduces the alarm items that need attention and their handling methods from multiple dimensions such as business continuity, cluster availability, and machines.
+# Manage Alerts
 
-The following  `$job_name` needs to be replaced with the corresponding job name in the prometheus configuration, and `$fe_leader` needs to be replaced with the corresponding IP of the leader FE.
+This topic introduces various alert items from different dimensions, including business continuity, cluster availability, and machine load, and provides corresponding resolutions.
 
-## Service pending alarm
+:::note
 
-### FE service suspended
+In the following examples, all variables are prefixed with `$`. They should be replaced according to your business environment. For example, `$job_name` should be replaced with the corresponding Job Name in the Prometheus configuration, and `$fe_leader` should be replaced with the IP address of the Leader FE.
 
-Expression:
+:::
 
-```sql
+## Service Suspension Alerts
+
+### FE Service Suspension
+
+**PromSQL**
+
+```Plain
 count(up{group="fe", job="$job_name"}) >= 3
 ```
 
-Alarm description:
+**Alert Description**
 
-Please adjust the number of surviving FE nodes according to the actual number of FE nodes.
+An alert is triggered when the number of active FE nodes falls below a specified value. You can adjust this value based on the actual number of FE nodes.
 
-Processing method:
+**Resolution**
 
-FE service is down, try to pull it up.
+Try to restart the suspended FE node.
 
-### BE service suspended
+### BE Service Suspension
 
-Expression:
+**PromSQL**
 
-```sql
+```Plain
 node_info{type="be_node_num", job="$job_name",state="dead"} > 1
 ```
 
-Alarm description:
+**Alert Description**
 
-The number of pending nodes are greater than 1.
+An alert is triggered when more than one BE node is suspended.
 
-Processing method:
+**Resolution**
 
-There is a BE service down, try to pull up.
+Try to restart the suspended BE node.
 
-## Machine overload alarm
+## Machine Load Alerts
 
-### BE CPU alarm
+### BE CPU Alert
 
-Expression:
+**PromSQL**
 
-```sql
-(1-(sum(rate(starocks_be_cpu{mode="idle", job="$job_name",instance=~".*"}[5m])) by (job, instance)) / (sum(rate(starocks_be_cpu{job="$job_name",host=~".*"}[5m])) by (job, instance))) * 100 > 90
+```Plain
+(1-(sum(rate(starrocks_be_cpu{mode="idle", job="$job_name",instance=~".*"}[5m])) by (job, instance)) / (sum(rate(starrocks_be_cpu{job="$job_name",host=~".*"}[5m])) by (job, instance))) * 100 > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-CPU util exceeds 90%
+An alert is triggered when BE CPU Utilization exceeds 90%.
 
-Processing method:
+**Resolution**
 
-There may be large queries or a large amount of data import. First, you can get the top result and take a screenshot.
+Check whether there are large queries or large-scale data loading and forward the details to the support team for further investigation.
 
-```shell
-top -Hp $be_pid
-```
+1. Use the `top` command to check resource usage by processes.
 
-Get the result of the perf and send it to StarRocks support for positioning.
+   ```Bash
+   top -Hp $be_pid
+   ```
 
-```shell
-sudo perf top -p $be_pid -g >/tmp/perf.txt #Execute for 1-2 minutes, then cancel with CTRL+C.
-```
+2. Use the `perf` command to collect and analyze performance data.
 
-In case of emergency, in order to restore the service as soon as possible, you can try to restart the corresponding BE service (keep the stack before restarting) (emergency: BE node process monitoring continues to be abnormal and full, unable to reduce CPU usage through effective positioning measures).
+   ```Bash
+   # Execute the command for 1-2 minutes, and terminate it by pressing CTRL+C.
+   sudo perf top -p $be_pid -g >/tmp/perf.txt
+   ```
 
-### Memory alarm
+:::note
 
-Expression:
+In emergencies, to quickly restore service, you can try to restart the corresponding BE node after preserving the stack. An emergency here refers to a situation where the BE node's CPU utilization remains abnormally high, and no effective means are available to reduce CPU usage.
 
-```sql
+:::
+
+### Memory Alert
+
+**PromSQL**
+
+```Plain
 (1-node_memory_MemAvailable_bytes{instance=~".*"}/node_memory_MemTotal_bytes{instance=~".*"})*100 > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-Memory usage rate exceeds 90%.
+An alert is triggered when memory usage exceeds 90%.
 
-Processing method:
+**Resolution**
 
-Troubleshooting methods can refer to [memory problem troubleshooting](../../management/resource_management/Memory_management.md) or get [heap profile](https://github.com/StarRocks/starrocks/pull/35322) troubleshooting.
+Refer to the [Get Heap Profile](https://github.com/StarRocks/starrocks/pull/35322) for troubleshooting.
 
-- In case of emergency, in order to restore the service as soon as possible, you can try to restart the corresponding BE service (emergency: BE node process memory monitoring continues to be abnormal and full, and it is impossible to reduce memory usage through effective positioning).
-- If other services of the mixed department affect SR, other services can be considered to be stopped in an emergency
+:::note
 
-### Disk alarm
+- In emergencies, you can try to restart the corresponding BE service to restore the service. An emergency here refers to a situation where the BE node's memory usage remains abnormally high, and no effective means are available to reduce memory usage.
+- If other mixed-deployed services are affecting the system, you may consider terminating those services in emergencies.
 
-#### Disk load alarm
+:::
 
-Expression:
+### Disk Alerts
 
-```sql
+#### Disk Load Alert
+
+**PromSQL**
+
+```SQL
 rate(node_disk_io_time_seconds_total{instance=~".*"}[1m]) * 100 > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-Disk load over 90%
+An alert is triggered when disk load exceeds 90%.
 
-Processing method:
+**Resolution**
 
-If there is a node_disk_io_time_seconds_total alarm, then first confirm whether there is a change in the business, if there is, whether the change can be rolled back, maintain the resource balance conditions before, if not, consider whether it is normal business growth leads to the need to expand resources.
+If the cluster triggers a `node_disk_io_time_seconds_total` alert, first check if there are any business changes. If so, consider rolling back the changes to maintain the previous resource balance. If no changes are identified or rollback is not possible, consider whether normal business growth is driving the need for resource expansion. You can use the `iotop` tool to analyze disk I/O usage. `iotop` has a UI similar to `top` and includes information such as `pid`, `user`, and I/O.
 
-You can use the `iotop` tool to analyze and monitor disk I/O usage. `iotop` has a UI similar to `top`, including PID, user, I/O, process and other related information.
+You can also use the following SQL query to identify the tablets consuming significant I/O and trace them back to specific tasks and tables.
 
-You can also use the following command to obtain the tablets that consume IO in the current system in StarRocks, and then locate specific tasks and tables.
-
-```sql
-/*"all" indicates all services, "10" represents a collection interval of 10 seconds, and "3" signifies obtaining the top 3 results*/
-admin execute on $backend_id 'System.print(ExecEnv.io_profile_and_get_topn_stats("all", 10, 3))';
+```SQL
+-- "all" indicates all services. 10 indicates the collection lasts 10 seconds. 3 indicates fetching the top 3 results.
+ADMIN EXECUTE ON $backend_id 'System.print(ExecEnv.io_profile_and_get_topn_stats("all", 10, 3))';
 ```
 
-#### Root directory space capacity alarm
+#### Root Path Capacity Alert
 
-Expression:
+**PromSQL**
 
-```sql
+```SQL
 node_filesystem_free_bytes{mountpoint="/"} /1024/1024/1024 < 5
 ```
 
-Alarm description:
+**Alert Description**
 
-The remaining space capacity of the root directory is less than 5g.
+An alert is triggered when the available space in the root directory is less than 5GB.
 
-Processing method:
+**Resolution**
 
-You can use the following command to analyze which directory occupies more space and clean up unnecessary files in time. Generally, directories that may occupy more space are /var,/opt,/tmp
+Common directories that may occupy significant space include **/var**, **/****opt**, and **/tmp**. Use the following command to check for large files and clear unnecessary files.
 
-```shell
+```Bash
 du -sh / --max-depth=1
 ```
 
-#### Data disk disk capacity alarm
+#### Data Disk Capacity Alert
 
-Expression:
+**PromSQL**
 
-```sql
-(SUM(starocks_be_disks_total_capacity{job="$job"}) by (host, path) - SUM(starocks_be_disks_avail_capacity{job="$job"}) by (host, path)) / SUM(starocks_be_disks_total_capacity{job="$job"}) by (host, path) * 100 > 90
+```Bash
+(SUM(starrocks_be_disks_total_capacity{job="$job"}) by (host, path) - SUM(starrocks_be_disks_avail_capacity{job="$job"}) by (host, path)) / SUM(starrocks_be_disks_total_capacity{job="$job"}) by (host, path) * 100 > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-Disk capacity usage over 90%
+An alert is triggered when disk capacity utilization exceeds 90%.
 
-Processing method:
+**Resolution**
 
+1. Check if there have been changes in the loaded data volume.
 
-1. Check if the amount of imported data has changed
+   Monitor the `load_bytes` metric in Grafana. If there has been a significant increase in data loading volume, you may need to scale the system resources.
 
-You can pay attention to the load bytes monitoring item in the grafana monitoring. If the data import volume increases a lot, it is recommended to expand the resources.
+2. Check for any DROP operations.
 
-2. Check if there is a drop operation
+   If data loading volume has not changed much, run `SHOW BACKENDS`. If the reported disk usage does not match the actual usage, check the FE Audit Log for recent DROP DATABASE, TABLE, or PARTITION operations.
 
-If there is no significant change in the amount of data imported, and the dataused and disk usage seen in show backends are inconsistent, you can check whether you have recently performed drop database, drop table, or drop partition operations (fe.audite.log).
+   Metadata for these operations remains in FE memory for one day, allowing you to restore data using the RECOVER statement within 24 hours to avoid misoperations. After recovery, the actual disk usage may exceed what is shown in `SHOW BACKENDS`.
 
-The metadata information involved in these operations will be retained in the FE memory for 1 day (data can be recovered through recover within one day to avoid misoperation), this time may occur, disk occupancy is greater than the displayed in the show backends used space, memory retention 1 day can be adjusted by the FE parameter catalog_trash_expire_second, adjustment method
+   The retention period of deleted data in memory can be adjusted using the FE dynamic parameter `catalog_trash_expire_second` (default value: 86400).
 
-```sql
-admin set frontend config ("catalog_trash_expire_second"="86400") #If persistence is required, remember to add it to the `fe.conf` file.
-```
+   ```Bash
+   ADMIN SET FRONTEND CONFIG ("catalog_trash_expire_second"="86400");
+   ```
 
-The data dropped in the FE memory after 1 day into the BE trash directory ($storage_root_path/trash), the data will be retained in the trash directory for 3 days by default, this time will also appear disk occupancy is greater than the show backends displayed in the used space, trash retention time by BE configuration trash_file_expire_time_sec (default 259200, 3 days, since v2.5.17, v3.0.9 and v3.1.6, the default value from 259,200 to 86,400), the adjustment method.
+   To persist this change, add the configuration item to the FE configuration file **fe.conf**.
 
-```shell
-curl http://be_ip:be_http_port/api/update_config?trash_file_expire_time_sec=xxx #If persistence is required, the configuration needs to be added to `be.conf`.
-```
+   After that, deleted data will be moved to the **trash** directory on BE nodes (`$storage_root_path/trash`). By default, deleted data is kept in the **trash** directory for one day, which may also result in the actual disk usage exceeding what is shown in `SHOW BACKENDS`.
 
-#### FE metadata disk capacity alarm
+   The retention time of deleted data in the **trash** directory can be adjusted using the BE dynamic parameter `trash_file_expire_time_sec` (default value: 86400).
 
-Expression:
+   ```Bash
+   curl http://$be_ip:$be_http_port/api/update_config?trash_file_expire_time_sec=86400
+   ```
 
-```sql
+#### FE Metadata Disk Capacity Alert
+
+**PromSQL**
+
+```Bash
 node_filesystem_free_bytes{mountpoint="${meta_path}"} /1024/1024/1024 < 10
 ```
 
-Alarm description:
+**Alert Description**
 
-The remaining space capacity of the FE meta directory is less than 10g.
+An alert is triggered when the available disk space for FE metadata is less than 10GB.
 
-Processing method:
+**Resolution**
 
-You can use the following command to analyze which directory takes up more space, clean up unnecessary files in time, the meta path is the path configured meta_dir specified in fe.conf
+Use the following commands to check for directories occupying large amounts of space and clear unnecessary files. The metadata path is specified by the `meta_dir` configuration in **fe.conf**.
 
-```shell
+```Bash
 du -sh /${meta_dir} --max-depth=1
 ```
 
-If the meta directory occupies a large space, it is usually because the bdb directory occupies a large space. It may be a checkpoint failure. You can refer to [checkpoint failure alarm] (#checkpoint failure alarm) for troubleshooting. If there is no progress, contact StarRocks support personnel in time to solve it.
+If the metadata directory occupies a lot of space, it is usually because the **bdb** directory is large, possibly due to CheckPoint failure. Refer to the [CheckPoint Failure Alert]() for troubleshooting. If this method does not solve the issue, contact the technical support team.
 
-## Cluster service exception alarm
+## Cluster Service Exception Alerts
 
-### Compaction exception alarm
+### Compaction Failure Alerts
 
-#### Compaction failure alarm
+#### Cumulative Compaction Failure Alert
 
-Expression:
+**PromSQL**
 
-```sql
-increase(starocks_be_engine_requests_total{job="$job_name" ,status="failed",type="cumulative_compaction"}[1m]) > 3
-increase(starocks_be_engine_requests_total{job="$job_name" ,status="failed",type="base_compaction"}[1m]) > 3
+```Bash
+increase(starrocks_be_engine_requests_total{job="$job_name" ,status="failed",type="cumulative_compaction"}[1m]) > 3
+increase(starrocks_be_engine_requests_total{job="$job_name" ,status="failed",type="base_compaction"}[1m]) > 3
 ```
 
-Alarm description:
+**Alert Description**
 
-There have been three failed incremental merges or three failed base merges in the last minute.
+An alert is triggered when there are three failures in Cumulative Compaction or Base Compaction within the last minute.
 
-Processing method:
+**Resolution**
 
-Search for the following keywords in the corresponding node log to determine the tablet involved
+Search the log of the corresponding BE node for the following keywords to identify the involved tablet.
 
-```shell
-grep -E 'compaction' be.INFO|grep failed
+```Bash
+grep -E 'compaction' be.INFO | grep failed
 ```
 
-Generally, there will be the following logs
+A log record like the following indicates a Compaction failure.
 
-```plain text
+```Plain
 W0924 17:52:56:537041 123639 comaction_task_cpp:193] compaction task:8482. tablet:8423674 failed.
 ```
 
-You can obtain the context of the corresponding tablet, which may be caused by deleting tables or partitioning during the compaction process. There is an internal compaction retry strategy. If it is a fixed replica, you can trigger a re-clone repair by manually setting bad (provided that the table is a 3-replica).
+You can check the context of the log to analyze the failure. Typically, the failure may have been caused by a DROP TABLE or PARTITION operation during the Compaction process. The system has an internal retry mechanism for Compaction, and you can also manually set the tablet's status to BAD and trigger a Clone task to repair it.
 
-```sql
-ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "2889157", "backend_id" = "$backend_id", "status" = "bad");
+:::note
+
+Before performing the following operation, ensure that the table has at least three complete replicas.
+
+:::
+
+```Bash
+ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "$tablet_id", "backend_id" = "$backend_id", "status" = "bad");
 ```
 
-#### High compaction pressure alarm
+#### High Compaction Pressure Alert
 
-Expression:
+**PromSQL**
 
-```sql
-starocks_fe_max_tablet_compaction_score{job="$job_name",instance="$fe_leader"} > 100
+```Bash
+starrocks_fe_max_tablet_compaction_score{job="$job_name",instance="$fe_leader"} > 100
 ```
 
-Alarm description:
+**Alert Description**
 
-The maximum merged score exceeds 100, indicating that the merger pressure is relatively high.
+An alert is triggered when the highest Compaction Score exceeds 100, indicating high Compaction pressure.
 
-Processing method:
+**Resolution**
 
-This is generally due to the initiation of high-frequency (once per second) write tasks, or it may be due to the initiation of more insert into values or delete from tasks. It is recommended to submit load or delete tasks every 5s +, and it is not recommended to submit delete tasks with high concurrency.
+This alert is typically caused by frequent loading, `INSERT INTO VALUES`, or `DELETE` operations (at a rate of 1 per second). It is recommended to set the interval between loading or DELETE tasks to more than 5 seconds and avoid submitting high-concurrency DELETE tasks.
 
-##### Alert when the number of versions exceeds the limit.
+#### Exceeding Version Count Alert
 
-Expression:
+**PromSQL**
 
-```sql
-starocks_be_max_tablet_rowset_num{job="$job_name"} > 700
+```Bash
+starrocks_be_max_tablet_rowset_num{job="$job_name"} > 700
 ```
 
-Alarm description:
+**Alert Description**
 
-There are more than 700 versions of a tablet.
+An alert is triggered when a tablet on a BE node has more than 700 data versions.
 
-Processing method:
+**Resolution**
 
-Check which tablets
+Use the following command to check the tablet with excessive versions:
 
-```sql
-select BE_ID,TABLET_ID from information_schema.be_tablets where NUM_ROWSET>700;
+```SQL
+SELECT BE_ID,TABLET_ID FROM information_schema.be_tablets WHERE NUM_ROWSET>700;
 ```
 
-Take tablet 2889156 as an example
+Example for Tablet with ID `2889156`:
 
-```sql
-show tablet 2889156;
+```SQL
+SHOW TABLET 2889156;
 ```
 
-Then execute the instructions in detailcmd
+Execute the command returned in the `DetailCmd` field:
 
-```sql
+```SQL
 SHOW PROC '/dbs/2601148/2889154/partitions/2889153/2889155/2889156';
 ```
 
 ![show proc replica](../../../_assets/alert_show_proc_3.png)
 
-Under normal circumstances, as shown in the figure, all three replicas should be in the normal state, and the other indicators should be basically consistent, such as rowcount and datasize. If only one replica version exceeds 700, the following command can be used to trigger cloning from other replicas
+Under normal circumstances, as shown, all three replicas should be in `NORMAL` status, and other metrics like `RowCount` and `DataSize` should remain consistent. If only one replica exceeds the version limit of 700, you can trigger a Clone task based on other replicas using the following command:
 
-```sql
-ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "2889157", "backend_id" = "$backend_id", "status" = "bad");
+```SQL
+ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "$tablet_id", "backend_id" = "$backend_id", "status" = "bad");
 ```
 
-If more than 2 copies exceed the version limit, the number of versions can be temporarily increased
+If two or more replicas exceed the version limit, you can temporarily increase the version count limit:
 
-```shell
-#The be_host below is the IP of the BE node with a version exceeding the limit found above, and the http_port defaults to 8040.
-curl -XPOST http://be_host:http_port/api/update_config?tablet_max_versions=2000（default 1000）
+```Bash
+# Replace be_ip with the IP of the BE node which stores the tablet that exceeds the version limit.
+# The default be_http_port is 8040.
+# The default value of tablet_max_versions is 1000.
+curl -XPOST http://$be_ip:$be_http_port/api/update_config?tablet_max_versions=2000
 ```
 
-### Checkpoint failure alarm
+### CheckPoint Failure Alert
 
-Expression:
+**PromSQL**
 
-```sql
-starocks_fe_meta_log_count{job="$job_name",instance="$fe_master"} > 100000
+```Bash
+starrocks_fe_meta_log_count{job="$job_name",instance="$fe_master"} > 100000
 ```
 
-Alarm description:
+**Alert Description**
 
-If the number of FE bdb logs exceeds 100000, the default value of 50000 will be set to 0 for checkpoint and re-accumulation.
+An alert is triggered when the FE node's BDB log count exceeds 100,000. By default, the system performs a CheckPoint when the BDB log count exceeds 50,000, and then resets the count to 0.
 
-Processing method:
+**Resolution**
 
-The reason for the alarm is that Checkpoint was not done, so we confirmed the problem by investigating the Checkpoint situation.
+This alert indicates that a CheckPoint was not performed. You need to investigate the FE logs to analyze the CheckPoint process and resolve the issue:
 
-Check if there is a log of completed checkpoint in FE: search for `begin to generate new image: image.xxxx` in the fe.log of Leader FE. If found, it means that the image has started to be generated. Check the subsequent logs of this thread. If `checkpoint finished save image.xxxx` appears, it means that the image has been written successfully. If `an Exception occurs when generating new image file`, the generation fails. You need to check the specific error information, which involves metadata issues. The operation needs to be cautious. Please contact S ta r R o c k s support personnel for analysis.
+In the **fe.log** of the Leader FE node, search for records like `begin to generate new image: image.xxxx`. If found, it means the system has started generating a new image. Continue checking the logs for records like `checkpoint finished save image.xxxx` to confirm successful image creation. If you find `Exception when generate new image file`, the image generation failed. You should carefully handle the metadata based on the specific error. It is recommended to contact the support team for further analysis.
 
-### FE thread count is full alarm
+### Excessive FE Thread Count Alert
 
-Expression:
+**PromSQL**
 
-```sql
-s ta ro c k sfe_thread_pool{job="$job_name"} > 3000
+```Bash
+starrocks_fe_thread_pool{job="$job_name"} > 3000
 ```
 
-Alarm description:
+**Alert Description**
 
-FE thread pool size exceeds 3000.
+An alert is triggered when the number of threads on the FE exceeds 3000.
 
-Processing method:
+**Resolution**
 
-The default number of threads for FE and BE is 4096. Generally, there are many union all queries, so reduce the execution concurrency of union all and adjust the SQL level pipeline_dop. If it is not convenient to adjust the SQL granularity, you can adjust the pipeline_dop globally, `set global pipeline_dop = 8`.
+The default thread count limit for FE and BE nodes is 4096. A large number of UNION ALL queries typically lead to an excessive thread count. It is recommended to reduce the concurrency of UNION ALL queries and adjust the system variable `pipeline_dop`. If it is not possible to adjust SQL query granularity, you can globally adjust `pipeline_dop`:
 
-Emergency handling:
-
-Temporary avoidance and emergency scenarios can choose to increase this parameter, thrift_server_max_worker_threads, default value 4096
-
-```sql
-admin set frontend config ("thrift_server_max_worker_threads"="8192")
+```SQL
+SET GLOBAL pipeline_dop=8;
 ```
 
-### FE JVM high usage alarm
+:::note
 
-Expression:
+In emergencies, to restore services quickly, you can increase the FE dynamic parameter `thrift_server_max_worker_threads` (default value: 4096).
 
-```sql
+```SQL
+ADMIN SET FRONTEND CONFIG ("thrift_server_max_worker_threads"="8192");
+```
+
+:::
+
+### High FE JVM Usage Alert
+
+**PromSQL**
+
+```SQL
 sum(jvm_heap_size_bytes{job="$job_name", type="used"}) * 100 / sum(jvm_heap_size_bytes{job="$job_name", type="max"}) > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-FE JVM usage rate exceeds 90%.
+An alert is triggered when the JVM usage on an FE node exceeds 90%.
 
+**Resolution**
 
-Processing method:
+This alert indicates that JVM usage is too high. You can use the `jmap` command to analyze the situation. Since detailed monitoring information for this metric is still under development, direct insights are limited. Perform the following actions and send the results to the support team for analysis:
 
-If this monitoring alarm occurs, you can manually download jmap to assist in analysis when the JVM usage rate is high. The detailed monitoring information of the current indicator is still under development, so there is no more intuitive way to see the occupation information. Perform the following operations to send the results to StarRocks support personnel for positioning.
-
-```shell
-jmap -histo[:live] $fe_pid > jmap.dump  #Adding "live" may cause the FE to restart.
+```Bash
+# Note that specifying `live` in the command may cause FE to restart.
+jmap -histo[:live] $fe_pid > jmap.dump
 ```
 
-You can restart the corresponding FE node or adjust the JVM (Xmx) to restart the FE service if it continues to hit high without releasing.
+:::note
 
-## Business availability alarm
+In emergencies, to quickly restore services, you can restart the corresponding FE node or increase the JVM (Xmx) size and then restart the FE service.
 
-### Import exception alarm
+:::
 
-#### Import failure alarm
+## Service Availability Alerts
 
-Expression:
+### Loading Exception Alerts
 
-```sql
-rate(starocks_fe_txn_failed{job="$job_name",instance="$fe_master"}[5m]) * 100 > 5
+#### Loading Failure Alert
+
+**PromSQL**
+
+```SQL
+rate(starrocks_fe_txn_failed{job="$job_name",instance="$fe_master"}[5m]) * 100 > 5
 ```
 
-Alarm description:
+**Alert Description**
 
-The number of failed items imported exceeds 5%.
+An alert is triggered when the number of failed loading transactions exceeds 5% of the total.
 
-Processing method:
+**Resolution**
 
-View leader FE log
+Check the logs of the Leader FE node to find information about the loading errors. Search for the keyword `status: ABORTED` to identify failed loading tasks.
 
-Search for information related to import errors, you can search for the keyword "status: ABORTED" to view the task of import failure.
-
-```plain text
+```Plain
 2024-04-09 18:34:02.363+08:00 INFO (thrift-server-pool-8845163|12111749) [DatabaseTransactionMgr.abortTransaction():1279] transaction:[TransactionState. txn_id: 7398864, label: 967009-2f20a55e-368d-48cf-833a-762cf1fe07c5, db id: 10139, table id list: 155532, callback id: 967009, coordinator: FE: 192.168.2.1, transaction status: ABORTED, error replicas num: 0, replica ids: , prepare time: 1712658795053, commit time: -1, finish time: 1712658842360, total cost: 47307ms, reason: [E1008]Reached timeout=30000ms @192.168.1.1:8060 attachment: RLTaskTxnCommitAttachment [filteredRows=0, loadedRows=0, unselectedRows=0, receivedBytes=1033110486, taskExecutionTimeMs=0, taskId=TUniqueId(hi:3395895943098091727, lo:-8990743770681178171), jobId=967009, progress=KafkaProgress [partitionIdToOffset=2_1211970882|7_1211893755]]] successfully rollback
 ```
 
-#### Routine load consumption delay alarm
+#### Routine Load Consumption Delay Alert
 
-Expression:
+**PromSQL**
 
-```sql
-(sum by (job_name)(starocks_fe_routine_load_max_lag_of_partition{job="$job_name",instance="$fe_mater"})) > 300000
-starocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="NEED_SCHEDULE"} > 3
-starocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} > 0
+```SQL
+(sum by (job_name)(starrocks_fe_routine_load_max_lag_of_partition{job="$job_name",instance="$fe_mater"})) > 300000
+starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="NEED_SCHEDULE"} > 3
+starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} > 0
 ```
 
-Alarm description:
+**Alert Description**
 
-The consumption delay exceeds 300,000.
+- An alert is triggered when over 300,000 entries are delayed in consumption.
+- An alert is triggered when the number of pending Routine Load tasks exceeds 3.
+- An alert is triggered when there are tasks in the `PAUSED` state.
 
-The number of scheduled routine load tasks exceeds 3 or there are tasks in PAUSED state.
+**Resolution**
 
+1. First, check if the Routine Load task status is `RUNNING`.
 
-Processing method:
+   ```SQL
+   SHOW ROUTINE LOAD FROM $db;
+   ```
 
-1. First, check whether the routine load task status is RUNNING
+   Pay attention to the `State` field in the returned data.
 
-show routine load from $db; #Pay attention to the State field.
+2. If any Routine Load task is in the `PAUSED` state, examine the `ReasonOfStateChanged`, `ErrorLogUrls`, and `TrackingSQL` fields. Typically, executing the SQL query in `TrackingSQL` can reveal the specific error.
 
-2. If the routine load task status is PAUSED
+   Example:
 
-Pay attention to the ReasonOfStateChanged, ErrorLogUrls or TrackingSQL returned in the previous step. Generally, the SQL corresponding to TrackingSQL can see the specific error information, such as
+   ![Tracking SQL](../../../_assets/alert_routine_load_tracking.png)
 
-![Tracking SQL](../../../_assets/alert_routine_load_tracking.png)
+3. If the Routine Load task status is `RUNNING`, you can try to increase the task’s concurrency. The concurrency of individual Routine Load jobs is determined by the minimum value of the following four parameters:
 
-3. If the routine load task status is RUNNING
+   - `kafka_partition_num`: Number of partitions in the Kafka Topic.
+   - `desired_concurrent_number`: The set concurrency for the task.
+   - `alive_be_num`: Number of live BE nodes.
+   - `max_routine_load_task_concurrent_num`: FE configuration parameter, with a default value of 5.
 
-You can try to increase the task parallelism. The concurrency of a single Routine Load Job is determined by the minimum of the following four values.
+In most cases, you may need to adjust the task’s concurrency or the number of Kafka Topic partitions (contact Kafka support if necessary).
 
-```plain text
-kafka_partition_num: the number of partitions for the Kafka topic.
-desired_concurrent_number: the parallelism set for the task.
-alive_be_num: the number of alive BE nodes.
-max_routine_load_task_concurrent_num: the configuration for the FE, with a default of 5.
-```
+The following example shows how to set concurrency for the task.
 
-Generally, it is necessary to adjust the parallelism of tasks or the number of topic partitions in Kafka (contact Kafka colleagues for processing). The following is the method to adjust the parallelism of tasks
-
-```sql
+```SQL
 ALTER ROUTINE LOAD FOR ${routine_load_jobname}
 PROPERTIES
 (
@@ -432,260 +471,286 @@ PROPERTIES
 );
 ```
 
-#### Import more than a single DB transaction limit alarm
+#### Loading Transaction Limit Alert for a Single Database
 
-Expression:
+**PromSQL**
 
-```sql
-sum(starocks_fe_txn_running{job="$job_name"}) by(db) > 900
+```SQL
+sum(starrocks_fe_txn_running{job="$job_name"}) by(db) > 900
 ```
 
-Alarm description:
+**Alert Description**
 
-The number of imported transactions in a single db exceeds 900. Before version 3.1, the limit was 100. Please modify the alarm threshold accordingly.
+An alert is triggered when the number of loading transactions for a single database exceeds 900 (100 in versions prior to v3.1).
 
-Processing method:
+**Resolution**
 
-Generally, it is due to the addition of more import tasks, and the limit of a single DB import transaction can be temporarily increased
+This alert is typically triggered by a large number of newly added loading tasks. You can temporarily increase the limit on loading transactions for a single database.
 
-```sql
+```SQL
 ADMIN SET FRONTEND CONFIG ("max_running_txn_num_per_db" = "2000");
 ```
 
-### Query abnormal alarm
+### Query Exception Alerts
 
-#### Query delay alarm
+#### Query Latency Alert
 
-Expression:
+**PromSQL**
 
-```sql
-starocks_fe_query_latency_ms{job="$job_name", quantile="0.95"} > 5
+```SQL
+starrocks_fe_query_latency_ms{job="$job_name", quantile="0.95"} > 5000
 ```
 
-Alarm description:
+**Alert Description**
 
-Query time P95 is greater than 5s
+An alert is triggered when the P95 query latency exceeds 5 seconds.
 
-Processing method:
+**Resolution**
 
-1. First, investigate the big query
+1. Investigate whether there are any big queries.
 
-Check if there are large queries that occupy a lot of machine resources during the period of abnormal monitoring indicators, causing other queries to timeout or fail.
+   Check whether large queries have consumed significant machine resources during the exception, leading to other queries timing out or failing.
 
-- Editor execute `show proc '/current_queries'`; can get the specific query id and other information, in order to quickly restore the service, you can kill the longest query execution time
+   - Execute `show proc '/current_queries';` to view the `QueryId` of big queries. If you need to quickly restore service, you can use the `KILL` command to terminate the long-running queries.
 
-```sql
-mysql> SHOW PROC '/current_queries';
-+--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
-| QueryId                              | ConnectionId | Database   | User | ScanBytes | ProcessRows    | CPUCostSeconds | MemoryUsageBytes | ExecTime |
-+--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
-| 7c56495f-ae8b-11ed-8ebf-00163e00accc | 4            | tpcds_100g | root | 37.88 MB  | 1075769 Rows   | 11.13 Seconds  | 146.70 MB        | 3804     |
-| 7d543160-ae8b-11ed-8ebf-00163e00accc | 6            | tpcds_100g | root | 13.02 GB  | 487873176 Rows | 81.23 Seconds  | 6.37 GB          | 2090     |
-+--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
-2 rows in set (0.01 sec)
+      ```SQL
+      mysql> SHOW PROC '/current_queries';
+      +--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
+      | QueryId                              | ConnectionId | Database   | User | ScanBytes | ProcessRows    | CPUCostSeconds | MemoryUsageBytes | ExecTime |
+      +--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
+      | 7c56495f-ae8b-11ed-8ebf-00163e00accc | 4            | tpcds_100g | root | 37.88 MB  | 1075769 Rows   | 11.13 Seconds  | 146.70 MB        | 3804     |
+      | 7d543160-ae8b-11ed-8ebf-00163e00accc | 6            | tpcds_100g | root | 13.02 GB  | 487873176 Rows | 81.23 Seconds  | 6.37 GB          | 2090     |
+      +--------------------------------------+--------------+------------+------+-----------+----------------+----------------+------------------+----------+
+      2 rows in set (0.01 sec)
+      ```
+
+   - You can also restart the BE nodes with high CPU utilization to resolve the issue.
+
+2. Check if the machine resources are sufficient.
+
+   Verify whether CPU, memory, Disk I/O, and network traffic during the exception are normal. If anomalies are detected, investigate the root cause by examining peak traffic variations and cluster resource usage. If the issue persists, consider restarting the affected node.
+
+:::note
+
+In emergencies, you can resolve the issue by:
+
+- Reducing business traffic and restarting the affected BE node if a sudden traffic spike caused resource overuse and query failure.
+- Expanding node capacity if high resource usage is due to normal operations.
+
+:::
+
+#### Query Failure Alert
+
+**PromSQL**
+
+```Plain
+sum by (job,instance)(starrocks_fe_query_err_rate{job="$job_name"}) * 100 > 10
+
+# This PromSQL is supported from v3.1.15, v3.2.11, and v3.3.3 onwards.
+increase(starrocks_fe_query_internal_err{job="$job_name"})[1m] >10
 ```
 
-- Directly restart BE node with high CPU utilization
+**Alert Description**
 
-2. Check if machine resources are sufficient
+An alert is triggered when the query failure rate exceeds 0.1/second or 10 failed queries occur within one minute.
 
-At the machine resource level, confirm whether the corresponding time period Cpu, Mem, Diskio, and network traffic monitoring information are normal. If there are abnormalities in the corresponding time period, the reason for query failure or bottleneck can be confirmed through changes in peak traffic and cluster resource usage. If there are continuous abnormalities, the corresponding node can be restarted.
+**Resolution**
 
-Emergency handling:
+When this alert is triggered, check the logs to identify the queries that failed.
 
-1. If the query fails due to an abnormal peak traffic surge, the business traffic can be urgently reduced, and the corresponding BE node can be restarted to release the backlog of queries
-2. If the resource is normally full and triggers an alarm value, node expansion can be considered
-
-#### Query failure alarm
-
-Expression:
-
-```
-sum by (job,instance)(starocks_fe_query_err_rate{job="$job_name"}) * 100 > 10 
-increase(starocks_fe_query_internal_err{job="$job_name"})[1m] >10（since v3.1.15,v3.2.11,v3.3.3）
+```Bash
+grep 'State=ERR' fe.audit.log
 ```
 
-Alarm description:
+If you have the AuditLoader plugin installed, you can locate the corresponding queries using the following query.
 
-Query failure rate 0.1/s or 1 minute query failure 10 new
-
-Processing method:
-
-When triggering this monitoring indicator, we can first confirm which SQL errors have been reported through logs.
-
-```shell
-grep 'State=ERR' fe.auit.log
+```Bash
+SELECT stmt FROM starrocks_audit_db__.starrocks_audit_tbl__ WHERE state='ERR';
 ```
 
-If the auditloder plugin is installed, you can find the corresponding SQL in the following way
+Note that queries that fail due to syntax errors or timeouts are also recorded in `starrocks_fe_query_err_rate`.
 
-```sql
-select stmt from starocks_audit_db__.starocks_audit_tbl__ where state='ERR';
+For query failures caused by kernel issues, search the `fe.log` for the error and obtain the complete stack trace and [Query Dump](), and contact the support team for troubleshooting.
+
+#### Query Overload Alert
+
+**PromSQL**
+
+```Bash
+abs((sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m]))-sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m] offset 1m)))/sum by (exported_job)(rate(starrocks_fe_query_total{process="FE",job="$job_name"}[3m]))) * 100 > 100
+abs((sum(starrocks_fe_connection_total{job="$job_name"})-sum(starrocks_fe_connection_total{job="$job_name"} offset 3m))/sum(starrocks_fe_connection_total{job="$job_name"})) * 100 > 100
 ```
 
-It should be noted that the current syntax error, timeout, and other types of SQL are also counted as starocks_fe_query_err_rate failed queries.
+**Alert Description**
 
-SQL query failure due to SR kernel exception, need to get the complete exception stack in fe.log (search for error sql in fe.log) and Query Dump contact StarRocks support colleague troubleshooting.
+An alert is triggered when the QPS or the number of connections increases by 100% within the last minute.
 
-#### Query overload alarm
+**Resolution**
 
-Expression:
+Check whether the high-frequency queries in the `fe.audit.log` are expected. If there are legitimate changes in business behavior (for example, new services going live or increased data volumes), monitor machine load and scale BE nodes as needed.
 
-```sql
-abs((sum by (exported_job)(rate(starocks_fe_query_total{process="FE",job="$job_name"}[3m]))-sum by (exported_job)(rate(starocks_fe_query_total{process="FE",job="$job_name"}[3m] offset 1m)))/sum by (exported_job)(rate(starocks_fe_query_total{process="FE",job="$job_name"}[3m]))) * 100 > 100
+#### User Connection Limit Exceeded Alert
 
-abs((sum(starocks_fe_connection_total{job="$job_name"})-sum(starocks_fe_connection_total{job="$job_name"} offset 3m))/sum(starocks_fe_connection_total{job="$job_name"})) * 100 > 100
+**PromSQL**
+
+```Bash
+sum(starrocks_fe_connection_total{job="$job_name"}) by(user) > 90
 ```
 
-Alarm description:
+**Alert Description**
 
-The QPS or connection count in the last minute increased by 100% compared to the previous minute, alarming.
+An alert is triggered when the number of user connections exceeds 90. (User connection limits are supported from versions v3.1.16, v3.2.12, and v3.3.4 onward.)
 
-Processing method:
+**Resolution**
 
-Check if the frequently occurring queries in fe.audit.log or starocks_audit_db__ starocks_audit_tbl__ meet expectations. If there are changes in normal business behavior (such as new business or changes in business data volume), it is necessary to pay attention to the machine load and timely expand the BE node.
+Use the SQL command `SHOW PROCESSLIST` to check if the number of current connections is as expected. You can terminate unexpected connections using the `KILL` command. Additionally, ensure that frontend services are not holding connections open for too long, and consider adjusting the system variable `wait_timeout` (Unit: Seconds) to accelerate the system's automatic termination of idle connections.
 
-#### User granularity connection number exceeds limit alarm
-
-Expression:
-
-```sql
-sum(starocks_fe_connection_total{job="$job_name"}) by(user) > 90
+```Bash
+SET wait_timeout = 3600;
 ```
 
-Alarm description:
+:::note
 
-User granularity connection count greater than 90 alarm (user granularity connection count is supported from 3.1.16/3.2.12/3.3.4)
+In emergencies, you can increase the user connection limit temporarily to restore service:
 
-Processing method:
+- For v3.1.16, v3.2.12, and v3.3.4 or later:
 
-You can check whether the current number of connections meets expectations through the show processlist. You can manually kill the connections that do not meet expectations. Check whether the front-end has improper use of the business side that causes the connection to not be released for a long time. You can also automatically kill the connections that have slept for too long by adjusting the wait_timeout parameters. You can adjust the Set wait_timeout = xxx parameter in units of s.
+  ```Bash
+  ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
+  ```
 
-Emergency solution:
+- For v2.5 and earlier:
 
-```sql
-/*Increase the connection limit for the corresponding user.*/
-ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
+  ```Bash
+  SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
+  ```
 
-/*Settings for versions 2.5 and earlier.*/
-SET PROPERTY FOR 'jack' 'max_user_connections' = '1000'；
+:::
+
+### Schema Change Exception Alert
+
+**PromSQL**
+
+```Bash
+increase(starrocks_be_engine_requests_total{job="$job_name",type="schema_change", status="failed"}[1m]) > 1
 ```
 
-#### Schema change abnormal alarm
+**Alert Description**
 
-Expression:
+An alert is triggered when more than one Schema Change task fails in the last minute.
 
-```sql
-increase(starocks_be_engine_requests_total{job="$job_name",type="schema_change", status="failed"}[1m]) > 1
+**Resolution**
+
+Run the following statement to check if the `Msg` field contains any error messages:
+
+```Bash
+SHOW ALTER COLUMN FROM $db;
 ```
 
-Alarm description:
+If no message is found, search for the JobId from the previous step in the Leader FE logs to retrieve the context.
 
-The number of failed schema change tasks in the last minute exceeded 1.
+- Schema Change Out of Memory
 
-Processing method:
+  If the Schema Change fails due to insufficient memory, search the **be.WARNING** logs for `failed to process the version`, `failed to process the schema change from tablet`, or `Memory of schema change task exceeded limit` to identify log records shown in the following:
 
-First, check whether the field Msg returned by the following command has a corresponding error message
+  ```Bash
+  fail to execute schema change: Memory of schema change task exceed limit. DirectSchemaChange Used: 2149621304, Limit: 2147483648. You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]
+  ```
 
-show alter column from $db;
+  The memory limit error is typically caused by exceeding the 2GB memory limit for a single Schema Change, controlled by the BE dynamic parameter `memory_limitation_per_thread_for_schema_change`. You can modify this parameter to resolve the issue.
 
-If not, search for the JobId context returned from the previous step in the leader FE log
+  ```Bash
+  curl -XPOST http://be_host:http_port/api/update_config?memory_limitation_per_thread_for_schema_change=8
+  ```
 
-1. Schema change out of memory
+- Schema Change Timeout
 
-You can search in the be.WARNING log of the corresponding time node for `failed to process the version, failed to process the schema change. from tablet, Memory of schema change task exceeds limit information`, confirm the context, and view failed to execute schema change:
+  Except for adding columns, which is a lightweight implementation, most Schema Changes involve creating a large number of new tablets, rewriting the original data, and implementing the operation via SWAP.
 
-Memory overrun error log is: `fail to execute schema change: Memory of schema change task exceeds limit. DirectSchemaChange Used: 2149621304, Limit: 2147483648. You can change the limit by modifying BE config [memory_limitation_per_thread_for_schema_change]`
+  ```Plain
+  Create replicas failed. Error: Error replicas:21539953=99583471, 21539953=99583467, 21539953=99599851
+  ```
 
-This error is caused by a single schema change using more than the default memory limit of 2G, which is controlled by the following parameters.
+  You can address this by:
 
-```plain text
-memory_limitation_per_thread_for_schema_change     
-```
-Modification method
+  - Increasing the timeout for creating tablets (Default: 10 seconds).
 
-```shell
-curl -XPOST http://be_host:http_port/api/update_config?memory_limitation_per_thread_for_schema_change=8     
-```
+    ```Bash
+    ADMIN SET FRONTEND CONFIG ("tablet_create_timeout_second"="60");
+    ```
 
-2. Schema change timeout
+  - Increasing the number of threads for creating tablets (default: 3).
 
-Adding columns is a lightweight implementation, while other schema change implementations create a bunch of new tablets, rewrite the original data, and ultimately implement it through swap.
+    ```Bash
+    curl -XPOST http://be_host:http_port/api/update_config?alter_tablet_worker_count=6
+    ```
 
-```plain text
-Create replicas failed. Error: Error replicas:21539953=99583471, 21539953=99583467, 21539953=99599851     
-```
+- Non-Normal Tablet State
 
-Increase the Timeout for creating tablets
+  1. If a tablet is in a non-normal state, search the **be.WARNING** logs for `tablet is not normal` and execute `SHOW PROC '/statistic'` to check the cluster-level `UnhealthyTabletNum`.
 
-```sql
-admin set frontend config ("tablet_create_timeout_second" = "60") (default 10)
-```
+     ![show statistic](../../../_assets/alert_show_statistic.png)
 
-Increase the number of threads to create tablets
+  2. Execute `SHOW PROC '/statistic/$DbId'` to check the unhealthy tablet number in the specified database.
 
-```shell
-curl -XPOST http://be_host: http_port/api/update_config? alter_tablet_worker_count = 6 (default 3)
-```
+     ![show statistic db](../../../_assets/alert_show_statistic_db.png)
 
-3. Tablets have abnormal copies
+  3. Execute `SHOW TABLET $tablet_id` to view the table information of the corresponding tablet.
 
-You can search the be.WARNING log for information that the tablet is not normal.`show proc '/statistic'` can see the cluster-level UnhealthyTabletNum information
+     ![show tablet](../../../_assets/alert_show_tablet.png)
 
-![show statistic](../../../_assets/alert_show_statistic.png)
+  4. Execute the command returned in the `DetailCmd` field to identify the cause of the unhealthy tablets.
 
-You can further enter show proc '/statistics/Dbid' to see the number of unhealthy replicas in the specified DB
+     ![show proc](../../../_assets/alert_show_proc.png)
 
-![show statistic db](../../../_assets/alert_show_statistic_db.png)
+  Typically, unhealthy as well as inconsistent replicas are usually caused by high-frequency loading, where the progress of writes to different replicas is not synchronized. You can check if the table has a large number of real-time writes and reduce the number of abnormal replicas by reducing the frequency of loading or temporarily suspending the service and retrying the task thereafter.
 
-Further, the corresponding table information can be viewed by showing tablet tabletid
+:::note
 
-![show tablet](../../../_assets/alert_show_tablet.png)
+In emergencies, to restore the service, you can set the non-Normal replicas as Bad to trigger a Clone task.
 
-Execute the content in DetailCmd to confirm the unhealthy cause
-
-![show proc](../../../_assets/alert_show_proc.png)
-
-Generally speaking, unhealthy and inconsistent replicas are related to high-frequency imports. You can check whether the table has a large number of real-time writes. This unhealthy or inconsistent behavior is related to the asynchronous writing progress of the three replicas. After reducing the frequency or briefly stopping the service, it will decrease. You can retry the task.
-
-Emergency handling:
-- After the task fails, you need to troubleshoot and retry through the above method.
-- The online environment is strictly required to be configured as 3 replicas. If there is a replica with 1 tablet that is not normal, the command to forcibly set it to bad can be executed (provided that three replicas are guaranteed and only one replica is damaged).
-
-#### Materialized view refresh abnormal alarm
-
-Expression:
-
-```sql
-increase(starocks_fe_mv_refresh_total_failed_jobs[5m]) > 0
+```Bash
+ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "$tablet_id", "backend_id" = "$backend_id", "status" = "bad");
 ```
 
-Alarm description:
+Before performing this operation, ensure the table has at least three complete replicas with only one non-normal replica.
 
-The number of failed times to refresh the new materialized view in the last 5 minutes exceeds 1.
+:::
 
-Processing method:
+### Materialized View Refresh Exception Alert
 
-1. Which materialized views failed
+**PromSQL**
 
-```sql
-select TABLE_NAME,IS_ACTIVE,INACTIVE_REASON,TASK_NAME from information_schema.materialized_views where LAST_REFRESH_STATE !=" SUCCESS"
+```Bash
+increase(starrocks_fe_mv_refresh_total_failed_jobs[5m]) > 0
 ```
 
-2. You can try to refresh manually first.
+**Alert Description**
 
-```sql
-REFRESH MATERIALIZED VIEW ${mv_name};
-```
+An alert is triggered when more than one materialized view refresh fails in the last five minutes.
 
-3. If the materialized view state is INACTIVE, you can try to set it to ACTIVE as follows
+**Resolution**
 
-```sql
-ALTER MATERIALIZED VIEW ${mv_name} ACTIVE;
-```
+1. Check the materialized views that failed to refresh.
 
-4. Reasons for troubleshooting failure
+   ```SQL
+   SELECT TABLE_NAME,IS_ACTIVE,INACTIVE_REASON,TASK_NAME FROM information_schema.materialized_views WHERE LAST_REFRESH_STATE !=" SUCCESS";
+   ```
 
-```sql
-SELECT * FROM information_schema.task_runs WHERE task_name ='mv-112517' \G
-```
+2. Try manually refreshing the materialized view.
+
+   ```SQL
+   REFRESH MATERIALIZED VIEW $mv_name;
+   ```
+
+3. If the materialized view is in the `INACTIVE` state, try to manually activate it.
+
+   ```SQL
+   ALTER MATERIALIZED VIEW $mv_name ACTIVE;
+   ```
+
+4. Investigate the cause of the refresh failure.
+
+   ```SQL
+   SELECT * FROM information_schema.task_runs WHERE task_name ='mv-112517' \G
+   ```
