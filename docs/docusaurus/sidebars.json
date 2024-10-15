@@ -456,7 +456,6 @@
                                 "administration/management/monitoring/metrics-materialized_view",
                                 "administration/management/monitoring/metrics-shared-data",
                                 "administration/management/monitoring/alert"
-
                             ]
                         },
                         "administration/management/audit_loader",
