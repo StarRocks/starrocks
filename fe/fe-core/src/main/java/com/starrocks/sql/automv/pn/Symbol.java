@@ -69,10 +69,6 @@ public final class Symbol extends SymTabEntry {
             return false;
         }
         Symbol symbol = (Symbol) o;
-        if (symbol.isTenured() && this.isTenured() && symbol.getTenuredColumn().equals(getTenuredColumn())) {
-            return true;
-        } else {
-            return Objects.equals(id, symbol.id);
-        }
+        return Objects.equals(id, symbol.id);
     }
 }

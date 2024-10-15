@@ -81,7 +81,7 @@ public class TunespaceExecutor {
         CustomizedQueryExecutor executor = new CustomizedQueryExecutor();
         List<PlanPieceInfo> pieceInfos =
                 executor.query(PlanPieceInfo.class, PlanPieceInfo.getColumns(), context, selectSql);
-        AutoMVOptions options = AutoMVOptions.of(context.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), context.getSessionVariable());
 
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
 
@@ -159,7 +159,7 @@ public class TunespaceExecutor {
                     .map(subPlan -> Pair.create(nameGenerator.get(), subPlan))
                     .collect(Collectors.toList());
 
-            AutoMVOptions options = AutoMVOptions.of(context.getSessionVariable());
+            AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), context.getSessionVariable());
             List<PlanPieceInfo> pieceInfos = namedSubPlans.stream()
                     .map(namedSubPlan -> PlanPieceInfo.from(options, namedSubPlan.first, namedSubPlan.second, false,
                             fqTableMap))

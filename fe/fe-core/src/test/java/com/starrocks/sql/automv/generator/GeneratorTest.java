@@ -27,6 +27,7 @@ import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -91,7 +92,7 @@ public class GeneratorTest {
             List<OptExpression> subPlans = fQTableMapAndSubPlans.second;
             Map<String, FQTable> fqTableMap = fQTableMapAndSubPlans.first;
             PrettyPrinter traceLog = new PrettyPrinter();
-            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+            AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
             Supplier<String> nameGenerator = Util.nextStringGenerator(p.first + ".part.", "");
             for (OptExpression subPlan : subPlans) {
                 PlanPiece planPiece =

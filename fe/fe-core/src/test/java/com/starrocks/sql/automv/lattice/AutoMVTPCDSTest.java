@@ -36,6 +36,7 @@ import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.qe.ColumnPlus;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
 import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.qe.TablePlus;
@@ -854,7 +855,7 @@ public class AutoMVTPCDSTest {
             List<OptExpression> subPlans =
                     RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG());
 
-            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+            AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
             List<PlanPieceInfo> pieceInfos = subPlans.stream()
                     .map(subPlan -> PlanPieceInfo.from(options, name, subPlan, false, fqTableMap))
                     .collect(Collectors.toList());
@@ -887,7 +888,7 @@ public class AutoMVTPCDSTest {
         AggregatePiece planPiece = optPlanPiece.get();
         PrettyPrinter traceLog = new PrettyPrinter();
 
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, traceLog);
         PlanPieceInfo pieceInfo = PlanPieceInfo.from(planPiece, policy, fqTableMap);
         TablePlus table = PlanPieceInfo.getTable("tunespace", 1, 1);

@@ -32,11 +32,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 public class AutoMVPartitionPolicyTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
@@ -57,28 +56,6 @@ public class AutoMVPartitionPolicyTest {
             m.createStatisticsTablesForTest();
         }
         UtFrameUtils.mockTimelinessForAsyncMVTest(starRocksAssert.getCtx());
-    }
-
-    private void testHelper(Object[][] testCases) {
-        for (Object[] tc : testCases) {
-            String q = (String) tc[0];
-            TimeGranule.Unit defaultGranule = (TimeGranule.Unit) tc[1];
-            String granuleStr = Optional.ofNullable(defaultGranule).map(Enum::name).orElse("none");
-            String[] expectLines = (String[]) tc[2];
-            AutoMVUtil.testSingleQueryHelper(STARROCKS_ASSERT.get(), q,
-                    sv -> {
-                        sv.setAutoMVDefaultPartitionByTimeGranule(granuleStr);
-                        sv.setAutoMVCardRowCountRatioLWM(1.0);
-                        sv.setAutoMVCardRowCountRatioHWM(1.0);
-                    },
-                    results -> {
-                        Assert.assertFalse(results.isEmpty());
-                        String mv = results.get(0).get(2);
-                        Stream.of(expectLines).forEach(ln -> {
-                            Assert.assertTrue(mv, mv.contains(ln));
-                        });
-                    });
-        }
     }
 
     @Test
@@ -113,7 +90,7 @@ public class AutoMVPartitionPolicyTest {
 
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -149,7 +126,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -179,7 +156,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
 
     }
 
@@ -213,7 +190,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -247,7 +224,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -283,7 +260,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -319,7 +296,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     // TODO: by satanson, a MV that has list-partition base tables are not support in present,
@@ -350,7 +327,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -389,7 +366,7 @@ public class AutoMVPartitionPolicyTest {
                         }
                 }
         };
-        testHelper(testCases);
+        AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
     }
 
     @Test
@@ -523,6 +500,57 @@ public class AutoMVPartitionPolicyTest {
                         Assert.assertTrue(
                                 (mvLimit < 30 && result.size() == mvLimit) || (mvLimit >= 30 && result.size() == 30));
                     });
+        }
+    }
+
+    @Test
+    public void testMVPreferRangePartition() {
+        String q0 = "select UserId, sum(M0) from hits_daily_list " +
+                " group by UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.DAY,
+                        new String[] {
+                                "PARTITION BY _ca0002",
+                                "(str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")) AS _ca0002",
+                                "GROUP BY\n" +
+                                        "  str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")"
+                        }
+                },
+                {q0, TimeGranule.Unit.MONTH,
+                        new String[] {
+                                "PARTITION BY _ca0002",
+                                "(str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")) AS _ca0002",
+                                "GROUP BY\n" +
+                                        "  str2date(`db0`.`hits_daily_list`.EventDateS, \"%Y-%m-%d\")"
+                        }
+                }
+        };
+
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(true);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testMVPreferListPartition() {
+        String q0 = "select UserId, sum(M0) from hits_daily_list " +
+                " group by UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.DAY, new String[] {"PARTITION BY EventDateS"}},
+                {q0, TimeGranule.Unit.MONTH, new String[] {"PARTITION BY EventDateS"}}
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
         }
     }
 }

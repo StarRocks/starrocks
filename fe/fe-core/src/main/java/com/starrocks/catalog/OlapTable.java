@@ -1241,9 +1241,15 @@ public class OlapTable extends Table {
      *  values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
+        return getListPartitionValues().entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new PListCell(e.getValue())));
+    }
+
+    public Map<String, List<List<String>>> getListPartitionValues() {
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-        Map<String, PListCell> partitionItems = Maps.newHashMap();
+        Map<String, List<List<String>>> partitionValues = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
             String partitionName = partitionEntry.getValue().getName();
@@ -1259,16 +1265,16 @@ public class OlapTable extends Table {
                 for (String val : singleValues) {
                     cellValue.add(Lists.newArrayList(val));
                 }
-                partitionItems.put(partitionName, new PListCell(cellValue));
+                partitionValues.put(partitionName, cellValue);
             }
 
             // multi items
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
             if (multiValues != null) {
-                partitionItems.put(partitionName, new PListCell(multiValues));
+                partitionValues.put(partitionName, multiValues);
             }
         }
-        return partitionItems;
+        return partitionValues;
     }
 
     @Override

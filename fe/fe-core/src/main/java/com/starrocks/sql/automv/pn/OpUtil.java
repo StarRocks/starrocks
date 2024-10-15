@@ -22,6 +22,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -39,6 +41,7 @@ import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
 import java.util.Collection;
@@ -1035,5 +1038,15 @@ public class OpUtil {
         } else {
             return op.isVarIsNotNull();
         }
+    }
+
+    public static Op exprToOp(Expr expr, ColumnRefToIdConverter idConverter,
+                              TieredMap<Integer, GenericColumn> columns) {
+        return OpUtil.toOpConverter(idConverter, columns).apply(SqlToScalarOperatorTranslator.translate(expr));
+    }
+
+    public static Op literalExprToOp(LiteralExpr literal) {
+        return OpUtil.toOpConverter(new ColumnRefToIdConverter(), TieredMap.genesis())
+                .apply(SqlToScalarOperatorTranslator.translate(literal));
     }
 }

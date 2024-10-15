@@ -45,10 +45,12 @@ import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPieceBuilder;
 import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
+import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
 import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.qe.ColumnPlus;
 import com.starrocks.sql.automv.qe.CustomizedQueryExecutor;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
 import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.qe.TunespaceExecutor;
@@ -63,7 +65,6 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.internal.stubbing.answers.DoesNothing;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.sql.Timestamp;
@@ -94,7 +95,8 @@ public class AutoMVUtil {
             Supplier<String> nameGenerator = Util.nextStringGenerator(name + ".part.", "");
             List<PlanPieceInfo> pieceInfoList = RboOptimizer.getPlanPieces(query, ctx).stream().map(piece -> {
                 AggregatePolicy policy =
-                        AggregatePolicies.defaultPolicies(AutoMVOptions.of(ctx.getSessionVariable()));
+                        AggregatePolicies.defaultPolicies(
+                                AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable()));
                 PlanPieceInfo pieceInfo = PlanPieceInfo.from(piece, policy, piece.getCommonState().getFqTableMap());
                 pieceInfo.getTraits().setName(nameGenerator.get());
                 return pieceInfo;
@@ -214,6 +216,21 @@ public class AutoMVUtil {
         });
     }
 
+    private static void refreshMVRange(StarRocksAssert starRocksAssert, String mvName, String start, String end,
+                                       boolean force) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("refresh materialized view " + mvName);
+        if (start != null && end != null) {
+            sb.append(String.format(" partition start('%s') end('%s')", start, end));
+        }
+        if (force) {
+            sb.append(" force");
+        }
+        sb.append(" with sync mode");
+        String sql = sb.toString();
+        starRocksAssert.getCtx().executeSql(sql);
+    }
+
     public static void testSingleQueryHelper(StarRocksAssert starRocksAssert, String query,
                                              Consumer<SessionVariable> svSetter,
                                              Consumer<List<List<String>>> resultChecker) {
@@ -225,6 +242,7 @@ public class AutoMVUtil {
                 String mvName = mvResults.get(0).get(1);
                 String mv = mvResults.get(0).get(2);
                 starRocksAssert.withMaterializedView(mv, () -> {
+                    refreshMVRange(starRocksAssert, mvName, null, null, false);
                     String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), query);
                     Assert.assertTrue(plan, plan.contains(mvName));
                 });
@@ -233,7 +251,7 @@ public class AutoMVUtil {
         });
     }
 
-    private static Map<String, Object> saveGlobalVariable() {
+    public static Map<String, Object> saveGlobalVariable() {
         return Stream.of(GlobalVariable.class.getDeclaredFields())
                 .filter(field -> Modifier.isStatic(field.getModifiers()))
                 .peek(field -> field.setAccessible(true))
@@ -242,7 +260,7 @@ public class AutoMVUtil {
                         f -> Result.wrap(() -> f.get(null)).unwrap().orElse(null)));
     }
 
-    private static void restoreGlobalVariable(Map<String, Object> values) {
+    public static void restoreGlobalVariable(Map<String, Object> values) {
         Map<String, Field> fieldMap = Stream.of(GlobalVariable.class.getDeclaredFields())
                 .filter(field -> Modifier.isStatic(field.getModifiers()))
                 .peek(field -> field.setAccessible(true))
@@ -276,13 +294,14 @@ public class AutoMVUtil {
             List<Pair<String, AggregatePiece>> pieces = getPieces(ctx, queryList);
             ShowResultSet showResultSet = TunespaceExecutor.execute(stmt, ctx);
             resultChecker.apply(pieces, showResultSet.getResultRows());
-        } catch (IOException e) {
+        } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         } finally {
             try {
                 ctx.getSessionVariable().replayFromJson(savedSv);
                 restoreGlobalVariable(savedGv);
-            } catch (IOException e) {
+            } catch (Throwable e) {
                 Assert.fail();
             }
         }
@@ -294,7 +313,7 @@ public class AutoMVUtil {
 
     public static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx, List<Pair<String, String>> queryList,
                                                                java.util.function.Predicate<String> filter) {
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
         return queryList.stream()
                 .filter(p -> filter.test(p.first))
@@ -327,7 +346,7 @@ public class AutoMVUtil {
             AggregatePiece planPiece = optPlanPiece.get();
 
             PlanPieceNormalizer.normalize(planPiece);
-            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+            AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
             MVGenerateContext mvGenerateContext = MVGenerateContext.builder()
                     .setMvNameGenerator(query -> MVName.generateFromQuery(query).toString())
                     .setNextId(idConverter::nextId)
@@ -346,5 +365,27 @@ public class AutoMVUtil {
     public static List<MVRecommendation> recommend(List<Pair<String, String>> queryList, ConnectContext context) {
         mockUpCustomizedQueryExecutor(queryList);
         return TunespaceExecutor.recommend("ts", context, 0, Integer.MAX_VALUE);
+    }
+
+    public static void testPartitionHelper(StarRocksAssert starRocksAssert, Object[][] testCases) {
+        for (Object[] tc : testCases) {
+            String q = (String) tc[0];
+            TimeGranule.Unit defaultGranule = (TimeGranule.Unit) tc[1];
+            String granuleStr = Optional.ofNullable(defaultGranule).map(Enum::name).orElse("none");
+            String[] expectLines = (String[]) tc[2];
+            AutoMVUtil.testSingleQueryHelper(starRocksAssert, q,
+                    sv -> {
+                        sv.setAutoMVDefaultPartitionByTimeGranule(granuleStr);
+                        sv.setAutoMVCardRowCountRatioLWM(1.0);
+                        sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    },
+                    results -> {
+                        Assert.assertFalse(results.isEmpty());
+                        String mv = results.get(0).get(2);
+                        Stream.of(expectLines).forEach(ln -> {
+                            Assert.assertTrue(mv, mv.contains(ln));
+                        });
+                    });
+        }
     }
 }

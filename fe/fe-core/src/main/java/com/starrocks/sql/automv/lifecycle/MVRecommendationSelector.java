@@ -57,7 +57,7 @@ public class MVRecommendationSelector {
         double estimatedPopCardinality = cardRecord.getCardinality() / cardEstimateState.getSamplingRatio();
 
         boolean isPartitionedMV =
-                PartitionPolicy.getPartitionColumnId(mv.getLatticeNode().getFinalAggPiece()).isPresent();
+                PartitionPolicy.getPartitionColumnId(mv.getLatticeNode().getFinalAggPiece(), null).isPresent();
         if (isPartitionedMV) {
             return estimatedPopCardinality <= options.getPartitionedMVCardinalityMax();
         } else {

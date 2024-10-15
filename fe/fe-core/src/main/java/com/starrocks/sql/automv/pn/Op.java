@@ -126,6 +126,9 @@ public abstract class Op {
     }
 
     public static Val val(ConstantOperator constant) {
+        if (constant.getType().isStringType()) {
+            constant = ConstantOperator.createVarchar(constant.getVarchar());
+        }
         return new Val(constant);
     }
 

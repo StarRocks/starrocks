@@ -15,30 +15,30 @@
 package com.starrocks.sql.automv.policies;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PieceCommonState;
 import com.starrocks.sql.automv.pieces.PlanPiece;
-import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.StrictOp;
 import com.starrocks.sql.automv.pn.TimeGranule;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
+import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 // TimeGranulePartitionPolicy is used to pick up a partition-by column for MV. At
 // first, it tries to use an already-existing time granules which reside in AggregatePiece's
@@ -52,26 +52,29 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
     // For default time granule's coarseness, we only support HOUR, DAY, MONTH, QUARTER and YEAR.
     // TODO(by satanson): at present, weekly-partition MV is not supported, so there is no
     //  WEEK time granule.
-    private static final Map<TimeGranule.Unit, AbstractAggregatePolicy>
-            POLICY_MAP = Stream.of(
-                    TimeGranule.Unit.HOUR,
-                    TimeGranule.Unit.DAY,
-                    TimeGranule.Unit.MONTH,
-                    TimeGranule.Unit.QUARTER,
-                    TimeGranule.Unit.YEAR)
-            .collect(ImmutableMap.toImmutableMap(
-                    Function.identity(),
-                    TimeGranulePartitionPolicy::new));
+    private static final Set<TimeGranule.Unit> POLICY_SET = ImmutableSet.of(
+            TimeGranule.Unit.HOUR,
+            TimeGranule.Unit.DAY,
+            TimeGranule.Unit.MONTH,
+            TimeGranule.Unit.QUARTER,
+            TimeGranule.Unit.YEAR);
+
+    private final PartitionExtractor partitionExtractor;
     private final TimeGranule.Unit defaultTimeGranuleUnit;
 
-    private TimeGranulePartitionPolicy(TimeGranule.Unit defaultTimeGranuleUnit) {
+    private TimeGranulePartitionPolicy(PartitionExtractor partitionExtractor, TimeGranule.Unit defaultTimeGranuleUnit) {
+        this.partitionExtractor = partitionExtractor;
         this.defaultTimeGranuleUnit = defaultTimeGranuleUnit;
     }
 
-    public static AbstractAggregatePolicy resolvePolicy(String timeGranuleUnit) {
+    public static AbstractAggregatePolicy resolvePolicy(PartitionExtractor extractor, String timeGranuleUnit) {
         try {
             TimeGranule.Unit unit = TimeGranule.Unit.valueOf(timeGranuleUnit.toUpperCase());
-            return POLICY_MAP.getOrDefault(unit, IDENTITY_POLICY);
+            if (POLICY_SET.contains(unit)) {
+                return new TimeGranulePartitionPolicy(extractor, unit);
+            } else {
+                return IDENTITY_POLICY;
+            }
         } catch (IllegalArgumentException ignored) {
             return IDENTITY_POLICY;
         }
@@ -85,15 +88,9 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         AggregatePiece.FlatTable flatTable = aggPiece.getFlatTable();
         PlanPiece flatTablePiece = flatTable.getPiece();
         // extract all partition-by columns from base tables.
-        List<TableAndPartitionColumn>
-                tpList = aggPiece.getPartitionColumns().stream()
-                .filter(p -> p.second.size() == 1)
-                .map(p -> Pair.create(p.first, p.second.entrySet().iterator().next()))
-                .map(p -> TableAndPartitionColumn.of(p.first, p.second.getKey(), p.second.getValue()))
+        List<PartitionPlus> ppList = aggPiece.getPartitionColumns(partitionExtractor).stream()
+                .filter(p -> !p.getPartitionColumns().isEmpty())
                 .collect(Collectors.toList());
-
-        ColumnRefSet partitionByColumnIds = ColumnRefSet.of();
-        tpList.forEach(tp -> partitionByColumnIds.union(tp.getId()));
 
         // At first, try to use already-exists time granule which reside in dimensions and rollupDimensions
         // of the AggregatePiece, these granule is never turned into coarse-grained one;
@@ -102,12 +99,12 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         return addCoarseTimeGranuleAsPartitionByColumn(
                 aggPiece,
                 aggPiece.getDimensions().merge(aggPiece.getRollupDimensions()),
-                partitionByColumnIds,
+                ppList,
                 true
         ).or(() -> addCoarseTimeGranuleAsPartitionByColumn(
                 aggPiece,
                 flatTablePiece.getColumns(),
-                partitionByColumnIds,
+                ppList,
                 false)
         );
     }
@@ -115,35 +112,75 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
     private Optional<AggregatePiece> addCoarseTimeGranuleAsPartitionByColumn(
             AggregatePiece aggPiece,
             TieredMap<Integer, GenericColumn> columns,
-            ColumnRefSet partitionByColumnIds,
-            boolean alreadyExists) {
+            List<PartitionPlus> ppList,
+            boolean columnsFromAgg) {
 
-        Optional<TimeGranule> optChosenGranule = OpUtil.extractPartitionByTimeGranule(columns, partitionByColumnIds)
+        ColumnRefSet columnIds = ColumnRefSet.createByIds(columns.keySet());
+        ColumnRefSet partitionColumnIds = ColumnRefSet.of();
+        ppList.stream()
+                .map(pp -> pp.getPartitionColumns().stream().map(p -> p.first).collect(Collectors.toList()))
+                .map(ColumnRefSet::createByIds)
+                .forEach(partitionColumnIds::union);
+
+        TieredList<Op> dimPartOps = OpUtil.columnsToStrictOpMap(columns).keySet()
                 .stream()
-                .max(Comparator.comparing(p -> p.second, TimeGranule.getComparator()))
-                .map(p -> p.second);
+                .map(StrictOp::getOp)
+                .filter(op -> partitionColumnIds.containsAll(op.getIds()))
+                .collect(TieredList.<Op>toList());
+        TieredList<Op> baseTablePartOps = ppList.stream()
+                .map(PartitionPlus::chosePartitionOp)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .filter(op -> columnIds.containsAll(op.getIds()))
+                .collect(TieredList.<Op>toList());
 
-        if (optChosenGranule.isEmpty()) {
-            return Optional.empty();
+        TieredList<Op> partOps = dimPartOps.concat(baseTablePartOps);
+
+        Optional<TimeGranule> optChosenGranule = partOps.stream().map(op -> Optional.ofNullable(TimeGranule.of(op)))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .max(Comparator.comparing(Function.identity(), TimeGranule.getComparator()));
+
+        if (optChosenGranule.isPresent()) {
+            TimeGranule timeGranule = optChosenGranule.get();
+            TimeGranule wellFormedTimeGranule = timeGranule.toWellFormed();
+            TimeGranule coarseTimeGranule =
+                    Objects.requireNonNull(wellFormedTimeGranule.toCoarse(defaultTimeGranuleUnit));
+
+            boolean exists = aggPiece.getDimensions().merge(aggPiece.getRollupDimensions())
+                    .entrySet()
+                    .stream()
+                    .map(e -> OpUtil.columnToOp(e.getKey(), e.getValue()).strict())
+                    .anyMatch(op -> op.equals(coarseTimeGranule.getOp().strict()));
+
+            if (exists) {
+                return Optional.of(aggPiece);
+            }
+            return addPartitionDimension(aggPiece, coarseTimeGranule.getOp(), columnsFromAgg);
         }
 
-        TimeGranule timeGranule = optChosenGranule.get();
-        TimeGranule wellFormedTimeGranule = timeGranule.toWellFormed();
-        TimeGranule coarseTimeGranule = Objects.requireNonNull(wellFormedTimeGranule.toCoarse(defaultTimeGranuleUnit));
-
-        if (alreadyExists && wellFormedTimeGranule.equals(coarseTimeGranule)) {
-            return Optional.of(aggPiece);
+        // if partition columns of base tables are not TimeGranules, we use the
+        // first non-TimeGranule column.
+        Optional<Op> optNonGranuleOp = partOps.stream().filter(Op::isVar).findFirst();
+        if (optNonGranuleOp.isPresent()) {
+            return addPartitionDimension(aggPiece, optNonGranuleOp.get(), columnsFromAgg);
         }
+        return Optional.empty();
+    }
 
+    private Optional<AggregatePiece> addPartitionDimension(AggregatePiece aggPiece, Op partitionOp,
+                                                           boolean columnsFromAgg) {
         ColumnRefToIdConverter newIdConverter = aggPiece.getCommonState().getIdConverter().duplicate();
         PieceCommonState newCommonState =
                 new PieceCommonState(newIdConverter, aggPiece.getCommonState().getCoveredQueries(),
                         aggPiece.getCommonState().getFqTableMap());
 
-        Op partitionOp = coarseTimeGranule.getOp();
         TieredMap<StrictOp, Integer> strictOpToIds =
                 OpUtil.columnsToStrictOpMap(aggPiece.getFlatTable().getPiece().getColumns());
         Optional<Integer> optId = Optional.ofNullable(strictOpToIds.get(partitionOp.strict()));
+        if (columnsFromAgg && optId.isPresent()) {
+            return Optional.of(aggPiece);
+        }
         AggregatePiece.FlatTable newFlatTable;
         Pair<Integer, GenericColumn> partitionByColumn;
         if (optId.isPresent()) {
@@ -154,7 +191,7 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
             partitionByColumn = OpUtil.opToColumn(partitionOp, () -> id);
             newFlatTable = aggPiece.getFlatTable();
         } else {
-            partitionByColumn = OpUtil.opToColumn(coarseTimeGranule.getOp(), newIdConverter::nextId);
+            partitionByColumn = OpUtil.opToColumn(partitionOp, newIdConverter::nextId);
             PlanPiece flatTablePiece = aggPiece.getFlatTable().getPiece();
             TieredMap<Integer, GenericColumn> newColumns = flatTablePiece.getColumns().newTier()
                     .put(partitionByColumn.first, partitionByColumn.second)
@@ -180,33 +217,5 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
                 .build().cast();
 
         return Optional.of(newAggPiece);
-    }
-
-    private static class TableAndPartitionColumn {
-        private final TablePiece tablePiece;
-        private final Integer id;
-        private final GenericColumn column;
-
-        private TableAndPartitionColumn(TablePiece tablePiece, Integer id, GenericColumn column) {
-            this.tablePiece = Objects.requireNonNull(tablePiece);
-            this.id = Objects.requireNonNull(id);
-            this.column = Objects.requireNonNull(column);
-        }
-
-        public static TableAndPartitionColumn of(TablePiece tablePiece, Integer id, GenericColumn column) {
-            return new TableAndPartitionColumn(tablePiece, id, column);
-        }
-
-        public TablePiece getTablePiece() {
-            return tablePiece;
-        }
-
-        public Integer getId() {
-            return id;
-        }
-
-        public GenericColumn getColumn() {
-            return column;
-        }
     }
 }

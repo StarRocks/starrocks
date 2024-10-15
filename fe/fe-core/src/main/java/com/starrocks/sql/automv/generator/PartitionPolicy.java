@@ -14,11 +14,18 @@
 
 package com.starrocks.sql.automv.generator;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.automv.column.ColumnAlias;
+import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
+import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.TimeGranule;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
+import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -27,6 +34,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 //TODO(by satanson): PartitionPolicy is too naive to use it in product environment,
 // a new sophisticated partition policy will substitute this naive one soon to support MV
@@ -35,39 +44,63 @@ import java.util.Optional;
 // 2. partition by str2date(dt, '%Y-%m-%d');
 public class PartitionPolicy {
 
-    public static Optional<Integer> getPartitionColumnId(AggregatePiece aggPiece) {
+    public static Optional<Integer> getPartitionColumnId(AggregatePiece aggPiece, PartitionExtractor extractor) {
         if (aggPiece.getDimensions().isEmpty()) {
             return Optional.empty();
         }
 
-        ColumnRefSet partitionByColumnIds = ColumnRefSet.of();
-        aggPiece.getPartitionColumns().forEach(p ->
-                partitionByColumnIds.union(ColumnRefSet.createByIds(p.second.keySet())));
+        TieredMap<Integer, GenericColumn> dimensions = aggPiece.getDimensions().merge(aggPiece.getRollupDimensions());
 
-        List<Pair<Integer, TimeGranule>> partitionByTimeGranules =
-                OpUtil.extractPartitionByTimeGranule(aggPiece.getDimensions(), partitionByColumnIds);
+        ColumnRefSet partitionColumnIds = ColumnRefSet.of();
+        aggPiece.getPartitionColumns(extractor).stream()
+                .map(PartitionPlus::getPartitionColumns)
+                .map(partColumns -> partColumns.stream().map(p -> p.first).collect(Collectors.toList()))
+                .map(ColumnRefSet::createByIds)
+                .forEach(partitionColumnIds::union);
 
-        Optional<Pair<Integer, TimeGranule>> optChosenTimeGranule =
-                partitionByTimeGranules.stream().max(Comparator.comparing(p -> p.second, TimeGranule.getComparator()));
+        TieredMap<Integer, Op> dimensionOps = OpUtil.columnsToOpMap(dimensions);
+
+        List<Pair<Integer, Op>> candidatePartitionOp = dimensionOps.entrySet().stream()
+                .filter(e -> partitionColumnIds.containsAll(e.getValue().getIds()))
+                .map(e -> Pair.create(e.getKey(), e.getValue()))
+                .collect(Collectors.toList());
+
+        Optional<Pair<Integer, TimeGranule>> optChosenTimeGranule = candidatePartitionOp.stream()
+                .map(p -> Pair.create(p.first, Optional.ofNullable(TimeGranule.of(p.second))))
+                .filter(p -> p.second.isPresent())
+                .map(p -> Pair.create(p.first, p.second.get()))
+                .max(Comparator.comparing(p -> p.second, TimeGranule.getComparator()));
+
+        Supplier<Optional<Integer>> optFallbackIdSupplier = () -> candidatePartitionOp.stream()
+                .filter(p -> p.second.isVar())
+                .findFirst()
+                .map(p -> p.first);
+
         if (optChosenTimeGranule.isEmpty()) {
-            return Optional.empty();
+            return optFallbackIdSupplier.get();
         }
 
         Pair<Integer, TimeGranule> chosenTimeGranule = optChosenTimeGranule.get();
         int timeGranuleId = chosenTimeGranule.first;
         TimeGranule timeGranule = chosenTimeGranule.second;
         if (timeGranule.isFineGrained(TimeGranule.Unit.MINUTE)) {
-            return Optional.empty();
+            return optFallbackIdSupplier.get();
         }
         return Optional.of(timeGranuleId);
     }
 
     public static Optional<PrettyPrinter> getPartitionExpr(AggregatePiece aggPiece,
+                                                           PartitionExtractor extractor,
                                                            TieredMap<Integer, ColumnAlias> columnAliases) {
-        return getPartitionColumnId(aggPiece).map(timeGranuleId ->
+        return getPartitionColumnId(aggPiece, extractor).map(timeGranuleId ->
                 new PrettyPrinter()
                         .add("PARTITION BY ")
                         .add(Objects.requireNonNull(columnAliases.get(timeGranuleId)).getName()).newLine()
         );
+    }
+
+    public static void getPartitionInfo(Table table) {
+        List<Column> pColumns = PartitionUtil.getPartitionColumns(table);
+
     }
 }

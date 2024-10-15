@@ -109,6 +109,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -939,5 +940,29 @@ public final class SqlToScalarOperatorTranslator {
             return new ColumnRefOperator(node.getSlotId().asInt(),
                     node.getType(), columnName, node.isNullable());
         }
+    }
+
+    static class PartitionByExprVisitor extends Visitor {
+        private final Map<String, Integer> columnToColumnRefIds;
+
+        public PartitionByExprVisitor(Map<String, Integer> columnToColumnRefIds) {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    new ColumnRefFactory(), Collections.emptyList(),
+                    null, null, null, null);
+            this.columnToColumnRefIds = columnToColumnRefIds;
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Context context) {
+            String columnName = Objects.requireNonNull(node.getColumnName());
+
+            return new ColumnRefOperator(Objects.requireNonNull(columnToColumnRefIds.get(columnName)),
+                    node.getType(), columnName, node.isNullable());
+        }
+    }
+
+    public static ScalarOperator translatePartitionBy(Expr expression, Map<String, Integer> columnToColumnRefIds) {
+        PartitionByExprVisitor visitor = new PartitionByExprVisitor(columnToColumnRefIds);
+        return visitor.visit(expression, new Context());
     }
 }

@@ -205,7 +205,7 @@ public class RboOptimizer {
         QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
         QueryStatement queryStmt = stmt.getQueryStatement();
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, "Q", fqTableMap);
         return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG())
                 .stream()
@@ -217,7 +217,7 @@ public class RboOptimizer {
         QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
         QueryStatement queryStmt = stmt.getQueryStatement();
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, name, fqTableMap);
         return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG())
                 .stream()

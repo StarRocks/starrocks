@@ -23,7 +23,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
-import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
@@ -35,11 +34,12 @@ import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceNormalizer;
 import com.starrocks.sql.automv.pieces.StarJoinPiece;
-import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.Var;
 import com.starrocks.sql.automv.policies.AggregatePolicies;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
+import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.Box;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -223,16 +223,19 @@ public class MVRecommender {
         Set<Box<AggregatePiece>> nonSplitPieceSet = Sets.newHashSet();
         Set<Box<AggregatePiece>> spiltPieceSet = Sets.newHashSet();
 
+        PartitionExtractor extractor = options.getPartitionExtractor();
         for (List<Pair<AggregatePiece, Integer>> columnGroup : identicalNormColumnGroups) {
             Pair<AggregatePiece, Integer> firstAggAndColumn = columnGroup.get(0);
             AggregatePiece firstAggPiece = firstAggAndColumn.first;
             Integer columnId = firstAggAndColumn.second;
-            List<Pair<TablePiece, Map<Integer, GenericColumn>>>
-                    tableAndPartitionColumns = firstAggPiece.getPartitionColumns();
+            List<PartitionPlus> partitions = firstAggPiece.getPartitionColumns(extractor);
             ColumnRefSet partitionColumnIds = ColumnRefSet.of();
-            tableAndPartitionColumns.stream()
-                    .map(p -> ColumnRefSet.createByIds(p.second.keySet()))
+            partitions.stream()
+                    .filter(pp -> pp.getPartitionOp().isNullVal())
+                    .map(pp -> pp.getPartitionColumns().stream().map(p -> p.first).collect(Collectors.toList()))
+                    .map(ColumnRefSet::createByIds)
                     .forEach(partitionColumnIds::union);
+
             List<Box<AggregatePiece>> aggPieceGroup = columnGroup.stream()
                     .map(p -> p.first)
                     .map(Box::of).collect(Collectors.toList());

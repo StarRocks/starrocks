@@ -14,23 +14,24 @@
 
 package com.starrocks.sql.automv.column;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
 import java.util.Objects;
 
 public class ColumnRefToIdConverter {
-    final Map<Integer, Integer> ids;
+    final BiMap<Integer, Integer> ids;
     int id;
 
-    private ColumnRefToIdConverter(Map<Integer, Integer> ids, int id) {
+    private ColumnRefToIdConverter(BiMap<Integer, Integer> ids, int id) {
         this.ids = Objects.requireNonNull(ids);
         this.id = id;
     }
 
     public ColumnRefToIdConverter() {
-        this(Maps.newHashMap(), 0);
+        this(HashBiMap.create(), 0);
     }
 
     public int nextId() {
@@ -43,6 +44,10 @@ public class ColumnRefToIdConverter {
 
     public ColumnRefToIdConverter duplicate() {
 
-        return new ColumnRefToIdConverter(Maps.newHashMap(ids), id);
+        return new ColumnRefToIdConverter(HashBiMap.create(ids), id);
+    }
+
+    public Map<Integer, Integer> getReverseMap() {
+        return ids.inverse();
     }
 }

@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
 
@@ -47,7 +48,8 @@ public class AggregateMVGenerator {
         mvSchema.indentEnclose(() -> mvSchema.addItemsWithNlDel(", ", mvColumns));
         mvSchema.newLine().add(")").newLine();
         mvSchema.add("COMMENT").spaces(1).addDoubleQuoted("MV recommended by AutoMV").newLine();
-        Optional<PrettyPrinter> optPartitionExpr = PartitionPolicy.getPartitionExpr(aggPiece, columnAliases);
+        PartitionExtractor extractor = context.getOptions().getPartitionExtractor();
+        Optional<PrettyPrinter> optPartitionExpr = PartitionPolicy.getPartitionExpr(aggPiece, extractor, columnAliases);
         optPartitionExpr.ifPresent(mvSchema::addSuperStep);
         Optional<Set<Integer>> optCollocateBucketKey =
                 optPartitionExpr.map(ignored -> aggPiece.getAuxState().getColocateBucketKey().orElse(null));

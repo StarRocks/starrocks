@@ -136,7 +136,8 @@ public class AggregatePolicies {
                 ConditionalPolicy.EXISTS_ONLY_ROLLUP_ABLE_METRICS,
                 AggregatePolicy.seq(
                         TimeGranuleExtractPolicy.INSTANCE,
-                        TimeGranulePartitionPolicy.resolvePolicy(options.getDefaultPartitionByTimeGranule())
+                        TimeGranulePartitionPolicy.resolvePolicy(options.getPartitionExtractor(),
+                                options.getDefaultPartitionByTimeGranule())
                 )
         );
     }

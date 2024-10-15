@@ -15,20 +15,18 @@
 package com.starrocks.sql.automv.pieces;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
+import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import org.apache.commons.compress.utils.Lists;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -53,43 +51,35 @@ public abstract class PlanPiece {
         this.auxState = Objects.requireNonNull(auxState);
     }
 
-    public static <T extends PlanPiece> List<T> collect(PlanPiece piece, Class<T> klass) {
+    public static <T extends PlanPiece> List<T> collect(PlanPiece piece, Class<T> klass, boolean ignoreSemiAntiSide) {
         List<T> pieces = Lists.newArrayList();
-        collectImpl(piece, klass, pieces);
+        collectImpl(piece, klass, ignoreSemiAntiSide, pieces);
         return pieces;
     }
 
+    public static <T extends PlanPiece> List<T> collect(PlanPiece piece, Class<T> klass) {
+        return collect(piece, klass, false);
+    }
+
     @SuppressWarnings("unchecked")
-    private static <T extends PlanPiece> void collectImpl(PlanPiece piece, Class<T> klass, List<T> pieces) {
-        piece.getInputPieces().forEach(inputPiece -> collectImpl(inputPiece, klass, pieces));
+    private static <T extends PlanPiece> void collectImpl(PlanPiece piece,
+                                                          Class<T> klass,
+                                                          boolean ignoreSemiAntiSide,
+                                                          List<T> pieces) {
+        if (piece.isStarJoin() && ignoreSemiAntiSide) {
+            StarJoinPiece starJoin = piece.mustCast(StarJoinPiece.class);
+            starJoin.getCorners()
+                    .stream()
+                    .filter(corner -> !corner.getJoinType().isSemiAntiJoin())
+                    .map(StarJoinPiece.StarCorner::getPiece)
+                    .forEach(inputPiece -> collectImpl(inputPiece, klass, true, pieces));
+            collectImpl(starJoin.getCentre(), klass, true, pieces);
+        } else {
+            piece.getInputPieces().forEach(inputPiece -> collectImpl(inputPiece, klass, ignoreSemiAntiSide, pieces));
+        }
         if (klass.isAssignableFrom(piece.getClass())) {
             pieces.add((T) piece);
         }
-    }
-
-    private static Map<Integer, GenericColumn> getPartitionColumns(TablePiece tablePiece) {
-        FQTable fqTable = tablePiece.getTable();
-        // TODO(by satanson): A MV with list-partition base tables is not supported in present,
-        //  it would be supported soon in future.
-        if ((fqTable.getTable() instanceof OlapTable) &&
-                ((OlapTable) fqTable.getTable()).getPartitionInfo().isListPartition()) {
-            return Collections.emptyMap();
-        }
-        Optional<List<String>> optPartitionColNames =
-                Optional.ofNullable(fqTable.getTable().getPartitionColumnNames());
-
-        Function<Column, Optional<Pair<Integer, GenericColumn>>> getGenericColumn = column ->
-                tablePiece.getColumns().entrySet().stream()
-                        .filter(e -> Objects.equals(e.getValue().getColumnName(), column.getName()))
-                        .findFirst().map(e -> Pair.create(e.getKey(), e.getValue()));
-
-        return optPartitionColNames.map(names -> names.stream()
-                        .map(name -> fqTable.getTable().getColumn(name))
-                        .map(getGenericColumn)
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .collect(Collectors.toMap(p -> p.first, p -> p.second)))
-                .orElse(Collections.emptyMap());
     }
 
     public abstract Builder<? extends PlanPiece> builder();
@@ -241,11 +231,12 @@ public abstract class PlanPiece {
         return "Columns:\n" + columns + "Conjuncts" + conjuncts;
     }
 
-    public List<Pair<TablePiece, Map<Integer, GenericColumn>>> getPartitionColumns() {
-        List<TablePiece> tablePieces = PlanPiece.collect(this, TablePiece.class);
+    public List<PartitionPlus> getPartitionColumns(PartitionExtractor partitionExtractor) {
+        // right side of left semi/anti join can not be output, so we can not use it's column as partition column
+        List<TablePiece> tablePieces = PlanPiece.collect(this, TablePiece.class, true);
         Preconditions.checkArgument(!tablePieces.isEmpty());
         return tablePieces.stream()
-                .map(tablePiece -> Pair.create(tablePiece, getPartitionColumns(tablePiece)))
+                .map(tablePiece -> PartitionPlus.of(tablePiece, partitionExtractor))
                 .collect(Collectors.toList());
     }
 

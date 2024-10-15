@@ -101,6 +101,10 @@ public final class GlobalVariable {
     public static final String AUTOMV_COLOCATE_MV_DIMENSIONS_LIMIT = "automv_colocate_mv_dimensions_limit";
     public static final String AUTOMV_PER_LATTICE_NODE_LIMIT = "automv_per_lattice_node_limit";
 
+    public static final String AUTOMV_PREFER_RANGE_PARTITION = "automv_prefer_range_partition";
+
+    public static final String AUTOMV_STRING_TIME_FORMATS = "automv_string_time_formats";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
@@ -240,6 +244,11 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = AUTOMV_PER_LATTICE_NODE_LIMIT, flag = VariableMgr.INVISIBLE)
     private static int autoMVPerLatticeNodeLimit = 100;
 
+    @VariableMgr.VarAttr(name = AUTOMV_PREFER_RANGE_PARTITION)
+    private static boolean autoMVPreferRangePartition = true;
+
+    @VariableMgr.VarAttr(name = AUTOMV_STRING_TIME_FORMATS)
+    private static String autoMVStringTimeFormats = "%Y%m%d,%Y-%m-%d";
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
     }
@@ -507,6 +516,21 @@ public final class GlobalVariable {
 
     public static int getAutoMVPerLatticeNodeLimit() {
         return autoMVPerLatticeNodeLimit;
+    }
+
+    public static void setAutoMVPreferRangePartition(boolean on) {
+        autoMVPreferRangePartition = on;
+    }
+    public static boolean isAutoMVPreferRangePartition() {
+        return autoMVPreferRangePartition;
+    }
+
+    public static void setAutoMVStringTimeFormats(String timeFmts) {
+        autoMVStringTimeFormats = timeFmts;
+    }
+
+    public static String getAutoMVStringTimeFormats() {
+        return autoMVStringTimeFormats;
     }
     // Don't allow create instance.
     private GlobalVariable() {

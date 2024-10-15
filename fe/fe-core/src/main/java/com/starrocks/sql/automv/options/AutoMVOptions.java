@@ -15,8 +15,12 @@
 package com.starrocks.sql.automv.options;
 
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
+
+import java.util.Objects;
 
 public class AutoMVOptions {
+    private final PartitionExtractor partitionExtractor;
     private final int partialRollupMinAggPieces;
     private final boolean useCardinalityEstimation;
     private final boolean pruneRollupAbleWithConjuncts;
@@ -38,8 +42,8 @@ public class AutoMVOptions {
     private final boolean enableComplexDerivedDimensions;
     private final String defaultPartitionByTimeGranule;
     private final boolean decayAcceleratedQueries;
-
     private AutoMVOptions(
+            PartitionExtractor partitionExtractor,
             int partialRollupMinAggregatePieces,
             boolean useCardinalityEstimation,
             boolean pruneRollupAbleWithConjuncts,
@@ -60,6 +64,7 @@ public class AutoMVOptions {
             String defaultPartitionByTimeGranule,
             boolean decayAcceleratedQueries
     ) {
+        this.partitionExtractor = Objects.requireNonNull(partitionExtractor);
         this.partialRollupMinAggPieces = partialRollupMinAggregatePieces;
         this.useCardinalityEstimation = useCardinalityEstimation;
         this.pruneRollupAbleWithConjuncts = pruneRollupAbleWithConjuncts;
@@ -83,8 +88,9 @@ public class AutoMVOptions {
         this.decayAcceleratedQueries = decayAcceleratedQueries;
     }
 
-    public static AutoMVOptions of(SessionVariable sv) {
+    public static AutoMVOptions of(PartitionExtractor partitionExtractor, SessionVariable sv) {
         return new AutoMVOptions(
+                partitionExtractor,
                 sv.getAutoMVPartialRollupMinAggPieces(),
                 sv.isAutoMVUseCardinalityEstimation(),
                 sv.isAutoMVPruneRollupUnableAggregateWithConjuncts(),
@@ -106,6 +112,10 @@ public class AutoMVOptions {
                 sv.isAutoMVEnableComplexDerivedDimensions(),
                 sv.getAutoMVDefaultPartitionByTimeGranule(),
                 sv.isAutoMVDecayAcceleratedQueries());
+    }
+
+    public PartitionExtractor getPartitionExtractor() {
+        return partitionExtractor;
     }
 
     public boolean isDecayAcceleratedQueries() {

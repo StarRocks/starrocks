@@ -34,6 +34,7 @@ import com.starrocks.sql.automv.pn.Apply;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.pn.Var;
+import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.sql.automv.util.TieredMap;
@@ -70,7 +71,8 @@ public class LatticeTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        getStarRocksAssert();
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        starRocksAssert.getCtx().getSessionVariable().setAutoMVDefaultPartitionByTimeGranule("none");
     }
 
     private CardEstimator getEstimator(ConnectContext ctx, List<Pair<String, String>> queryList) {
@@ -81,7 +83,7 @@ public class LatticeTest {
                 .map(p -> Pair.create(p.first, PlanPieceNormalizer.normalize(p.second)))
                 .collect(Collectors.groupingBy(p -> p.second.getFlatTableNormHash()));
 
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Assert.assertEquals(pieceGroups.size(), 1);
 
         List<PlanPiece> pieceList =
@@ -229,7 +231,7 @@ public class LatticeTest {
                 .map(p -> Pair.create(p.first, PlanPieceNormalizer.normalize(p.second)))
                 .collect(Collectors.groupingBy(p -> p.second.getFlatTableNormHash()));
 
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         Assert.assertEquals(pieceGroups.size(), 1);
         List<PlanPiece> pieceList =
                 pieceGroups.values().iterator().next().stream().map(p -> p.second).collect(Collectors.toList());
@@ -487,7 +489,7 @@ public class LatticeTest {
         GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(-1.0);
         List<Pair<String, AggregatePiece>> pieces = AutoMVUtil.getPieces(ctx, queryList);
         List<PlanPiece> pieceList = pieces.stream().map(p -> p.second).collect(Collectors.toList());
-        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
+        AutoMVOptions options = AutoMVOptions.of(new PartitionExtractor(), ctx.getSessionVariable());
         MVRecommender mvRecommender = new MVRecommender(ctx, options);
         List<MVRecommendation> resultList = mvRecommender.recommend(pieceList, 0, Integer.MAX_VALUE);
         Assert.assertEquals(resultList.size(), 1);
