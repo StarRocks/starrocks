@@ -103,21 +103,24 @@ public class ColumnRangePredicate extends RangePredicate {
     public static ColumnRangePredicate andRange(
             ColumnRangePredicate rangePredicate, ColumnRangePredicate otherRangePredicate) {
         List<Range<ConstantOperator>> ranges = new ArrayList<>();
+        boolean isConnected = false;
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
-                    // once there is a range that is not connected with the range, the result is null
                     if (!range.isConnected(otherRange)) {
-                        return FALSE;
+                        continue;
                     }
                     Range<ConstantOperator> intersection = range.intersection(otherRange);
                     if (!intersection.isEmpty()) {
+                        isConnected = true;
                         ranges.add(intersection);
                     }
                 }
-            } else {
-                return FALSE;
             }
+        }
+        // once there is a range that is not connected with the range, the result is null
+        if (!isConnected) {
+            return FALSE;
         }
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }
