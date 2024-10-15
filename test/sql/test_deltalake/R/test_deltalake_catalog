@@ -262,6 +262,21 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_tim
 2	2	2023-01-01 01:01:01
 3	3	2022-01-01 01:01:01
 -- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age=30 order by col_tinyint;
+-- result:
+{"name":"Alice","sex":"female","age":30}
+-- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.sex='male' order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Charlie","sex":"male","age":35}
+{"name":"Edward","sex":"male","age":40}
+-- !result
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age<30 order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Diana","sex":"female","age":28}
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result
