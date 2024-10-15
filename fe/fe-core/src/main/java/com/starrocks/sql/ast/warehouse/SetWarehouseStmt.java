@@ -12,30 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
+public class SetWarehouseStmt extends StatementBase {
+    private final String warehouseName;
 
-public class DropComputeNodeClause extends ComputeNodeClause {
-    public String warehouse;
-
-    public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
-        this(hostPorts, warehouse, NodePosition.ZERO);
+    public SetWarehouseStmt(String warehouseName) {
+        this(warehouseName, NodePosition.ZERO);
     }
 
-    public DropComputeNodeClause(List<String> hostPorts, String warehouse, NodePosition pos) {
-        super(hostPorts, pos);
-        this.warehouse = warehouse;
+    public SetWarehouseStmt(String warehouseName, NodePosition pos) {
+        super(pos);
+        this.warehouseName = warehouseName;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropComputeNodeClause(this, context);
+        return visitor.visitSetWarehouseStatement(this, context);
+    }
+
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.NO_FORWARD;
     }
 }
