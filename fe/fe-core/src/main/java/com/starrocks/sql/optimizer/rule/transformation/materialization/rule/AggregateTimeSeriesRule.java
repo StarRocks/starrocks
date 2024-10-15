@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -39,6 +40,10 @@ public class AggregateTimeSeriesRule extends BaseMaterializedViewRewriteRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        SessionVariable sessionVariable = context.getSessionVariable();
+        if (!sessionVariable.isEnableMaterializedViewTimeSeriesPushDownRewrite()) {
+            return false;
+        }
         if (!MvUtils.isLogicalSPJG(input)) {
             return false;
         }
