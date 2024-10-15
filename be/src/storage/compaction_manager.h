@@ -132,6 +132,8 @@ public:
 
     int get_waiting_task_num();
 
+    ThreadPool* get_compaction_thread_pool() { return _compaction_pool.get(); }
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
