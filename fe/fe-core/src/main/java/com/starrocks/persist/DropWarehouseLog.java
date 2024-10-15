@@ -12,54 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
 
-public abstract class Warehouse implements Writable {
+public class DropWarehouseLog implements Writable {
     @SerializedName(value = "name")
-    protected String name;
-    @SerializedName(value = "id")
-    private long id;
-    @SerializedName(value = "comment")
-    protected String comment;
+    private String warehouseName;
 
-    public Warehouse(long id, String name, String comment) {
-        this.id = id;
-        this.name = name;
-        this.comment = comment;
+    public DropWarehouseLog(String warehouseName) {
+        this.warehouseName = warehouseName;
     }
 
-    public long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getComment() {
-        return comment;
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public abstract Long getAnyWorkerGroupId();
-
-    public abstract List<Long> getWorkerGroupIds();
-
-    public abstract List<String> getWarehouseInfo();
-
-    public abstract List<List<String>> getWarehouseNodesInfo();
+    public static DropWarehouseLog read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, DropWarehouseLog.class);
+    }
 }
