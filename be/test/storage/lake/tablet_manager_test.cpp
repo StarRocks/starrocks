@@ -833,13 +833,14 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     rowset_meta_pb1->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
-    metadata.set_version(2);
-    auto rowset_meta_pb2 = metadata.add_rowsets();
+    starrocks::TabletMetadata metadata2;
+    metadata2.set_version(2);
+    auto rowset_meta_pb2 = metadata2.add_rowsets();
     rowset_meta_pb2->set_id(3);
     rowset_meta_pb2->set_overlapped(false);
     rowset_meta_pb2->set_data_size(1024);
     rowset_meta_pb2->set_num_rows(5);
-    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata2));
 
     auto res = _tablet_manager->capture_tablet_and_rowsets(123, 0, 2);
     EXPECT_TRUE(res.ok());
@@ -848,7 +849,7 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
 
     res = _tablet_manager->capture_tablet_and_rowsets(123, 1, 2);
     auto& [tablet1, rowsets1] = res.value();
-    ASSERT_EQ(1, rowsets1.size());
+    ASSERT_EQ(2, rowsets1.size());
 }
 
 #endif // USE_STAROS
