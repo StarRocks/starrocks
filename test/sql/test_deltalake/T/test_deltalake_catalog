@@ -75,4 +75,9 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null order by col_
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is null order by col_smallint;
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is not null order by col_smallint;
 
+-- test predicate with struct subfield
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age=30 order by col_tinyint;
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.sex='male' order by col_tinyint;
+select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct.age<30 order by col_tinyint;
+
 drop catalog delta_test_${uuid0}
