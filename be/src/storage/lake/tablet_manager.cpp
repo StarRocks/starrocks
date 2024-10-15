@@ -835,8 +835,8 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
     std::vector<RowsetPtr> to_rowsets;
 
     TabletMetadataPtr pre_version_tablet_meta = nullptr;
-    for (int version = from_version + 1; version <= to_version; version++) {
-        LOG(INFO) << "from version " << from_version;
+    for (int version = from_version; version <= to_version; version++) {
+        LOG(INFO) << "version " << version;
         ASSIGN_OR_RETURN(auto current_version_tablet_meta, get_tablet_metadata(tablet_id, version));
         if (current_version_tablet_meta->compaction_inputs_size() == 0) {
             LOG(INFO) << "load tablet meta";
