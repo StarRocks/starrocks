@@ -227,7 +227,6 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     }
 #endif
 
-    LOG(INFO) << "handle stale cache value";
     if (_cache_param.keys_type != TKeysType::PRIMARY_KEYS) {
         _handle_stale_cache_value_for_non_pk(tablet_id, cache_value, buffer, version);
     } else {
