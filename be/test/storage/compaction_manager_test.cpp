@@ -306,4 +306,38 @@ TEST_F(CompactionManagerTest, test_compaction_parallel) {
     ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
 }
 
+TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
+    config::max_compaction_concurrency = 10;
+    config::cumulative_compaction_num_threads_per_disk = 2;
+    config::base_compaction_num_threads_per_disk = 2;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    ASSERT_EQ(4, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = 0;
+    config::base_compaction_num_threads_per_disk = 0;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    ASSERT_EQ(0, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = -1;
+    config::base_compaction_num_threads_per_disk = -1;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    ASSERT_EQ(5, compaction_concurrency);
+
+    _engine->compaction_manager()->init_max_task_num(compaction_concurrency);
+    _engine->compaction_manager()->schedule();
+    ASSERT_EQ(5, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(3);
+    ASSERT_EQ(3, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(0);
+    ASSERT_EQ(0, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(-1);
+    ASSERT_EQ(5, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+}
+
 } // namespace starrocks

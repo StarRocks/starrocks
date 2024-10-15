@@ -112,7 +112,7 @@ public:
 
     Status update_max_threads(int max_threads);
 
-    int32_t compute_max_compaction_concurrency();
+    int32_t compute_max_compaction_concurrency() const;
 
     void set_max_compaction_concurrency(int threads_num);
 
@@ -179,7 +179,7 @@ private:
     std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
     std::thread _scheduler_thread;
 
-    std::mutex _compact_threads_mutex;
+    mutable std::mutex _compact_threads_mutex;
     int32_t _max_compaction_concurrency = 0;
 };
 

@@ -560,7 +560,7 @@ std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const Ta
     return res;
 }
 
-int32_t CompactionManager::compute_max_compaction_concurrency() {
+int32_t CompactionManager::compute_max_compaction_concurrency() const {
     int32_t max_task_num = 0;
     // new compaction framework
     if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
@@ -596,11 +596,7 @@ Status CompactionManager::update_max_threads(int max_threads) {
             return _compaction_pool->update_max_threads(std::max(1, _max_task_num));
         }
         if (max_threads == 0) {
-            Status st = _compaction_pool->update_max_threads(0);
-            if (!st.ok()) {
-                return st;
-            }
-            return Status::OK();
+            return _compaction_pool->update_max_threads(0);
         }
         if (max_threads >= _max_task_num) {
             max_threads = _max_task_num;
