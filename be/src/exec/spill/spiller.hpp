@@ -304,6 +304,7 @@ template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
+    // @TODO probe side don't need split?
 
     if (spilling_partitions.empty() && splitting_partitions.empty()) {
         return Status::OK();

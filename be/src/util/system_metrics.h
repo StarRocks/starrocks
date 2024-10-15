@@ -71,6 +71,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
 };
 
+class FileDescriptorMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(fd_num_limit, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
+};
+
 class SystemMetrics {
 public:
     SystemMetrics();
@@ -91,6 +97,9 @@ public:
                              const std::map<std::string, int64_t>& lst_rcv_map, int64_t interval_sec,
                              int64_t* send_rate, int64_t* rcv_rate);
     const MemoryMetrics* memory_metrics() const { return _memory_metrics.get(); }
+    const FileDescriptorMetrics* fd_metrics() const {
+        return _fd_metrics.get();
+    }
 
 private:
     void _install_cpu_metrics(MetricRegistry*);

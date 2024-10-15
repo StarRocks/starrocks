@@ -271,7 +271,7 @@ void PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_p
     num_partitions = BitUtil::next_power_of_two(num_partitions);
     num_partitions = std::min<size_t>(num_partitions, 1 << config::spill_max_partition_level);
     num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
-
+    LOG(INFO) << "reset_partition, partition_num: " << num_partitions;
     _level_to_partitions.clear();
     _id_to_partitions.clear();
     std::fill(_partition_set.begin(), _partition_set.end(), false);
@@ -319,21 +319,29 @@ void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_pt
     std::sort(partitions.begin(), partitions.end(),
               [](const auto& left, const auto& right) { return left->partition_id < right->partition_id; });
     _partition_set[partition->partition_id] = true;
+    _total_partition_num += 1;
+
 }
 
 void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partition) {
+    LOG(INFO) << "remove partition: " << partition->partition_id;
     _id_to_partitions.erase(partition->partition_id);
     size_t level = partition->level;
     auto& partitions = _level_to_partitions[level];
     _partition_set[partition->partition_id] = false;
-    partitions.erase(std::find_if(partitions.begin(), partitions.end(),
-                                  [partition](auto& val) { return val->partition_id == partition->partition_id; }));
+    auto iter = std::find_if(partitions.begin(), partitions.end(),
+                                  [partition](auto& val) { return val->partition_id == partition->partition_id; });
+    _total_partition_num -= (iter != partitions.end());
+    partitions.erase(iter);
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
         if (_min_level == level) {
             _min_level = level + 1;
         }
     }
+    LOG(INFO) << "remove done";
+    // @TODO after remove partition, how about its block
+
 }
 
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
@@ -463,6 +471,7 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
 
 Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
                                                  SpilledPartition* partition) {
+    LOG(INFO) << fmt::format("spill partition[{}] begin ", partition->debug_string());
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
@@ -484,7 +493,7 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
                                    mem_table->mem_usage(), mem_table->num_rows());
 
     mem_table->reset();
-    TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
+    LOG(INFO) << fmt::format("spill partition[{}] done ", partition->debug_string());
     return Status::OK();
 }
 
@@ -513,6 +522,7 @@ Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext
 Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
                                                          const std::vector<SpilledPartition*>& splitting_partitions) {
     SCOPED_TIMER(_spiller->metrics().split_partition_timer);
+    COUNTER_UPDATE(_spiller->metrics().partition_split_times, 1);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto& flush_ctx = std::static_pointer_cast<PartitionedFlushContext>(io_task)->split_stage_ctx;
 
@@ -565,6 +575,7 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
         flush_ctx.reset_read_context();
     }
 
+    COUNTER_UPDATE(_spiller->metrics().peak_partition_num, _total_partition_num);
     for (auto partition : splitting_partitions) {
         _remove_partition(partition);
     }
@@ -578,7 +589,7 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
     auto left_mem_table = left_partition->spill_writer->mem_table();
     auto right_mem_table = right_partition->spill_writer->mem_table();
 
-    TRACE_SPILL_LOG << fmt::format(
+    LOG(INFO) << fmt::format(
             "split partition [{}] to [{}] and [{}], left_mem_table_rows[{}], right_mem_table_rows[{}]",
             partition->debug_string(), left_partition->debug_string(), right_partition->debug_string(),
             left_mem_table->num_rows(), right_mem_table->num_rows());

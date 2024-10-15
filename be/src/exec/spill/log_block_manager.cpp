@@ -34,6 +34,7 @@
 #include "util/defer_op.h"
 #include "util/raw_container.h"
 #include "util/uid_util.h"
+#include "util/stack_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {
@@ -49,7 +50,8 @@ public:
               _direct_io(direct_io) {}
 
     ~LogBlockContainer() {
-        TRACE_SPILL_LOG << "delete spill container file: " << path();
+        LOG(INFO) << "delete spill container file: " << path();
+        // LOG(INFO) << get_stack_trace();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
         _dir->dec_size(_acquired_data_size);
         // try to delete related dir, only the last one can success, we ignore the error
@@ -122,7 +124,7 @@ Status LogBlockContainer::open() {
     }
     opt.direct_write = _direct_io;
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
-    TRACE_SPILL_LOG << "create new container file: " << file_path;
+    LOG(INFO) << "create new container file: " << file_path;
     _has_open = true;
     return Status::OK();
 }
@@ -178,7 +180,11 @@ class LogBlock : public Block {
 public:
     LogBlock(LogBlockContainerPtr container, size_t offset) : _container(std::move(container)), _offset(offset) {}
 
-    ~LogBlock() override = default;
+    // if exclusive, remove container??
+    ~LogBlock() override {
+        // @TODO need to know if exclusive
+        LOG(INFO) << "destruct LogBlock: " << debug_string();
+    }
 
     size_t offset() const { return _offset; }
 
@@ -262,7 +268,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 Status LogBlockManager::release_block(BlockPtr block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
-    TRACE_SPILL_LOG << "release block: " << block->debug_string();
+    LOG(INFO) << "release block: " << block->debug_string();
     bool is_full = container->size() >= _max_container_bytes;
     if (is_full) {
         RETURN_IF_ERROR(container->close());

@@ -108,6 +108,11 @@ public:
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
 
+    // times that split partition
+    RuntimeProfile::Counter* partition_split_times = nullptr;
+    // peak partition number in this spiller
+    RuntimeProfile::HighWaterMarkCounter* peak_partition_num = nullptr;
+
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
     RuntimeProfile::Counter* local_block_count = nullptr;
