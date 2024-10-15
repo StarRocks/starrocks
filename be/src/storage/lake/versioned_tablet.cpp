@@ -66,13 +66,6 @@ StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer_with_schema(
 }
 
 StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
-    //    if (base_rowsets != nullptr) {
-    //        std::vector<std::shared_ptr<Rowset>> rowsets;
-    //        for (auto& rowset : *base_rowsets) {
-    //            rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
-    //        }
-    //        return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), std::move(rowsets));
-    //    }
     return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema));
 }
 

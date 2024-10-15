@@ -108,7 +108,6 @@ Status TabletReader::prepare() {
         return Status::InternalError("failed to construct tablet schema");
     }
     if (!_rowsets_inited) {
-        LOG(INFO) << "rowset not init";
         _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
         _rowsets_inited = true;
     }
