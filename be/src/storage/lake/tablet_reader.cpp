@@ -64,10 +64,13 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
-          _rowsets_inited(true),
-          _rowsets(std::move(rowsets)),
           _need_split(need_split),
-          _could_split_physically(could_split_physically) {}
+          _could_split_physically(could_split_physically) {
+    if (!rowsets.empty()) {
+        _rowsets_inited = true;
+        _rowsets = std::move(rowsets);
+    }
+}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
@@ -105,6 +108,7 @@ Status TabletReader::prepare() {
         return Status::InternalError("failed to construct tablet schema");
     }
     if (!_rowsets_inited) {
+        LOG(INFO) << "rowset not init";
         _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
         _rowsets_inited = true;
     }
