@@ -831,9 +831,6 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
         return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
     }
 
-    std::vector<RowsetPtr> from_rowsets;
-    std::vector<RowsetPtr> to_rowsets;
-
     TabletMetadataPtr pre_version_tablet_meta = nullptr;
     for (int version = from_version; version <= to_version; version++) {
         LOG(INFO) << "version " << version;
