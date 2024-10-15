@@ -174,6 +174,13 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+        public ScalarOperator visitSubfield(SubfieldOperator subfieldOperator, Void context) {
+            SubfieldOperator operator = new SubfieldOperator(subfieldOperator.getChild(0).accept(this, null),
+                    subfieldOperator.getType(), subfieldOperator.getFieldNames());
+            return tryRewrite(operator);
+        }
+
+        @Override
         public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
             ScalarOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
                     operator.getLambdaExpr().accept(this, null), operator.getType()
