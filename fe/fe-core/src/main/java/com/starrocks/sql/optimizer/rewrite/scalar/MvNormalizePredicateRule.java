@@ -72,7 +72,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                                                  ScalarOperatorRewriteContext context) {
         // sort the children of compound predicate, but not use insensitive to compare which may cause wrong result:/
         // eg: a in ('a', 'A') will be normalized to a = 'a'
-        Map<String, ScalarOperator> sorted = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<String, ScalarOperator> sorted = Maps.newTreeMap();
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             before.forEach(x -> sorted.put(x.toString(), x));
