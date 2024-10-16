@@ -428,20 +428,20 @@ public class ExecutionFragment {
             return false;
         }
 
+        boolean hasBucketShuffle = false;
         if (root instanceof JoinNode) {
             JoinNode joinNode = (JoinNode) root;
             if (joinNode.isLocalHashBucket()) {
-                isRightOrFullBucketShuffle = joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
-                return true;
+                hasBucketShuffle = true;
+                isRightOrFullBucketShuffle |= joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin();
             }
         }
 
-        boolean childHasBucketShuffle = false;
         for (PlanNode child : root.getChildren()) {
-            childHasBucketShuffle |= isLocalBucketShuffleJoin(child);
+            hasBucketShuffle |= isLocalBucketShuffleJoin(child);
         }
 
-        return childHasBucketShuffle;
+        return hasBucketShuffle;
     }
 
     public boolean isScheduled() {
