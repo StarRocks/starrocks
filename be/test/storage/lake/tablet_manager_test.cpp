@@ -830,7 +830,7 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
 
     metadata.set_version(2);
     auto rowset_meta_pb2 = metadata.add_rowsets();
-    rowset_meta_pb2->set_id(3);
+    rowset_meta_pb2->set_id(2);
     rowset_meta_pb2->set_overlapped(false);
     rowset_meta_pb2->set_data_size(1024);
     rowset_meta_pb2->set_num_rows(5);
