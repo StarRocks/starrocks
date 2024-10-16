@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 import BEConfigMethod from '../../_assets/commonMarkdown/BE_config_method.md'
 
+import CNConfigMethod from '../../_assets/commonMarkdown/CN_config_method.md'
+
 import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.md'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.md'
@@ -11,6 +13,8 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 # BE Configuration
 
 <BEConfigMethod />
+
+<CNConfigMethod />
 
 
 ## View BE configuration items
@@ -3265,6 +3269,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to enable Lazy Dyamic Flat JSON when a query misses Flat JSON schema in read process. When this item is set to `true`, StarRocks will postpone the Flat JSON operation to calculation process instead of read process.
 - Introduced in: v3.3.3
 
+##### jit_lru_cache_size
+
+- Default: 0
+- Type: Int
+- Unit: GB
+- Is mutable: Yes
+- Description: The LRU cache size for JIT compilation. It represents the actual size of the cache if it is set to greater than 0. If it is set to less than or equal to 0, the system will adaptively set the cache using the formula `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` (while `mem_limit` of the node must be greater or equal to 16 GB).
+- Introduced in: -
+
 ### Shared-data
 
 ##### starlet_port
@@ -3701,11 +3714,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
 <!--
@@ -3998,6 +4011,33 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The minimum effective capacity for Data Cache Automatic Scaling. If the system tries to adjust the cache capacity to less than this value, the cache capacity will be directly set to `0` to prevent suboptimal performance caused by frequent cache fills and evictions due to insufficient cache capacity.
 - Introduced in: v3.3.0
+
+##### datacache_block_buffer_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable Block Buffer to optimize Data Cache efficiency. When Block Buffer is enabled, the system reads the Block data from the Data Cache and caches it in a temporary buffer, thus reducing the extra overhead caused by frequent cache reads.
+- Introduced in: v3.2.0
+
+##### datacache_tiered_cache_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable tiered cache mode for Data Cache. When tiered cache mode is enabled, Data Cache is configured with two layers of caching, memory and disk. When disk data becomes hot data, it is automatically loaded into the memory cache, and when the data in the memory cache becomes cold, it is automatically flushed to disk. When tiered cache mode is not enabled, the memory and disk configured for Data Cache form two separate cache spaces and cache different types of data, with no data flow between them.
+- Introduced in: v3.2.5
+
+##### query_max_memory_limit_percent
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum memory that the Query Pool can use. It is expressed as a percentage of the Process memory limit.
+- Introduced in: v3.1.0
 
 <!--
 ##### datacache_block_size
@@ -4593,17 +4633,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 ##### olap_string_max_length
 
 - Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### jit_lru_cache_size
-
-- Default: 0
 - Type: Int
 - Unit:
 - Is mutable: Yes

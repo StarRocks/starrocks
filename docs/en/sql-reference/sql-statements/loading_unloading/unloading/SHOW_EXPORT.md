@@ -84,7 +84,7 @@ The parameters in the return result are described as follows:
   - `FINISHED`: The export job has been successfully completed.
   - `CANCELLED`: The export job has failed.
 
-- `Progress`: the progress of the export job. The progress is measured in the unit of query plans. Suppose that the export job is divided into 10 query plans and three of them have finished. In this case, the progress of the export job is 30%. For more information, see ["Export data using EXPORT > Workflow"](../../../../unloading/Export.md#workflow).
+- `Progress`: the progress of the export job. The progress is measured in the unit of query plans. Suppose that the export job is divided into 10 query plans and three of them have finished. In this case, the progress of the export job is 30%.
 - `TaskInfo`: the information of the export job.
 
   The information is a JSON object that consists of the following keys:
@@ -93,7 +93,7 @@ The parameters in the return result are described as follows:
   - `column separator`: the column separator used in the exported data file.
   - `columns`: the names of the columns whose data is exported.
   - `tablet num`: the total number of tablets that are exported.
-  - `broker`: In v2.4 and earlier, this field is used to return the name of the broker that is used by the export job. From v2.5 onwards, this field returns an empty string. For more information, see ["Export data using EXPORT > Background information"](../../../../unloading/Export.md#background-information).
+  - `broker`: In v2.4 and earlier, this field is used to return the name of the broker that is used by the export job. From v2.5 onwards, this field returns an empty string.
   - `coord num`: the number of query plans into which the export job is divided.
   - `db`: the name of the database to which the exported data belongs.
   - `tbl`: the name of the table to which the exported data belongs

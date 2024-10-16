@@ -21,17 +21,22 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
@@ -118,6 +123,12 @@ public class JobSpecTest extends SchedulerTestBase {
                 connectContext, fragments, scanNodes, descTable.toThrift());
         JobSpec jobSpec = coordinator.getJobSpec();
 
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
+        Map<String, QueryStatisticsItem> queryStatistics = QeProcessorImpl.INSTANCE.getQueryStatistics();
+        assertThat(queryStatistics).hasSize(1);
+        assertThat(queryStatistics.get(DebugUtil.printId(queryId)).getResourceGroupName())
+                .isEqualTo(QUERY_RESOURCE_GROUP.getName());
+
         // Check created jobSpec.
         Assert.assertEquals(queryId, jobSpec.getQueryId());
         Assert.assertEquals(lastQueryId.toString(), jobSpec.getQueryGlobals().getLast_query_id());
@@ -138,6 +149,8 @@ public class JobSpecTest extends SchedulerTestBase {
      */
     @Test
     public void testQueryResourceGroup() throws Exception {
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
 
         new MockUp<ResourceGroupMgr>() {
             @Mock

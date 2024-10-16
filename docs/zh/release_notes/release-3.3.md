@@ -10,6 +10,49 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.4
+
+发布日期：2024 年 9 月 30 日
+
+### 新增功能
+
+- 支持在 List Partition 的表上创建异步物化视图。[ #46680](https://github.com/StarRocks/starrocks/pull/46680) [#46808](https://github.com/StarRocks/starrocks/pull/46808/files)
+- List Partition 表支持 Nullable 分区列。 [#47797](https://github.com/StarRocks/starrocks/pull/47797)
+- 支持通过 `DESC FILES()` 查看外部文件 Schema 信息。[#50527](https://github.com/StarRocks/starrocks/pull/50527)
+- 支持通过 `SHOW PROC '/replications'` 查看数据复制任务指标。[#50483](https://github.com/StarRocks/starrocks/pull/50483)
+
+### 功能优化
+
+- 优化存算分离架构下 `TRUNCATE TABLE` 的数据回收速度。[#49975](https://github.com/StarRocks/starrocks/pull/49975)
+- CTE 算子支持中间结果落盘。[#47982](https://github.com/StarRocks/starrocks/pull/47982)
+- 支持自适应分阶段调度，缓解复杂查询导致的 OOM。[#47868](https://github.com/StarRocks/starrocks/pull/47868)
+- 在一些特定场景下支持了 STRING 类型的 date 或 datetime 列的查询下推。[#50643](https://github.com/StarRocks/starrocks/pull/50643)
+- 支持基于常量的半结构化数据上计算 `COUNT DISTINCT`。[#48273](https://github.com/StarRocks/starrocks/pull/48273)
+- 新增 FE 参数 `lake_enable_balance_tablets_between_workers`，用于启用存算分离表的 Tablet 均衡。[#50843](https://github.com/StarRocks/starrocks/pull/50843)
+- 优化生成列的改写能力。[#50398](https://github.com/StarRocks/starrocks/pull/50398)
+- Partial Update 支持自动填充默认值为 `CURRENT_TIMESTAMP` 的列的值。[#50287](https://github.com/StarRocks/starrocks/pull/50287)
+
+### 问题修复
+
+修复了如下问题：
+
+- Tablet Clone 时 FE 侧死循环导致报错 "version has been compacted"。[#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- ISO 格式 DATETIME 类型在查询时无法下推。[#49358](https://github.com/StarRocks/starrocks/pull/49358)
+- 并发场景下，当 Tablet 被删除后，数据仍旧存在。[#50382](https://github.com/StarRocks/starrocks/pull/50382)
+- 函数 `yearweek` 结果错误。[#51065](https://github.com/StarRocks/starrocks/pull/51065)
+- ARRAY 低基数字典在 CTE 查询中的问题。[#51148](https://github.com/StarRocks/starrocks/pull/51148)
+- FE 重启后，物化视图的分区 TTL 相关参数丢失。[#51028](https://github.com/StarRocks/starrocks/pull/51028)
+- 升级后，表中使用 `CURRENT_TIMESTAMP` 定义的列数据丢失。[#50911](https://github.com/StarRocks/starrocks/pull/50911)
+- 函数 `array_distinct` 导致堆栈溢出。[#51017](https://github.com/StarRocks/starrocks/pull/51017)
+- 升级后，因字段默认长度变化而导致的物化视图激活（active）失败。您可以通过设置`enable_active_materialized_view_schema_strict_check` 为 `false` 规避此类问题。[#50869](https://github.com/StarRocks/starrocks/pull/50869)
+- 资源组属性 `cpu_weight` 可以设置为负。[#51005](https://github.com/StarRocks/starrocks/pull/51005)
+- 磁盘容量的统计信息统计错误。[#50669](https://github.com/StarRocks/starrocks/pull/50669)
+- 函数 `replace` 常量折叠。[#50828](https://github.com/StarRocks/starrocks/pull/50828)
+
+### 行为变更
+
+- 更改外表物化视图的默认副本数，从默认 `1` 副本改为遵循 FE 参数 `default_replication_num` 的值（默认值：`3`）。[#50931](https://github.com/StarRocks/starrocks/pull/50931)
+
 ## 3.3.3
 
 发布日期：2024 年 9 月 5 日
@@ -30,12 +73,14 @@ displayed_sidebar: docs
   - 因 Kerberos 认证失败而导致的 Broker Load 报错，给出具体认证失败的节点信息。[#46085](https://github.com/StarRocks/starrocks/pull/46085)
 - 优化导入时的分区机制，降低初始阶段的内存占用。[#47976](https://github.com/StarRocks/starrocks/pull/47976)
 - 优化存算一体集群的内存占用问题。增加元数据内存占用限制，避免在 Tablet、Segment 文件过多时可能引发的问题。[#49170](https://github.com/StarRocks/starrocks/pull/49170)
-- 优化了 `max(par``tition``_co``lumn``)` 的查询性能。[#49391](https://github.com/StarRocks/starrocks/pull/49391)
+- 优化了 `max(partition_column)` 的查询性能。[#49391](https://github.com/StarRocks/starrocks/pull/49391)
 - 如果分区列是生成列（即基于表中某个原生列计算所得），且查询的谓词过滤条件包含原生列，则可以使用分区裁剪优化查询性能。 [#48692](https://github.com/StarRocks/starrocks/pull/48692)
 - 对 Files()、PIPE 相关操作中的敏感信息进行脱敏。[#47629](https://github.com/StarRocks/starrocks/pull/47629)
-- 提供新的命令 `SHOW`` ``PROC`` '/global_current_queries'`，用以查看在所有 FE 节点上运行的查询。而相对应的命令 `SHOW PROC`` '/current_queries'` 只能查看当前连接的 FE 节点上运行的查询。[#49826](https://github.com/StarRocks/starrocks/pull/49826)
+- 提供新的命令 `SHOW PROC '/global_current_queries'`，用以查看在所有 FE 节点上运行的查询。而相对应的命令 `SHOW PROC '/current_queries'` 只能查看当前连接的 FE 节点上运行的查询。[#49826](https://github.com/StarRocks/starrocks/pull/49826)
 
 ### 问题修复
+
+修复了如下问题：
 
 - 在通过 StarRocks 外表将数据导出至目标集群时，系统将源集群 BE 误添加到当前集群。[#49323](https://github.com/StarRocks/starrocks/pull/49323)
 - aarch64 类机器上部署的 StarRocks 集群在通过 `select * from files` 读取 ORC 文件时，TINYINT 数据类型返回 NULL。[#49517](https://github.com/StarRocks/starrocks/pull/49517)
@@ -46,7 +91,7 @@ displayed_sidebar: docs
 ### 行为变更
 
 - 为了更好的适应向云上对象存储备份的场景，引入新的参数 `object_storage_rename_file_request_timeout_ms`。系统会优先使用该参数作为备份的超时时间。默认为 30 秒。 [#49706](https://github.com/StarRocks/starrocks/pull/49706)
-- `to_json`、`CAST(AS MAP)` 以及 `STRUCT AS JSON` 时，默认转换失败不报错，返回为 NULL。您可以通过设置系统变量 `sql``_``mode` 为 `ALLOW_THROW_EXCEPTION` 来使查询允许报错。[#50157](https://github.com/StarRocks/starrocks/pull/50157)
+- `to_json`、`CAST(AS MAP)` 以及 `STRUCT AS JSON` 时，默认转换失败不报错，返回为 NULL。您可以通过设置系统变量 `sql_mode` 为 `ALLOW_THROW_EXCEPTION` 来使查询允许报错。[#50157](https://github.com/StarRocks/starrocks/pull/50157)
 
 ## 3.3.2
 
@@ -87,6 +132,8 @@ displayed_sidebar: docs
 - 持久化 PIPE 元数据，防止因 FE 重启而导致元数据丢失。[#48852](https://github.com/StarRocks/starrocks/pull/48852)
 
 ### 问题修复
+
+修复了如下问题：
 
 - 在 FE Follower 上创建字典时进程无法结束。 [#47802](https://github.com/StarRocks/starrocks/pull/47802)
 - SHOW PARTITIONS 命令在存算分离集群和存算一体集群中返回的信息不一致。[#48647](https://github.com/StarRocks/starrocks/pull/48647)

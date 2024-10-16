@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergEqualityDeleteScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
@@ -151,6 +152,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRu
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -177,6 +179,7 @@ public class RuleSet {
             new HiveScanImplementationRule(),
             new FileScanImplementationRule(),
             new IcebergScanImplementationRule(),
+            new IcebergEqualityDeleteScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
@@ -271,6 +274,10 @@ public class RuleSet {
                 new LimitPruneTabletsRule()
         ));
 
+        REWRITE_RULES.put(RuleSetType.VECTOR_REWRITE, ImmutableList.of(
+                new RewriteToVectorPlanRule()
+        ));
+
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
@@ -316,6 +323,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
                 PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
+                PushDownPredicateScanRule.ICEBERG_EQUALITY_DELETE_SCAN,
                 PushDownPredicateScanRule.KUDU_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,

@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -40,6 +41,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -56,6 +59,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -69,6 +73,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -85,6 +90,13 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(ORC);
         SUPPORTED_FORMATS.add(CSV);
     }
+
+    private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
+            .column("PATH", Type.STRING)
+            .column("SIZE", Type.BIGINT)
+            .column("IS_DIR", Type.BOOLEAN)
+            .column("MODIFICATION_TIME", Type.DATETIME)
+            .build();
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
@@ -113,10 +125,13 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
 
+    private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
+
     private String path;
     private String format;
-    private String compressionType;
+    private boolean listFilesOnly = false;
 
+    // for load data
     private int autoDetectSampleFiles;
     private int autoDetectSampleRows;
 
@@ -124,6 +139,10 @@ public class TableFunctionTable extends Table {
     private boolean strictMode = false;
     private final Map<String, String> properties;
 
+    private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
+
+    // for unload data
+    private String compressionType;
     private Optional<List<Integer>> partitionColumnIDs = Optional.empty();
     private boolean writeSingleFile;
     private long targetMaxFileSize;
@@ -139,30 +158,30 @@ public class TableFunctionTable extends Table {
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
 
-    private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
-
-    // Ctor for load data via table function
+    // Ctor for load data / list files via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
+        this(properties, null);
+    }
+
+    // Ctor for load data / list files via table function
+    public TableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc)
+            throws DdlException {
         super(TableType.TABLE_FUNCTION);
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
 
         parseProperties();
-        parseFiles();
 
-
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
-            columns.add(new Column("col_int", Type.INT));
-            columns.add(new Column("col_string", Type.VARCHAR));
+        if (listFilesOnly) {
+            setSchemaForListFiles();
         } else {
-            columns = getFileSchema();
+            setSchemaForLoad();
         }
 
-        columns.addAll(getSchemaFromPath());
-
-        setNewFullSchema(columns);
+        if (pushDownSchemaFunc != null) {
+            pushDownSchemaFunc.accept(this);
+        }
     }
 
     // Ctor for unload data via table function
@@ -172,7 +191,26 @@ public class TableFunctionTable extends Table {
         checkNotNull(sessionVariable, "sessionVariable is null");
         this.properties = properties;
         parsePropertiesForUnload(columns, sessionVariable);
-        super.setNewFullSchema(columns);
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForLoad() throws DdlException {
+        parseFilesForLoad();
+
+        // infer schema from files
+        List<Column> columns = new ArrayList<>();
+        if (path.startsWith(FAKE_PATH)) {
+            columns.add(new Column("col_int", Type.INT));
+            columns.add(new Column("col_string", Type.VARCHAR));
+        } else {
+            columns = getFileSchema();
+        }
+        columns.addAll(getSchemaFromPath());
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForListFiles() {
+        setNewFullSchema(LIST_FILES_COLUMNS);
     }
 
     @Override
@@ -180,8 +218,34 @@ public class TableFunctionTable extends Table {
         return true;
     }
 
-    public List<TBrokerFileStatus> fileList() {
+    // for load
+    public List<TBrokerFileStatus> loadFileList() {
         return fileStatuses;
+    }
+
+    // for list files
+    // must be consistent with list files schema
+    public List<List<String>> listFilesAndDirs() {
+        List<List<String>> files = Lists.newArrayList();
+        try {
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                List<FileStatus> fileStatuses = HdfsUtil.listFileMeta(piece, new BrokerDesc(properties), false);
+                for (FileStatus fStatus : fileStatuses) {
+                    List<String> fileInfo = Lists.newArrayList(
+                            fStatus.getPath().toString(),
+                            String.valueOf(fStatus.getLen()),
+                            String.valueOf(fStatus.isDirectory()),
+                            ScalarOperatorFunctions.fromUnixTime(
+                                    ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
+                    files.add(fileInfo);
+                }
+            }
+            return files;
+        } catch (UserException e) {
+            LOG.warn("failed to parse files", e);
+            throw new SemanticException("failed to parse files: " + e.getMessage());
+        }
     }
 
     @Override
@@ -226,6 +290,10 @@ public class TableFunctionTable extends Table {
         return path;
     }
 
+    public boolean isListFilesOnly() {
+        return listFilesOnly;
+    }
+
     private void parseProperties() throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of table function");
@@ -236,6 +304,17 @@ public class TableFunctionTable extends Table {
             throw new DdlException("path is null. Please add properties(path='xxx') when create table");
         }
 
+        if (properties.containsKey(PROPERTY_LIST_FILES_ONLY)) {
+            String property = properties.get(PROPERTY_LIST_FILES_ONLY);
+            listFilesOnly = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_FILES_ONLY);
+        }
+
+        if (!listFilesOnly) {
+            parsePropertiesForLoad(properties);
+        }
+    }
+
+    private void parsePropertiesForLoad(Map<String, String> properties) throws DdlException {
         format = properties.get(PROPERTY_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
@@ -331,7 +410,7 @@ public class TableFunctionTable extends Table {
         }
     }
 
-    private void parseFiles() throws DdlException {
+    private void parseFilesForLoad() throws DdlException {
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
@@ -660,6 +739,23 @@ public class TableFunctionTable extends Table {
                         "expect a boolean value (true or false).", useLegacyEncoding);
             }
             this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
+        }
+    }
+
+    private static class SchemaBuilder {
+        private List<Column> columns;
+
+        public SchemaBuilder() {
+            columns = Lists.newArrayList();
+        }
+
+        public SchemaBuilder column(String name, Type type) {
+            columns.add(new Column(name, type, false, null, true, null, ""));
+            return this;
+        }
+
+        public List<Column> build() {
+            return columns;
         }
     }
 }

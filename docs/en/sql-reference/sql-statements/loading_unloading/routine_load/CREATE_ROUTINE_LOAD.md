@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 ---
 
+import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
+
 # CREATE ROUTINE LOAD
 
-:::tip
-Try Routine Load out in this [Quick Start](../../../../quick_start/routine-load.md)
-:::
+<Tip />
 
 Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via multiple security protocols, including `plaintext`, `ssl`, `sasl_plaintext`, and `sasl_ssl`.
 
@@ -14,7 +14,7 @@ This topic describes the syntax, parameters, and examples of the CREATE ROUTINE 
 
 > **NOTE**
 >
-> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/RoutineLoad.md).
+> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/Loading_intro.md).
 > - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Syntax
@@ -96,7 +96,7 @@ PARTITION (p1, p2, p3)
 
 `TEMPORARY PARTITION`
 
-The name of the [temporary partition](../../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
+The name of the [temporary partition](../../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 ### `job_properties`
 
@@ -117,7 +117,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | log_rejected_record_num | No | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul> |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../../administration/management/timezone.md). |
 | partial_update | No | Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. |
-| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../../loading/Load_to_Primary_Key_tables.md).<br />**NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
+| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. **NOTE**<br />Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
 | format                    | No           | The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. |
 | trim_space                | No           | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. |
 | enclose                   | No           | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
@@ -332,10 +332,6 @@ FROM KAFKA
 #### Improve loading performance by increasing task parallelism
 
 To improve loading performance and avoid accumulative consumption, you can increase task parallelism by increasing the `desired_concurrent_number` value when you create the Routine Load job. Task parallelism allows splitting one Routine Load job into as many parallel tasks as possible.
-
-> **Note**
->
-> For more ways to improve loading performance, see [Routine Load FAQ](../../../../faq/loading/Routine_load_faq.md).
 
 Note that the actual task parallelism is determined by the minimum value among the following multiple parameters:
 

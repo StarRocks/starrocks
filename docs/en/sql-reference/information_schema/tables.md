@@ -19,7 +19,7 @@ The following fields are provided in `tables`:
 | ROW_FORMAT      | Applies to a feature not available in StarRocks.             |
 | TABLE_ROWS      | Row count of the table.                                      |
 | AVG_ROW_LENGTH  | Average row length (size) of the table. It is equivalent to `DATA_LENGTH`/`TABLE_ROWS`. Unit: Byte. |
-| DATA_LENGTH     | Data length (size) of the table. Unit: Byte.                 |
+| DATA_LENGTH     | The data length of the table is determined by summing the data length of the table across all replicas. Unit: Byte.|
 | MAX_DATA_LENGTH | Applies to a feature not available in StarRocks.             |
 | INDEX_LENGTH    | Applies to a feature not available in StarRocks.             |
 | DATA_FREE       | Applies to a feature not available in StarRocks.             |

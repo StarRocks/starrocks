@@ -225,7 +225,7 @@ public class PluginMgr implements Writable {
      * It must add the plugin to the "plugins" and "dynamicPluginNames", even if the plugin
      * is not loaded successfully.
      */
-    public void replayLoadDynamicPlugin(PluginInfo info) throws IOException, UserException {
+    public void replayLoadDynamicPlugin(PluginInfo info) throws IOException {
         DynamicPluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, info);
         try {
             // should add to "plugins" first before loading.
@@ -350,14 +350,6 @@ public class PluginMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int pluginInfoSize = reader.readInt();
-            for (int i = 0; i < pluginInfoSize; ++i) {
-                PluginInfo pluginInfo = reader.readJson(PluginInfo.class);
-                replayLoadDynamicPlugin(pluginInfo);
-            }
-        } catch (UserException e) {
-            throw new RuntimeException(e);
-        }
+        reader.readCollection(PluginInfo.class, this::replayLoadDynamicPlugin);
     }
 }

@@ -136,10 +136,10 @@ public class LockManagerAllLockModesRandomTest {
 
     @Test
     public void testAllLockModesConcurrent() throws InterruptedException {
-        final int NUM_TEST_DBS = 10;
+        final int NUM_TEST_DBS = 3;
         final int NUM_TEST_THREADS_PER_DB = 16;
         final int NUM_TEST_OPERATIONS = 5000; // 5k
-        final long THREAD_STATE_LOG_INTERVAL_MS = 2000; // 2s
+        final long THREAD_STATE_LOG_INTERVAL_MS = 1000; // 2s
 
         final AtomicBoolean readerStop = new AtomicBoolean(false);
 

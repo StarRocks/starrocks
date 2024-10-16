@@ -701,7 +701,7 @@ struct TReportExecStatusParams {
 
   // New errors that have not been reported to the coordinator
   // optional in V1
-  9: optional list<string> error_log
+  9: optional list<string> error_log // Decrepated
 
   // URL of files need to load
   // optional
@@ -1584,6 +1584,7 @@ struct TQueryStatisticsInfo {
     12: optional i64 execTime
     13: optional string wareHouseName
     14: optional string customQueryId
+    15: optional string resourceGroupName
 }
 
 struct TGetQueryStatisticsResponse {

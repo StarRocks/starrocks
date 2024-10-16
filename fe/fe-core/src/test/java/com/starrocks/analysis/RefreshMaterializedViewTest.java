@@ -14,6 +14,8 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -33,6 +35,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -73,6 +76,20 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                // table whose partitions have only single values
+                .withTable("CREATE TABLE s2 (\n" +
+                        "      id BIGINT,\n" +
+                        "      age SMALLINT,\n" +
+                        "      dt VARCHAR(10),\n" +
+                        "      province VARCHAR(64) not null\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "PARTITION BY LIST (dt) (\n" +
+                        "     PARTITION p1 VALUES IN (\"20240101\") ,\n" +
+                        "     PARTITION p2 VALUES IN (\"20240102\") ,\n" +
+                        "     PARTITION p3 VALUES IN (\"20240103\") \n" +
+                        ")\n" +
+                        "DISTRIBUTED BY RANDOM\n")
                 .withMaterializedView("create materialized view mv_to_refresh\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
@@ -1089,5 +1106,54 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropTable("t2");
         starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testRefreshListPartitionMV1() {
+        starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                        "partition by dt \n" +
+                        "distributed by random \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "properties ('partition_refresh_number' = '1')" +
+                        "as select dt, province, sum(age) from s2 group by dt, province;",
+                (obj) -> {
+                    {
+                        String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION ('20240101') FORCE;";
+                        RefreshMaterializedViewStatement statement =
+                                (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                        Assert.assertTrue(statement.isForceRefresh());
+                        Assert.assertNull(statement.getPartitionRangeDesc());
+                        Set<PListCell> expect = ImmutableSet.of(
+                                new PListCell("20240101")
+                        );
+                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                    }
+                    {
+                        String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION ('20240101', '20240102') FORCE;";
+                        RefreshMaterializedViewStatement statement =
+                                (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                        Assert.assertTrue(statement.isForceRefresh());
+                        Assert.assertNull(statement.getPartitionRangeDesc());
+                        Set<PListCell> expect = ImmutableSet.of(
+                                        new PListCell("20240101"),
+                                        new PListCell("20240102")
+                                );
+                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                    }
+                    // multi partition columns may be supported in the future
+                    {
+                        String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('20240101', 'beijing'), ('20240101', " +
+                                "'nanjing')) FORCE;";
+                        RefreshMaterializedViewStatement statement =
+                                (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                        Assert.assertTrue(statement.isForceRefresh());
+                        Assert.assertNull(statement.getPartitionRangeDesc());
+                        Set<PListCell> expect = ImmutableSet.of(
+                                new PListCell(ImmutableList.of(ImmutableList.of("20240101", "beijing"))),
+                                new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
+                        );
+                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                    }
+                });
     }
 }

@@ -139,7 +139,6 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
-    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
@@ -148,6 +147,8 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+    MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
+    MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -167,6 +168,10 @@ private:
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
+
+    // Track usage of jemalloc
+    std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
+    std::shared_ptr<MemTracker> _jemalloc_fragmentation_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
@@ -198,9 +203,6 @@ private:
 
     // The memory used for schema change
     std::shared_ptr<MemTracker> _schema_change_mem_tracker;
-
-    // The memory used for column pool
-    std::shared_ptr<MemTracker> _column_pool_mem_tracker;
 
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
@@ -318,7 +320,7 @@ public:
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
-    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
@@ -393,7 +395,7 @@ private:
     ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
-    lake::LocationProvider* _lake_location_provider = nullptr;
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 

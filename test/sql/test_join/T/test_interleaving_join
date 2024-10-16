@@ -1,4 +1,4 @@
--- name: test interleaving join
+-- name: test_interleaving_join
 CREATE TABLE `lineitem` (
   `l_orderkey` int(11) NOT NULL COMMENT "",
   `l_partkey` int(11) NOT NULL COMMENT "",

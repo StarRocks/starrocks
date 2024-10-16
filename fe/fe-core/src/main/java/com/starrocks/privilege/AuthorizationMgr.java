@@ -30,6 +30,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
+import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -1688,67 +1689,58 @@ public class AuthorizationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            // 1 json for myself
-            AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
-            ret.globalStateMgr = globalStateMgr;
-            ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
-            ret.initBuiltinRolesAndUsers();
+        // 1 json for myself
+        AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
+        ret.globalStateMgr = globalStateMgr;
+        ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
+        ret.initBuiltinRolesAndUsers();
 
-            // 1 json for num user
-            int numUser = reader.readInt();
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++i) {
-                // 2 json for each user(kv)
-                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserPrivilegeCollectionV2 collection = reader.readJson(UserPrivilegeCollectionV2.class);
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserPrivilegeCollectionV2.class,
+                (MapEntryConsumer<UserIdentity, UserPrivilegeCollectionV2>) (userIdentity, collection) -> {
+                    if (userIdentity.equals(UserIdentity.ROOT)) {
+                        try {
+                            UserPrivilegeCollectionV2 rootUserPrivCollection =
+                                    ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                            collection.grantRoles(rootUserPrivCollection.getAllRoles());
+                            collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
+                            collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
+                        } catch (PrivilegeException e) {
+                            throw new IOException("failed to load users in AuthorizationManager!", e);
+                        }
+                    }
 
-                if (userIdentity.equals(UserIdentity.ROOT)) {
-                    UserPrivilegeCollectionV2 rootUserPrivCollection =
-                            ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
-                    collection.grantRoles(rootUserPrivCollection.getAllRoles());
-                    collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
-                    collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
-                }
+                    ret.userToPrivilegeCollection.put(userIdentity, collection);
+                });
 
-                ret.userToPrivilegeCollection.put(userIdentity, collection);
-            }
-            // 1 json for num roles
-            int numRole = reader.readInt();
-            LOG.info("loading {} roles", numRole);
-            for (int i = 0; i != numRole; ++i) {
-                // 2 json for each role(kv)
-                Long roleId = reader.readLong();
-                RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+        LOG.info("loading roles");
+        reader.readMap(Long.class, RolePrivilegeCollectionV2.class,
+                (MapEntryConsumer<Long, RolePrivilegeCollectionV2>) (roleId, collection) -> {
+                    // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
+                    // The reason why need to replay from the image here
+                    // is because the associated information of the role-id is stored in the image.
+                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
+                                ret.roleIdToPrivilegeCollection.get(roleId);
+                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                    }
+                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
+                });
 
-                // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
-                // The reason why need to replay from the image here
-                // is because the associated information of the role-id is stored in the image.
-                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
-                            ret.roleIdToPrivilegeCollection.get(roleId);
-                    collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                }
-                ret.roleIdToPrivilegeCollection.put(roleId, collection);
-            }
+        LOG.info("loaded {} users, {} roles",
+                ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
 
-            LOG.info("loaded {} users, {} roles",
-                    ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
+        // mark data is loaded
+        isLoaded = true;
+        roleNameToId = ret.roleNameToId;
+        pluginId = ret.pluginId;
+        pluginVersion = ret.pluginVersion;
+        userToPrivilegeCollection = ret.userToPrivilegeCollection;
+        roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
 
-            // mark data is loaded
-            isLoaded = true;
-            roleNameToId = ret.roleNameToId;
-            pluginId = ret.pluginId;
-            pluginVersion = ret.pluginVersion;
-            userToPrivilegeCollection = ret.userToPrivilegeCollection;
-            roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
-
-            // Initialize the Authorizer class in advance during the loading phase
-            // to prevent loading errors and lack of permissions.
-            Authorizer.getInstance();
-        } catch (PrivilegeException e) {
-            throw new IOException("failed to load AuthorizationManager!", e);
-        }
+        // Initialize the Authorizer class in advance during the loading phase
+        // to prevent loading errors and lack of permissions.
+        Authorizer.getInstance();
     }
 
     public void saveV2(ImageWriter imageWriter) throws IOException {

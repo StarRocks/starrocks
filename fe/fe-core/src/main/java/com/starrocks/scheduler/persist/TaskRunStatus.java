@@ -372,11 +372,9 @@ public class TaskRunStatus implements Writable {
         if (!state.isFinishState()) {
             return false;
         }
-        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
-                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
-            return false;
-        }
-        return true;
+        return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
+                Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
     }
 
     public long calculateRefreshProcessDuration() {
@@ -427,6 +425,13 @@ public class TaskRunStatus implements Writable {
         return true;
     }
 
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String definition) {
+        this.definition = definition;
+    }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);

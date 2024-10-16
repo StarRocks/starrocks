@@ -29,6 +29,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
@@ -84,7 +85,8 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         if (global_env->process_mem_tracker()->has_limit()) {
             mem_limit = global_env->process_mem_tracker()->limit();
         }
-        cache_options.mem_space_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
+                                                                      &cache_options.mem_space_size));
         if (config::datacache_disk_path.value().empty()) {
             // If the disk cache does not be configured for datacache, set default path according storage path.
             std::vector<std::string> datacache_paths;
@@ -93,12 +95,13 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                 // Clear the residual datacache files
                 std::filesystem::path sp(root_path.path);
                 auto old_path = sp.parent_path() / "datacache";
-                clean_residual_datacache(old_path.string());
+                DataCacheUtils::clean_residual_datacache(old_path.string());
             });
             config::datacache_disk_path = JoinStrings(datacache_paths, ";");
         }
-        RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
-                                                         config::ignore_broken_disk, &cache_options.disk_spaces));
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_disk_spaces(
+                config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk,
+                &cache_options.disk_spaces));
 
         size_t total_quota_byts = 0;
         for (auto& space : cache_options.disk_spaces) {
@@ -161,7 +164,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
 
     // init network option
-    if (!BackendOptions::init()) {
+    if (!BackendOptions::init(as_cn)) {
         exit(-1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": backend network options init successfully";
@@ -170,6 +173,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* global_env = GlobalEnv::GetInstance();
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
+
+    // make sure global variables are initialized
+    auto* global_vars = GlobalVariables::GetInstance();
+    CHECK(global_vars->is_init()) << "global variables not initialized";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";

@@ -545,4 +545,38 @@ public class ConstantExpressionTest extends PlanTestBase {
         }
 
     }
+
+    @Test
+    public void testReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");
+            assertContains(plan, "<slot 2> : 'abc def ghi abc'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : '1234 def ghi 1234'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', NULL, '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', NULL)");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+    }
 }

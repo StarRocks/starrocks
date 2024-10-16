@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -49,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateR
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
@@ -85,6 +87,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.ApplyTuningGuideRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.DataCachePopulateRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
@@ -168,7 +171,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
-                requiredColumns, columnRefFactory);
+                requiredColumns, columnRefFactory, new VectorSearchOptions());
     }
 
     public OptExpression optimize(ConnectContext connectContext,
@@ -177,10 +180,13 @@ public class Optimizer {
                                   StatementBase stmt,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
+                                  ColumnRefFactory columnRefFactory,
+                                  VectorSearchOptions vectorSearchOptions) {
         try {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
+
+            context.setVectorSearchOptions(vectorSearchOptions);
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
@@ -514,6 +520,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
+
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_OP_WITH_CONSTANT);
         ruleRewriteOnlyOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
@@ -557,6 +564,7 @@ public class Optimizer {
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
         skewJoinOptimize(tree, rootTaskContext);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 
@@ -657,6 +665,8 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
@@ -915,6 +925,7 @@ public class Optimizer {
         // update the existRequiredDistribution value in optExpression. The next rules need it to determine
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
+        result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
         return result;
     }
 

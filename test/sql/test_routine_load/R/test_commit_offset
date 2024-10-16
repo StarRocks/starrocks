@@ -40,3 +40,8 @@ SHOW ROUTINE LOAD FOR rl_commit_offset;
 -- result:
 [REGEX].*{"0":"1713497961406"}.*
 -- !result
+
+select state from information_schema.routine_load_jobs where name = "rl_commit_offset" order by id desc limit 1;
+-- result:
+RUNNING
+-- !result

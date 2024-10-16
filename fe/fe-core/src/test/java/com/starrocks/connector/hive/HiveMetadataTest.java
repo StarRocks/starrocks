@@ -736,7 +736,7 @@ public class HiveMetadataTest {
 
             @Mock
             public boolean tableExists(String dbName, String tableName) {
-                return true;
+                return false;
             }
         };
 
@@ -757,6 +757,12 @@ public class HiveMetadataTest {
         CreateTableStmt createTableStmt =
                 (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
         Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
     }
 

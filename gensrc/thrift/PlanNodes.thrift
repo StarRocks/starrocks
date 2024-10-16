@@ -390,6 +390,13 @@ struct THdfsScanRange {
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
 
+    // for extended column like iceberg data_seq_num or spec_id
+    28: optional map<Types.TSlotId, Exprs.TExpr> extended_columns;
+    
+    // attached partition value.
+    29: optional Descriptors.THdfsPartition partition_value;
+
+    30: optional Types.TTableId table_id;
 }
 
 struct TBinlogScanRange {
@@ -525,6 +532,19 @@ struct TColumnAccessPath {
     5: optional Types.TTypeDesc type_desc
 }
 
+struct TVectorSearchOptions {
+  1: optional bool enable_use_ann;
+  2: optional i64 vector_limit_k;
+  3: optional string vector_distance_column_name;
+  4: optional list<string> query_vector;
+  5: optional map<string, string> query_params;
+  6: optional double vector_range;
+  7: optional i32 result_order;
+  8: optional bool use_ivfpq;
+  9: optional double pq_refine_factor;
+  10: optional double k_factor;
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -555,6 +575,8 @@ struct TOlapScanNode {
   35: optional bool enable_prune_column_after_index_filter
   36: optional bool enable_gin_filter
   37: optional i64 schema_id
+
+  40: optional TVectorSearchOptions vector_search_options
 }
 
 struct TJDBCScanNode {
@@ -1112,6 +1134,9 @@ struct THdfsScanNode {
     21: optional string metadata_table_type
 
     22: optional DataCache.TDataCacheOptions datacache_options;
+
+    // for extended column like iceberg data_seq_num or spec_id
+    23: optional list<Types.TSlotId> extended_slot_ids;
 }
 
 struct TProjectNode {

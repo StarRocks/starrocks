@@ -9,7 +9,7 @@ import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/Loading_intro.md).
 
 <InsertPrivNote />
 
@@ -121,7 +121,7 @@ INTO TABLE <table_name>
 
 - `TEMPORARY PARTITION`
 
-  Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
+  Specifies the name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 - `COLUMNS TERMINATED BY`
 
@@ -177,7 +177,7 @@ INTO TABLE <table_name>
   >
   > If the columns of the data file are mapped in sequence onto the columns of the StarRocks table, you do not need to specify `column_list`.
 
-  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [Transform data at loading](../../../loading/Etl_in_loading.md).
+  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [loading overview](../../../loading/Loading_intro.md).
 
 - `COLUMNS FROM PATH AS`
 
@@ -605,7 +605,7 @@ The following parameters are supported:
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the FE parameter `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -622,8 +622,6 @@ The following parameters are supported:
 - `merge_condition`
 
   Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
-  
-  Broker Load supports conditional updates since v3.1. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md#conditional-updates).
   
   > **NOTE**
   >
@@ -693,7 +691,7 @@ For examples about loading JSON-formatted data by using the matched mode, see [L
 
 ## Related configuration items
 
-The [FE configuration item](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+The FE configuration item `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
 
@@ -707,7 +705,7 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter [`min_bytes_per_broker_scanner`](../../../administration/management/FE_configuration.md) and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter `min_bytes_per_broker_scanner` and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
 
 **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`, Number of BE/CN nodes)**
 

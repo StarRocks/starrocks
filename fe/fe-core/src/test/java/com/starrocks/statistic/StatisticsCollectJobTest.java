@@ -59,6 +59,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -408,8 +409,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                properties);
+                StatsConstants.ScheduleType.ONCE, properties);
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
@@ -512,6 +512,53 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
         Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void createAnalyzeJobSimultaneously() throws Exception {
+        new MockUp<StatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        // case: sample table
+        {
+            starRocksAssert.ddl("create analyze sample table test.t0_stats");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            Optional<StatisticsCollectJob> tableJob = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats")).findFirst();
+            Assert.assertTrue(tableJob.isPresent());
+            Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, tableJob.get().getType());
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: column
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(2, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: overlapped columns
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v3)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2, v3)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(4, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
     }
 
     @Test
@@ -891,7 +938,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
 
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
@@ -1265,7 +1313,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Resource group
@@ -15,13 +16,15 @@ The roadmap of Resource Group:
 - Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster.
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
 - StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
+- From v3.3.5 onwards, StarRocks supports imposing hard limits on CPU resources.
 
-|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO | Broker Load  | Routine Load, Stream Load, Schema Change |
-|---|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × | × |
-| 2.5 | √ | √ | √ | √ | √ | × | × |
-| 3.1 and later | √ | √ | √ | √ | √ | √ | × |
+|                 | Internal Table | External Table | Big Query Restriction | INSERT INTO | Broker Load | Routine Load, Stream Load, Schema Change | CPU Hard Limit |
+| --------------- | -------------- | -------------- | --------------------- | ----------- | ----------- | ---------------------------------------- | -------------- |
+| 2.2             | √              | ×              | ×                     | ×           | ×           | ×                                        | x              |
+| 2.3             | √              | √              | √                     | ×           | ×           | ×                                        | x              |
+| 2.5             | √              | √              | √                     | √           | ×           | ×                                        | x              |
+| 3.1 & 3.2       | √              | √              | √                     | √           | √           | ×                                        | x              |
+| 3.3.5 and later | √              | √              | √                     | √           | √           | √                                        | √              |
 
 ## Terms
 
@@ -33,79 +36,105 @@ Each resource group is a set of computing resources from a specific BE. You can 
 
 You can specify CPU and memory resource quotas for a resource group on a BE by using the following parameters:
 
-- `cpu_core_limit`
+| Parameter                  | Description                                                    | Value Range                                                    | Default |
+| -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
+| cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
+| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
+| mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
+| concurrency_limit          | Maximum number of concurrent queries in this resource group.   | Integer (takes effect when greater than 0)                     | 0       |
+| big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.   | Integer (takes effect when greater than 0)               | 0       |
+| big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.   | Integer (takes effect when greater than 0)                 | 0       |
+| big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.        | Integer (takes effect when greater than 0)                     | 0       |
 
-  This parameter specifies the soft limit for the number of CPU cores that can be allocated to the resource group on the BE. Valid values: any non-zero positive integer. Range: (1, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BEs.
+#### CPU resource parameters
 
-  In actual business scenarios, CPU cores that are allocated to the resource group proportionally scale based on the availability of CPU cores on the BE.
+##### `cpu_weight`
 
-  > **NOTE**
-  >
-  > For example, you configure three resource groups on a BE that provides 16 CPU cores: rg1, rg2, and rg3. The values of `cpu_core_limit` for the three resource groups are `2`, `6`, and `8`, respectively.
-  >
-  > If all CPU cores of the BE are occupied, the number of CPU cores that can be allocated to each of the three resource groups are 2, 6, and 8, respectively, based on the following calculations:
-  >
-  > - Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/16) = 2
-  > - Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/16) = 6
-  > - Number of CPU cores for rg3 = Total number of CPU cores on the BE × (8/16) = 8
-  >
-  > If not all CPU cores of the BE are occupied, as when rg1 and rg2 are loaded but rg3 is not, the number of CPU cores that can be allocated to rg1 and rg2 are 4 and 12, respectively, based on the following calculations:
-  >
-  > - Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/8) = 4
-  > - Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/8) = 12
+This parameter specifies the CPU scheduling weight of a resource group on a single BE node, determining the relative share of CPU time allocated to tasks from this group. Before v3.3.5, this was referred to as `cpu_core_limit`.
 
-- `mem_limit`
+Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0. Either cpu_weight or exclusive_cpu_cores must be greater than 0, but not both.
 
-  This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Valid values: (0, 1).
+> **NOTE**
+>
+> For example, suppose three resource groups, rg1, rg2, and rg3, have cpu_weight values of 2, 6, and 8, respectively. On a fully loaded BE node, these groups would receive 12.5%, 37.5%, and 50% of the CPU time. If the node is not fully loaded and rg1 and rg2 are under load while rg3 is idle, rg1 and rg2 would receive 25% and 75% of the CPU time, respectively.
 
-  > **NOTE**
-  >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+##### `exclusive_cpu_cores`
 
-- `concurrency_limit`
+This parameter defines CPU hard hard limit for a resource group. It has two implications:
 
-  This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries. This parameter takes effect only when it is set greater than 0. Default: 0.
+- **Exclusive**: Reserves `exclusive_cpu_cores` CPU cores exclusively for this resource group, making them unavailable to other groups, even when idle.
+- **Quota**: Limits the resource group to only using these reserved CPU cores, preventing it from using available CPU resources from other groups.
 
-- `max_cpu_cores`
+The value range is (0, `min_be_cpu_cores - 1`], where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes. It takes effect only when greater than 0. Only one of `cpu_weight` or `exclusive_cpu_cores` can be set to greater than 0.
 
-  The CPU core threshold for triggering query queue in FE. For more details, refer to [Query queues - Specify resource thresholds for resource group-level query queues](./query_queues.md#specify-resource-thresholds-for-resource-group-level-query-queues). It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+- Resource groups with `exclusive_cpu_cores` greater than 0 are called Exclusive resource groups, and the CPU cores allocated to them are called Exclusive Cores. Other groups are called Shared resource groups and run on Shared Cores.
+- The total number of `exclusive_cpu_cores` across all resource groups cannot exceed `min_be_cpu_cores - 1`. The upper limit is set to leave at least one Shared Core available.
 
-- `spill_mem_limit_threshold`
+The relationship between `exclusive_cpu_cores` and `cpu_weight`:
 
-  The memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results. The valid range is (0, 1). The default value is 1, indicating the threshold does not take effect. This parameter was introduced in v3.1.7.
-  - If automatic spilling is enabled (that is, the system variable `spill_mode` is set to `auto`) but the resource group feature is disabled, the system will trigger spilling when the memory usage of a query exceeds 80% of `query_mem_limit`. Here, `query_mem_limit` is the maximum memory that a single query can use, controlled by the system variable `query_mem_limit`, with a default value of 0, indicating no limit.
-  - If automatic spilling is enabled, and the query hits a resource group (including all system built-in resource groups), spilling will be triggered if the query meets any of the following conditions:
-    - The memory used by all queries in the current resource group exceeds `current BE node memory limit * mem_limit * spill_mem_limit_threshold`.
-    - The current query consumes more than 80% of `query_mem_limit`.
+Only one of `cpu_weight` or `exclusive_cpu_cores` can be active at a time. Exclusive resource groups operate on their own reserved Exclusive Cores without requiring a share of CPU time through `cpu_weight`.
 
-On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
+You can configure whether Shared resource groups can borrow Exclusive Cores from Exclusive resource groups using the BE configuration `enable_resource_group_cpu_borrowing`. When set to `true` (default), Shared groups can borrow CPU resources when Exclusive groups are idle.
 
-- `big_query_cpu_second_limit`: This parameter specifies the CPU upper time limit for a big query on a single BE. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
-- `big_query_scan_rows_limit`: This parameter specifies the scan row count upper limit for a big query on a single BE. This parameter takes effect only when it is set greater than 0. Default: 0.
-- `big_query_mem_limit`: This parameter specifies the memory usage upper limit for a big query on a single BE. The unit is byte. This parameter takes effect only when it is set greater than 0. Default: 0.
+To modify this configuration dynamically, use the following command:
+
+```SQL
+UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
+```
+
+#### Memory resource parameters
+
+##### `mem_limit`
+
+Specifies the percentage of memory (query pool) available to the resource group on the current BE node. The value range is (0,1].
+
+##### `spill_mem_limit_threshold`
+
+Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1], with the default being 1 (inactive). Introduced in v3.1.7.
+
+- When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of `query_mem_limit`.
+- When resource groups are enabled, spilling will occur if:
+  - The total memory usage of all queries in the group exceeds `current BE memory limit * mem_limit * spill_mem_limit_threshold`, or
+  - The memory usage of the current query exceeds 80% of `query_mem_limit`.
+
+#### Query concurrency parameters
+
+##### `concurrency_limit`
+
+Defines the maximum number of concurrent queries in the resource group to prevent system overload. Effective only when greater than 0, with a default value of 0.
+
+#### Big query resource parameters
+
+You can configure resource limits specifically for large queries using the following parameters:
+
+##### `big_query_cpu_second_limit`
+
+Specifies the maximum CPU time (in seconds) that large query tasks can use on each BE node, summing the actual CPU time used by parallel tasks. Effective only when greater than 0, with a default value of 0.
+
+##### `big_query_scan_rows_limit`
+
+Sets a limit on the number of rows large query tasks can scan on each BE node. Effective only when greater than 0, with a default value of 0.
+
+##### `big_query_mem_limit`
+
+Defines the maximum memory large query tasks can use on each BE node, in bytes. Effective only when greater than 0, with a default value of 0.
 
 > **NOTE**
 >
 > When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query`, or `normal`.
+##### Type (Deprecated Since v3.3.5)
 
-- The default value is `normal`. You do not need specify `normal` in the parameter `type`.
-- When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
-- When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
-
-> **CAUTION**
->
-> - You can create at most ONE short query resource group in a StarRocks Cluster.
-> - StarRocks does not set set a hard upper limit of CPU resource for `short_query` resource group.
+Before v3.3.5, StarRocks allowed setting the `type` of a resource group to `short_query`. However, the parameter `type` has been deprecated and replaced by `exclusive_cpu_cores`. For any existing resource groups of this type, the system will automatically convert them to an Exclusive resource group where the `exclusive_cpu_cores` value equals the `cpu_weight` after upgrading to v3.3.5.
 
 #### System-defined resource groups
 
-There are two system-defined resource groups in each StarRocks instance: `default_wg` and `default_mv_wg`.
+There are two system-defined resource groups in each StarRocks instance: `default_wg` and `default_mv_wg`. You can modify the configuration of system-defined resource groups using the ALTER RESOURCE GROUP command, but you cannot define classifiers for them or delete system-defined resource groups.
 
 ##### default_wg
 
-`default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The resource limits of `default_wg` are as follows:
+`default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The default resource limits of `default_wg` are as follows:
 
 - `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
 - `mem_limit`: 100%.
@@ -117,14 +146,12 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 ##### default_mv_wg
 
-`default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The resource limits of `default_mv_wg` are as follows:
+`default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The default resource limits of `default_mv_wg` are as follows:
 
 - `cpu_core_limit`: 1.
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.
-
-You can configure the CPU core limit, memory limit, concurrency limit, and spilling threshold of `default_mv_wg` by modifying the BE configuration items `default_mv_resource_group_cpu_limit`, `default_mv_resource_group_memory_limit`, `default_mv_resource_group_concurrency_limit`, `default_mv_resource_group_spill_mem_limit_threshold`.
 
 ### classifier
 
@@ -227,7 +254,7 @@ TO (
     source_ip='cidr'
 ) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
 WITH (
-    "cpu_core_limit" = "INT",
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT",
     "type" = "str" --The type of the resource group. Set the value to normal.
@@ -245,7 +272,7 @@ TO
     (user='rg1_user4'),
     (db='db1')
 WITH (
-    'cpu_core_limit' = '10',
+    'exclusive_cpu_cores' = '10',
     'mem_limit' = '20%',
     'big_query_cpu_second_limit' = '100',
     'big_query_scan_rows_limit' = '100000',
@@ -255,7 +282,7 @@ WITH (
 
 ### Specify resource group (Optional)
 
-You can specify resource group for the current session directly.
+You can specify resource group for the current session directly, including `default_wg` and `default_mv_wg`.
 
 ```SQL
 SET resource_group = 'group_name';
@@ -285,19 +312,30 @@ Example:
 
 ```plain
 mysql> SHOW RESOURCE GROUPS ALL;
-+------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
-| Name | Id     | CPUCoreLimit | MemLimit | ConcurrencyLimit | Type   | Classifiers                                                                                                            |
-+------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
-| rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300040, weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)         |
-| rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300041, weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)                         |
-| rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300042, weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)                                                 |
-| rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300043, weight=1.0, user=rg1_user4)                                                                                |
-+------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
+| name          | id    | cpu_weight | exclusive_cpu_cores | mem_limit | big_query_cpu_second_limit | big_query_scan_rows_limit | big_query_mem_limit | concurrency_limit | spill_mem_limit_threshold | classifiers                            |
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
+| default_mv_wg | 3     | 1          | 0                   | 80.0%     | 0                          | 0                         | 0                   | null              | 80%                       | (id=0, weight=0.0)                     |
+| default_wg    | 2     | 1          | 0                   | 100.0%    | 0                          | 0                         | 0                   | null              | 100%                      | (id=0, weight=0.0)                     |
+| rge1          | 15015 | 0          | 6                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15016, weight=1.0, user=rg1_user)  |
+| rgs1          | 15017 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15018, weight=1.0, user=rgs1_user) |
+| rgs2          | 15019 | 8          | 0                   | 90.0%     | 0                          | 0                         | 0                   | null              | 100%                      | (id=15020, weight=1.0, user=rgs2_user) |
++---------------+-------+------------+---------------------+-----------+----------------------------+---------------------------+---------------------+-------------------+---------------------------+----------------------------------------+
 ```
 
 > **NOTE**
 >
 > In the preceding example, `weight` indicates the degree of matching.
+
+To query all fields of a resource group, including deprecated fields.
+
+By adding the keyword `VERBOSE` to the three commands mentioned above, you can view all fields of the resource group, including deprecated ones, such as `type` and `max_cpu_cores`.
+
+```sql
+SHOW VERBOSE RESOURCE GROUPS ALL;
+SHOW VERBOSE RESOURCE GROUPS;
+SHOW VERBOSE RESOURCE GROUP group_name;
+```
 
 ### Manage resource groups and classifiers
 
@@ -340,7 +378,11 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### View the resource group of a query
 
-You can view the resource group that a query hits from the `ResourceGroup` column in the **fe.audit.log**, or from the `RESOURCE GROUP` column returned after executing `EXPLAIN VERBOSE <query>`. They indicate the resource group that a specific query task matches.
+For queries that have not yet been executed, you can view the resource group matched by the query from the `RESOURCE GROUP` field returned by `EXPLAIN VERBOSE <query>`.
+
+While a query is running, you can check which resource group the query has hit from the `ResourceGroup` field returned by `SHOW PROC '/current_queries'` and `SHOW PROC '/global_current_queries'`.
+
+After a query has completed, you can view the resource group that the query matched by checking the `ResourceGroup` field in the **fe.audit.log** file on the FE node.
 
 - If the query is not under the management of resource groups, the column value is an empty string `""`.
 - If the query is under the management of resource groups but doesn't match any classifier, the column value is an empty string `""`. But this query is assigned to the default resource group `default_wg`.
@@ -360,9 +402,9 @@ The following FE metrics only provide statistics within the current FE node:
 | starrocks_fe_query_resource_group               | Count | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
 | starrocks_fe_query_resource_group_latency       | ms    | Instantaneous | The query latency percentile for this resource group. The label `type` indicates specific percentiles, including `mean`, `75_quantile`, `95_quantile`, `98_quantile`, `99_quantile`, `999_quantile`. |
 | starrocks_fe_query_resource_group_err           | Count | Instantaneous | The number of queries in this resource group that encountered an error. |
-| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
-| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
+| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled. |
 
 ### BE metrics
 
@@ -413,10 +455,45 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 +------------+----+-----------+-----------------+-----------------+------------------+
 ```
 
-## What to do next
+### View thread information for Exclusive and Shared resource groups
 
-After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
+Query execution mainly involves three thread pools: `pip_exec`, `pip_scan`, and `pip_con_scan`.
 
-- [Memory management](./Memory_management.md)
+- Exclusive resource groups run in their dedicated thread pools and are bound to the Exclusive CPU cores allocated to them.
+- Shared resource groups run in shared thread pools and are bound to the remaining Shared CPU cores.
 
-- [Query management](./Query_management.md)
+The threads in these three pools follow the naming convention `{ pip_exec | pip_scan | pip_con_scan }_{ com | <resource_group_id> }`, where `com` refers to the shared thread pool, and `<resource_group_id>` refers to the ID of the Exclusive resource group.
+
+You can view the CPU information bound to each BE thread through the system-defined view `information_schema.be_threads`. The fields `BE_ID`, `NAME`, and `BOUND_CPUS` represent the BE's ID, the name of the thread, and the number of CPU cores bound to that thread, respectively.
+
+```sql
+select * from information_schema.be_threads where name like '%pip_exec%';
+select * from information_schema.be_threads where name like '%pip_scan%';
+select * from information_schema.be_threads where name like '%pip_con_scan%';
+```
+
+Example:
+
+```sql
+select BE_ID, NAME, FINISHED_TASKS, BOUND_CPUS from information_schema.be_threads where name like '%pip_exec_com%' and be_id = 10223;
++-------+--------------+----------------+------------+
+| BE_ID | NAME         | FINISHED_TASKS | BOUND_CPUS |
++-------+--------------+----------------+------------+
+| 10223 | pip_exec_com | 2091295        | 10         |
+| 10223 | pip_exec_com | 2088025        | 10         |
+| 10223 | pip_exec_com | 1637603        | 6          |
+| 10223 | pip_exec_com | 1641260        | 6          |
+| 10223 | pip_exec_com | 1634197        | 6          |
+| 10223 | pip_exec_com | 1633804        | 6          |
+| 10223 | pip_exec_com | 1638184        | 6          |
+| 10223 | pip_exec_com | 1636374        | 6          |
+| 10223 | pip_exec_com | 2095951        | 10         |
+| 10223 | pip_exec_com | 2095248        | 10         |
+| 10223 | pip_exec_com | 2098745        | 10         |
+| 10223 | pip_exec_com | 2085338        | 10         |
+| 10223 | pip_exec_com | 2101221        | 10         |
+| 10223 | pip_exec_com | 2093901        | 10         |
+| 10223 | pip_exec_com | 2092364        | 10         |
+| 10223 | pip_exec_com | 2091366        | 10         |
++-------+--------------+----------------+------------+
+```

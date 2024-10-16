@@ -54,6 +54,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/s3/poco_http_client_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -212,6 +213,9 @@ int main(int argc, char** argv) {
         aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
+    if (starrocks::config::enable_poco_client_for_aws_sdk) {
+        Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
+    }
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);

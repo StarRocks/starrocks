@@ -25,10 +25,10 @@ public class RandomSorter implements Sorter {
     }
 
     @NotNull
-    public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
+    public List<PartitionStatisticsSnapshot> sort(@NotNull List<PartitionStatisticsSnapshot> partitionStatistics) {
         Collections.shuffle(partitionStatistics);
         return partitionStatistics.stream()
-                .sorted(Comparator.comparingInt((PartitionStatistics stats) -> stats.getPriority().getValue())
+                .sorted(Comparator.comparingInt((PartitionStatisticsSnapshot stats) -> stats.getPriority().getValue())
                         .reversed())
                 .collect(Collectors.toList());
     }

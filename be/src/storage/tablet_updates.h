@@ -306,7 +306,8 @@ public:
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state,
-                             const TabletSchemaCSPtr& tablet_schema);
+                             const TabletSchemaCSPtr& tablet_schema,
+                             const std::map<string, string>* column_to_expr_value = nullptr);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                 std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
@@ -382,6 +383,8 @@ public:
             _reset_apply_status(*version_info_apply);
         }
     }
+
+    void rewrite_rs_meta();
 
 private:
     friend class Tablet;
@@ -503,6 +506,7 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
+    bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
 

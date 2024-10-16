@@ -4,6 +4,29 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.11
+
+Release date: September 9, 2024
+
+### Improvements
+
+- Supports masking authentication information for Files() and PIPE. [#47629](https://github.com/StarRocks/starrocks/pull/47629)
+- Support automatic inference for the STRUCT type when reading Parquet files through Files(). [#50481](https://github.com/StarRocks/starrocks/pull/50481)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error is returned for equi-join queries because they failed to be rewritten by the global dictionary. [#50690](https://github.com/StarRocks/starrocks/pull/50690)
+- The error "version has been compacted" caused by an infinite loop on the FE side during Tablet Clone. [#50561](https://github.com/StarRocks/starrocks/pull/50561)
+- Incorrect scheduling for unhealthy replica repairs after distributing data based on labels. [#50331](https://github.com/StarRocks/starrocks/pull/50331)
+- An error in the statistics collection log: "Unknown column '%s' in '%s." [#50785](https://github.com/StarRocks/starrocks/pull/50785)
+- Incorrect timezone usage when reading complex types like TIMESTAMP from Parquet files via Files(). [#50448](https://github.com/StarRocks/starrocks/pull/50448)
+
+### Behavior Changes
+
+- When downgrading StarRocks from v3.3.x to v3.2.11, the system will ignore it if there is incompatible metadata. [#49636](https://github.com/StarRocks/starrocks/pull/49636)
+
 ## 3.2.10
 
 Release date: August 23, 2024

@@ -57,7 +57,10 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+
+    // the actual output property of this expression
     private PhysicalPropertySet outputProperty;
+
     private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
@@ -269,6 +272,7 @@ public class OptExpression {
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
+            sb.append('\n');
             sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
@@ -291,6 +295,7 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
             return this;
         }
 
@@ -316,6 +321,11 @@ public class OptExpression {
 
         public Builder setCost(double cost) {
             optExpression.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
             return this;
         }
 

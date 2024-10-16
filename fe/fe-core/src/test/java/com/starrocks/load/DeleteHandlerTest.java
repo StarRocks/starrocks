@@ -43,6 +43,7 @@ import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -103,6 +104,7 @@ public class DeleteHandlerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
     private ConnectContext connectContext = new ConnectContext();
+    private VariableMgr variableMgr = new VariableMgr();
 
     @Before
     public void setUp() {
@@ -110,6 +112,7 @@ public class DeleteHandlerTest {
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         try {
             db = CatalogMocker.mockDb();
@@ -172,6 +175,10 @@ public class DeleteHandlerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());

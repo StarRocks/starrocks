@@ -46,7 +46,6 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -61,6 +60,10 @@
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -241,56 +244,12 @@ ObjectPool* RuntimeState::global_obj_pool() const {
     return _query_ctx->object_pool();
 }
 
-std::string RuntimeState::error_log() {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-    return boost::algorithm::join(_error_log, "\n");
-}
-
-bool RuntimeState::log_error(std::string_view error) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-
-    if (_error_log.size() < _query_options.max_errors) {
-        _error_log.emplace_back(error);
-        return true;
-    }
-
-    return false;
-}
-
-void RuntimeState::log_error(const Status& status) {
-    if (status.ok()) {
-        return;
-    }
-
-    log_error(status.message());
-}
-
-void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-
-    if (_unreported_error_idx < _error_log.size()) {
-        new_errors->assign(_error_log.begin() + _unreported_error_idx, _error_log.end());
-        _unreported_error_idx = _error_log.size();
-    }
-}
-
 bool RuntimeState::use_page_cache() {
     if (config::disable_storage_page_cache) {
         return false;
     }
     if (_query_options.__isset.use_page_cache) {
         return _query_options.use_page_cache;
-    }
-    return true;
-}
-
-bool RuntimeState::use_column_pool() const {
-    if (config::disable_column_pool) {
-        return false;
-    }
-
-    if (_query_options.__isset.use_column_pool) {
-        return _query_options.use_column_pool;
     }
     return true;
 }
@@ -319,7 +278,6 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
 
-    log_error(ss.str());
     DCHECK(_process_status.is_mem_limit_exceeded());
     return _process_status;
 }
@@ -523,8 +481,12 @@ Status RuntimeState::reset_epoch() {
 }
 
 bool RuntimeState::is_jit_enabled() const {
+#ifdef STARROCKS_JIT_ENABLE
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+#else
+    return false;
+#endif
 }
 
 void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {

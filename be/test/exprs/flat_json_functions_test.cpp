@@ -615,9 +615,9 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonPathDeriver, FlatJsonDeriverPaths,
     ::testing::Values(
         std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_VARCHAR}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": [1,2,3] })", R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
 
         std::make_tuple(R"({ "k1": "v1", "k2": [3,4,5], "k3": 1, "k4": 1.2344 })",  

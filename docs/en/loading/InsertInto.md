@@ -25,7 +25,7 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 - You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
 - You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
-- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
+- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. If your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via Routine Load.
 - If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#use-a-temporary-partition-to-replace-the-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
@@ -111,7 +111,7 @@ DISTRIBUTED BY HASH(user);
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Insert data via INSERT INTO VALUES
 
@@ -119,7 +119,7 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -219,7 +219,7 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/Loading_intro.md) for other options that suit your scenarios.
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 

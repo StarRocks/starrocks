@@ -44,7 +44,6 @@ Status HorizontalGeneralTabletWriter::open() {
 }
 
 Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
-    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer(segment));
@@ -60,7 +59,6 @@ Status HorizontalGeneralTabletWriter::flush(SegmentPB* segment) {
 }
 
 Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
-    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     RETURN_IF_ERROR(flush_segment_writer(segment));
     _finished = true;
     return Status::OK();
@@ -71,7 +69,13 @@ void HorizontalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
-            full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -89,7 +93,12 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
         wopts.encryption_info = pair.info;
         opts.encryption_meta = std::move(pair.encryption_meta);
     }
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -145,7 +154,6 @@ Status VerticalGeneralTabletWriter::open() {
 
 Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes,
                                                   bool is_key) {
-    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     const size_t chunk_num_rows = data.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -217,7 +225,6 @@ Status VerticalGeneralTabletWriter::flush(SegmentPB* segment) {
 }
 
 Status VerticalGeneralTabletWriter::flush_columns() {
-    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     if (_segment_writers.empty()) {
         return Status::OK();
     }
@@ -233,7 +240,6 @@ Status VerticalGeneralTabletWriter::flush_columns() {
 }
 
 Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
-    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -257,7 +263,13 @@ void VerticalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
-            full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -276,7 +288,12 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         wopts.encryption_info = pair.info;
         opts.encryption_meta = std::move(pair.encryption_meta);
     }
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

@@ -14,7 +14,7 @@
 
 #include "storage/aggregate_iterator.h"
 
-#include "column/column_pool.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 #include "storage/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
@@ -36,7 +36,7 @@ static std::vector<Datum> row(const Chunk& chunk, size_t row_id) {
 class AggregateIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
-    void TearDown() override { TEST_clear_all_columns_this_thread(); }
+    void TearDown() override {}
 };
 
 // NOLINTNEXTLINE

@@ -22,7 +22,7 @@ StarRocks supports the following remote storage systems:
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
 
-If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
+If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../../table_design/data_distribution/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
 
 ### Create a repository
 
@@ -197,7 +197,7 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md).
 
-From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
+From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) when you back up and restore the database they reside in.
 
 During BACKUP and RESTORE of a database, StarRocks does as follows:
 
