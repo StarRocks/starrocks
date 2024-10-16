@@ -111,9 +111,7 @@ Status LambdaFunction::collect_lambda_argument_ids() {
 
 SlotId LambdaFunction::max_used_slot_id() const {
     SlotId max_slot_id = 0;
-    for_each_slot_id([&max_slot_id](SlotId slot_id) {
-        max_slot_id = std::max(max_slot_id, slot_id);
-    });
+    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
     return max_slot_id;
 }
 
