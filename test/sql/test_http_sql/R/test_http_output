@@ -171,7 +171,10 @@ sync;
 -- !result
 
 -- name: test_http_output_add_scan_partitions_audit
-use ${db[0]};
+create database test_add_scan_partitions_db;
+-- result:
+-- !result
+use test_add_scan_partitions_db;
 -- result:
 -- !result
 CREATE TABLE test_add_scan_partitions_1 (
@@ -227,10 +230,10 @@ insert into test_add_scan_partitions_2(c1,c2,c3,ds) values('1','1','1','2024-10-
 insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('1','1','1','2024-10-01'),('2','2','2','2024-10-02');
 -- result:
 -- !result
-shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
+shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/test_add_scan_partitions_db/sql' -u 'root:' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
 -- result:
 0
-[REGEX]"scanPartitions":"[{catalogName:default_catalog,databaseName:.*,tableName:test_add_scan_partitions_1,partitionIds:[p20241001, p20241002]}, {catalogName:default_catalog,databaseName:.*,tableName:test_add_scan_partitions_2,partitionIds:[p20241001_1, p20241002_2]}, {catalogName:default_catalog,databaseName:.*,tableName:test_add_scan_partitions_3,partitionIds:[test_add_scan_partitions_3]}]"
+"scanPartitions":"[{catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_1,partitionIds:[p20241001, p20241002]}, {catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_2,partitionIds:[p20241001_1, p20241002_2]}, {catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_3,partitionIds:[test_add_scan_partitions_3]}]"
 -- !result
 sync;
 -- result:
