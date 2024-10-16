@@ -993,7 +993,9 @@ Used for MySQL client compatibility. No practical usage.
 
 ### sql_select_limit
 
-Used for MySQL client compatibility. No practical usage.
+* **Description**: Used to limit the maximum number of rows returned by a query, which can prevent issues such as insufficient memory or network congestion caused by the query returning too much data.
+* **Default**: Unlimited
+* **Data type**: Long
 
 ### statistic_collect_parallel
 

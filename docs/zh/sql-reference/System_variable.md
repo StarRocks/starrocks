@@ -1007,7 +1007,9 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### sql_select_limit
 
-用于兼容 MySQL 客户端。无实际作用。
+* 描述：用于限制查询返回的结果集的最大行数，可以防止因查询返回过多的数据而导致内存不足或网络拥堵等问题。
+* 默认值：无限制
+* 类型：Long
 
 ### statistic_collect_parallel
 
