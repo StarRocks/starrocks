@@ -51,7 +51,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
     ASSIGN_OR_RETURN(auto file,
                      HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
-    for (int64_t offset = 0; offset < delete_file.length;) {
+    int64_t offset = 0;
+    while (offset < delete_file.length) {
         const int64_t remain_length =
                 std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), delete_file.length - offset);
         io_ranges.emplace_back(offset, remain_length);
@@ -76,8 +77,8 @@ Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
     HdfsScanStats app_scan_stats;
     HdfsScanStats fs_scan_stats;
-    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
-    std::shared_ptr<io::CacheInputStream> cache_input_stream;
+    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
                                                         shared_buffered_input_stream, cache_input_stream));
