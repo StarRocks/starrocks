@@ -826,11 +826,6 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     schema->set_id(1);
     metadata.set_id(123);
     metadata.set_version(1);
-    auto rowset_meta_pb1 = metadata.add_rowsets();
-    rowset_meta_pb1->set_id(2);
-    rowset_meta_pb1->set_overlapped(false);
-    rowset_meta_pb1->set_data_size(1024);
-    rowset_meta_pb1->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
     starrocks::TabletMetadata metadata2;
@@ -842,14 +837,42 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     rowset_meta_pb2->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata2));
 
-    auto res = _tablet_manager->capture_tablet_and_rowsets(123, 0, 2);
-    EXPECT_TRUE(res.ok());
-    auto& [tablet, rowsets] = res.value();
-    ASSERT_EQ(2, rowsets.size());
+    starrocks::TabletMetadata metadata3;
+    metadata3.set_version(3);
+    auto rowset_meta_pb3 = metadata3.add_rowsets();
+    rowset_meta_pb3->set_id(3);
+    rowset_meta_pb3->set_overlapped(false);
+    rowset_meta_pb3->set_data_size(1024);
+    rowset_meta_pb3->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata3));
 
-    res = _tablet_manager->capture_tablet_and_rowsets(123, 1, 2);
-    auto& [tablet1, rowsets1] = res.value();
-    ASSERT_EQ(2, rowsets1.size());
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(123, 0, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(123, 1, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(123, 2, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(123, 3, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(1, rowsets.size());
+    }
 }
 
 #endif // USE_STAROS
