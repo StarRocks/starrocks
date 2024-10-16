@@ -333,9 +333,7 @@ public class SchemaScanNode extends ScanNode {
     public void computeBeScanRanges() {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Set<ComputeNode> computeNodes = new HashSet<>(systemInfoService.getIdToBackend().values());
-        if (RunMode.isSharedDataMode()) {
-            computeNodes.addAll(systemInfoService.getIdComputeNode().values());
-        }
+        computeNodes.addAll(systemInfoService.getIdComputeNode().values());
         for (ComputeNode be : computeNodes) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
