@@ -310,13 +310,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 
 #ifdef USE_STAROS
 #define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
-        _config_callback.emplace(#BE_CONFIG, [value]() {                                                     \
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
-                LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
-                return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
-            }                                                                                            \
-            return Status::OK();                                                                         \
-        });
+    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
+        }                                                                                            \
+        return Status::OK();                                                                         \
+    });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
         UPDATE_STARLET_CONFIG(starlet_cache_evict_low_water, cachemgr_evict_low_water);
@@ -328,13 +328,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
         UPDATE_STARLET_CONFIG(starlet_cache_evict_interval, cachemgr_evict_interval);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
-        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor, fslib_s3client_nonread_retry_scale_factor);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
+                              fslib_s3client_nonread_retry_scale_factor);
         UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
 #endif // USE_STAROS
-});
+    });
 
     Status s = config::set_config(name, value);
     if (s.ok()) {
