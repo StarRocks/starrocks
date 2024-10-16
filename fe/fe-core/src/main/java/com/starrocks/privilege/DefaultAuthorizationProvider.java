@@ -245,49 +245,4 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                               PrivilegeCollectionV2 currentPrivilegeCollection) {
         return currentPrivilegeCollection.allowGrant(objectType, wants, objects);
     }
-
-    @Override
-    public void upgradePrivilegeCollection(PrivilegeCollectionV2 info, short pluginId, short metaVersion)
-            throws PrivilegeException {
-        if (pluginId != PLUGIN_ID && metaVersion != PLUGIN_VERSION) {
-            throw new PrivilegeException(String.format(
-                    "unexpected privilege collection %s; plugin id expect %d actual %d; version expect %d actual %d",
-                    info.toString(), PLUGIN_ID, pluginId, PLUGIN_VERSION, metaVersion));
-        }
-
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() < StarRocksFEMetaVersion.VERSION_4) {
-            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                    .stream().filter(catalogName ->
-                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName))
-                    .collect(Collectors.toList());
-            for (String catalog : catalogs) {
-                CatalogPEntryObject catalogPEntryObject = CatalogPEntryObject.generate(
-                        GlobalStateMgr.getCurrentState(), Lists.newArrayList(catalog));
-
-                PEntryObject pEntryObject = generateObject(
-                        ObjectType.CATALOG, Lists.newArrayList(catalog), GlobalStateMgr.getCurrentState());
-                if (searchAnyActionOnObject(ObjectType.CATALOG, pEntryObject, info)) {
-                    info.grant(ObjectType.CATALOG, Lists.newArrayList(PrivilegeType.USAGE),
-                            Lists.newArrayList(catalogPEntryObject), false);
-                    continue;
-                }
-
-                pEntryObject = generateObject(
-                        ObjectType.DATABASE, Lists.newArrayList(catalog, "*"), GlobalStateMgr.getCurrentState());
-                if (searchAnyActionOnObject(ObjectType.DATABASE, pEntryObject, info)) {
-                    info.grant(ObjectType.CATALOG, Lists.newArrayList(PrivilegeType.USAGE),
-                            Lists.newArrayList(catalogPEntryObject), false);
-                    continue;
-                }
-
-                pEntryObject = generateObject(
-                        ObjectType.TABLE, Lists.newArrayList(catalog, "*", "*"), GlobalStateMgr.getCurrentState());
-                if (searchAnyActionOnObject(ObjectType.TABLE, pEntryObject, info)) {
-                    info.grant(ObjectType.CATALOG, Lists.newArrayList(PrivilegeType.USAGE),
-                            Lists.newArrayList(catalogPEntryObject), false);
-                    continue;
-                }
-            }
-        }
-    }
 }

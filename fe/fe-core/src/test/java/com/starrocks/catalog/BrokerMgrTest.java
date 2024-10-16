@@ -38,7 +38,6 @@ public class BrokerMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         new Expectations() {
             {
                 globalStateMgr.getEditLog();

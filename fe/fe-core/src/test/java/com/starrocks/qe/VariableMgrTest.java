@@ -302,7 +302,6 @@ public class VariableMgrTest {
 
     @Test
     public void testImagePersist() throws Exception {
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         VariableMgr mgr = new VariableMgr();
         GlobalVarPersistInfo info = new GlobalVarPersistInfo();
         info.setPersistJsonString("{\"query_timeout\":100}");
