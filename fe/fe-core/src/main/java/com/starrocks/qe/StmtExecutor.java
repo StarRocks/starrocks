@@ -1199,9 +1199,26 @@ public class StmtExecutor {
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 
+        String scanPartitionsInfo = "";
+        if (isEnableScanPartitionsAudit) {
+            List<String> scanPartitionsList = Lists.newArrayList();
+            Map<String, String> scanPartitionsMap = Maps.newHashMap();
+            for (ScanNode sn : scanNodes) {
+                Database db = MetaUtils.getDatabaseByTableId(sn.getTableId());
+                if (db.getOriginName() != "") {
+                    scanPartitionsMap.put("catalogName", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                    scanPartitionsMap.put("databaseName", db.getOriginName());
+                    scanPartitionsMap.put("tableName", sn.getTableName());
+                    scanPartitionsMap.put("partitionIds", sn.getSelectedPartitionNames().toString());
+                    scanPartitionsList.add(GSON.toJson(scanPartitionsMap));
+                }
+            }
+            scanPartitionsInfo = scanPartitionsList.toString().replace("\"", "");
+        }
+
         RowBatch batch;
         if (context instanceof HttpConnectContext) {
-            batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
+            batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt(), scanPartitionsInfo);
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1274,22 +1291,7 @@ public class StmtExecutor {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
             entity.counterScanFinishedTotal.increase(1L);
         }
-        // collect scan-partitions metrics
-        if (isEnableScanPartitionsAudit) {
-            List<String> scanPartitionsList = Lists.newArrayList();
-            Map<String, String> scanPartitionsMap = Maps.newHashMap();
-            for (ScanNode sn : scanNodes) {
-                Database db = MetaUtils.getDatabaseByTableId(sn.getTableId());
-                if (db.getOriginName() != "") {
-                    scanPartitionsMap.put("catalogName", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                    scanPartitionsMap.put("databaseName", db.getOriginName());
-                    scanPartitionsMap.put("tableName", sn.getTableName());
-                    scanPartitionsMap.put("partitionIds", sn.getSelectedPartitionNames().toString());
-                    scanPartitionsList.add(GSON.toJson(scanPartitionsMap));
-                }
-            }
-            statisticsForAuditLog.scanPartitions = scanPartitionsList.toString().replace("\"", "");
-        }
+        statisticsForAuditLog.scanPartitions = scanPartitionsInfo;
     }
 
     private void analyzePlanWithExecStats(ExecPlan execPlan) {
