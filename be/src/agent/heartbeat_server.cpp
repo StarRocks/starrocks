@@ -154,25 +154,25 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 }
 
 std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
-  using ::apache::thrift::to_string;
+    using ::apache::thrift::to_string;
 
-  std::ostringstream out;
-  out << "TMasterInfo(";
-  out << "network_address=" << to_string(network_address);
-  out << ", " << "cluster_id="; (__isset.cluster_id ? (out << to_string(cluster_id)) : (out << "<null>"));
-  out << ", " << "epoch=" << to_string(epoch);
-  out << ", " << "token="; (__isset.token ? (out << to_string(token)) : (out << "<null>"));
-  out << ", " << "backend_ip="; (__isset.backend_ip ? (out << to_string(backend_ip)) : (out << "<null>"));
-  out << ", " << "http_port="; (__isset.http_port ? (out << to_string(http_port)) : (out << "<null>"));
-  out << ", " << "heartbeat_flags="; (__isset.heartbeat_flags ? (out << to_string(heartbeat_flags)) : (out << "<null>"));
-  out << ", " << "backend_id="; (__isset.backend_id ? (out << to_string(backend_id)) : (out << "<null>"));
-  out << ", " << "min_active_txn_id="; (__isset.min_active_txn_id ? (out << to_string(min_active_txn_id)) : (out << "<null>"));
-  out << ", " << "run_mode="; (__isset.run_mode ? (out << to_string(run_mode)) : (out << "<null>"));
-  out << ", " << "disabled_disks="; (__isset.disabled_disks ? (out << to_string(disabled_disks)) : (out << "<null>"));
-  out << ", " << "decommissioned_disks="; (__isset.decommissioned_disks ? (out << to_string(decommissioned_disks)) : (out << "<null>"));
-  out << ", " << "encrypted="; (__isset.encrypted ? (out << to_string(encrypted)) : (out << "<null>"));
-  out << ")";
-  return out.str();
+    std::ostringstream out;
+    out << "TMasterInfo(";
+    out << "network_address=" << to_string(network_address);
+    out << ", " << "cluster_id="; (__isset.cluster_id ? (out << to_string(cluster_id)) : (out << "<null>"));
+    out << ", " << "epoch=" << to_string(epoch);
+    out << ", " << "token="; (__isset.token ? (out << to_string(token)) : (out << "<null>"));
+    out << ", " << "backend_ip="; (__isset.backend_ip ? (out << to_string(backend_ip)) : (out << "<null>"));
+    out << ", " << "http_port="; (__isset.http_port ? (out << to_string(http_port)) : (out << "<null>"));
+    out << ", " << "heartbeat_flags="; (__isset.heartbeat_flags ? (out << to_string(heartbeat_flags)) : (out << "<null>"));
+    out << ", " << "backend_id="; (__isset.backend_id ? (out << to_string(backend_id)) : (out << "<null>"));
+    out << ", " << "min_active_txn_id="; (__isset.min_active_txn_id ? (out << to_string(min_active_txn_id)) : (out << "<null>"));
+    out << ", " << "run_mode="; (__isset.run_mode ? (out << to_string(run_mode)) : (out << "<null>"));
+    out << ", " << "disabled_disks="; (__isset.disabled_disks ? (out << to_string(disabled_disks)) : (out << "<null>"));
+    out << ", " << "decommissioned_disks="; (__isset.decommissioned_disks ? (out << to_string(decommissioned_disks)) : (out << "<null>"));
+    out << ", " << "encrypted="; (__isset.encrypted ? (out << to_string(encrypted)) : (out << "<null>"));
+    out << ")";
+    return out.str();
 }
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
