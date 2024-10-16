@@ -494,6 +494,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
+<<<<<<< HEAD
     @Test
     @Order(6)
     public void testMVRestore_TestMVWithBaseTable4() {
@@ -511,6 +512,10 @@ public class RestoreJobMaterializedViewTest {
                 result = db;
             }
         };
+=======
+    @Ignore
+    public void testMVRestoreMVWithBaseTable4() {
+>>>>>>> 780419cf50 ([BugFix] Add task's defination into task run status (#51707))
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {

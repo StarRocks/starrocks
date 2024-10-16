@@ -19,6 +19,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TTaskRunInfo;
+import com.starrocks.thrift.TUserIdentity;
+import org.apache.commons.lang3.NotImplementedException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
+import org.apache.thrift.meta_data.FieldValueMetaData;
+import org.apache.thrift.protocol.TType;
+>>>>>>> 780419cf50 ([BugFix] Add task's defination into task run status (#51707))
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -46,4 +57,147 @@ public class TaskRunsSystemTable {
                         .column("PROPERTIES", ScalarType.createVarcharType(512))
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean supportFeEvaluation() {
+        return true;
+    }
+
+    @Override
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        return evaluate(Utils.extractConjuncts(predicate));
+    }
+
+    public static List<List<ScalarOperator>> evaluate(List<ScalarOperator> conjuncts) {
+        // Build a Params
+        TGetTasksParams params = new TGetTasksParams();
+        for (ScalarOperator conjunct : conjuncts) {
+            BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
+            ColumnRefOperator columnRef = binary.getChild(0).cast();
+            String name = columnRef.getName();
+            ConstantOperator value = binary.getChild(1).cast();
+            switch (name.toUpperCase()) {
+                case "QUERY_ID":
+                    params.setQuery_id(value.getVarchar());
+                    break;
+                case "TASK_NAME":
+                    params.setTask_name(value.getVarchar());
+                    break;
+                default:
+                    throw new NotImplementedException("unsupported column: " + name);
+            }
+        }
+
+        ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        params.setCurrent_user_ident(userIdentity);
+        // Evaluate result
+        TGetTaskRunInfoResult info = query(params);
+        return info.getTask_runs().stream().map(TaskRunsSystemTable::infoToScalar).collect(Collectors.toList());
+    }
+
+    private static List<ScalarOperator> infoToScalar(TTaskRunInfo info) {
+        List<ScalarOperator> result = Lists.newArrayList();
+        for (Column column : TABLE.getColumns()) {
+            String name = column.getName().toLowerCase();
+            TTaskRunInfo._Fields field = TTaskRunInfo._Fields.findByName(name);
+            FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
+            Object obj = info.getFieldValue(field);
+            Type valueType = thriftToScalarType(meta.type);
+            ConstantOperator scalar = ConstantOperator.createNullableObject(obj, valueType);
+            scalar = mayCast(scalar, column.getType());
+            result.add(scalar);
+        }
+        return result;
+    }
+
+    /**
+     * The thrift type may differ from schema-type, for example user a LONG timestamp in thrift, but return a
+     * DATETIME in the schema table.
+     */
+    private static ConstantOperator mayCast(ConstantOperator value, Type schemaType) {
+        if (value.getType().equals(schemaType)) {
+            return value;
+        }
+        if (value.getType().isStringType() && schemaType.isStringType()) {
+            return value;
+        }
+        // From timestamp to DATETIME
+        if (value.getType().isBigint() && schemaType.isDatetime()) {
+            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
+        }
+        return value.castTo(schemaType)
+                .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
+                        value.getType(), schemaType)));
+    }
+
+    private static Type thriftToScalarType(byte type) {
+        Type valueType = THRIFT_TO_SCALAR_TYPE_MAPPING.get(type);
+        if (valueType == null) {
+            throw new NotImplementedException("not supported type: " + type);
+        }
+        return valueType;
+    }
+
+    public static TGetTaskRunInfoResult query(TGetTasksParams params) {
+        TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
+        List<TTaskRunInfo> tasksResult = Lists.newArrayList();
+        result.setTask_runs(tasksResult);
+
+        UserIdentity currentUser = null;
+        if (params.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TaskManager taskManager = globalStateMgr.getTaskManager();
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
+
+        for (TaskRunStatus status : taskRunList) {
+            if (status.getDbName() == null) {
+                LOG.warn("Ignore the task status because db information is incorrect: " + status);
+                continue;
+            }
+
+            try {
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        status.getDbName());
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            String taskName = status.getTaskName();
+            TTaskRunInfo info = new TTaskRunInfo();
+            info.setQuery_id(status.getQueryId());
+            info.setTask_name(taskName);
+            info.setCreate_time(status.getCreateTime() / 1000);
+            info.setFinish_time(status.getFinishTime() / 1000);
+            info.setState(status.getState().toString());
+            info.setCatalog(status.getCatalogName());
+            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
+            if (!Strings.isEmpty(status.getDefinition())) {
+                info.setDefinition(status.getDefinition());
+            } else {
+                try {
+                    // NOTE: use task's definition to display task-run's definition here
+                    Task task = taskManager.getTaskWithoutLock(taskName);
+                    if (task != null) {
+                        info.setDefinition(task.getDefinition());
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Get taskName {} definition failed: {}", taskName, e);
+                }
+            }
+            info.setError_code(status.getErrorCode());
+            info.setError_message(status.getErrorMessage());
+            info.setExpire_time(status.getExpireTime() / 1000);
+            info.setProgress(status.getProgress() + "%");
+            info.setExtra_message(status.getExtraMessage());
+            info.setProperties(status.getPropertiesJson());
+            tasksResult.add(info);
+        }
+        return result;
+    }
+>>>>>>> 780419cf50 ([BugFix] Add task's defination into task run status (#51707))
 }
