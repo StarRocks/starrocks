@@ -118,6 +118,7 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 
 -- name: test_http_output_add_scan_partitions_audit
+use ${db[0]};
 CREATE TABLE test_add_scan_partitions_1 (
   `c1` string,
   `c2` string,
