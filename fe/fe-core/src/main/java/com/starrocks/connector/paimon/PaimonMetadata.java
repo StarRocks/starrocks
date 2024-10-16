@@ -271,7 +271,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange versionRange) {
-        if (!properties.enableGetTableStatsFromMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 

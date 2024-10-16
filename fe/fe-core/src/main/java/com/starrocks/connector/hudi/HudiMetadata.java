@@ -192,7 +192,7 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit, TableVersionRange version) {
-        if (!properties.enableGetTableStatsFromMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 

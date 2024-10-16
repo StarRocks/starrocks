@@ -32,6 +32,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
@@ -133,7 +134,7 @@ public class HiveMetadataTest {
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
                 Optional.empty(), executorForHmsRefresh, executorForHmsRefresh,
-                new ConnectorProperties("hive"));
+                new ConnectorProperties(ConnectorType.HIVE));
     }
 
     @After

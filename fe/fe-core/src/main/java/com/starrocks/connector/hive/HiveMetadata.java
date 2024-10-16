@@ -319,7 +319,7 @@ public class HiveMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange version) {
-        if (!properties.enableGetTableStatsFromMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 

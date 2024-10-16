@@ -61,7 +61,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         AnalyzeTestUtil.init();
         String createCatalog = "CREATE EXTERNAL CATALOG iceberg_catalog PROPERTIES(\"type\"=\"iceberg\", " +
                 "\"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\"=\"hive\"," +
-                "\"enable_get_stats_from_metadata\"=\"true\")";
+                "\"enable_get_stats_from_external_metadata\"=\"true\")";
         starRocksAssert.withCatalog(createCatalog);
         new MockUp<IcebergMetadata>() {
             @Mock

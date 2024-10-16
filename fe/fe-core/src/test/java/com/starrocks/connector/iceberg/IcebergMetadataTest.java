@@ -40,6 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -783,8 +784,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
-                new ConnectorProperties("iceberg",
-                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_METADATA, "true")));
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")));
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_1).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
@@ -812,8 +813,8 @@ public class IcebergMetadataTest extends TableTestBase {
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
-                new ConnectorProperties("iceberg",
-                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_METADATA, "true")));
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")));
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_4).commit();
         mockedNativeTableB.refresh();
@@ -927,8 +928,8 @@ public class IcebergMetadataTest extends TableTestBase {
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
-                new ConnectorProperties("iceberg",
-                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_METADATA, "true")));
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")));
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);

@@ -14,33 +14,30 @@
 
 package com.starrocks.connector;
 
+import org.apache.iceberg.util.PropertyUtil;
+
 import java.util.Map;
 
 public class ConnectorProperties {
-    public static final String ENABLE_GET_STATS_FROM_METADATA = "enable_get_stats_from_metadata";
+    public static final String ENABLE_GET_STATS_FROM_EXTERNAL_METADATA = "enable_get_stats_from_external_metadata";
 
     private final ConnectorType connectorType;
     private final Map<String, String> properties;
 
-    public ConnectorProperties(String connectorType) {
-        this.connectorType = ConnectorType.from(connectorType);
+    public ConnectorProperties(ConnectorType connectorType) {
+        this.connectorType = connectorType;
         this.properties = Map.of();
     }
 
-    public ConnectorProperties(String connectorType, Map<String, String> properties) {
-        this.connectorType = ConnectorType.from(connectorType);
+    public ConnectorProperties(ConnectorType connectorType, Map<String, String> properties) {
+        this.connectorType = connectorType;
         this.properties = properties;
     }
 
-    public boolean enableGetTableStatsFromMetadata() {
-        if (properties.containsKey(ConnectorProperties.ENABLE_GET_STATS_FROM_METADATA)) {
-            return Boolean.parseBoolean(properties.get(ConnectorProperties.ENABLE_GET_STATS_FROM_METADATA));
-        }
+    public boolean enableGetTableStatsFromExternalMetadata() {
         // For Iceberg and DeltaLake, we don't get table stats from metadata by default.
-        if (connectorType == ConnectorType.ICEBERG || connectorType == ConnectorType.DELTALAKE) {
-            return false;
-        } else {
-            return true;
-        }
+        boolean defaultValue = connectorType != ConnectorType.ICEBERG && connectorType != ConnectorType.DELTALAKE;
+        return PropertyUtil.propertyAsBoolean(properties, ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA,
+                defaultValue);
     }
 }

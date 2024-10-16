@@ -39,6 +39,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -192,7 +193,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
                            IcebergCatalogProperties catalogProperties) {
         this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
-                catalogProperties, new ConnectorProperties("iceberg"));
+                catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG));
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
@@ -980,7 +981,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange version) {
-        if (!properties.enableGetTableStatsFromMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;

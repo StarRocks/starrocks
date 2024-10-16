@@ -6,7 +6,7 @@ create external catalog delta_test_${uuid0} PROPERTIES (
     "aws.s3.access_key"="${oss_ak}",
     "aws.s3.secret_key"="${oss_sk}",
     "aws.s3.endpoint"="${oss_endpoint}",
-    "enable_get_stats_from_metadata"="true"
+    "enable_get_stats_from_external_metadata"="true"
 );
 
 set time_zone="Asia/Shanghai";

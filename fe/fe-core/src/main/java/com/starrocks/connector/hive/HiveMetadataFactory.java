@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
@@ -43,7 +44,7 @@ public class HiveMetadataFactory {
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
-    private final Map<String, String> properties;
+    private final ConnectorProperties connectorProperties;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -72,7 +73,7 @@ public class HiveMetadataFactory {
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
-        this.properties = properties;
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HIVE, properties);
     }
 
     public HiveMetadata create() {
@@ -92,7 +93,7 @@ public class HiveMetadataFactory {
         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
                 statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor,
-                new ConnectorProperties("hive", properties));
+                connectorProperties);
     }
 
     public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {

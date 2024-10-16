@@ -147,7 +147,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TableVersionRange versionRange) {
-        if (!properties.enableGetTableStatsFromMetadata()) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
 

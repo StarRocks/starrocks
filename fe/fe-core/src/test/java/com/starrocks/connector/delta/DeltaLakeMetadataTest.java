@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.TableVersionRange;
@@ -74,7 +75,7 @@ public class DeltaLakeMetadataTest {
                 MetastoreType.HMS);
 
         deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps, null,
-                new ConnectorProperties("deltalake"));
+                new ConnectorProperties(ConnectorType.DELTALAKE));
     }
 
     @Test

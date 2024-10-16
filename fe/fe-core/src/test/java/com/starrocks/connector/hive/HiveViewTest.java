@@ -21,6 +21,7 @@ import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -129,7 +130,7 @@ public class HiveViewTest extends PlanTestBase {
                 null, null, true, false);
         HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
                 Optional.of(hiveCacheUpdateProcessor), null, null,
-                new ConnectorProperties("hive"));
+                new ConnectorProperties(ConnectorType.HIVE));
 
         Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
         new Expectations() {

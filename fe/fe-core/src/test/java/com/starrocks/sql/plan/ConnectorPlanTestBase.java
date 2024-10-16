@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -255,7 +256,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         //register paimon catalog
         PaimonMetadata paimonMetadata =
                 new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog,
-                        new ConnectorProperties("paimon", properties));
+                        new ConnectorProperties(ConnectorType.PAIMON, properties));
         metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
     }
 
@@ -285,8 +286,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
-            super(null, null, null, null,
-                    new ConnectorProperties("deltalake"));
+            super(null, null, null, null, new ConnectorProperties(ConnectorType.DELTALAKE));
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
