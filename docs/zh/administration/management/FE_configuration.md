@@ -4884,7 +4884,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### replication_transaction_timeout_sec
 
-- 默认值：1 * 60 * 60
+- 默认值：24 * 60 * 60
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
