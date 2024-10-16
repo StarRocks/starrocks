@@ -799,4 +799,21 @@ public class TaskManagerTest {
         taskRunManager.killTaskRun(1L, true);
         Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
+
+    @Test
+    public void testTaskRunDefinition() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 1;
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun.setTaskId(taskId);
+        taskRun.initStatus("1", now + 10);
+        taskRun.getStatus().setPriority(0);
+        TaskRunStatus taskRunStatus = taskRun.getStatus();
+        Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+    }
 }

@@ -176,7 +176,6 @@ select is_active, inactive_reason from information_schema.materialized_views
 -- result:
 true	
 -- !result
-  
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 -- result:
@@ -202,7 +201,7 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 -- !result
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 select state from information_schema.task_runs
-  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%";
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%" ORDER BY CREATE_TIME DESC LIMIT 1;
 -- result:
 SUCCESS
 -- !result
