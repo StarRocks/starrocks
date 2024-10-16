@@ -21,7 +21,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"
@@ -197,24 +196,37 @@ static void bench_func(benchmark::State& state) {
     perf.do_bench(state);
 }
 
+// Benchmark SegmentedColumn::clone_selective && Chunk::append_selective function
 class SegmentedChunkPerf {
 public:
     SegmentedChunkPerf() = default;
 
-    void do_bench_segmented_chunk_clone(benchmark::State& state) {
+    void prepare_bench_segmented_chunk_clone(benchmark::State& state) {
         // std::cerr << "chunk_size: " << _dest_chunk_size << std::endl;
         // std::cerr << "segment_size: " << _segment_size << std::endl;
         // std::cerr << "segmented_chunk_size: " << _segment_chunk_size << std::endl;
-
-        state.PauseTiming();
         SegmentedChunkPtr seg_chunk = prepare_chunk();
         CHECK_EQ(seg_chunk->num_rows(), _segment_chunk_size);
 
         // random select
-        std::vector<uint32_t> select;
         random_select(select, _dest_chunk_size, seg_chunk->num_rows());
-        state.ResumeTiming();
+    }
 
+    void prepare_bench_chunk_clone(benchmark::State& state) {
+        ChunkPtr chunk = build_chunk(_segment_size);
+        CHECK_EQ(chunk->num_rows(), _segment_size);
+        random_select(select, _dest_chunk_size, chunk->num_rows());
+    }
+
+    void prepare(benchmark::State& state) {
+        state.PauseTiming();
+        prepare_bench_chunk_clone(state);
+        prepare_bench_segmented_chunk_clone(state);
+        state.ResumeTiming();
+    }
+
+    void do_bench_segmented_chunk_clone(benchmark::State& state) {
+        SegmentedChunkPtr seg_chunk = prepare_chunk();
         // clone_selective
         size_t items = 0;
         for (auto _ : state) {
@@ -227,13 +239,7 @@ public:
     }
 
     void do_bench_chunk_clone(benchmark::State& state) {
-        state.PauseTiming();
-        ChunkPtr chunk = build_chunk(_segment_size);
-        CHECK_EQ(chunk->num_rows(), _segment_size);
-        std::vector<uint32_t> select;
-        random_select(select, _dest_chunk_size, chunk->num_rows());
-        state.ResumeTiming();
-
+        ChunkPtr chunk = prepare_big_chunk();
         size_t items = 0;
         for (auto _ : state) {
             ChunkPtr empty = chunk->clone_empty();
@@ -241,6 +247,14 @@ public:
             items += select.size();
         }
         state.SetItemsProcessed(items);
+    }
+
+    ChunkPtr prepare_big_chunk() {
+        if (_big_chunk) {
+            return _big_chunk;
+        }
+        _big_chunk = build_chunk(_segment_chunk_size);
+        return _big_chunk;
     }
 
     SegmentedChunkPtr prepare_chunk() {
@@ -312,19 +326,30 @@ private:
     size_t _segment_chunk_size = _segment_size * _num_segments;
 
     SegmentedChunkPtr _seg_chunk;
+    ChunkPtr _big_chunk;
+    std::vector<uint32_t> select;
     std::vector<TypeDescriptor> _types;
 };
 
-static void bench_segmented_chunk_clone(benchmark::State& state) {
-    google::InstallFailureSignalHandler();
-    SegmentedChunkPerf perf;
-    perf.do_bench_segmented_chunk_clone(state);
-}
+class BenchCloneSelective : public benchmark::Fixture {
+public:
+    void SetUp(benchmark::State& state) override {
+        google::InstallFailureSignalHandler();
+        perf = std::make_unique<SegmentedChunkPerf>();
+        perf->prepare(state);
+    }
 
-static void bench_chunk_clone(benchmark::State& state) {
-    google::InstallFailureSignalHandler();
-    SegmentedChunkPerf perf;
-    perf.do_bench_chunk_clone(state);
+    void TearDown(const ::benchmark::State& state) override {}
+
+protected:
+    std::unique_ptr<SegmentedChunkPerf> perf;
+};
+
+BENCHMARK_F(BenchCloneSelective, SegmentedChunk)(benchmark::State& state) {
+    perf->do_bench_segmented_chunk_clone(state);
+}
+BENCHMARK_F(BenchCloneSelective, Chunk)(benchmark::State& state) {
+    perf->do_bench_chunk_clone(state);
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
@@ -357,9 +382,6 @@ static void process_args(benchmark::internal::Benchmark* b) {
 }
 
 BENCHMARK(bench_func)->Apply(process_args);
-
-BENCHMARK(bench_chunk_clone);
-BENCHMARK(bench_segmented_chunk_clone);
 
 } // namespace starrocks
 
