@@ -322,6 +322,9 @@ public class Locker {
         }
     }
 
+    /**
+     * No need to release lock explicitly, it will be released automatically when the locker failed.
+     */
     public boolean tryLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType,
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
@@ -457,28 +460,15 @@ public class Locker {
     }
 
     /**
-     * Try lock database and table id with intensive db lock.
-     *
+     * Try to lock a database and a table id with intensive db lock.
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType, long timeout, TimeUnit unit) {
-        boolean isLockSuccess = false;
-        try {
-            if (!tryLockTablesWithIntensiveDbLock(dbId, ImmutableList.of(tableId), lockType, timeout, unit)) {
-                return false;
-            }
-            isLockSuccess = true;
-        } finally {
-            if (!isLockSuccess) {
-                unLockTablesWithIntensiveDbLock(dbId, ImmutableList.of(tableId), lockType);
-            }
-        }
-        return true;
+        return tryLockTablesWithIntensiveDbLock(dbId, ImmutableList.of(tableId), lockType, timeout, unit);
     }
 
     /**
-     * Try lock database and tables with intensive db lock.
-     *
+     * Try to lock multi database and tables with intensive db lock.
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(LockParams lockParams, LockType lockType, long timeout, TimeUnit unit) {
