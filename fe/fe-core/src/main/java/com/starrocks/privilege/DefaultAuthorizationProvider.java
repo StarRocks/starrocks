@@ -15,8 +15,6 @@
 package com.starrocks.privilege;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.StarRocksFEMetaVersion;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -27,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
