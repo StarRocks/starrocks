@@ -506,7 +506,11 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
+<<<<<<< HEAD
     @Test
+=======
+    @Ignore
+>>>>>>> 780419cf50 ([BugFix] Add task's defination into task run status (#51707))
     public void testMVRestoreMVWithBaseTable3() {
         new MockUp<MetadataMgr>() {
             @Mock
@@ -525,7 +529,11 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
+<<<<<<< HEAD
     @Test
+=======
+    @Ignore
+>>>>>>> 780419cf50 ([BugFix] Add task's defination into task run status (#51707))
     public void testMVRestoreMVWithBaseTable4() {
         new MockUp<MetadataMgr>() {
             @Mock
