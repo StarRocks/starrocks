@@ -27,6 +27,7 @@ import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
+import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -103,6 +104,7 @@ public class DeltaLakeScanNode extends ScanNode {
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
             throws UserException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
+        DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();
         long snapshotId = snapshot.getVersion(engine);
 

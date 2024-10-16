@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -31,6 +32,7 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -77,11 +79,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final Map<String, Long> partitionInfos = new ConcurrentHashMap<>();
+    private final ConnectorProperties properties;
 
-    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog) {
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
+                          ConnectorProperties properties) {
         this.paimonNativeCatalog = paimonNativeCatalog;
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
+        this.properties = properties;
     }
 
     @Override
@@ -266,6 +271,10 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange versionRange) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());

@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
@@ -35,6 +36,7 @@ import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,19 +66,22 @@ public class HudiMetadata implements ConnectorMetadata {
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
+    private final ConnectorProperties properties;
 
     public HudiMetadata(String catalogName,
                         HdfsEnvironment hdfsEnvironment,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
-                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor) {
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
+                        ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.hmsOps = hmsOps;
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
+        this.properties = properties;
     }
 
     @Override
@@ -187,6 +192,10 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit, TableVersionRange version) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
         Statistics statistics = null;
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList(columns.keySet());
         try {

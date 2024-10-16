@@ -19,8 +19,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.ImmutableTriple;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class StatisticsUtils {
     public static Table getTableByUUID(String tableUUID) {
@@ -56,5 +62,13 @@ public class StatisticsUtils {
         }
 
         return ImmutableTriple.of(splits[0], db, table);
+    }
+
+    public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(1);
+        statisticsBuilder.addColumnStatistics(
+                columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
+        return statisticsBuilder.build();
     }
 }
