@@ -500,7 +500,7 @@ void LocalTabletsChannel::_flush_stale_memtables() {
             // has write means active writer
             ++total_active_writer;
             if (need_flush) {
-                VLOG(1) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
+                VLOG(2) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
                         << " partition_id: " << writer->partition_id() << " is_immutable: " << writer->is_immutable()
                         << " write_buffer_size: " << writer->write_buffer_size()
                         << " stale_time: " << now - last_write_ts << " job_mem_usage: " << _mem_tracker->consumption()
@@ -553,7 +553,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
 
         stub->tablet_writer_cancel(&closure->cntl, &cancel_request, &closure->result, closure);
 
-        VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "
+        VLOG(2) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " Cancel "
                 << tablet_ids.size() << " tablets " << node_abort_tablet_id_list_str << " request to "
                 << endpoint.host() << ":" << endpoint.port();
     }
@@ -609,7 +609,7 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     // if sender close means data send finished, we need to decrease _num_initial_senders
     _num_initial_senders.fetch_sub(1);
 
-    VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
+    VLOG(2) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
             << n - 1 << " senders";
     return n - 1;
 }
