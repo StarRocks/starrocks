@@ -267,7 +267,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         auto& delta_writer = it->second;
 
         // back pressure OlapTableSink since there are too many memtables need to flush
-        while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
+        while (delta_writer->get_state() != kAborted &&
+               delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
             if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
                 LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
