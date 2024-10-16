@@ -112,7 +112,7 @@ public class QueryDetailTest {
         //Assert.assertEquals(2, cluster.getTableRowCount("db1", "test_add_scan_partitions_3"));
 
 
-        //3.enable scan partitions audit
+        //3.enable scan partitions audit 
         cluster.runSql("db1", "set enable_scan_partitions_audit=true");
 
         //4.query
