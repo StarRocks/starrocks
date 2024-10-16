@@ -38,6 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -45,6 +47,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
@@ -288,5 +291,48 @@ public class VariableMgrTest {
         List<List<String>> vars2 = VariableMgr.dump(SetType.SESSION, null, null);
         Assert.assertTrue(vars.size() == vars2.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testWarehouseVar() {
+        SystemVariable systemVariable =
+                new SystemVariable(SetType.GLOBAL, SessionVariable.WAREHOUSE_NAME, new StringLiteral("warehouse_1"));
+        VariableMgr variableMgr = new VariableMgr();
+        try {
+            variableMgr.setSystemVariable(null, systemVariable, false);
+        } catch (DdlException e) {
+            Assert.assertEquals("Variable 'warehouse' is a SESSION variable and can't be used with SET GLOBAL",
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testImagePersist() throws Exception {
+        UtFrameUtils.PseudoImage.setUpImageVersion();
+        VariableMgr mgr = new VariableMgr();
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo();
+        info.setPersistJsonString("{\"query_timeout\":100}");
+        mgr.replayGlobalVariableV2(info);
+
+        PseudoImage image = new PseudoImage();
+        mgr.save(image.getImageWriter());
+
+        VariableMgr mgr2 = new VariableMgr();
+        mgr2.load(image.getMetaBlockReader());
+
+        Assert.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+
+    @Test
+    public void testAutoCommit() throws Exception {
+        VariableExpr desc = new VariableExpr("autocommit");
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
+
+        Assert.assertEquals("autocommit", desc.getName());
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assert.assertEquals((long) desc.getValue(), 1);
+    }
+>>>>>>> dbd40cd4aa ([BugFix] fix .net can not read sr (#51946))
 }
 
