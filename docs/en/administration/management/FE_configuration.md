@@ -4889,7 +4889,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### replication_transaction_timeout_sec
 
-- Default: 1 * 60 * 60
+- Default: 24 * 60 * 60
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
