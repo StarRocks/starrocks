@@ -340,6 +340,10 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
         status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
+        // NOTE: definition will cause a lot of repeats and cost a lot of metadata memory resources,
+        // since history task runs has been stored in sr's internal table, we can save it in the
+        // task run status.
+        status.setDefinition(task.getDefinition());
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());

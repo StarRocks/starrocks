@@ -510,7 +510,6 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Test
     @Ignore
     public void testMVRestoreMVWithBaseTable3() {
         new MockUp<MetadataMgr>() {
@@ -530,7 +529,6 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Test
     @Ignore
     public void testMVRestoreMVWithBaseTable4() {
         new MockUp<MetadataMgr>() {

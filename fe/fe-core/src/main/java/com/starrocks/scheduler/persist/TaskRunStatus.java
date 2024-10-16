@@ -425,6 +425,13 @@ public class TaskRunStatus implements Writable {
         return true;
     }
 
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String definition) {
+        this.definition = definition;
+    }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
