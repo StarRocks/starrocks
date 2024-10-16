@@ -38,6 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -45,11 +47,13 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -287,6 +291,16 @@ public class VariableMgrTest {
 
         List<List<String>> vars2 = VariableMgr.dump(SetType.SESSION, null, null);
         Assert.assertTrue(vars.size() == vars2.size());
+    }
+
+    @Test
+    public void testAutoCommit() throws Exception {
+        VariableExpr desc = new VariableExpr("autocommit");
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
+
+        Assert.assertEquals("autocommit", desc.getName());
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assert.assertEquals((long) desc.getValue(), 1);
     }
 }
 
