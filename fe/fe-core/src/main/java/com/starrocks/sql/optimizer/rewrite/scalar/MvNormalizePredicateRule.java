@@ -70,23 +70,25 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Map<String, ScalarOperator> sorted = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        // sort the children of compound predicate, but not use insensitive to compare which may cause wrong result:/
+        // eg: a in ('a', 'A') will be normalized to a = 'a'
+        Map<String, ScalarOperator> sorted = Maps.newTreeMap();
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             before.forEach(x -> sorted.put(x.toString(), x));
             List<ScalarOperator> after = Lists.newArrayList(sorted.values());
-            if ((after).equals(before)) {
+            if (after.equals(before)) {
                 return predicate;
             }
-            return Utils.compoundAnd((after));
+            return Utils.compoundAnd(after);
         } else if (predicate.isOr()) {
             List<ScalarOperator> before = Utils.extractDisjunctive(predicate);
             before.forEach(x -> sorted.put(x.toString(), x));
             List<ScalarOperator> after = Lists.newArrayList(sorted.values());
-            if ((after).equals(before)) {
+            if (after.equals(before)) {
                 return predicate;
             }
-            return Utils.compoundOr((after));
+            return Utils.compoundOr(after);
         } else {
             // for not
             return predicate;
