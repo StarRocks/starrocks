@@ -128,7 +128,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
-        this.usedComputeNode = hasComputeNode && preferComputeNode;
+        if (MapUtils.isEmpty(availableID2Backend) && hasComputeNode) {
+            this.usedComputeNode = true;
+        } else {
+            this.usedComputeNode = hasComputeNode && preferComputeNode;
+        }
         this.preferComputeNode = preferComputeNode;
     }
 
@@ -192,7 +196,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public boolean isDataNodeAvailable(long dataNodeId) {
-        return getBackend(dataNodeId) != null;
+        return getBackend(dataNodeId) != null || getComputeNode(dataNodeId) != null;
     }
 
     @Override
@@ -253,6 +257,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     @VisibleForTesting
     ComputeNode getBackend(Long backendID) {
         return availableID2Backend.get(backendID);
+    }
+
+    @VisibleForTesting
+    ComputeNode getComputeNode(Long computeNodeID) {
+        return availableID2ComputeNode.get(computeNodeID);
     }
 
     @Override
