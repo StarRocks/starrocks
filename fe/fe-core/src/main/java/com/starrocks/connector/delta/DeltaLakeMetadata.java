@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
@@ -34,6 +35,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
@@ -77,13 +79,15 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
+    private final ConnectorProperties properties;
 
     public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
-                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor) {
+                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties) {
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
+        this.properties = properties;
     }
 
     public String getCatalogName() {
@@ -143,6 +147,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TableVersionRange versionRange) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getDbName();
@@ -161,12 +169,12 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     dbName, table, predicate);
         }
 
-        if (session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getTableStatistics" + key)) {
+        String traceLabel = session.getSessionVariable().enableDeltaLakeColumnStatistics() ?
+                "DELTA_LAKE.getTableStatistics" + key : "DELTA_LAKE.getCardinalityStats" + key;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+            if (session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
                 return statisticProvider.getTableStatistics(schema, key, columns);
-            }
-        } else {
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getCardinalityStats" + key)) {
+            } else {
                 return statisticProvider.getCardinalityStats(schema, key, columns);
             }
         }
@@ -310,22 +318,17 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         List<FileScanTask> files = Lists.newArrayList();
         boolean enableCollectColumnStats = enableCollectColumnStatistics(connectContext);
+        String traceLabel = enableCollectColumnStats ? "DELTA_LAKE.updateDeltaLakeFileStats" :
+                "DELTA_LAKE.updateDeltaLakeCardinality";
+
         Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
                 buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
         while (iterator.hasNext()) {
             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
             files.add(pair.first);
-
-            if (enableCollectColumnStats) {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
-                    statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                            nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
-                }
-            } else {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
-                    statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                            nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
-                }
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+                statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
+                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
             }
         }
         splitTasks.put(key, files);
