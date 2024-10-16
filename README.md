@@ -116,6 +116,8 @@ We welcome all kinds of contributions from the community, individuals and partne
 **📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
+
+**💬 Developer Group：** Please join our [Google Groups](https://groups.google.com/g/starrocks-dev) to discuss StarRocks features, project directions, issues, pull requests, or share suggestions.
   
 <br>
   
