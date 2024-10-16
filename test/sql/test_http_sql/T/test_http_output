@@ -118,7 +118,8 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 
 -- name: test_http_output_add_scan_partitions_audit
-use ${db[0]};
+create database test_add_scan_partitions_db;
+use test_add_scan_partitions_db;
 CREATE TABLE test_add_scan_partitions_1 (
   `c1` string,
   `c2` string,
@@ -169,5 +170,5 @@ insert into test_add_scan_partitions_2(c1,c2,c3,ds) values('2','2','2','2024-10-
 insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('1','1','1','2024-10-01');
 insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('2','2','2','2024-10-02');
 
-shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
+shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/test_add_scan_partitions_db/sql' -u 'root:' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
 sync;
