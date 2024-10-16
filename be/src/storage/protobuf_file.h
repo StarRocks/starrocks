@@ -31,6 +31,8 @@ class ProtobufFile {
 public:
     explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
 
+    explicit ProtobufFile(std::string path, std::shared_ptr<FileSystem> fs) : _path(std::move(path)), _fs(fs) {}
+
     DISALLOW_COPY_AND_MOVE(ProtobufFile);
 
     Status save(const ::google::protobuf::Message& message, bool sync = true);
@@ -39,11 +41,15 @@ public:
 
 private:
     std::string _path;
+    std::shared_ptr<FileSystem> _fs;
 };
 
 class ProtobufFileWithHeader {
 public:
     explicit ProtobufFileWithHeader(std::string path) : _path(std::move(path)) {}
+
+    explicit ProtobufFileWithHeader(std::string path, std::shared_ptr<FileSystem> fs)
+            : _path(std::move(path)), _fs(fs) {}
 
     DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
 
@@ -55,6 +61,7 @@ public:
 
 private:
     std::string _path;
+    std::shared_ptr<FileSystem> _fs;
 };
 
 } // namespace starrocks

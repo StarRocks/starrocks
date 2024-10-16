@@ -61,6 +61,13 @@ TEST(FileSystemTest, test_good_construction) {
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("unknown2://"));
         ASSERT_EQ(fs->type(), FileSystem::S3);
     }
+
+    {
+        std::unordered_map<std::string, std::string> params = {{"fs.s3a.readahead.range", "100"}};
+        std::unique_ptr<FSOptions> fs_options = std::make_unique<FSOptions>(params);
+        ASSIGN_OR_ABORT(auto fs, FileSystem::Create("unknown2://", *fs_options));
+        ASSERT_EQ(fs->type(), FileSystem::S3);
+    }
 }
 
 } // namespace starrocks

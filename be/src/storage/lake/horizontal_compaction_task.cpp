@@ -145,9 +145,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
-        auto fill_meta_cache = false;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = false};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();

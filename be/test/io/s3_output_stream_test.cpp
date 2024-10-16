@@ -137,7 +137,7 @@ TEST_F(S3OutputStreamTest, test_multipart_upload) {
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
     S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024);
-    S3InputStream is(g_s3client, kBucketName, kObjectName);
+    S3InputStream is(g_s3client, kBucketName, kObjectName, /*5MB=*/5 * 1024 * 1024);
 
     std::string s1("first line of multipart upload\n");
     std::string s2("second line of multipart upload\n");

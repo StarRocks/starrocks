@@ -104,7 +104,8 @@ Status TabletReader::prepare() {
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
-        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
+        read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
         return Status::NotSupported("reader type not supported now");
     }
     RETURN_IF_ERROR(init_compaction_column_paths(read_params));
@@ -311,6 +312,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();
     }
+    rs_opts.reader_type = params.reader_type;
 
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;

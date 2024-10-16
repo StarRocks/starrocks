@@ -86,7 +86,7 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts);
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts);
 
     Status _read_data_page(const PagePointer& pp);
 
