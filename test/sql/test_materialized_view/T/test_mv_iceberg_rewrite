@@ -109,7 +109,7 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 
 select state from information_schema.task_runs
-  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%";
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%" ORDER BY CREATE_TIME DESC LIMIT 1;
 
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
