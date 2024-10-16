@@ -666,7 +666,7 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     return n;
 }
 
-void Expr::for_each_slot_id(std::function<void(SlotId)> cb) const {
+void Expr::for_each_slot_id(const std::function<void(SlotId)>& cb) const {
     for (auto child : _children) {
         child->for_each_slot_id(cb);
     }
