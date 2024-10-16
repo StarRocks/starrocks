@@ -53,6 +53,7 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
@@ -486,6 +487,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_META_VERSION_V2: {
+                    MetaVersion metaVersion = (MetaVersion) journal.getData();
+                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                        throw new JournalInconsistentException("Not compatible with meta version "
+                                + metaVersion.getStarRocksVersion()
+                                + ", current version is " + FeConstants.STARROCKS_META_VERSION);
+                    }
                     break;
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
