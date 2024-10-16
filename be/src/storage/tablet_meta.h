@@ -123,11 +123,7 @@ public:
     [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-<<<<<<< HEAD
-    [[nodiscard]] Status save_meta(DataDir* data_dir);
-=======
     Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
 
     [[nodiscard]] Status serialize(std::string* meta_binary);
     [[nodiscard]] Status deserialize(std::string_view data);

@@ -375,11 +375,7 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
-<<<<<<< HEAD
-=======
-    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
     void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -423,18 +419,12 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
-<<<<<<< HEAD
-=======
     // Keep the rowsets committed but not publish which rowset meta without schema
     phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
                                   std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5,
-                                  phmap::NullMutex, true>
+                                  std::mutex, true>
             _committed_rs_map;
 
-    // gtid -> version
-    std::map<int64_t, int64_t> _gtid_to_version_map;
-
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 

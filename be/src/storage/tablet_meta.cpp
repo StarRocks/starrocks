@@ -202,9 +202,6 @@ void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std:
                                     DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
-<<<<<<< HEAD
-    _save_meta(data_dir);
-=======
     for (auto& rs : committed_rs) {
         RowsetMetaPB meta_pb;
         rs->rowset_meta()->get_full_meta_pb(&meta_pb);
@@ -214,7 +211,6 @@ void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std:
     }
 
     (void)_save_meta(data_dir, false);
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
 }
 
 Status TabletMeta::_save_meta(DataDir* data_dir, bool skip_tablet_schema) {

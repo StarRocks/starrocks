@@ -613,8 +613,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
         VLOG(1) << "tablet: " << tablet_id()
@@ -635,22 +633,6 @@ void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     }
 }
 
-void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
-    std::unique_lock wrlock(_meta_lock);
-    vector<RowsetSharedPtr> origin_rowsets;
-    _pick_candicate_rowset_before_specify_version(&origin_rowsets, version);
-    if (VLOG_IS_ON(2)) {
-        for (auto& rs : origin_rowsets) {
-            VLOG(2) << "delete rowset, tablet_id: " << tablet_id() << ", schema_hash: " << schema_hash()
-                    << ", rowset_id: " << rs->rowset_id() << ", version: " << rs->version();
-        }
-    }
-    Version rowset_version(0, version);
-    rowset->make_visible(rowset_version);
-    modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
-}
-
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
     // delete incremental rowset from map
     _inc_rs_version_map.erase(version);

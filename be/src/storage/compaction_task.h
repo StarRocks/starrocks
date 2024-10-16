@@ -276,13 +276,8 @@ protected:
                 input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
             }
             std::vector<RowsetSharedPtr> to_replace;
-<<<<<<< HEAD
             _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
-            _tablet->save_meta();
-=======
-            _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
             _tablet->save_meta(config::skip_schema_in_rowset_meta);
->>>>>>> 3005729289 ([Enhancement] Skip tablet schema in rowset meta during ingestion. (#50873))
             Rowset::close_rowsets(_input_rowsets);
             for (auto& rs : to_replace) {
                 StorageEngine::instance()->add_unused_rowset(rs);
