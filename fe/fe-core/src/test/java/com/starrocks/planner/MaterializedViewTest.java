@@ -5624,7 +5624,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(mv1);
 
         // date column should be the same with date_trunc('day', ct)
-        String[] rollupTimeUnits = new String[]{"day", "week", "month", "quarter", "year"};
+        String[] rollupTimeUnits = new String[]{ "day", "week", "month", "quarter", "year" };
         for (String rollupTimeUnit : rollupTimeUnits) {
             String query = "select tinyint_col, date_trunc('" + rollupTimeUnit + "', date_col) as date_col, " +
                     "   sum(float_col_1 * int_col) as sum_value from t0 " +
@@ -5754,5 +5754,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropTable("s1");
+    }
+
+    @Test
+    public void testRangePredicateRewriteCase1() {
+        String mv = "select lo_orderkey, lo_orderdate, lo_linenumber, lo_shipmode from lineorder";
+        String query = "select distinct lo_orderkey from lineorder where lo_shipmode in (upper('a'), lower('a')) and " +
+                "lo_linenumber = 1";
+        String plan = testRewriteOK(mv, query)
+                .getExecPlan();
+        PlanTestBase.assertContains(plan, "   TABLE: mv0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: lo_linenumber = 1, 21: lo_shipmode IN ('A', 'a')");
     }
 }
