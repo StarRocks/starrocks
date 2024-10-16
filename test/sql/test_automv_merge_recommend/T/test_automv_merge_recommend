@@ -1,4 +1,4 @@
--- name: test_automv_merge_recommend_with_specified_names
+-- name: test_automv_merge_recommend_with_specified_names @slow @sequential
 
 function: prepare_data("ssb", "${db[0]}")
 
@@ -31,7 +31,7 @@ set automv_card_rowcount_ratio_lwm = 1.0;
 set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 
--- name: test_automv_merge_recommend_with_default_names
+-- name: test_automv_merge_recommend_with_default_names @slow @sequential
 
 function: prepare_data("ssb", "${db[0]}")
 
@@ -66,7 +66,7 @@ set automv_card_rowcount_ratio_lwm = 1.0;
 set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 
--- name: test_automv_merge_recommend_with_legacy_mv
+-- name: test_automv_merge_recommend_with_legacy_mv @slow @sequential
 
 function: prepare_data("ssb", "${db[0]}")
 
@@ -141,7 +141,7 @@ set automv_card_rowcount_ratio_lwm = 1.0;
 set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d35811884752afda5734ac8024e")
 
--- name: test_automv_merge_recommend_extract_multi_parts
+-- name: test_automv_merge_recommend_extract_multi_parts @slow @sequential
 
 function: prepare_data("ssb", "${db[0]}")
 
@@ -172,7 +172,7 @@ set automv_card_rowcount_ratio_lwm = 1.0;
 set global automv_per_lattice_mv_selectivity_ratio = 1.0;
 function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.part.2")
 
--- name: test_automv_merge_recommend_extract_multi_parts_with_default_names
+-- name: test_automv_merge_recommend_extract_multi_parts_with_default_names @slow @sequential
 
 function: prepare_data("ssb", "${db[0]}")
 

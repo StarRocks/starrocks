@@ -1,4 +1,4 @@
--- name: test_automv_merge_recommend_with_specified_names
+-- name: test_automv_merge_recommend_with_specified_names @slow @sequential
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
@@ -44,7 +44,7 @@ function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3")
 -- result:
 None
 -- !result
--- name: test_automv_merge_recommend_with_default_names
+-- name: test_automv_merge_recommend_with_default_names @slow @sequential
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
@@ -95,7 +95,7 @@ function: check_automv_merge_recommend("ts0", "${expect_names[1]}")
 -- result:
 None
 -- !result
--- name: test_automv_merge_recommend_with_legacy_mv
+-- name: test_automv_merge_recommend_with_legacy_mv @slow @sequential
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
@@ -185,7 +185,7 @@ function: check_automv_merge_recommend("ts0", "Q1.1,Q1.2,Q1.3,_mv_947cbb72498e2d
 -- result:
 None
 -- !result
--- name: test_automv_merge_recommend_extract_multi_parts
+-- name: test_automv_merge_recommend_extract_multi_parts @slow @sequential
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
@@ -230,7 +230,7 @@ function: check_automv_merge_recommend("ts0", "query.part.0,query.part.1,query.p
 -- result:
 None
 -- !result
--- name: test_automv_merge_recommend_extract_multi_parts_with_default_names
+-- name: test_automv_merge_recommend_extract_multi_parts_with_default_names @slow @sequential
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
