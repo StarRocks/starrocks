@@ -408,7 +408,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **Query performance analysis**: Since the table queried does not have a bitmap index, pages containing the `lo_partkey` column data are read and then predicate filtering is applied.
 
-Total time: approximately 0.43 ms, **including 0.39 ms for data loading** and 0.02 ms for predicate filtering.
+Total time: approximately 0.43 seconds, **including 0.39 seconds for data loading** and 0.02 seconds for predicate filtering.
 
 ```Bash
 PullRowNum: 255 // Number of rows in the result set.
