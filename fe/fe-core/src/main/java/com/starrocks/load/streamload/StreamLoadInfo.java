@@ -46,6 +46,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 
 public class StreamLoadInfo {
 
@@ -99,9 +100,11 @@ public class StreamLoadInfo {
         this.stripOuterArray = false;
     }
 
-    public StreamLoadInfo(TUniqueId id, long txnId, int timeout) {
+    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, int timeout) {
         this.id = id;
         this.txnId = txnId;
+        this.fileType = fileType;
+        this.formatType = formatType;
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
@@ -268,93 +271,21 @@ public class StreamLoadInfo {
         return warehouseId;
     }
 
-    public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
+    public static StreamLoadInfo fromHttpStreamLoadRequest(TUniqueId id, long txnId, int timeout, StreamLoadKvParams params)
             throws UserException {
-        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId, timeout);
-        streamLoadInfo.setOptionalFromStreamLoadContext(context);
+        StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
+                params.getFileType().orElse(TFileType.FILE_STREAM),
+                params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
+        streamLoadInfo.setOptionalFromStreamLoad(params);
         return streamLoadInfo;
-    }
-
-    private void setOptionalFromStreamLoadContext(StreamLoadParam context) throws UserException {
-        if (context.columns != null) {
-            setColumnToColumnExpr(context.columns);
-        }
-        if (context.whereExpr != null) {
-            setWhereExpr(context.whereExpr);
-        }
-        if (context.columnSeparator != null) {
-            columnSeparator = new ColumnSeparator(context.columnSeparator);
-        }
-        if (context.rowDelimiter != null) {
-            rowDelimiter = new RowDelimiter(context.rowDelimiter);
-        }
-        if (context.partitions != null) {
-            String[] partNames = PART_NAME_SPLIT.split(context.partitions.trim());
-            if (context.useTempPartition) {
-                partitions = new PartitionNames(true, Lists.newArrayList(partNames));
-            } else {
-                partitions = new PartitionNames(false, Lists.newArrayList(partNames));
-            }
-        }
-        if (context.fileType != null) {
-            this.fileType = context.fileType;
-        }
-        if (context.formatType != null) {
-            this.formatType = context.formatType;
-        }
-        switch (context.fileType) {
-            case FILE_STREAM:
-                path = context.path;
-                break;
-            default:
-                throw new UserException("unsupported file type, type=" + context.fileType);
-        }
-        if (context.negative) {
-            negative = context.negative;
-        }
-        if (context.strictMode) {
-            strictMode = context.strictMode;
-        }
-        if (context.timezone != null) {
-            timezone = TimeUtils.checkTimeZoneValidAndStandardize(context.timezone);
-        }
-        if (context.loadMemLimit != -1) {
-            loadMemLimit = context.loadMemLimit;
-        }
-        if (context.formatType == TFileFormatType.FORMAT_JSON) {
-            if (context.jsonPaths != null) {
-                jsonPaths = context.jsonPaths;
-            }
-            if (context.jsonRoot != null) {
-                jsonRoot = context.jsonRoot;
-            }
-            stripOuterArray = context.stripOuterArray;
-        }
-        if (context.partialUpdate) {
-            partialUpdate = context.partialUpdate;
-        }
-        if (context.transmissionCompressionType != null) {
-            compressionType = CompressionUtils.findTCompressionByName(context.transmissionCompressionType);
-        }
-        if (context.loadDop != -1) {
-            loadParallelRequestNum = context.loadDop;
-        }
-        if (context.partialUpdateMode != null) {
-            if (context.partialUpdateMode.equals("column")) {
-                partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
-            } else if (context.partialUpdateMode.equals("auto")) {
-                partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
-            } else if (context.partialUpdateMode.equals("row")) {
-                partialUpdateMode = TPartialUpdateMode.ROW_MODE;
-            }
-        }
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
             throws UserException {
+        StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
-                request.getFileType(), request.getFormatType());
-        streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
+                streamLoadParams.getFileType().orElse(null), streamLoadParams.getFileFormatType().orElse(null));
+        streamLoadInfo.setOptionalFromStreamLoad(streamLoadParams);
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (request.isSetBackend_id()) {
             SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -370,101 +301,72 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
-    private void setOptionalFromTSLPutRequest(TStreamLoadPutRequest request, Database db) throws UserException {
-        if (request.isSetColumns()) {
-            setColumnToColumnExpr(request.getColumns());
+    private void setOptionalFromStreamLoad(StreamLoadParams params) throws UserException {
+        Optional<String> columns = params.getColumns();
+        if (columns.isPresent()) {
+            setColumnToColumnExpr(columns.get());
         }
-        if (request.isSetWhere()) {
-            setWhereExpr(request.getWhere());
+        Optional<String> where = params.getWhere();
+        if (where.isPresent()) {
+            setWhereExpr(where.get());
         }
-        if (request.isSetColumnSeparator()) {
-            columnSeparator = new ColumnSeparator(request.getColumnSeparator());
-        }
-        if (request.isSetRowDelimiter()) {
-            rowDelimiter = new RowDelimiter(request.getRowDelimiter());
-        }
-        if (request.isSetSkipHeader()) {
-            skipHeader = request.getSkipHeader();
-        }
-        if (request.isSetEnclose()) {
-            enclose = request.getEnclose();
-        }
-        if (request.isSetEscape()) {
-            escape = request.getEscape();
-        }
-        if (request.isSetTrimSpace()) {
-            trimSpace = request.isTrimSpace();
-        }
-        if (request.isSetPartitions()) {
-            String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
-            if (request.isSetIsTempPartition()) {
-                partitions = new PartitionNames(request.isIsTempPartition(), Lists.newArrayList(partNames));
+        params.getColumnSeparator().ifPresent(value -> columnSeparator = new ColumnSeparator(value));
+        params.getRowDelimiter().ifPresent(value -> rowDelimiter = new RowDelimiter(value));
+        params.getSkipHeader().ifPresent(value -> skipHeader = value);
+        params.getEnclose().ifPresent(value -> enclose = value);
+        params.getEscape().ifPresent(value -> escape = value);
+        params.getTrimSpace().ifPresent(value -> trimSpace = value);
+
+        Optional<String> parts = params.getPartitions();
+        if (parts.isPresent()) {
+            String[] partNames = PART_NAME_SPLIT.split(parts.get().trim());
+            Optional<Boolean> isTempPartition = params.getIsTempPartition();
+            if (isTempPartition.isPresent()) {
+                partitions = new PartitionNames(isTempPartition.get(), Lists.newArrayList(partNames));
             } else {
                 partitions = new PartitionNames(false, Lists.newArrayList(partNames));
             }
         }
-        switch (request.getFileType()) {
-            case FILE_STREAM:
-                path = request.getPath();
-                break;
-            default:
-                throw new UserException("unsupported file type, type=" + request.getFileType());
-        }
-        if (request.isSetNegative()) {
-            negative = request.isNegative();
-        }
-        if (request.isSetTimeout()) {
-            timeout = request.getTimeout();
-        }
-        if (request.isSetStrictMode()) {
-            strictMode = request.isStrictMode();
-        }
-        if (request.isSetTimezone()) {
-            timezone = TimeUtils.checkTimeZoneValidAndStandardize(request.getTimezone());
-        }
-        if (request.isSetLoadMemLimit()) {
-            loadMemLimit = request.getLoadMemLimit();
-        }
-        if (request.getFormatType() == TFileFormatType.FORMAT_JSON) {
-            if (request.getJsonpaths() != null) {
-                jsonPaths = request.getJsonpaths();
+
+        if (fileType != null) {
+            if (fileType == TFileType.FILE_STREAM) {
+                path = params.getFilePath().orElse(null);
+            } else {
+                throw new UserException("Unsupported file type, type=" + fileType);
             }
-            if (request.getJson_root() != null) {
-                jsonRoot = request.getJson_root();
-            }
-            stripOuterArray = request.isStrip_outer_array();
-        }
-        if (request.isSetTransmission_compression_type()) {
-            compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
-        }
-        if (request.isSetLoad_dop()) {
-            loadParallelRequestNum = request.getLoad_dop();
         }
 
-        if (request.isSetEnable_replicated_storage()) {
-            enableReplicatedStorage = request.isEnable_replicated_storage();
+        params.getNegative().ifPresent(value -> negative = value);
+        params.getTimeout().ifPresent(value -> timeout = value);
+        params.getStrictMode().ifPresent(value -> strictMode = value);
+        Optional<String> timezoneOptional = params.getTimezone();
+
+        if (timezoneOptional.isPresent()) {
+            timezone = TimeUtils.checkTimeZoneValidAndStandardize(timezoneOptional.get());
         }
 
-        if (request.isSetMerge_condition()) {
-            mergeConditionStr = request.getMerge_condition();
+        params.getLoadMemLimit().ifPresent(value -> loadMemLimit = value);
+
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            params.getJsonPaths().ifPresent(value -> jsonPaths = value);
+            params.getJsonRoot().ifPresent(value -> jsonRoot = value);
+            params.getStripOuterArray().ifPresent(value -> stripOuterArray = value);
         }
 
-        if (request.isSetLog_rejected_record_num()) {
-            logRejectedRecordNum = request.getLog_rejected_record_num();
-        }
+        params.getTransmissionCompressionType().ifPresent(
+                value -> compressionType = CompressionUtils.findTCompressionByName(value));
+        params.getLoadDop().ifPresent(value -> loadParallelRequestNum = value);
+        params.getEnableReplicatedStorage().ifPresent(value -> enableReplicatedStorage = value);
+        params.getMergeCondition().ifPresent(value -> mergeConditionStr = value);
+        params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
+        params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
+        params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
 
-        if (request.isSetPartial_update()) {
-            partialUpdate = request.isPartial_update();
-        }
-
-        if (request.isSetPartial_update_mode()) {
-            partialUpdateMode = request.getPartial_update_mode();
-        }
-
-        if (request.isSetPayload_compression_type()) {
-            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getPayload_compression_type());
+        Optional<String> compressionType = params.getPayloadCompressionType();
+        if (compressionType.isPresent()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(compressionType.get());
             if (payloadCompressionType == null) {
-                throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
+                throw new UserException("Unsupported compression type: " + compressionType.get());
             }
         }
     }
