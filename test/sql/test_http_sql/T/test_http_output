@@ -116,3 +116,57 @@ sync;
 -- kill a random connection
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "kill 314159265432222;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 sync;
+
+-- name: test_http_output_add_scan_partitions_audit
+CREATE TABLE test_add_scan_partitions_1 (
+  `c1` string,
+  `c2` string,
+  `c3` string,
+  `ds` date
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+PARTITION BY RANGE(`ds`)
+(
+PARTITION p20241001 VALUES [("2024-10-01"), ("2024-10-02")),
+PARTITION p20241002 VALUES [("2024-10-02"), ("2024-10-03")))
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE test_add_scan_partitions_2 (
+    c1 string,
+    c2 string,
+    c3 string,
+    ds varchar(20)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (ds,c3)
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE test_add_scan_partitions_3 (
+  `c1` string,
+  `c2` string,
+  `c3` string,
+  `ds` string
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into test_add_scan_partitions_1(c1,c2,c3,ds) values('1','1','1','2024-10-01');
+insert into test_add_scan_partitions_1(c1,c2,c3,ds) values('2','2','2','2024-10-02');
+
+insert into test_add_scan_partitions_2(c1,c2,c3,ds) values('1','1','1','2024-10-01');
+insert into test_add_scan_partitions_2(c1,c2,c3,ds) values('2','2','2','2024-10-02');
+
+insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('1','1','1','2024-10-01');
+insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('2','2','2','2024-10-02');
+
+shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
+sync;
