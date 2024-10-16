@@ -136,6 +136,7 @@ public class JsonSerializer {
                 scanBytes += item.scanBytes;
             }
             returnRows = queryStatistics.returnedRows;
+            scanPartitions = queryStatistics.scanPartitions;
         }
 
         jsonWriter.name(STATISTICS_SCAN_ROWS).value(scanRows);
