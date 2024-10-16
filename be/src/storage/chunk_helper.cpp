@@ -615,19 +615,9 @@ bool ChunkPipelineAccumulator::is_finished() const {
 }
 
 template <class ColumnT>
-inline constexpr bool has_value_type =
-        !std::is_same_v<ColumnT, ConstColumn> && !std::is_same_v<ColumnT, NullableColumn>;
-
-template <class ColumnT>
 inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
                                   std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
                                   std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
-
-template <class ColumnT>
-inline constexpr bool is_fixed_or_binary =
-        has_value_type<ColumnT> &&
-        (std::is_base_of_v<FixedLengthColumnBase<typename ColumnT::ValueType>, ColumnT> ||
-         std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>);
 
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
@@ -640,43 +630,96 @@ public:
               _from(from),
               _size(size) {}
 
-    template <class ColumnT>
-    typename std::enable_if_t<is_fixed_or_binary<ColumnT>, Status> do_visit(const ColumnT& column) {
-        using ContainerT = typename ColumnT::Container*;
+    template <class T>
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
+        using ColumnT = FixedLengthColumnBase<T>;
+        using ContainerT = typename ColumnT::Container;
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
 
+        std::vector<ContainerT*> buffers;
         auto columns = _segment_column->columns();
-        size_t segment_size = _segment_column->segment_size();
-        std::vector<ContainerT> buffers;
         for (auto& seg_column : columns) {
             buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
         }
 
-        // reserve memory to avoid frequent allocation
-        if constexpr (std::is_same_v<ColumnT, BinaryColumn> || std::is_same_v<ColumnT, LargeBinaryColumn>) {
-            size_t bytes = 0;
-            for (uint32_t i = 0; i < _size; i++) {
-                uint32_t idx = _indexes[_from + i];
-                auto [segment_id, segment_offset] = _segment_address(idx);
-                Slice slice = (*buffers[segment_id])[segment_offset];
-                bytes += slice.get_size();
-            }
-            output->reserve(_size, bytes);
-        } else {
-            output->reserve(_size);
-        }
-
+        ContainerT& output_items = output->get_data();
+        output_items.resize(_size);
         for (uint32_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
-            int segment_id = idx / segment_size;
-            int segment_offset = idx % segment_size;
-            // It is supposed to call the non-virtual append
-            // void BinaryColumnBase::append(const Slice& str);
-            // void FixedLengthColumnBase::append(const T& value);
-            output->append((*buffers[segment_id])[segment_offset]);
+            auto [segment_id, segment_offset] = _segment_address(idx);
+            DCHECK_LT(segment_id, columns.size());
+            DCHECK_LT(segment_offset, columns[segment_id]->size());
+
+            output_items[i] = (*buffers[segment_id])[segment_offset];
         }
+        return {};
+    }
+
+    // Implementation refers to BinaryColumn::append_selective
+    template <class Offset>
+    Status do_visit(const BinaryColumnBase<Offset>& column) {
+        using ColumnT = BinaryColumnBase<Offset>;
+        using ContainerT = typename ColumnT::Container*;
+        using Bytes = ColumnT::Bytes;
+        using Byte = ColumnT::Byte;
+        using Offsets = ColumnT::Offsets;
+
+        _result = column.clone_empty();
+        auto output = ColumnHelper::as_column<ColumnT>(_result);
+        auto& output_offsets = output->get_offset();
+        auto& output_bytes = output->get_bytes();
+
+        // input
+        auto columns = _segment_column->columns();
+        std::vector<Bytes*> input_bytes;
+        std::vector<Offsets*> input_offsets;
+        for (auto& seg_column : columns) {
+            input_bytes.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_bytes());
+            input_offsets.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_offset());
+        }
+
+#ifndef NDEBUG
+        for (auto& src_col : columns) {
+            src_col->check_or_die();
+        }
+#endif
+
+        // assign offsets
+        output_offsets.resize(_size + 1);
+        size_t num_bytes = 0;
+        for (size_t i = 0; i < _size; i++) {
+            uint32_t idx = _indexes[_from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx);
+            DCHECK_LT(segment_id, columns.size());
+            DCHECK_LT(segment_offset, columns[segment_id]->size());
+
+            Offsets& src_offsets = *input_offsets[segment_id];
+            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+
+            output_offsets[i + 1] = output_offsets[i] + str_size;
+            num_bytes += str_size;
+        }
+        output_bytes.resize(num_bytes);
+
+        // copy bytes
+        Byte* dest_bytes = output_bytes.data();
+        for (size_t i = 0; i < _size; i++) {
+            uint32_t idx = _indexes[_from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx);
+            Bytes& src_bytes = *input_bytes[segment_id];
+            Offsets& src_offsets = *input_offsets[segment_id];
+            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+            Byte* str_data = src_bytes.data() + src_offsets[segment_offset];
+
+            strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
+        }
+
+#ifndef NDEBUG
+        output->check_or_die();
+#endif
+
         return {};
     }
 
@@ -785,10 +828,10 @@ std::vector<ColumnPtr> SegmentedColumn::columns() const {
 }
 
 void SegmentedColumn::upgrade_to_nullable() {
-    // TODO
-    // for (auto& column : _columns) {
-    //     column = NullableColumn::wrap_if_necessary(column);
-    // }
+    for (auto& segment : _chunk->segments()) {
+        auto& column = segment->get_column_by_index(_column_index);
+        column = NullableColumn::wrap_if_necessary(column);
+    }
 }
 
 SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size) {
@@ -821,6 +864,7 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotI
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
+            open_segment->check_or_die();
             open_segment = open_segment->clone_empty();
             _segments.emplace_back(open_segment);
         }
@@ -833,10 +877,11 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk) {
     size_t append_index = 0;
     while (append_rows > 0) {
         size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
-        open_segment->append(*chunk, append_index, open_segment_append_rows);
+        open_segment->append_safe(*chunk, append_index, open_segment_append_rows);
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;
         if (open_segment->num_rows() == _segment_size) {
+            open_segment->check_or_die();
             open_segment = open_segment->clone_empty();
             _segments.emplace_back(open_segment);
         }
@@ -857,6 +902,9 @@ void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
         } else {
             append_chunk(input_segments[i]);
         }
+    }
+    for (auto& segment : _segments) {
+        segment->check_or_die();
     }
 }
 
@@ -933,6 +981,12 @@ ChunkUniquePtr SegmentedChunk::clone_empty(size_t reserve) {
 void SegmentedChunk::reset() {
     for (auto& chunk : _segments) {
         chunk->reset();
+    }
+}
+
+void SegmentedChunk::check_or_die() {
+    for (auto& chunk : _segments) {
+        chunk->check_or_die();
     }
 }
 

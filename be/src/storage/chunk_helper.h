@@ -206,6 +206,7 @@ public:
     Status upgrade_if_overflow();
     Status downgrade();
     bool has_large_column() const;
+    void check_or_die();
 
 private:
     std::vector<ChunkPtr> _segments;

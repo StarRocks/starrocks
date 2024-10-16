@@ -59,6 +59,26 @@ protected:
         return tuple_desc;
     }
 
+    // A tuple with two column
+    TupleDescriptor* _create_simple_desc2() {
+        TDescriptorTableBuilder table_builder;
+        TTupleDescriptorBuilder tuple_builder;
+
+        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
+        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_VARCHAR, "c1", 1));
+        tuple_builder.build(&table_builder);
+
+        std::vector<TTupleId> row_tuples{0};
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                      .ok());
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+
+        return tuple_desc;
+    }
+
     RuntimeState _runtime_state;
     ObjectPool _pool;
 };
@@ -95,9 +115,10 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
 }
 
 SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
-    auto* tuple_desc = _create_simple_desc();
+    auto* tuple_desc = _create_simple_desc2();
     auto segmented_chunk = SegmentedChunk::create(1 << 16);
     segmented_chunk->append_column(Int32Column::create(), 0);
+    segmented_chunk->append_column(BinaryColumn::create(), 1);
     segmented_chunk->build_columns();
 
     // put 100 chunks into the segmented chunk
@@ -107,6 +128,8 @@ SegmentedChunkPtr ChunkHelperTest::build_segmented_chunk() {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, chunk_rows);
         for (int j = 0; j < chunk_rows; j++) {
             chunk->get_column_by_index(0)->append_datum(row_id++);
+            std::string str = fmt::format("str{}", row_id);
+            chunk->get_column_by_index(1)->append_datum(Slice(str));
         }
 
         segmented_chunk->append_chunk(std::move(chunk));
@@ -217,8 +240,8 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
 
     EXPECT_EQ(409600, segmented_chunk->num_rows());
     EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(1835008, segmented_chunk->memory_usage());
-    EXPECT_EQ(1, segmented_chunk->columns().size());
+    EXPECT_EQ(8043542, segmented_chunk->memory_usage());
+    EXPECT_EQ(2, segmented_chunk->columns().size());
     auto column0 = segmented_chunk->columns()[0];
     EXPECT_EQ(false, column0->is_nullable());
     EXPECT_EQ(false, column0->has_null());
@@ -231,7 +254,7 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
     segmented_chunk->reset();
     EXPECT_EQ(0, segmented_chunk->num_rows());
     EXPECT_EQ(7, segmented_chunk->num_segments());
-    EXPECT_EQ(1835008, segmented_chunk->memory_usage());
+    EXPECT_EQ(8043542, segmented_chunk->memory_usage());
 
     // slicing
     segmented_chunk = build_segmented_chunk();
@@ -241,14 +264,31 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
     while (!slice.empty()) {
         auto chunk = slice.cutoff(1000);
         EXPECT_LE(chunk->num_rows(), 1000);
+        auto& slices = ColumnHelper::as_column<BinaryColumn>(chunk->get_column_by_index(1))->get_data();
         for (int i = 0; i < chunk->num_rows(); i++) {
             EXPECT_EQ(total_rows + i, chunk->get_column_by_index(0)->get(i).get_int32());
+            EXPECT_EQ(fmt::format("str{}", total_rows + i + 1), slices[i].to_string());
         }
         total_rows += chunk->num_rows();
     }
     EXPECT_EQ(409600, total_rows);
     EXPECT_EQ(0, segmented_chunk->num_rows());
     EXPECT_EQ(7, segmented_chunk->num_segments());
+    segmented_chunk->check_or_die();
+
+    // append
+    auto seg1 = build_segmented_chunk();
+    auto seg2 = build_segmented_chunk();
+    seg1->append(seg2, 1);
+    EXPECT_EQ(409600 * 2 - 1, seg1->num_rows());
+    seg1->check_or_die();
+    // clone_selective
+    {
+        std::vector<uint32_t> index{1, 2, 4, 10000, 20000};
+        auto column1 = seg1->columns()[1];
+        ColumnPtr str_column1 = column1->clone_selective(index.data(), 0, index.size());
+        EXPECT_EQ("['str2', 'str3', 'str5', 'str10001', 'str20001']", str_column1->debug_string());
+    }
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {

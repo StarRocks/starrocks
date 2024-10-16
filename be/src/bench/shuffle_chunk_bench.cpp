@@ -16,14 +16,15 @@
 #include <testutil/assert.h>
 
 #include <memory>
+#include <random>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum_tuple.h"
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "runtime/chunk_cursor.h"
-#include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "storage/chunk_helper.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -196,6 +197,136 @@ static void bench_func(benchmark::State& state) {
     perf.do_bench(state);
 }
 
+class SegmentedChunkPerf {
+public:
+    SegmentedChunkPerf() = default;
+
+    void do_bench_segmented_chunk_clone(benchmark::State& state) {
+        // std::cerr << "chunk_size: " << _dest_chunk_size << std::endl;
+        // std::cerr << "segment_size: " << _segment_size << std::endl;
+        // std::cerr << "segmented_chunk_size: " << _segment_chunk_size << std::endl;
+
+        state.PauseTiming();
+        SegmentedChunkPtr seg_chunk = prepare_chunk();
+        CHECK_EQ(seg_chunk->num_rows(), _segment_chunk_size);
+
+        // random select
+        std::vector<uint32_t> select;
+        random_select(select, _dest_chunk_size, seg_chunk->num_rows());
+        state.ResumeTiming();
+
+        // clone_selective
+        size_t items = 0;
+        for (auto _ : state) {
+            for (auto& column : seg_chunk->columns()) {
+                auto cloned = column->clone_selective(select.data(), 0, select.size());
+            }
+            items += select.size();
+        }
+        state.SetItemsProcessed(items);
+    }
+
+    void do_bench_chunk_clone(benchmark::State& state) {
+        state.PauseTiming();
+        ChunkPtr chunk = build_chunk(_segment_size);
+        CHECK_EQ(chunk->num_rows(), _segment_size);
+        std::vector<uint32_t> select;
+        random_select(select, _dest_chunk_size, chunk->num_rows());
+        state.ResumeTiming();
+
+        size_t items = 0;
+        for (auto _ : state) {
+            ChunkPtr empty = chunk->clone_empty();
+            empty->append_selective(*chunk, select.data(), 0, select.size());
+            items += select.size();
+        }
+        state.SetItemsProcessed(items);
+    }
+
+    SegmentedChunkPtr prepare_chunk() {
+        if (_seg_chunk) {
+            return _seg_chunk;
+        }
+        ChunkPtr chunk = build_chunk(_dest_chunk_size);
+
+        for (int i = 0; i < (_segment_chunk_size / _dest_chunk_size); i++) {
+            if (!_seg_chunk) {
+                _seg_chunk = SegmentedChunk::create(_segment_size);
+                ChunkPtr chunk = build_chunk(_dest_chunk_size);
+                auto map = chunk->get_slot_id_to_index_map();
+                for (auto entry : map) {
+                    _seg_chunk->append_column(chunk->get_column_by_slot_id(entry.first), entry.first);
+                }
+                _seg_chunk->build_columns();
+            } else {
+                // std::cerr << " append " << chunk->num_rows() << "rows, become " << _seg_chunk->num_rows() << std::endl;
+                _seg_chunk->append_chunk(chunk);
+            }
+        }
+        return _seg_chunk;
+    }
+
+    void random_select(std::vector<uint32_t>& select, size_t count, size_t range) {
+        select.resize(count);
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, range - 1);
+        std::generate(select.begin(), select.end(), [&]() { return dis(gen); });
+    }
+
+    ChunkPtr build_chunk(size_t chunk_size) {
+        auto chunk = std::make_unique<Chunk>();
+        for (int i = 0; i < _column_count; i++) {
+            if (i % 2 == 0) {
+                _types.emplace_back(TypeDescriptor::create_varchar_type(128));
+            } else {
+                _types.emplace_back(LogicalType::TYPE_INT);
+            }
+            auto col = init_dest_column(_types[i], chunk_size);
+            chunk->append_column(col, i);
+        }
+        return chunk;
+    }
+
+    ColumnPtr init_dest_column(const TypeDescriptor& type, size_t chunk_size) {
+        auto c1 = ColumnHelper::create_column(type, true);
+        c1->reserve(chunk_size);
+        for (int i = 0; i < chunk_size; i++) {
+            if (type.is_string_type()) {
+                std::string str = fmt::format("str{}", i);
+                c1->append_datum(Slice(str));
+            } else if (type.is_integer_type()) {
+                c1->append_datum(i);
+            } else {
+                CHECK(false) << "not supported";
+            }
+        }
+        return c1;
+    }
+
+private:
+    int _column_count = 4;
+    size_t _dest_chunk_size = 4096;
+    size_t _segment_size = 65536;
+    size_t _num_segments = 10;
+    size_t _segment_chunk_size = _segment_size * _num_segments;
+
+    SegmentedChunkPtr _seg_chunk;
+    std::vector<TypeDescriptor> _types;
+};
+
+static void bench_segmented_chunk_clone(benchmark::State& state) {
+    google::InstallFailureSignalHandler();
+    SegmentedChunkPerf perf;
+    perf.do_bench_segmented_chunk_clone(state);
+}
+
+static void bench_chunk_clone(benchmark::State& state) {
+    google::InstallFailureSignalHandler();
+    SegmentedChunkPerf perf;
+    perf.do_bench_chunk_clone(state);
+}
+
 static void process_args(benchmark::internal::Benchmark* b) {
     // chunk_count, column_count, node_count, src_chunk_size, null percent
     b->Args({400, 400, 140, 4096, 80});
@@ -226,6 +357,9 @@ static void process_args(benchmark::internal::Benchmark* b) {
 }
 
 BENCHMARK(bench_func)->Apply(process_args);
+
+BENCHMARK(bench_chunk_clone);
+BENCHMARK(bench_segmented_chunk_clone);
 
 } // namespace starrocks
 
