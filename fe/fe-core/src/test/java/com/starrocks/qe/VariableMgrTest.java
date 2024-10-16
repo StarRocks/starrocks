@@ -38,12 +38,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
@@ -312,5 +315,15 @@ public class VariableMgrTest {
         mgr2.load(image.getMetaBlockReader());
 
         Assert.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
+    }
+
+    @Test
+    public void testAutoCommit() throws Exception {
+        VariableExpr desc = new VariableExpr("autocommit");
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
+
+        Assert.assertEquals("autocommit", desc.getName());
+        Assert.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assert.assertEquals((long) desc.getValue(), 1);
     }
 }
