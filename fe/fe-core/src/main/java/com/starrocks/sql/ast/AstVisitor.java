@@ -1473,5 +1473,7 @@ public interface AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
-
+    default R visitShowCatalogRecycleBinStatement(ShowCatalogRecycleBinStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }
