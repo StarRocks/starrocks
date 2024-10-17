@@ -220,8 +220,15 @@ public:
 
     void prepare(benchmark::State& state) {
         state.PauseTiming();
+
+        _column_count = state.range(0);
+        _data_type = state.range(1);
+        _num_segments = state.range(2);
+        _types.clear();
+
         prepare_bench_chunk_clone(state);
         prepare_bench_segmented_chunk_clone(state);
+
         state.ResumeTiming();
     }
 
@@ -289,13 +296,20 @@ public:
     }
 
     ChunkPtr build_chunk(size_t chunk_size) {
+        if (_types.empty()) {
+            for (int i = 0; i < _column_count; i++) {
+                if (_data_type == 0) {
+                    _types.emplace_back(TypeDescriptor::create_varchar_type(128));
+                } else if (_data_type == 1) {
+                    _types.emplace_back(LogicalType::TYPE_INT);
+                } else {
+                    CHECK(false) << "data type not supported: " << _data_type;
+                }
+            }
+        }
+
         auto chunk = std::make_unique<Chunk>();
         for (int i = 0; i < _column_count; i++) {
-            if (i % 2 == 0) {
-                _types.emplace_back(TypeDescriptor::create_varchar_type(128));
-            } else {
-                _types.emplace_back(LogicalType::TYPE_INT);
-            }
             auto col = init_dest_column(_types[i], chunk_size);
             chunk->append_column(col, i);
         }
@@ -312,7 +326,7 @@ public:
             } else if (type.is_integer_type()) {
                 c1->append_datum(i);
             } else {
-                CHECK(false) << "not supported";
+                CHECK(false) << "data type not supported";
             }
         }
         return c1;
@@ -320,6 +334,7 @@ public:
 
 private:
     int _column_count = 4;
+    int _data_type = 0;
     size_t _dest_chunk_size = 4096;
     size_t _segment_size = 65536;
     size_t _num_segments = 10;
@@ -331,26 +346,30 @@ private:
     std::vector<TypeDescriptor> _types;
 };
 
-class BenchCloneSelective : public benchmark::Fixture {
-public:
-    void SetUp(benchmark::State& state) override {
-        google::InstallFailureSignalHandler();
-        perf = std::make_unique<SegmentedChunkPerf>();
-        perf->prepare(state);
-    }
-
-    void TearDown(const ::benchmark::State& state) override {}
-
-protected:
-    std::unique_ptr<SegmentedChunkPerf> perf;
-};
-
-BENCHMARK_F(BenchCloneSelective, SegmentedChunk)(benchmark::State& state) {
+static void BenchSegmentedChunkClone(benchmark::State& state) {
+    google::InstallFailureSignalHandler();
+    auto perf = std::make_unique<SegmentedChunkPerf>();
+    perf->prepare(state);
     perf->do_bench_segmented_chunk_clone(state);
 }
-BENCHMARK_F(BenchCloneSelective, Chunk)(benchmark::State& state) {
+
+static void BenchChunkClone(benchmark::State& state) {
+    google::InstallFailureSignalHandler();
+    auto perf = std::make_unique<SegmentedChunkPerf>();
+    perf->prepare(state);
     perf->do_bench_chunk_clone(state);
 }
+
+static std::vector<std::vector<int64_t>> chunk_clone_args() {
+    return {
+            {1, 2, 3, 4},  // num columns
+            {0, 1},        // data type
+            {1, 4, 16, 64} // num_segments
+    };
+}
+
+BENCHMARK(BenchSegmentedChunkClone)->ArgsProduct(chunk_clone_args());
+BENCHMARK(BenchChunkClone)->ArgsProduct(chunk_clone_args());
 
 static void process_args(benchmark::internal::Benchmark* b) {
     // chunk_count, column_count, node_count, src_chunk_size, null percent
