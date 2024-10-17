@@ -399,6 +399,14 @@ static Status add_scan_ranges_partition_values(RuntimeState* runtime_state,
     return Status::OK();
 }
 
+static Status add_per_driver_scan_ranges_partition_values(RuntimeState* runtime_state,
+                                                          const PerDriverScanRangesMap& map) {
+    for (const auto& [_, scan_ranges] : map) {
+        RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+    }
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
@@ -525,6 +533,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
 
         RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+        RETURN_IF_ERROR(add_per_driver_scan_ranges_partition_values(runtime_state, scan_ranges_per_driver_seq));
+
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
@@ -917,6 +927,29 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(std::move(morsels), has_more_morsel));
     }
+
+    if (params.__isset.node_to_per_driver_seq_scan_ranges) {
+        UnifiedExecPlanFragmentParams uf_request{request, request};
+        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+            auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
+            if (iter == fragment_ctx->morsel_queue_factories().end()) {
+                continue;
+            }
+            MorselQueueFactory* morsel_queue_factory = iter->second.get();
+            if (morsel_queue_factory == nullptr) {
+                continue;
+            }
+
+            for (const auto& [_, scan_ranges] : per_driver_scan_ranges) {
+                RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
+                pipeline::Morsels morsels;
+                bool has_more_morsel = false;
+                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+                RETURN_IF_ERROR(morsel_queue_factory->append_morsels(std::move(morsels), has_more_morsel));
+            }
+        }
+    }
+
     return Status::OK();
 }
 

@@ -99,6 +99,7 @@ public class TFragmentInstanceFactory {
         result.params.setQuery_id(jobSpec.getQueryId());
         result.params.setFragment_instance_id(instance.getInstanceId());
         result.params.setPer_node_scan_ranges(instance.getNode2ScanRanges());
+        result.params.setNode_to_per_driver_seq_scan_ranges(instance.getNode2DriverSeqToScanRanges());
         result.params.setPer_exch_num_senders(new HashMap<>());
         return result;
     }
