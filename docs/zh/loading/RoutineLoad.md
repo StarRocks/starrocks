@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['Routine Load']
 ---
 
 # 使用 Routine Load 导入数据
