@@ -39,6 +39,47 @@ import java.util.HashSet;
 import java.util.List;
 
 public class CatalogRecycleBinTest {
+    private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
+                                               long time) {
+        while (recycleBin.getRecycleTableInfo(id) != null) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
+                                                   long time) {
+        while (recycleBin.getRecyclePartitionInfo(id) != null) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingTable(id)) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingPartition(id)) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
 
     @Test
     public void testGetDb() {
@@ -164,6 +205,9 @@ public class CatalogRecycleBinTest {
         bin.recycleTable(13, table3, true);
 
         bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitPartitionClearFinished(bin, 11L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitPartitionClearFinished(bin, 12L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitPartitionClearFinished(bin, 13L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
 
         Assert.assertEquals(0, bin.getTables(11L).size());
         Assert.assertEquals(0, bin.getTables(12L).size());
@@ -495,6 +539,7 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+        waitPartitionClearFinished(recycleBin, table1.getId(), expireFromNow - 1000);
 
         Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
         Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
@@ -513,6 +558,7 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+        waitTableToBeDone(recycleBin, table2.getId(), expireFromNow - 1000);
         Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -520,6 +566,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
         recycleBin.eraseTable(now);
+        waitPartitionClearFinished(recycleBin, table2.getId(), now);
         Assert.assertNull(recycleBin.getTable(dbId, table2.getId()));
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
@@ -577,6 +624,7 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p1.getId(), now);
 
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -594,6 +642,7 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+        waitPartitionToBeDone(recycleBin, p2.getId(), now);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -601,6 +650,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(p2.getId(), now));
         recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p2.getId(), now);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), null);
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
