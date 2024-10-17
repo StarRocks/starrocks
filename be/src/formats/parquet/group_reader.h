@@ -75,7 +75,6 @@ struct GroupReaderParam {
         const SlotId slot_id() const { return slot_desc->id(); }
     };
 
-    const TupleDescriptor* tuple_desc = nullptr;
     // conjunct_ctxs that column is materialized in group reader
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
