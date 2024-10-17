@@ -19,17 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.hive.HiveMetastore;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -47,9 +42,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -65,10 +58,8 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1759,104 +1750,6 @@ public class AuthorizationMgrTest {
         authorizationMgr.loadV2(reader);
 
         Assert.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
-    }
-
-    @Test
-    public void testUpgradePrivilege(@Mocked HiveMetastore hiveMetastore) throws Exception {
-        ConnectContext connectCtx = new ConnectContext();
-        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
-                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
-        Assert.assertTrue(stmt instanceof CreateCatalogStmt);
-        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        connectCtx.setCurrentUserIdentity(UserIdentity.ROOT);
-        connectCtx.setCurrentRoleIds(UserIdentity.ROOT);
-        CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
-        DDLStmtExecutor.execute(statement, connectCtx);
-
-        new Expectations() {
-            {
-                hiveMetastore.getAllDatabaseNames();
-                result = Lists.newArrayList("db");
-                minTimes = 0;
-
-                hiveMetastore.getAllTableNames("db");
-                result = Lists.newArrayList("tbl");
-                minTimes = 0;
-            }
-        };
-
-        MetadataMgr metadataMgr = connectCtx.getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadataMgr) {
-            {
-                metadataMgr.getDb("hive_catalog_1", "db");
-                result = new com.starrocks.catalog.Database(0, "db");
-                minTimes = 0;
-
-                metadataMgr.getTable("hive_catalog_1", "db", "tbl");
-                result = HiveTable.builder().setHiveTableName("tbl")
-                        .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
-                minTimes = 0;
-            }
-        };
-
-        connectCtx.changeCatalog("hive_catalog_1");
-
-        MetaContext.get().setStarRocksMetaVersion(3);
-
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv", connectCtx), connectCtx);
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create database on catalog hive_catalog_1 to test_upgrade_priv", connectCtx), connectCtx);
-        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
-        new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(), connectCtx.getCurrentRoleIds(),
-                "hive_catalog_1", PrivilegeType.CREATE_DATABASE);
-        Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
-                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
-
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv_2", connectCtx), connectCtx);
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create table on database db to test_upgrade_priv_2", connectCtx), connectCtx);
-        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
-        Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
-                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
-
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv_3", connectCtx), connectCtx);
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant select on table db.tbl to test_upgrade_priv_3", connectCtx), connectCtx);
-        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
-        Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
-                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
-
-
-        GlobalStateMgr masterGlobalStateMgr = connectCtx.getGlobalStateMgr();
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        saveRBACPrivilege(masterGlobalStateMgr, image.getImageWriter());
-        loadRBACPrivilege(masterGlobalStateMgr, image.getJsonReader());
-
-        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        UserPrivilegeCollectionV2 up1 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
-        UserPrivilegeCollectionV2 up2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
-        UserPrivilegeCollectionV2 up3 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
-
-        authorizationMgr.checkAction(up1, ObjectType.CATALOG, PrivilegeType.USAGE,
-                Lists.newArrayList("hive_catalog_1"));
-        authorizationMgr.checkAction(up2, ObjectType.CATALOG, PrivilegeType.USAGE,
-                Lists.newArrayList("hive_catalog_1"));
-        authorizationMgr.checkAction(up3, ObjectType.CATALOG, PrivilegeType.USAGE,
-                Lists.newArrayList("hive_catalog_1"));
-
-        saveRBACPrivilege(masterGlobalStateMgr, image.getImageWriter());
-        loadRBACPrivilege(masterGlobalStateMgr, image.getJsonReader());
     }
 
     @Test

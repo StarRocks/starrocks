@@ -64,7 +64,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -157,7 +156,6 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -274,7 +272,6 @@ public class GlobalStateMgr {
      * Meta and Image context
      */
     private String imageDir;
-    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -676,9 +673,6 @@ public class GlobalStateMgr {
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
-        this.metaContext = new MetaContext();
-        this.metaContext.setThreadLocalInfo();
-
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
@@ -895,10 +889,6 @@ public class GlobalStateMgr {
 
     public AuditEventProcessor getAuditEventProcessor() {
         return auditEventProcessor;
-    }
-
-    public static int getCurrentStateStarRocksMetaVersion() {
-        return MetaContext.get().getStarRocksMetaVersion();
     }
 
     public static boolean isCheckpointThread() {
@@ -1254,13 +1244,6 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
-            // Log meta_version
-            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-            if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
-                editLog.logMetaVersion(new MetaVersion(FeConstants.STARROCKS_META_VERSION));
-                MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-            }
-
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
                 // if isFirstTimeStartUp is true, frontends must contain this Node.
@@ -1339,7 +1322,6 @@ public class GlobalStateMgr {
 
         // start checkpoint thread
         checkpointer = new Checkpoint(journal);
-        checkpointer.setMetaContext(metaContext);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointer.getId();
@@ -1648,7 +1630,6 @@ public class GlobalStateMgr {
             System.exit(-1);
         }
 
-        MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         LOG.info("finished to replay header from image");
@@ -1888,8 +1869,6 @@ public class GlobalStateMgr {
                 }
             }
         };
-
-        replayer.setMetaContext(metaContext);
     }
 
     /**
@@ -2577,10 +2556,6 @@ public class GlobalStateMgr {
 
     public StateChangeExecution getStateChangeExecution() {
         return execution;
-    }
-
-    public MetaContext getMetaContext() {
-        return metaContext;
     }
 
     public void createBuiltinStorageVolume() {

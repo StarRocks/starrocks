@@ -20,7 +20,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -38,7 +37,6 @@ public class BrokerMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         new Expectations() {
             {
                 globalStateMgr.getEditLog();

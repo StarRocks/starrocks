@@ -39,7 +39,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
@@ -90,14 +89,9 @@ public class BackupMeta implements Writable, GsonPostProcessable {
 
     public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
         File file = new File(filePath);
-        MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(starrocksMetaVersion);
-        metaContext.setThreadLocalInfo();
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
             BackupMeta backupMeta = BackupMeta.read(dis);
             return backupMeta;
-        } finally {
-            MetaContext.remove();
         }
     }
 

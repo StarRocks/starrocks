@@ -127,9 +127,6 @@ public class StarRocksFE {
             // init globalStateMgr
             GlobalStateMgr.getCurrentState().initialize(args);
 
-            StateChangeExecutor.getInstance().setMetaContext(
-                    GlobalStateMgr.getCurrentState().getMetaContext());
-
             if (RunMode.isSharedDataMode()) {
                 Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                 if (journal instanceof BDBJEJournal) {

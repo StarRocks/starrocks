@@ -39,7 +39,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +48,6 @@ import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -63,11 +61,6 @@ import java.util.Map;
 public class LoadMgrTest {
     private LoadMgr loadManager;
     private final String fieldName = "idToLoadJob";
-
-    @Before
-    public void setUp() throws Exception {
-        UtFrameUtils.PseudoImage.setUpImageVersion();
-    }
 
     @After
     public void tearDown() throws Exception {
@@ -109,8 +102,7 @@ public class LoadMgrTest {
     }
 
     @Test
-    public void testSerializationWithJobRemoved(@Mocked MetaContext metaContext,
-                                                @Mocked GlobalStateMgr globalStateMgr,
+    public void testSerializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
@@ -144,8 +136,7 @@ public class LoadMgrTest {
     }
 
     @Test
-    public void testDeserializationWithJobRemoved(@Mocked MetaContext metaContext,
-                                                @Mocked GlobalStateMgr globalStateMgr,
+    public void testDeserializationWithJobRemoved(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
