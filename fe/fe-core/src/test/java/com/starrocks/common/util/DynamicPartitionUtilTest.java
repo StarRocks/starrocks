@@ -19,6 +19,8 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -228,4 +230,39 @@ public class DynamicPartitionUtilTest {
         Assert.assertNull(res);
     }
 
+    @Test
+    public void testAnalyzeDynamicPartition() throws DdlException {
+        Map<String, String> prop = Maps.newHashMap();
+        prop.put(DynamicPartitionProperty.ENABLE, "true");
+        prop.put(DynamicPartitionProperty.TIME_UNIT, "day");
+        prop.put(DynamicPartitionProperty.START, String.valueOf(-10));
+        prop.put(DynamicPartitionProperty.END, String.valueOf(2));
+        prop.put(DynamicPartitionProperty.PREFIX, "p");
+        prop.put(DynamicPartitionProperty.BUCKETS, "1");
+
+        DynamicPartitionUtil.analyzeDynamicPartition(prop);
+
+        prop.put("dynamic_partition.time_unit ", "day");
+        try {
+            DynamicPartitionUtil.analyzeDynamicPartition(prop);
+            throw new DdlException("UnKnown result");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table property:"));
+        }
+
+        prop.remove("dynamic_partition.time_unit ");
+        prop.put("dynamic_partition.xyz", "xyz");
+        try {
+            DynamicPartitionUtil.analyzeDynamicPartition(prop);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table property:"));
+        }
+    }
+
+    @Test
+    public void testCheckDynamicPartitionPropertiesExist() {
+        Map<String, String> prop = Maps.newHashMap();
+        prop.put("dynamic_partition.time_unit ", "day");
+        Assert.assertTrue(DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(prop));
+    }
 }
