@@ -14,6 +14,8 @@
 
 #include "exec/spill/log_block_manager.h"
 
+#include <fmt/core.h>
+
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -21,6 +23,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "block_manager.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
@@ -33,8 +36,8 @@
 #include "storage/options.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
-#include "util/uid_util.h"
 #include "util/stack_util.h"
+#include "util/uid_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {
@@ -51,7 +54,6 @@ public:
 
     ~LogBlockContainer() {
         LOG(INFO) << "delete spill container file: " << path();
-        // LOG(INFO) << get_stack_trace();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
         _dir->dec_size(_acquired_data_size);
         // try to delete related dir, only the last one can success, we ignore the error
@@ -180,11 +182,7 @@ class LogBlock : public Block {
 public:
     LogBlock(LogBlockContainerPtr container, size_t offset) : _container(std::move(container)), _offset(offset) {}
 
-    // if exclusive, remove container??
-    ~LogBlock() override {
-        // @TODO need to know if exclusive
-        LOG(INFO) << "destruct LogBlock: " << debug_string();
-    }
+    ~LogBlock() override = default;
 
     size_t offset() const { return _offset; }
 
@@ -210,8 +208,8 @@ public:
 
     std::string debug_string() const override {
 #ifndef BE_TEST
-        return fmt::format("LogBlock:{}[container={}, offset={}, len={}]", (void*)this, _container->path(), _offset,
-                           _size);
+        return fmt::format("LogBlock:{}[container={}, offset={}, len={}, affinity_group={}]", (void*)this,
+                           _container->path(), _offset, _size, _affinity_group);
 #else
         return fmt::format("LogBlock[container={}]", _container->path());
 #endif
@@ -258,16 +256,17 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 #endif
 
     ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
-                                                                   opts.name, opts.direct_io));
+                                                                   opts.name, opts.direct_io, opts.affinity_group));
     auto res = std::make_shared<LogBlock>(block_container, block_container->size());
     res->set_is_remote(dir->is_remote());
-    res->set_exclusive(opts.exclusive);
+    res->set_affinity_group(opts.affinity_group);
     return res;
 }
 
 Status LogBlockManager::release_block(BlockPtr block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
+    auto affinity_group = block->affinity_group();
     LOG(INFO) << "release block: " << block->debug_string();
     bool is_full = container->size() >= _max_container_bytes;
     if (is_full) {
@@ -278,33 +277,48 @@ Status LogBlockManager::release_block(BlockPtr block) {
     if (is_full) {
         TRACE_SPILL_LOG << "mark container as full: " << container->path();
         _full_containers.emplace_back(container);
-    } else if (!log_block->exclusive()) {
-        TRACE_SPILL_LOG << "return container to the pool: " << container->path();
+    } else {
         auto dir = container->dir();
         int32_t plan_node_id = container->plan_node_id();
-
-        auto iter = _available_containers.find(dir);
+        auto iter = _available_containers.find(affinity_group);
         CHECK(iter != _available_containers.end());
-        auto sub_iter = iter->second->find(plan_node_id);
-        sub_iter->second->push(container);
+        iter->second->find(dir)->second->find(plan_node_id)->second->push(container);
     }
     return Status::OK();
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(const DirPtr& dir,
-                                                                        const TUniqueId& fragment_instance_id,
-                                                                        int32_t plan_node_id,
-                                                                        const std::string& plan_node_name,
-                                                                        bool direct_io) {
+Status LogBlockManager::release_affinity_group(const BlockAffinityGroup affinity_group) {
+    std::lock_guard<std::mutex> l(_mutex);
+    auto iter = _available_containers.find(affinity_group);
+    if (iter != _available_containers.end()) {
+        LOG(INFO) << "remove affinity group: " << affinity_group;
+        _available_containers.erase(iter);
+    } else {
+        DCHECK(false) << "can't find affinity_group: " << affinity_group;
+    }
+    return Status::OK();
+}
+
+StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
+        const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+        const std::string& plan_node_name, bool direct_io, BlockAffinityGroup affinity_group) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir()
                     << ". fragment instance: " << print_id(fragment_instance_id) << ", plan node:" << plan_node_id
                     << ", " << plan_node_name;
 
     std::lock_guard<std::mutex> l(_mutex);
-    auto iter = _available_containers.find(dir.get());
-    if (iter == _available_containers.end()) {
-        _available_containers.insert({dir.get(), std::make_shared<PlanNodeContainerMap>()});
-        iter = _available_containers.find(dir.get());
+    auto it = _available_containers.find(affinity_group);
+    if (it == _available_containers.end()) {
+        _available_containers.insert({affinity_group, std::make_shared<DirContainerMap>()});
+        it = _available_containers.find(affinity_group);
+    }
+
+    auto& available_containers = it->second;
+
+    auto iter = available_containers->find(dir.get());
+    if (iter == available_containers->end()) {
+        available_containers->insert({dir.get(), std::make_shared<PlanNodeContainerMap>()});
+        iter = available_containers->find(dir.get());
     }
     auto sub_iter = iter->second->find(plan_node_id);
     if (sub_iter == iter->second->end()) {

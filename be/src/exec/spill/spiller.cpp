@@ -89,8 +89,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
                                              RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
 
     partition_split_times = ADD_CHILD_COUNTER(profile, "PartitionSplitTimes", TUnit::UNIT, parent);
-    peak_partition_num = profile->AddHighWaterMarkCounter("PeakPartitionNumber",
-        TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
+    peak_partition_num = profile->AddHighWaterMarkCounter(
+            "PeakPartitionNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
 
     block_count = ADD_CHILD_COUNTER(profile, "BlockCount", TUnit::NONE, parent);
     local_block_count = ADD_CHILD_COUNTER(profile, "LocalBlockCount", TUnit::UNIT, "BlockCount");

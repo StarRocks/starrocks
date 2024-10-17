@@ -209,7 +209,7 @@ struct SpilledPartition : public SpillPartitionInfo {
     ~SpilledPartition() override {
         std::ostringstream oss;
         if (block_group != nullptr) {
-            for (const auto& block: block_group->blocks()) {
+            for (const auto& block : block_group->blocks()) {
                 oss << block->debug_string() << ",";
             }
         }

@@ -63,16 +63,12 @@ Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t wr
         opts.plan_node_id = _spiller->options().plan_node_id;
         opts.name = _spiller->options().name;
         opts.block_size = write_size;
-        if (config::test_opt) {
-            opts.exclusive = (_spiller->options().init_partition_nums > 0 && _spiller->options().splittable) || !_spiller->options().is_unordered;
-        } else {
-            opts.exclusive = _spiller->options().init_partition_nums > 0 || !_spiller->options().is_unordered;
-        }
+        opts.affinity_group = _block_group->get_affinity_group();
         ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
         // update metrics
         auto block_count = GET_METRICS(block->is_remote(), _spiller->metrics(), block_count);
         COUNTER_UPDATE(block_count, 1);
-        LOG(INFO) << fmt::format("allocate block [{}]", block->debug_string());
+        LOG(INFO) << fmt::format("allocate block [{}], affinity group[{}]", block->debug_string(), opts.affinity_group);
         _cur_block = std::move(block);
         _block_group->append(_cur_block);
     }

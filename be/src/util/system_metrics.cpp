@@ -105,7 +105,6 @@ public:
     METRIC_DEFINE_INT_ATOMIC_COUNTER(tcp_out_segs, MetricUnit::NOUNIT);
 };
 
-
 class QueryCacheMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(query_cache_capacity, MetricUnit::BYTES);

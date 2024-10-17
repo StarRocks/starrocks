@@ -470,7 +470,7 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
         for (const auto* partition : _build_partitions) {
             _pid_to_build_partition[partition->partition_id] = partition;
         }
-        
+
         // @TODO set partition here
         _probe_spiller->set_partition(_build_partitions);
         COUNTER_SET(metrics.hash_partitions, (int64_t)_build_partitions.size());

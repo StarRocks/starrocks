@@ -21,6 +21,7 @@
 #include <memory>
 #include <numeric>
 
+#include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/spill/common.h"
@@ -320,17 +321,18 @@ void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_pt
               [](const auto& left, const auto& right) { return left->partition_id < right->partition_id; });
     _partition_set[partition->partition_id] = true;
     _total_partition_num += 1;
-
 }
 
 void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partition) {
     LOG(INFO) << "remove partition: " << partition->partition_id;
+    auto affinity_group = partition->block_group->get_affinity_group();
+    DCHECK(affinity_group != kDefaultBlockAffinityGroup);
     _id_to_partitions.erase(partition->partition_id);
     size_t level = partition->level;
     auto& partitions = _level_to_partitions[level];
     _partition_set[partition->partition_id] = false;
     auto iter = std::find_if(partitions.begin(), partitions.end(),
-                                  [partition](auto& val) { return val->partition_id == partition->partition_id; });
+                             [partition](auto& val) { return val->partition_id == partition->partition_id; });
     _total_partition_num -= (iter != partitions.end());
     partitions.erase(iter);
     if (partitions.empty()) {
@@ -339,9 +341,10 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
             _min_level = level + 1;
         }
     }
+    // @TODO should remove affinity group from log manager
+    (void)_spiller->block_manager()->release_affinity_group(affinity_group);
     LOG(INFO) << "remove done";
     // @TODO after remove partition, how about its block
-
 }
 
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
@@ -475,9 +478,12 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
-        auto block_group = std::make_shared<BlockGroup>();
+        BlockAffinityGroup affinity_group = _spiller->block_manager()->acquire_affinity_group();
+        auto block_group = std::make_shared<BlockGroup>(affinity_group);
         partition->block_group = block_group;
         partition->spill_writer->add_block_group(std::move(block_group));
+        // @TODO should alloc an affinity group here
+        LOG(INFO) << "create spill_output_stream for PartitionSpillWriter, group: " << affinity_group;
         auto output = create_spill_output_stream(_spiller, partition->block_group.get(), _spiller->block_manager());
         std::lock_guard<std::mutex> l(_mutex);
         DCHECK_EQ(partition->spill_output_stream, nullptr);
@@ -589,10 +595,9 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
     auto left_mem_table = left_partition->spill_writer->mem_table();
     auto right_mem_table = right_partition->spill_writer->mem_table();
 
-    LOG(INFO) << fmt::format(
-            "split partition [{}] to [{}] and [{}], left_mem_table_rows[{}], right_mem_table_rows[{}]",
-            partition->debug_string(), left_partition->debug_string(), right_partition->debug_string(),
-            left_mem_table->num_rows(), right_mem_table->num_rows());
+    LOG(INFO) << fmt::format("split partition [{}] to [{}] and [{}], left_mem_table_rows[{}], right_mem_table_rows[{}]",
+                             partition->debug_string(), left_partition->debug_string(), right_partition->debug_string(),
+                             left_mem_table->num_rows(), right_mem_table->num_rows());
     Status st;
     {
         auto flush_partition = [this, &spill_ctx, &yield_ctx](SpilledPartition* partition) -> Status {
