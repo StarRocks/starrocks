@@ -809,7 +809,7 @@ public class OlapTable extends Table {
                 List<List<String>> multiValues = origListPartitionInfo.getIdToMultiValues().get(entry.getValue());
                 // replace with new info
                 try {
-                    listPartitionInfo.addPartition(idToColumn, newPartId, dataProperty, (short) restoreReplicationNum,
+                    listPartitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum,
                             inMemory, dataCacheInfo, values, multiValues);
                 } catch (AnalysisException e) {
                     return new Status(ErrCode.COMMON_ERROR, "Failed to add partition " + e.getMessage());
