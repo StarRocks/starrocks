@@ -471,7 +471,6 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
             _pid_to_build_partition[partition->partition_id] = partition;
         }
 
-        // @TODO set partition here
         _probe_spiller->set_partition(_build_partitions);
         COUNTER_SET(metrics.hash_partitions, (int64_t)_build_partitions.size());
     }
@@ -530,7 +529,6 @@ bool SpillableHashJoinProbeOperator::_all_partition_finished() const {
 Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperatorFactory::prepare(state));
 
-    // @TODO since join probe don't need to split, can we not use exlucive?
     _spill_options = std::make_shared<spill::SpilledOptions>(config::spill_init_partition, false);
     _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();

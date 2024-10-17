@@ -214,7 +214,6 @@ struct SpilledPartition : public SpillPartitionInfo {
             }
         }
         LOG(INFO) << fmt::format("destruct spilled partition {}, blocks {}", debug_string(), oss.str());
-        // @TODO should delete block
     }
 
     // split partition to next level partition
@@ -227,7 +226,6 @@ struct SpilledPartition : public SpillPartitionInfo {
         return fmt::format("[id={},bytes={},mem_size={},num_rows={},in_mem={},is_spliting={}]", partition_id, bytes,
                            mem_size, num_rows, in_mem, is_spliting);
     }
-    // @TODO if partition is removed, how about its block group...
 
     bool is_spliting = false;
     std::unique_ptr<RawSpillerWriter> spill_writer;

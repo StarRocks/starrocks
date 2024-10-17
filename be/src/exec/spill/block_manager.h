@@ -41,7 +41,6 @@ public:
 
     // flush block to somewhere
     virtual Status flush() = 0;
-    // @TODO support release? or remove?
 
     virtual StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const = 0;
 

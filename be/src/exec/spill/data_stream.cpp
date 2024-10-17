@@ -105,9 +105,6 @@ Status BlockSpillOutputDataStream::flush() {
         TRACE_SPILL_LOG << fmt::format("flush block[{}]", _cur_block->debug_string());
     }
 
-    // @TODO can we put exclusive block into a whole container file? one partition use a file??? or logical file
-
-    // release block if not exclusive
     RETURN_IF_ERROR(_block_manager->release_block(std::move(_cur_block)));
     DCHECK(_cur_block == nullptr);
 

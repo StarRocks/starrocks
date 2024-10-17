@@ -23,6 +23,7 @@
 #include "block_manager.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::spill {
 
@@ -66,7 +67,8 @@ private:
                                                            bool direct_io, BlockAffinityGroup affinity_group);
 
 private:
-    typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
+    // typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
+    typedef phmap::flat_hash_map<uint64_t, LogBlockContainerPtr> ContainerMap;
     typedef std::queue<LogBlockContainerPtr> ContainerQueue;
     typedef std::shared_ptr<ContainerQueue> ContainerQueuePtr;
 
@@ -76,10 +78,10 @@ private:
     std::atomic<uint64_t> _next_container_id = 0;
     std::mutex _mutex;
 
-    typedef std::unordered_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
-    typedef std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> DirContainerMap;
+    typedef phmap::flat_hash_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
+    typedef phmap::flat_hash_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> DirContainerMap;
 
-    std::unordered_map<BlockAffinityGroup, std::shared_ptr<DirContainerMap>> _available_containers;
+    phmap::flat_hash_map<BlockAffinityGroup, std::shared_ptr<DirContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
     DirManager* _dir_mgr = nullptr;

@@ -53,7 +53,7 @@ public:
               _direct_io(direct_io) {}
 
     ~LogBlockContainer() {
-        LOG(INFO) << "delete spill container file: " << path();
+        TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
         _dir->dec_size(_acquired_data_size);
         // try to delete related dir, only the last one can success, we ignore the error
@@ -126,7 +126,7 @@ Status LogBlockContainer::open() {
     }
     opt.direct_write = _direct_io;
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
-    LOG(INFO) << "create new container file: " << file_path;
+    TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
     return Status::OK();
 }
@@ -267,7 +267,7 @@ Status LogBlockManager::release_block(BlockPtr block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
     auto affinity_group = block->affinity_group();
-    LOG(INFO) << "release block: " << block->debug_string();
+    TRACE_SPILL_LOG << "release block: " << block->debug_string();
     bool is_full = container->size() >= _max_container_bytes;
     if (is_full) {
         RETURN_IF_ERROR(container->close());
@@ -289,14 +289,10 @@ Status LogBlockManager::release_block(BlockPtr block) {
 
 Status LogBlockManager::release_affinity_group(const BlockAffinityGroup affinity_group) {
     std::lock_guard<std::mutex> l(_mutex);
-    auto iter = _available_containers.find(affinity_group);
-    if (iter != _available_containers.end()) {
-        LOG(INFO) << "remove affinity group: " << affinity_group;
-        _available_containers.erase(iter);
-    } else {
-        DCHECK(false) << "can't find affinity_group: " << affinity_group;
-    }
-    return Status::OK();
+    size_t count = _available_containers.erase(affinity_group);
+    DCHECK(count == 1) << "can't find affinity_group: " << affinity_group;
+    return count == 1 ? Status::OK()
+                      : Status::InternalError(fmt::format("can't find affinity_group {}", affinity_group));
 }
 
 StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
@@ -307,25 +303,12 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
                     << ", " << plan_node_name;
 
     std::lock_guard<std::mutex> l(_mutex);
-    auto it = _available_containers.find(affinity_group);
-    if (it == _available_containers.end()) {
-        _available_containers.insert({affinity_group, std::make_shared<DirContainerMap>()});
-        it = _available_containers.find(affinity_group);
-    }
 
-    auto& available_containers = it->second;
-
-    auto iter = available_containers->find(dir.get());
-    if (iter == available_containers->end()) {
-        available_containers->insert({dir.get(), std::make_shared<PlanNodeContainerMap>()});
-        iter = available_containers->find(dir.get());
-    }
-    auto sub_iter = iter->second->find(plan_node_id);
-    if (sub_iter == iter->second->end()) {
-        iter->second->insert({plan_node_id, std::make_shared<ContainerQueue>()});
-        sub_iter = iter->second->find(plan_node_id);
-    }
-    auto& q = sub_iter->second;
+    auto avaiable_containers =
+            _available_containers.try_emplace(affinity_group, std::make_shared<DirContainerMap>()).first->second;
+    auto dir_container_map =
+            avaiable_containers->try_emplace(dir.get(), std::make_shared<PlanNodeContainerMap>()).first->second;
+    auto q = dir_container_map->try_emplace(plan_node_id, std::make_shared<ContainerQueue>()).first->second;
     if (!q->empty()) {
         auto container = q->front();
         TRACE_SPILL_LOG << "return an existed container: " << container->path();
