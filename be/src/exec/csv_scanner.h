@@ -97,6 +97,7 @@ private:
     bool _use_v2;
     CSVReader::Fields fields;
     CSVRow row;
+    bool _discard_unknown_fields = false;
 };
 
 } // namespace starrocks

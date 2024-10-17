@@ -176,6 +176,7 @@ struct TBrokerRangeDesc {
     12: optional string jsonpaths
     13: optional string json_root
     14: optional Types.TCompressionType compression_type
+    15: optional bool discard_unknown_fields;
 }
 
 enum TObjectStoreType {
