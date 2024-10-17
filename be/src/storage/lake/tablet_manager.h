@@ -177,6 +177,8 @@ public:
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
 
+    void stop();
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
