@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorScanRangeSource;
@@ -128,7 +129,16 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
                         .setPartitionAttachments(partitionAttachments).build();
+        boolean useCache = true;
+        if (table instanceof HiveTable) {
+            useCache = ((HiveTable) table).isUseMetadataCache();
+        }
+        params.setUseCache(useCache);
         remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(table, params);
+        // Enable useMetadataCache for hive table if it is disabled
+        if (table instanceof HiveTable && !useCache) {
+            ((HiveTable) table).useMetadataCache(true);
+        }
     }
 
     private Optional<List<DataCacheOptions>> generateDataCacheOptions(Table table,
