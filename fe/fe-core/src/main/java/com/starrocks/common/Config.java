@@ -3222,4 +3222,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
 }
