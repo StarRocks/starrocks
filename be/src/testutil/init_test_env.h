@@ -110,6 +110,7 @@ int init_test_env(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
+    exec_env->wait_for_finish();
     // delete engine
     StorageEngine::instance()->stop();
     // destroy exec env
