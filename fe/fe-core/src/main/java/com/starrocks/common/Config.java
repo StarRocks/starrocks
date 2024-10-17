@@ -3217,9 +3217,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
 
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
 
     @ConfField(mutable = true)
     public static int max_column_number_per_table = 10000;
+=======
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
+>>>>>>> 35bf075b20 ([Enhancement] Support Async delete files from Recycle Bin (#51972))
 }
