@@ -429,8 +429,7 @@ bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const tparque
     if (_scanner_ctx->runtime_filter_collector) {
         std::vector<SlotDescriptor*> min_max_slots(1);
 
-        const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
-        const std::vector<SlotDescriptor*>& slots = tuple_desc.slots();
+        const std::vector<SlotDescriptor*>& slots = _scanner_ctx->slot_descs;
 
         for (auto& it : _scanner_ctx->runtime_filter_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
@@ -470,8 +469,13 @@ bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_gr
         StatisticsHelper::StatSupportedFilter filter_type;
         for (auto ctx : kv.second) {
             if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
-                const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
-                SlotDescriptor* slot = tuple_desc.get_slot_by_id(kv.first);
+                SlotDescriptor* slot = nullptr;
+                for (auto s : _scanner_ctx->slot_descs) {
+                    if (s->id() == kv.first) {
+                        slot = s;
+                    }
+                }
+
                 if (UNLIKELY(slot == nullptr)) {
                     // it shouldn't be here, just some defensive code
                     DCHECK(false) << "couldn't find slot id " << kv.first << " in tuple desc";
@@ -656,7 +660,6 @@ Status FileReader::_init_group_readers() {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
     // _group_reader_param is used by all group readers
-    _group_reader_param.tuple_desc = fd_scanner_ctx.tuple_desc;
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
     _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;

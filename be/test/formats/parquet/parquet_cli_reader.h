@@ -73,8 +73,9 @@ public:
         }
         slot_descs.emplace_back();
 
-        _scanner_ctx->tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
-        _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
+        _scanner_ctx->slot_descs = tuple_desc->slots();
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
