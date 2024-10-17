@@ -613,7 +613,7 @@ Status CompactionManager::update_max_threads(int max_threads) {
             return Status::OK();
         }
 
-        _max_task_num = compute_max_compaction_concurrency();
+        _max_task_num = compute_max_compaction_task_num();
         return _compaction_pool->update_max_threads(std::max(1, _max_task_num));
     } else {
         return Status::InternalError("Thread pool not exist");
