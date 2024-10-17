@@ -541,6 +541,184 @@ public class RestoreJobTest {
     }
 
     @Test
+    public void testRunBackupListTable() {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = id.incrementAndGet();
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        List<Long> beIds = Lists.newArrayList();
+        beIds.add(CatalogMocker.BACKEND1_ID);
+        beIds.add(CatalogMocker.BACKEND2_ID);
+        beIds.add(CatalogMocker.BACKEND3_ID);
+        new Expectations() {
+            {
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
+                minTimes = 0;
+                result = beIds;
+
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                minTimes = 0;
+                result = com.starrocks.common.Status.OK;
+            }
+        };
+
+        new Expectations() {
+            {
+                editLog.logBackupJob((BackupJob) any);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logBackupJob(BackupJob job) {
+                        System.out.println("log backup job: " + job);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                repo.upload(anyString, anyString);
+                result = Status.OK;
+                minTimes = 0;
+
+                List<BackupMeta> backupMetas = Lists.newArrayList();
+                repo.getSnapshotMetaFile(label, backupMetas, -1, -1);
+                minTimes = 0;
+                result = new Delegate() {
+                    public Status getSnapshotMetaFile(String label, List<BackupMeta> backupMetas) {
+                        backupMetas.add(backupMeta);
+                        return Status.OK;
+                    }
+                };
+            }
+        };
+
+        new MockUp<MarkedCountDownLatch>() {
+            @Mock
+            boolean await(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
+        Locker locker = new Locker();
+
+        // gen BackupJobInfo
+        jobInfo = new BackupJobInfo();
+        jobInfo.backupTime = System.currentTimeMillis();
+        jobInfo.dbId = CatalogMocker.TEST_DB_ID;
+        jobInfo.dbName = CatalogMocker.TEST_DB_NAME;
+        jobInfo.name = label;
+        jobInfo.success = true;
+
+        expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL5_ID);
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL5_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL5_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+
+        for (Partition partition : expectedRestoreTbl.getPartitions()) {
+            BackupPartitionInfo partInfo = new BackupPartitionInfo();
+            partInfo.id = partition.getId();
+            partInfo.name = partition.getName();
+            tblInfo.partitions.put(partInfo.name, partInfo);
+
+            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                BackupIndexInfo idxInfo = new BackupIndexInfo();
+                idxInfo.id = index.getId();
+                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                partInfo.indexes.put(idxInfo.name, idxInfo);
+
+                for (Tablet tablet : index.getTablets()) {
+                    BackupTabletInfo tabletInfo = new BackupTabletInfo();
+                    tabletInfo.id = tablet.getId();
+                    idxInfo.tablets.add(tabletInfo);
+                }
+            }
+        }
+
+        // drop this table, cause we want to try restoring this table
+        db.dropTable(expectedRestoreTbl.getName());
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+        List<Table> tbls = Lists.newArrayList();
+        tbls.add(expectedRestoreTbl);
+        backupMeta = new BackupMeta(tbls);
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        // pending
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+
+        // 2. snapshoting
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+
+        // 3. snapshot finished
+        List<AgentTask> agentTasks = Lists.newArrayList();
+        Map<TTaskType, Set<Long>> runningTasks = Maps.newHashMap();
+        agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
+        agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
+        agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
+        Assert.assertEquals(4, agentTasks.size());
+
+        for (AgentTask agentTask : agentTasks) {
+            if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
+                continue;
+            }
+
+            SnapshotTask task = (SnapshotTask) agentTask;
+            String snapshotPath = "/path/to/snapshot/" + System.currentTimeMillis();
+            TStatus taskStatus = new TStatus(TStatusCode.OK);
+            TBackend tBackend = new TBackend("", 0, 1);
+            TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+                    task.getSignature(), taskStatus);
+            request.setSnapshot_path(snapshotPath);
+            Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
+        }
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+    }
+
+    @Test
     public void testSignature() {
         Adler32 sig1 = new Adler32();
         sig1.update("name1".getBytes());

@@ -45,6 +45,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -53,6 +54,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.PrimitiveType;
@@ -128,6 +130,10 @@ public class CatalogMocker {
     // partition olap table with multi physical partition
     public static final String TEST_TBL4_NAME = "test_tbl4";
     public static final long TEST_TBL4_ID = 30004;
+
+    // list partition olap table
+    public static final String TEST_TBL5_NAME = "test_tbl5";
+    public static final long TEST_TBL5_ID = 30005;
 
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
@@ -511,6 +517,54 @@ public class CatalogMocker {
             db.registerTableUnlocked(olapTable4);
         }
 
+        // 6. list partition olap table
+        {
+            baseIndexP1 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
+            baseIndexP2 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
+            DistributionInfo distributionInfo5 = new RandomDistributionInfo(1);
+            partition1 = new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo5);
+
+            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                    Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
+            listPartitionInfo.setValues(TEST_PARTITION1_ID, Lists.newArrayList("10"));
+            listPartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
+            listPartitionInfo.setIsInMemory(TEST_PARTITION1_ID, false);
+            listPartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
+
+            baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
+            tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION1_ID,
+                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
+            replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica5 = new Replica(TEST_REPLICA5_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP1.addReplica(replica3);
+            baseTabletP1.addReplica(replica4);
+            baseTabletP1.addReplica(replica5);
+
+            baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
+            tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL5_ID, TEST_PARTITION2_ID,
+                    TEST_TBL5_ID, SCHEMA_HASH, TStorageMedium.HDD);
+            baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
+            replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
+            replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
+            replica8 = new Replica(TEST_REPLICA8_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
+
+            baseTabletP2.addReplica(replica6);
+            baseTabletP2.addReplica(replica7);
+            baseTabletP2.addReplica(replica8);
+
+            OlapTable olapTable5 = new OlapTable(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA,
+                    KeysType.DUP_KEYS, listPartitionInfo, distributionInfo5);
+            Deencapsulation.setField(olapTable5, "baseIndexId", TEST_TBL5_ID);
+            olapTable5.setIndexMeta(TEST_TBL5_ID, TEST_TBL5_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
+                    TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+            olapTable5.addPartition(partition1);
+
+            db.registerTableUnlocked(olapTable5);
+        }
         return db;
     }
 

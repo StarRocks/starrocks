@@ -22,11 +22,9 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -408,13 +406,6 @@ public class BackupRestoreAnalyzer {
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");
-            }
-        }
-
-        if (tbl instanceof OlapTable) {
-            PartitionInfo partitionInfo = ((OlapTable) tbl).getPartitionInfo();
-            if (partitionInfo instanceof ListPartitionInfo) {
-                throw new SemanticException("List partition table does not support backup/restore job");
             }
         }
 
