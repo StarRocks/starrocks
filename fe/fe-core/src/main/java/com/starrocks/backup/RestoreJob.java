@@ -316,6 +316,10 @@ public class RestoreJob extends AbstractJob {
         return state == RestoreJobState.CANCELLED;
     }
 
+    public void setRepo(Repository repo) {
+        this.repo = repo;
+    }
+
     @Override
     public void run() {
         if (state == RestoreJobState.FINISHED || state == RestoreJobState.CANCELLED) {
