@@ -967,6 +967,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     @VisibleForTesting
+    synchronized boolean recyclePartitionInfoIsEmpty() {
+        return idToPartition.isEmpty();
+    }
+
+    @VisibleForTesting
     synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
         return idToPartition.get(id);
     }
