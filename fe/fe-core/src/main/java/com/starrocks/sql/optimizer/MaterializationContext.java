@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
@@ -361,7 +362,7 @@ public class MaterializationContext {
          * Prefer small table to large table
          */
         private static long orderingRowCount(MaterializationContext mvContext) {
-            return mvContext.getMv().getRowCount();
+            return mvContext.getMv().getMaxPartitionRowCount();
         }
 
         @Override
@@ -370,8 +371,16 @@ public class MaterializationContext {
             OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
 
             if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
+                boolean mvHasDifferentRows = orderingRowCount(o1) != 0 && orderingRowCount(o2) != 0
+                        && orderingRowCount(o1) != orderingRowCount(o2);
                 return Comparator
-                        .comparing(this::orderingAggregation)
+                        .comparing((Function<MaterializationContext, Long>) mv -> {
+                            int r = orderingAggregation(mv);
+                            if (r > 0 && mvHasDifferentRows) {
+                                return orderingRowCount(mv);
+                            }
+                            return (long) r;
+                        })
                         .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
                         .compare(o1, o2);
