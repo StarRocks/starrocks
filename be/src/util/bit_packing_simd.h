@@ -376,7 +376,7 @@ inline void unpack<uint16_t>(int bit_width, const uint8_t* __restrict__ in, int6
 
 #else
 
-    unpackNaive<uint16_t>(bit_width, in, in_bytes, out, num_values);
+    unpackNaive<uint16_t>(bit_width, in, in_bytes, num_values, out);
 
 #endif
 }
