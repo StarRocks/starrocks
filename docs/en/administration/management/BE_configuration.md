@@ -720,27 +720,49 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which to monitor health status of disks.
 - Introduced in: -
 
-<!--
 ##### replication_threads
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
+- Introduced in: v3.3.5
 
-<!--
+##### replication_max_speed_limit_kbps
+
+- Default: 50000
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The maximum speed of each replication thread.
+- Introduced in: v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- Default: 50
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The minimum speed of each replication thread.
+- Introduced in: v3.3.5
+##### replication_min_speed_time_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration allowed for a replication thread to be under the minimum speed. Replication will fail if the time when the actual speed is lower than `replication_min_speed_limit_kbps` exceeds this value.
+- Introduced in: v3.3.5
+
 ##### clear_expired_replication_snapshots_interval_seconds
 
 - Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The time interval at which the system clears the expired snapshots left by abnormal replications.
+- Introduced in: v3.3.5
 
 ##### unused_rowset_monitor_interval
 
