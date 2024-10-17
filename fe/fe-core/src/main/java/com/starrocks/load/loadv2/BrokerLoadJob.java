@@ -352,7 +352,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .build());
                 return;
             }
-            if (retryTime <= 0 || !txnStatusChangeReason.contains("timeout") || !isTimeout()) {
+            boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
+                    && (LoadErrorUtils.isTimeoutFromLoadingTaskExecution(txnStatusChangeReason) || isTimeout());
+            if (!shouldRetry) {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job
