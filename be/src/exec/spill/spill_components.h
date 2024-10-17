@@ -206,15 +206,6 @@ using SpilledPartitionPtr = std::unique_ptr<SpilledPartition>;
 
 struct SpilledPartition : public SpillPartitionInfo {
     SpilledPartition(int32_t partition_id_) : SpillPartitionInfo(partition_id_) {}
-    ~SpilledPartition() override {
-        std::ostringstream oss;
-        if (block_group != nullptr) {
-            for (const auto& block : block_group->blocks()) {
-                oss << block->debug_string() << ",";
-            }
-        }
-        LOG(INFO) << fmt::format("destruct spilled partition {}, blocks {}", debug_string(), oss.str());
-    }
 
     // split partition to next level partition
     std::pair<SpilledPartitionPtr, SpilledPartitionPtr> split() {

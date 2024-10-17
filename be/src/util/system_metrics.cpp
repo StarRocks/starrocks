@@ -105,6 +105,12 @@ public:
     METRIC_DEFINE_INT_ATOMIC_COUNTER(tcp_out_segs, MetricUnit::NOUNIT);
 };
 
+class FileDescriptorMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(fd_num_limit, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
+};
+
 class QueryCacheMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(query_cache_capacity, MetricUnit::BYTES);

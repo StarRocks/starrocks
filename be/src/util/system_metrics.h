@@ -71,12 +71,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
 };
 
-class FileDescriptorMetrics {
-public:
-    METRIC_DEFINE_INT_GAUGE(fd_num_limit, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
-};
-
 class SystemMetrics {
 public:
     SystemMetrics();

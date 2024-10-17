@@ -67,7 +67,6 @@ private:
                                                            bool direct_io, BlockAffinityGroup affinity_group);
 
 private:
-    // typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
     typedef phmap::flat_hash_map<uint64_t, LogBlockContainerPtr> ContainerMap;
     typedef std::queue<LogBlockContainerPtr> ContainerQueue;
     typedef std::shared_ptr<ContainerQueue> ContainerQueuePtr;

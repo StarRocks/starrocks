@@ -68,7 +68,8 @@ Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t wr
         // update metrics
         auto block_count = GET_METRICS(block->is_remote(), _spiller->metrics(), block_count);
         COUNTER_UPDATE(block_count, 1);
-        LOG(INFO) << fmt::format("allocate block [{}], affinity group[{}]", block->debug_string(), opts.affinity_group);
+        TRACE_SPILL_LOG << fmt::format("allocate block [{}], affinity group[{}]", block->debug_string(),
+                                       opts.affinity_group);
         _cur_block = std::move(block);
         _block_group->append(_cur_block);
     }

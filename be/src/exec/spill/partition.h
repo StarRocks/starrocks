@@ -34,7 +34,6 @@ inline int32_t partition_level(int32_t partition_id) {
 
 struct SpillPartitionInfo {
     SpillPartitionInfo(int32_t partition_id_) : partition_id(partition_id_), level(partition_level(partition_id_)) {}
-    virtual ~SpillPartitionInfo() = default;
 
     int32_t partition_id;
     int32_t level;
