@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.util;
 
+import com.starrocks.common.profile.Counter;
 import com.starrocks.thrift.TUnit;
 import org.junit.Assert;
 import org.junit.Test;
