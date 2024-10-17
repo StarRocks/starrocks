@@ -799,7 +799,6 @@ public class OlapTable extends Table {
             Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
             idToPartition.clear();
             physicalPartitionIdToPartitionId.clear();
-            physicalPartitionNameToPartitionId.clear();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
                 // preserve existing info
@@ -831,7 +830,6 @@ public class OlapTable extends Table {
                         partition.addSubPartition(physicalPartition);
                     }
                     physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
                 });
             }
         } else if (partitionInfo.isUnPartitioned()) {
@@ -843,11 +841,6 @@ public class OlapTable extends Table {
             Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
             idToPartition.clear();
             physicalPartitionIdToPartitionId.clear();
-<<<<<<< HEAD
-            long newPartId = globalStateMgr.getNextId();
-=======
-            physicalPartitionNameToPartitionId.clear();
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
                 DataProperty dataProperty = origPartitionInfo.getDataProperty(entry.getValue());
