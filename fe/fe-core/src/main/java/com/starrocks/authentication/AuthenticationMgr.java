@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
@@ -61,6 +62,10 @@ public class AuthenticationMgr {
     // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
+
+    private static final Map<String, Long> FAIL_TIME = new ConcurrentHashMap<>();
+    private static final Map<String, Integer> FAIL_COUNT = new ConcurrentHashMap<>();
+    private static final Map<String, Long> LOCKED_TIMES = new ConcurrentHashMap<>();
 
     private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
@@ -248,7 +253,66 @@ public class AuthenticationMgr {
     }
 
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+        UserIdentity authenticatedUser = null;
+        String userAndHost = remoteUser.concat("@").concat(remoteHost);
+        for (Map.Entry<String, Long> attempt : FAIL_TIME.entrySet()) {
+            if (((System.currentTimeMillis() - attempt.getValue()) / 1000) > Config.password_lock_interval_seconds) {
+                if (!isUserLocked(attempt.getKey())) {
+                    clearFailedAttemptRecords(attempt.getKey());
+                } else {
+                    if (getRemainingLockedTime(attempt.getKey()) <= 0) {
+                        clearFailedAttemptRecords(attempt.getKey());
+                    }
+                }
+            }
+        }
+        if (!allowLoginAttempt(userAndHost)) {
+            return null;
+        }
+        authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+        if (Config.max_failed_login_attempts >= 0) {
+            if (authenticatedUser == null) {
+                recordFailedAttempt(userAndHost);
+            } else {
+                clearFailedAttemptRecords(userAndHost);
+            }
+        }
+        return authenticatedUser;
+    }
+
+    public Long getRemainingLockedTime(String userAndHost) {
+        return Config.password_lock_interval_seconds - ((System.currentTimeMillis() - LOCKED_TIMES.get(userAndHost)) / 1000);
+    }
+
+    private boolean allowLoginAttempt(String userAndHost) {
+        if (!FAIL_TIME.containsKey(userAndHost)) {
+            return true;
+        }
+        return !isUserLocked(userAndHost);
+    }
+
+    private void recordFailedAttempt(String userAndHost) {
+        if (!FAIL_TIME.containsKey(userAndHost)) {
+            FAIL_TIME.put(userAndHost, System.currentTimeMillis());
+        }
+        FAIL_COUNT.put(userAndHost,
+                FAIL_COUNT.getOrDefault(userAndHost, 0) + 1);
+        if (!LOCKED_TIMES.containsKey(userAndHost)
+                && FAIL_COUNT.get(userAndHost) >= Config.max_failed_login_attempts) {
+            LOCKED_TIMES.put(userAndHost, System.currentTimeMillis());
+        }
+    }
+
+    private void clearFailedAttemptRecords(String userAndHost) {
+        if (FAIL_TIME.containsKey(userAndHost)) {
+            FAIL_TIME.remove(userAndHost);
+            FAIL_COUNT.remove(userAndHost);
+            LOCKED_TIMES.remove(userAndHost);
+        }
+    }
+
+    public boolean isUserLocked(String userAndHost) {
+        return LOCKED_TIMES.containsKey(userAndHost);
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
