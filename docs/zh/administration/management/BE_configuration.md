@@ -716,27 +716,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：磁盘健康状态检测的间隔。
 - 引入版本：-
 
-<!--
 ##### replication_threads
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
+- 引入版本：v3.3.5
 
-<!--
-##### clear_expired_replcation_snapshots_interval_seconds
+##### replication_max_speed_limit_kbps
+
+- 默认值：50000
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最大速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- 默认值：50
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最小速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_time_seconds
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步线程低于最低速度所允许的持续时间。如果实际速度低于 `replication_min_speed_limit_kbps` 的时间超过此值，同步将失败。
+- 引入版本：v3.3.5
+
+##### clear_expired_replication_snapshots_interval_seconds
 
 - 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：系统清除异常同步遗留的过期快照的时间间隔。
+- 引入版本：v3.3.5
 
 ##### unused_rowset_monitor_interval
 
