@@ -155,3 +155,15 @@ None
 None
 None
 -- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3]]);
+-- result:
+[[101,102,103]]
+-- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3], [null]]);
+-- result:
+[[101,102,103],[null]]
+-- !result
+select array_map(x->array_map(x->array_map(x->x+100,x),x), [[[1,2,3]]]);
+-- result:
+[[[101,102,103]]]
+-- !result
