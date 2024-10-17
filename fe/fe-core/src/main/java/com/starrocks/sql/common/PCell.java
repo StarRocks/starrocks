@@ -21,4 +21,6 @@ package com.starrocks.sql.common;
  * For list partition, it can be {@code List<List<String>>} to represent the list values of the partition.
  */
 public abstract class PCell {
+
+    public abstract  boolean isIntersected(PCell o);
 }
