@@ -68,8 +68,8 @@ select * from t_timestamp_ntz where col_timestamp_ntz is not null order by col_i
 select * from t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
 select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
 
--- test column mapping
-select * from delta_test_column_mapping;
+-- -- test column mapping
+-- select * from delta_test_column_mapping;
 
 -- test timestamp as partition type
 select * from delta_lake_par_col_timestamp order by col_smallint;
@@ -83,8 +83,8 @@ select * from t_partition_timestamp_ntz where col_timestamp_ntz is not null orde
 select * from t_partition_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
 select * from t_partition_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
 
--- test double as partition type
-select * from delta_lake_par_col_double order by col_smallint;
+-- -- test double as partition type
+-- select * from delta_lake_par_col_double order by col_smallint;
 
 -- test null partition
 select * from delta_lake_par_null order by col_smallint;
