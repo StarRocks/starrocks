@@ -36,6 +36,7 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
@@ -51,6 +52,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -142,9 +144,13 @@ public class RestoreJobTest {
         db = CatalogMocker.mockDb();
         backupHandler = new MockBackupHandler(globalStateMgr);
         repoMgr = new MockRepositoryMgr();
-
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
+        MetricRepo.init();
+    }
 
+    @Ignore
+    @Test
+    public void testRunBackupRangeTable() {
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
@@ -165,20 +171,19 @@ public class RestoreJobTest {
             }
         };
 
+        List<Long> beIds = Lists.newArrayList();
+        beIds.add(CatalogMocker.BACKEND1_ID);
+        beIds.add(CatalogMocker.BACKEND2_ID);
+        beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
                 systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
                 minTimes = 0;
-                result = new Delegate() {
-                    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive,
-                                                                       boolean isCreate, String clusterName) {
-                        List<Long> beIds = Lists.newArrayList();
-                        beIds.add(CatalogMocker.BACKEND1_ID);
-                        beIds.add(CatalogMocker.BACKEND2_ID);
-                        beIds.add(CatalogMocker.BACKEND3_ID);
-                        return beIds;
-                    }
-                };
+                result = beIds;
+
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                minTimes = 0;
+                result = com.starrocks.common.Status.OK;
             }
         };
 
@@ -263,11 +268,7 @@ public class RestoreJobTest {
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta);
-    }
 
-    @Ignore
-    @Test
-    public void testRun() {
         // pending
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
@@ -376,19 +377,19 @@ public class RestoreJobTest {
     public void testRunBackupListTable() {
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = id.getAndIncrement();
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -400,7 +401,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
-                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
+                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
                 minTimes = 0;
                 result = beIds;
 
@@ -446,7 +447,6 @@ public class RestoreJobTest {
                 return true;
             }
         };
-        Locker locker = new Locker();
 
         // gen BackupJobInfo
         jobInfo = new BackupJobInfo();
@@ -486,29 +486,12 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return db;
-            }
-
-            @Mock
-            public Table getTable(String dbName, String tblName) {
-                return db.getTable(tblName);
-            }
-
-            @Mock
-            public Table getTable(Long dbId, Long tableId) {
-                return db.getTable(tableId);
-            }
-        };
-
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+                globalStateMgr, repo.getId(), backupMeta);
         job.setRepo(repo);
         // pending
         job.run();
