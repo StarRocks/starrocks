@@ -12,18 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "exec/write_combined_txn_log.h"
 
-#include <memory>
-
-#include "gen_cpp/lake_types.pb.h"
+#include "runtime/exec_env.h"
+#include "storage/lake/tablet_manager.h"
 
 namespace starrocks {
 
-using TxnLog = TxnLogPB;
-using TxnLogPtr = std::shared_ptr<const TxnLog>;
-using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
-using CombinedTxnLog = CombinedTxnLogPB;
-using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
+Status write_combined_txn_log(const CombinedTxnLogPB& logs) {
+    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    return tablet_mgr->put_combined_txn_log(logs);
+}
 
 } // namespace starrocks

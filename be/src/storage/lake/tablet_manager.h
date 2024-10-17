@@ -102,11 +102,13 @@ public:
 
     Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
 
-    Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
+    StatusOr<CombinedTxnLogPtr> get_combined_txn_log(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
 
@@ -145,6 +147,8 @@ public:
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
+
+    std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 

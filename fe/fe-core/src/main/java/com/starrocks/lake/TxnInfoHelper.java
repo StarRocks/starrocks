@@ -22,7 +22,7 @@ public class TxnInfoHelper {
     public static TxnInfoPB fromTransactionState(TransactionState state) {
         TxnInfoPB infoPB = new TxnInfoPB();
         infoPB.txnId = state.getTransactionId();
-        infoPB.combinedTxnLog = false;
+        infoPB.combinedTxnLog = state.isCombinedTxnLog();
         infoPB.commitTime = state.getCommitTime() / 1000; // milliseconds to seconds
         infoPB.txnType = state.getTransactionType().toProto();
         // check whether needs to force publish
