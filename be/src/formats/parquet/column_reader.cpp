@@ -21,6 +21,7 @@
 #include "column/struct_column.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
+<<<<<<< HEAD
 #include "exprs/expr.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
@@ -28,6 +29,14 @@
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
+=======
+#include "exprs/expr_context.h"
+#include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "formats/utils.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+>>>>>>> e3a62e162f ([Feature] Support column mapping for delta lake (#51807))
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"
@@ -972,25 +981,51 @@ private:
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                      bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
-
-    // build tmp mapping for ParquetField
-    std::unordered_map<std::string, size_t> field_name_2_pos;
-    for (size_t i = 0; i < field.children.size(); i++) {
-        const std::string format_field_name =
-                case_sensitive ? field.children[i].name : boost::algorithm::to_lower_copy(field.children[i].name);
-        field_name_2_pos.emplace(format_field_name, i);
-    }
-
-    for (size_t i = 0; i < col_type.children.size(); i++) {
-        const std::string formatted_subfield_name =
-                case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
-
-        auto it = field_name_2_pos.find(formatted_subfield_name);
-        if (it == field_name_2_pos.end()) {
-            pos[i] = -1;
-            continue;
+    if (!col_type.field_ids.empty()) {
+        std::unordered_map<int32_t, size_t> field_id_2_pos;
+        for (size_t i = 0; i < field.children.size(); i++) {
+            field_id_2_pos.emplace(field.children[i].field_id, i);
         }
-        pos[i] = it->second;
+
+        for (size_t i = 0; i < col_type.children.size(); i++) {
+            auto it = field_id_2_pos.find(col_type.field_ids[i]);
+            if (it == field_id_2_pos.end()) {
+                pos[i] = -1;
+                continue;
+            }
+            pos[i] = it->second;
+        }
+    } else {
+        std::unordered_map<std::string, size_t> field_name_2_pos;
+        for (size_t i = 0; i < field.children.size(); i++) {
+            const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
+            field_name_2_pos.emplace(format_field_name, i);
+        }
+
+        if (!col_type.field_physical_names.empty()) {
+            for (size_t i = 0; i < col_type.children.size(); i++) {
+                const std::string& formatted_physical_name =
+                        Utils::format_name(col_type.field_physical_names[i], case_sensitive);
+
+                auto it = field_name_2_pos.find(formatted_physical_name);
+                if (it == field_name_2_pos.end()) {
+                    pos[i] = -1;
+                    continue;
+                }
+                pos[i] = it->second;
+            }
+        } else {
+            for (size_t i = 0; i < col_type.children.size(); i++) {
+                const std::string formatted_subfield_name = Utils::format_name(col_type.field_names[i], case_sensitive);
+
+                auto it = field_name_2_pos.find(formatted_subfield_name);
+                if (it == field_name_2_pos.end()) {
+                    pos[i] = -1;
+                    continue;
+                }
+                pos[i] = it->second;
+            }
+        }
     }
 }
 
@@ -1098,6 +1133,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                 continue;
             }
             std::unique_ptr<ColumnReader> child_reader;
+
             RETURN_IF_ERROR(
                     ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
