@@ -505,13 +505,13 @@ public class RestoreJobTest {
     public void testRunBackupListTable() {
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
-                result = id.incrementAndGet();
+                result = id.getAndIncrement();
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -614,23 +614,6 @@ public class RestoreJobTest {
 
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
-
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return db;
-            }
-
-            @Mock
-            public Table getTable(String dbName, String tblName) {
-                return db.getTable(tblName);
-            }
-
-            @Mock
-            public Table getTable(Long dbId, Long tableId) {
-                return db.getTable(tableId);
-            }
-        };
 
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
