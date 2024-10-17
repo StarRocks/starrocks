@@ -187,6 +187,8 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
