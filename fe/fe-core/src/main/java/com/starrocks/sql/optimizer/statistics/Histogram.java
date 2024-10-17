@@ -63,6 +63,10 @@ public class Histogram {
         return sb.toString();
     }
 
+    public List<Bucket> getOverlapped(Bucket bucket) {
+
+    }
+
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
         Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
                 constantOperator.toString());
