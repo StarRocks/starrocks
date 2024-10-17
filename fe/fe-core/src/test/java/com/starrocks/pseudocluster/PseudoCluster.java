@@ -311,25 +311,6 @@ public class PseudoCluster {
         }
     }
 
-    public long getTableRowCount(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
-            return -1;
-        }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                return -1;
-            }
-            OlapTable olapTable = (OlapTable) table;
-            return olapTable.getRowCount();
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-    }
-
     private static void runSingleSql(Statement stmt, String sql, boolean verbose) throws SQLException {
         while (true) {
             try {
