@@ -717,6 +717,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
+    public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
+
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
@@ -1544,6 +1546,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorForceRebalance = false;
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
@@ -2721,6 +2726,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
         this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public boolean getHdfsBackendSelectorForceRebalance() {
+        return hdfsBackendSelectorForceRebalance;
+    }
+
+    public void setHdfsBackendSelectorForceRebalance(boolean hdfsBackendSelectorForceRebalance) {
+        this.hdfsBackendSelectorForceRebalance = hdfsBackendSelectorForceRebalance;
     }
 
     public int getConsistentHashVirtualNodeNum() {
