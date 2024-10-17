@@ -18,7 +18,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
@@ -105,7 +104,7 @@ public class IcebergUtil {
      */
     public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties,
                                                        HdfsEnvironment hdfsEnvironment) {
-        return IcebergGlueCatalog.getInstance(catalogName, icebergProperties, hdfsEnvironment);
+        return null;
     }
 
     /**
