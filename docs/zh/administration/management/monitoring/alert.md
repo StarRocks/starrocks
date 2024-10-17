@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+toc_max_heading_level: 4
 ---
 
 # 报警管理

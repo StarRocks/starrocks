@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+toc_max_heading_level: 4
 ---
 
 # Manage Alerts
