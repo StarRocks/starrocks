@@ -109,6 +109,7 @@ public:
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
+    const std::string& col_physical_name() const { return _col_physical_name; }
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
 
@@ -125,6 +126,7 @@ private:
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
+    const std::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE

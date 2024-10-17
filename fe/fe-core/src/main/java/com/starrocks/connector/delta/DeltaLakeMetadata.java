@@ -159,7 +159,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
 
-        DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), snapshot.getMetadata());
+        DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
 
         triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, predicate, columns);
 

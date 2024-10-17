@@ -75,8 +75,12 @@ struct TypeDescriptor {
     /// Empty for scalar types
     std::vector<TypeDescriptor> children;
 
-    /// Only set if type == TYPE_STRUCT. The field name of each child.
+    /// Only set if type == TYPE_STRUCT. The field logical name of each child.
     std::vector<std::string> field_names;
+    // Only set if type == TYPE_STRUCT. The field id of each child.
+    std::vector<int32_t> field_ids;
+    // Only set if type == TYPE_STRUCT. The field physical name of each child.
+    std::vector<std::string> field_physical_names;
 
     TypeDescriptor() = default;
 

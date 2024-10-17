@@ -236,6 +236,8 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };

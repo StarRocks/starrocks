@@ -72,6 +72,12 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
+            if (struct_field.__isset.id && struct_field.id != -1) {
+                field_ids.emplace_back(struct_field.id);
+            }
+            if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
+                field_physical_names.emplace_back(struct_field.physical_name);
+            }
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;

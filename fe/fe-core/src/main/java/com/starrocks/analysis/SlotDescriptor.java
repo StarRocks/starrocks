@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
@@ -267,6 +268,15 @@ public class SlotDescriptor {
                 LOG.debug("column id:{}, column unique id:{}",
                         column.getColumnId(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+        }
+        // set column unique id or physical name
+        if (column != null) {
+            if (column.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+            if (!Strings.isNullOrEmpty(column.getPhysicalName())) {
+                tSlotDescriptor.setCol_physical_name(column.getPhysicalName());
             }
         }
         tSlotDescriptor.setColumnPos(-1);
