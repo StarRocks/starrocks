@@ -157,8 +157,14 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
 }
 
 CompactionScheduler::~CompactionScheduler() {
-    _stopped.store(true, std::memory_order_relaxed);
-    _threads->shutdown();
+    stop();
+}
+
+void CompactionScheduler::stop() {
+    if (!_stopped) {
+        _stopped.store(true);
+        _threads->shutdown();
+    }
 }
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
