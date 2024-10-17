@@ -21,11 +21,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.Database;
-<<<<<<< HEAD
-import com.starrocks.catalog.ListPartitionInfo;
-=======
-import com.starrocks.catalog.MaterializedView;
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -308,29 +303,6 @@ public class BackupRestoreAnalyzer {
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");
-            }
-        }
-
-<<<<<<< HEAD
-
-        if (tbl instanceof OlapTable) {
-            PartitionInfo partitionInfo = ((OlapTable) tbl).getPartitionInfo();
-            if (partitionInfo instanceof ListPartitionInfo) {
-                throw new SemanticException("List partition table does not support backup/restore job");
-=======
-        tableIdToTableRefMap.put(tbl.getId(), tableRef);
-        if (tbl.isMaterializedView()) {
-            MaterializedView mv = (MaterializedView) tbl;
-            // check its base tables exist for materialized view.
-            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Optional<Table> refTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
-                if (refTableOpt.isEmpty()) {
-                    throw new SemanticException(String.format("Base table %s doest not existed in materialized view %s when " +
-                            "backup/restore", baseTableInfo.getTableName(), mv.getName()));
-                }
-                tblMaterializedViewMap.put(mv.getName(), mv);
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
             }
         }
 
