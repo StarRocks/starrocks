@@ -114,6 +114,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggFunPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
@@ -341,6 +342,7 @@ public class RuleSet {
                 new PushDownPredicateIntersectRule(),
                 new PushDownPredicateTableFunctionRule(),
                 new PushDownPredicateRepeatRule(),
+                new PushDownAggFunPredicateRule(),
 
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
