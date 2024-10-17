@@ -150,7 +150,7 @@ Status HdfsScanner::_build_scanner_context() {
         ctx.extended_columns.emplace_back(std::move(column));
     }
 
-    ctx.tuple_desc = _scanner_params.tuple_desc;
+    ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
