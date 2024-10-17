@@ -142,6 +142,10 @@ public:
 
     bool set_value(std::string value);
 
+    bool rollback_last_value();
+
+    void set_last_update_value();
+
     virtual std::string value() const = 0;
 
     static void clear_fields() { _s_field_map.clear(); }
@@ -160,6 +164,8 @@ protected:
     void* _storage;
     const char* _defval;
     bool _valmutable;
+    std::string _last_set_val;
+    std::string _current_set_val;
 };
 
 template <typename T, typename = void>
@@ -324,6 +330,8 @@ bool init(const char* filename);
 bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
+
+Status rollback_config(const std::string& field);
 
 std::vector<ConfigInfo> list_configs();
 
