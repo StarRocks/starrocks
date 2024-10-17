@@ -1,0 +1,22 @@
+-- name: test_deltalake_schema_change
+
+-- create catalog
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+-- test add column
+select * from delta_test_${uuid0}.delta_oss_db.delta_test_add_column order by `key`;
+
+-- test add subfield
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_add_subfield order by col_tinyint;
+
+--test complex type add subfield
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_complex_type order by col_tinyint;
+
+-- drop catalog
+drop catalog delta_test_${uuid0}
