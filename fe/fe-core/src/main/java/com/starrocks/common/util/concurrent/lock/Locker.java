@@ -354,14 +354,10 @@ public class Locker {
         }
     }
 
-<<<<<<< HEAD
-    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, 
-=======
     /**
      * No need to release lock explicitly, it will be released automatically when the locker failed.
      */
-    public boolean tryLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType,
->>>>>>> a1a3130214 ([BugFix] Fix Attempt to unlock lock, not locked by current locker in mv refresh (#51884))
+    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, 
                                                     long timeout, TimeUnit unit) {
         long timeoutMillis = timeout;
         if (!unit.equals(TimeUnit.MILLISECONDS)) {
@@ -503,7 +499,6 @@ public class Locker {
     }
 
     /**
-<<<<<<< HEAD
      * Try lock database and table with intensive db lock.
      *
      * @return try if try lock success, false otherwise.
@@ -518,25 +513,7 @@ public class Locker {
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(Database db, Long tableId, LockType lockType, long timeout, TimeUnit unit) {
-        boolean isLockSuccess = false;
-        try {
-            if (!tryLockTablesWithIntensiveDbLock(db, ImmutableList.of(tableId), lockType, timeout, unit)) {
-                return false;
-            }
-            isLockSuccess = true;
-        } finally {
-            if (!isLockSuccess) {
-                unLockTablesWithIntensiveDbLock(db, ImmutableList.of(tableId), lockType);
-            }
-        }
-        return true;
-=======
-     * Try to lock a database and a table id with intensive db lock.
-     * @return try if try lock success, false otherwise.
-     */
-    public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType, long timeout, TimeUnit unit) {
-        return tryLockTablesWithIntensiveDbLock(dbId, ImmutableList.of(tableId), lockType, timeout, unit);
->>>>>>> a1a3130214 ([BugFix] Fix Attempt to unlock lock, not locked by current locker in mv refresh (#51884))
+        return tryLockTablesWithIntensiveDbLock(db, ImmutableList.of(tableId), lockType, timeout, unit);
     }
 
     /**
