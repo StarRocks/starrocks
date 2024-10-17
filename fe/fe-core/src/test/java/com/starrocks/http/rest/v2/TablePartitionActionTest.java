@@ -477,13 +477,12 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static RestBaseResultV2<PagedResult<PartitionView>> parseResponseBody(String body) {
         try {
-            System.out.println("resp: " + body);
             return GsonUtils.GSON.fromJson(
                     body,
                     new TypeToken<RestBaseResultV2<PagedResult<PartitionView>>>() {
                     }.getType());
         } catch (Exception e) {
-            fail("invalid resp body: " + body);
+            fail(e.getMessage() + ", resp: " + body);
             throw new IllegalStateException(e);
         }
     }
