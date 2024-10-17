@@ -362,6 +362,8 @@ public class MaterializationContext {
          * Prefer small table to large table
          */
         private static long orderingRowCount(MaterializationContext mvContext) {
+            // prefer max partition row count to mv's total row count,
+            // eg: a mv is with less partitions and smaller total row count but maxPartitionRowCount is larger.
             return mvContext.getMv().getMaxPartitionRowCount();
         }
 
@@ -371,6 +373,13 @@ public class MaterializationContext {
             OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
 
             if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
+                // -- rows: 100 mv1:
+                // select sum(v1) from t1 group by a, b, c, f;
+                // -- rows: 10000 mv2:
+                // select sum(v1) from t1 group by a, b, d;
+                // query: select sum(v1) from t1 where b = 'a' group by a;
+
+                // when many mvs satisfy query, prefer mv with less rows, so choose mv1.
                 boolean mvHasDifferentRows = orderingRowCount(o1) != 0 && orderingRowCount(o2) != 0
                         && orderingRowCount(o1) != orderingRowCount(o2);
                 return Comparator
