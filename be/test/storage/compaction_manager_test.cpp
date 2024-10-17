@@ -365,19 +365,19 @@ TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
     config::cumulative_compaction_num_threads_per_disk = 2;
     config::base_compaction_num_threads_per_disk = 2;
     _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
-    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
     ASSERT_EQ(4, compaction_concurrency);
 
     config::cumulative_compaction_num_threads_per_disk = 0;
     config::base_compaction_num_threads_per_disk = 0;
     _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
-    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
     ASSERT_EQ(0, compaction_concurrency);
 
     config::cumulative_compaction_num_threads_per_disk = -1;
     config::base_compaction_num_threads_per_disk = -1;
     _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
-    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_concurrency();
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
     ASSERT_EQ(5, compaction_concurrency);
 
     _engine->compaction_manager()->init_max_task_num(compaction_concurrency);

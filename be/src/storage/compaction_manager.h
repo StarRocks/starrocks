@@ -112,7 +112,7 @@ public:
 
     Status update_max_threads(int max_threads);
 
-    int32_t compute_max_compaction_concurrency() const;
+    int32_t compute_max_compaction_task_num() const;
 
     void set_max_compaction_concurrency(int threads_num);
 
