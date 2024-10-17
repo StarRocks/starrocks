@@ -201,7 +201,7 @@ public enum ScalarOperatorEvaluator {
             }
             return operator;
         } catch (Exception e) {
-            LOG.debug("failed to invoke", e);
+            LOG.warn("failed to invoke", e);
             if (invoker.isMetaFunction) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
