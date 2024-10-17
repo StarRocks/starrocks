@@ -161,6 +161,7 @@ public:
     ~SegmentedColumn() = default;
 
     ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
+    ColumnPtr materialize() const;
 
     bool is_nullable() const;
     bool has_null() const;
@@ -192,17 +193,18 @@ public:
     void append(const SegmentedChunkPtr& chunk, size_t offset);
     void build_columns();
 
-    size_t memory_usage() const;
-    size_t num_rows() const;
+    SegmentedColumnPtr get_column_by_slot_id(SlotId slot_id);
     const SegmentedColumns& columns() const;
     SegmentedColumns& columns();
     size_t num_segments() const;
     const std::vector<ChunkPtr>& segments() const;
     std::vector<ChunkPtr>& segments();
-    size_t segment_size() const;
-    void reset();
     ChunkUniquePtr clone_empty(size_t reserve);
 
+    size_t segment_size() const;
+    void reset();
+    size_t memory_usage() const;
+    size_t num_rows() const;
     Status upgrade_if_overflow();
     Status downgrade();
     bool has_large_column() const;

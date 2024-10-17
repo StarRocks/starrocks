@@ -662,9 +662,9 @@ public:
     Status do_visit(const BinaryColumnBase<Offset>& column) {
         using ColumnT = BinaryColumnBase<Offset>;
         using ContainerT = typename ColumnT::Container*;
-        using Bytes = ColumnT::Bytes;
-        using Byte = ColumnT::Byte;
-        using Offsets = ColumnT::Offsets;
+        using Bytes = typename ColumnT::Bytes;
+        using Byte = typename ColumnT::Byte;
+        using Offsets = typename ColumnT::Offsets;
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
@@ -787,6 +787,18 @@ ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t fro
     SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
     (void)columns()[0]->accept(&visitor);
     return visitor.result();
+}
+
+ColumnPtr SegmentedColumn::materialize() const {
+    auto actual_columns = columns();
+    if (actual_columns.empty()) {
+        return {};
+    }
+    ColumnPtr result = actual_columns[0]->clone_empty();
+    for (size_t i = 0; i < actual_columns.size(); i++) {
+        result->append(*actual_columns[i]);
+    }
+    return result;
 }
 
 size_t SegmentedColumn::segment_size() const {
@@ -930,6 +942,16 @@ size_t SegmentedChunk::num_rows() const {
         result += chunk->num_rows();
     }
     return result;
+}
+
+SegmentedColumnPtr SegmentedChunk::get_column_by_slot_id(SlotId slot_id) {
+    DCHECK(!!_segments[0]);
+    auto& map = _segments[0]->get_slot_id_to_index_map();
+    auto iter = map.find(slot_id);
+    if (iter == map.end()) {
+        return nullptr;
+    }
+    return _columns[iter->second];
 }
 
 const SegmentedColumns& SegmentedChunk::columns() const {

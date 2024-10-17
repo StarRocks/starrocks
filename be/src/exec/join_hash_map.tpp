@@ -59,6 +59,7 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
     if (table_items->key_columns[0]->is_nullable()) {
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(table_items->key_columns[0]);
         auto& null_array = nullable_column->null_column()->get_data();
+        DCHECK_EQ(data.size(), table_items->row_count + 1);
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
                 uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
@@ -67,6 +68,7 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             }
         }
     } else {
+        DCHECK_EQ(data.size(), table_items->row_count + 1);
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num<CppType>(data[i], table_items->bucket_size);
             table_items->next[i] = table_items->first[bucket_num];
