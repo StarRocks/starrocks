@@ -1450,6 +1450,7 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
+<<<<<<< HEAD
                 if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
                     //If referring to an uninitialized variable, its value is NULL and a string type.
@@ -1458,6 +1459,23 @@ public class ExpressionAnalyzer {
                         node.setIsNull();
                         return null;
                     }
+=======
+                VariableMgr.fillValue(session.getSessionVariable(), node);
+                if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                    node.setType(Type.VARCHAR);
+                    node.setValue(SqlModeHelper.decode((long) node.getValue()));
+                } else if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.AUTO_COMMIT)) {
+                    node.setType(Type.BIGINT);
+                    node.setValue(((boolean) node.getValue()) ? (long) (1) : (long) 0);
+                }
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+>>>>>>> 0d22be523b ([BugFix] fix .net can not read sr (backport #51946) (#51961))
 
                     Type variableType = userVariable.getEvaluatedExpression().getType();
                     node.setType(variableType);
