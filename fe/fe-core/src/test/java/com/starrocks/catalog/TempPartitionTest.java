@@ -100,6 +100,16 @@ public class TempPartitionTest {
 
     }
 
+    private static void waitAllPartitionClearFinished(long time) {
+        while (!GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartitionInfoIsEmpty()) {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
@@ -493,6 +503,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        waitAllPartitionClearFinished(System.currentTimeMillis());
 
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
