@@ -54,12 +54,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -133,17 +127,10 @@ public class CatalogMocker {
     public static final String TEST_TBL3_NAME = "test_tbl3";
     public static final long TEST_TBL3_ID = 30003;
 
-<<<<<<< HEAD
-=======
-    // partition olap table with multi physical partition
-    public static final String TEST_TBL4_NAME = "test_tbl4";
-    public static final long TEST_TBL4_ID = 30004;
-
     // list partition olap table
     public static final String TEST_TBL5_NAME = "test_tbl5";
     public static final long TEST_TBL5_ID = 30005;
 
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
     public static final String TEST_PARTITION2_NAME = "p2";
@@ -502,59 +489,7 @@ public class CatalogMocker {
         olapTable3.addPartition(partition2Pk);
         db.registerTableUnlocked(olapTable3);
 
-<<<<<<< HEAD
-=======
-        // 5. range partition multi physical partition olap table
-        {
-            baseIndexP1 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
-            baseIndexP2 = new MaterializedIndex(TEST_TBL4_ID, IndexState.NORMAL);
-            DistributionInfo distributionInfo4 = new RandomDistributionInfo(1);
-            partition1 =
-                    new Partition(TEST_PARTITION1_ID, TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
-
-            PhysicalPartition physicalPartition2 = new PhysicalPartitionImpl(
-                        TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, 0, baseIndexP2);
-            partition1.addSubPartition(physicalPartition2);
-
-            rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
-            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
-
-            baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
-            tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
-                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
-            baseIndexP1.addTablet(baseTabletP1, tabletMetaBaseTabletP1);
-            replica3 = new Replica(TEST_REPLICA3_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
-            replica4 = new Replica(TEST_REPLICA4_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
-            replica5 = new Replica(TEST_REPLICA5_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
-
-            baseTabletP1.addReplica(replica3);
-            baseTabletP1.addReplica(replica4);
-            baseTabletP1.addReplica(replica5);
-
-            baseTabletP2 = new LocalTablet(TEST_BASE_TABLET_P2_ID);
-            tabletMetaBaseTabletP2 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION2_ID,
-                    TEST_TBL4_ID, SCHEMA_HASH, TStorageMedium.HDD);
-            baseIndexP2.addTablet(baseTabletP2, tabletMetaBaseTabletP2);
-            replica6 = new Replica(TEST_REPLICA6_ID, BACKEND1_ID, 0, ReplicaState.NORMAL);
-            replica7 = new Replica(TEST_REPLICA7_ID, BACKEND2_ID, 0, ReplicaState.NORMAL);
-            replica8 = new Replica(TEST_REPLICA8_ID, BACKEND3_ID, 0, ReplicaState.NORMAL);
-
-            baseTabletP2.addReplica(replica6);
-            baseTabletP2.addReplica(replica7);
-            baseTabletP2.addReplica(replica8);
-
-            OlapTable olapTable4 = new OlapTable(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA,
-                    KeysType.DUP_KEYS, rangePartitionInfo, distributionInfo4);
-            Deencapsulation.setField(olapTable4, "baseIndexId", TEST_TBL4_ID);
-            olapTable4.setIndexMeta(TEST_TBL4_ID, TEST_TBL4_NAME, TEST_TBL_BASE_SCHEMA, 0, SCHEMA_HASH, (short) 1,
-                            TStorageType.COLUMN, KeysType.DUP_KEYS);
-
-            olapTable4.addPartition(partition1);
-
-            db.registerTableUnlocked(olapTable4);
-        }
-
-        // 6. list partition olap table
+        // 5. list partition olap table
         {
             baseIndexP1 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
             baseIndexP2 = new MaterializedIndex(TEST_TBL5_ID, IndexState.NORMAL);
@@ -602,7 +537,6 @@ public class CatalogMocker {
 
             db.registerTableUnlocked(olapTable5);
         }
->>>>>>> d62055ed7f ([Enhancement] Support list partition for backup restore (#51993))
         return db;
     }
 
