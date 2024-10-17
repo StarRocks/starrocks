@@ -605,17 +605,16 @@ void CompactionManager::set_max_compaction_concurrency(int threads_num) {
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         set_max_compaction_concurrency(max_threads);
-        if (max_threads == -1) {
-            _max_task_num = compute_max_compaction_task_num();
-            return _compaction_pool->update_max_threads(std::max(1, _max_task_num));
-        }
         if (max_threads == 0) {
-            return _compaction_pool->update_max_threads(0);
+            Status st = _compaction_pool->update_max_threads(0);
+            if (!st.ok()) {
+                return st;
+            }
+            return Status::OK();
         }
-        if (max_threads >= _max_task_num) {
-            max_threads = _max_task_num;
-        }
-        return _compaction_pool->update_max_threads(max_threads);
+
+        _max_task_num = compute_max_compaction_concurrency();
+        return _compaction_pool->update_max_threads(std::max(1, _max_task_num));
     } else {
         return Status::InternalError("Thread pool not exist");
     }
