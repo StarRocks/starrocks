@@ -186,7 +186,6 @@ public class CompactionMgrTest {
             }
         };
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         compactionMgr.save(image.getImageWriter());
         CompactionMgr compactionMgr2 = new CompactionMgr();
