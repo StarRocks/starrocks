@@ -264,6 +264,12 @@ public:
     static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 
     static Status remove_tablet_persistent_index_meta(DataDir* store, TTabletId table_id);
+
+    static Status get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                  std::string* meta_value);
+
+    static Status get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                          std::string* meta_value);
 };
 
 } // namespace starrocks
