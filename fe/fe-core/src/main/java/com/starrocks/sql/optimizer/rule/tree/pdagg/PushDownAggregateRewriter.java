@@ -169,6 +169,9 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         List<ColumnRefOperator> keys = Lists.newArrayList(context.aggregations.keySet());
         for (ColumnRefOperator key : keys) {
             CallOperator aggFn = context.aggregations.get(key);
+            if (aggFn.getChildren().isEmpty()) {
+                continue;
+            }
             ScalarOperator aggInput = aggFn.getChild(0);
 
             if (!(aggInput instanceof ColumnRefOperator)) {
@@ -293,8 +296,16 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args) {
-        Function fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
-                new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Function fn;
+        if (FunctionSet.COUNT.equals(origin.getFnName())) {
+            Preconditions.checkState(Type.BIGINT.equals(args.getType()));
+            fn = Expr.getBuiltinFunction(FunctionSet.SUM,
+                    new Type[] {Type.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        } else {
+            fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
+                    new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        }
 
         Preconditions.checkState(fn instanceof AggregateFunction);
         if (args.getType().isDecimalOfAnyVersion()) {
@@ -380,11 +391,15 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         OptExpression result = optExpression;
         // if the aggregation is complex expression, need create project
-        if (context.aggregations.values().stream().map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
+        if (context.aggregations.values().stream().filter(c -> !c.getChildren().isEmpty())
+                .map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
             scan.getOutputColumns().forEach(c -> refs.put(c, c));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
+                if (entry.getValue().getChildren().isEmpty()) {
+                    continue;
+                }
                 ScalarOperator input = entry.getValue().getChild(0);
                 if (!input.isColumnRef()) {
                     ColumnRefOperator ref = factory.create(input, input.getType(), input.isNullable());
