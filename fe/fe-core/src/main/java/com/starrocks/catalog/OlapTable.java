@@ -628,13 +628,15 @@ public class OlapTable extends Table {
         }
 
         // reset all 'indexIdToXXX' map
+        Map<Long, MaterializedIndexMeta> origIndexIdToMeta = Maps.newHashMap(indexIdToMeta);
+        indexIdToMeta.clear();
         for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
             long newIdxId = globalStateMgr.getNextId();
             if (entry.getValue().equals(name)) {
                 // base index
                 baseIndexId = newIdxId;
             }
-            indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
+            indexIdToMeta.put(newIdxId, origIndexIdToMeta.get(entry.getKey()));
             indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
@@ -648,43 +650,65 @@ public class OlapTable extends Table {
         // reset partition info and idToPartition map
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            RangePartitionInfo origRangePartitionInfo = (RangePartitionInfo) rangePartitionInfo.clone();
+            for (Long partitionId : origPartNameToId.values()) {
+                rangePartitionInfo.dropPartition(partitionId);
+            }
+            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
+            idToPartition.clear();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
-                rangePartitionInfo.idToDataProperty.put(newPartId,
-                        rangePartitionInfo.idToDataProperty.remove(entry.getValue()));
-                rangePartitionInfo.idToReplicationNum.remove(entry.getValue());
-                rangePartitionInfo.idToReplicationNum.put(newPartId,
-                        (short) restoreReplicationNum);
-                rangePartitionInfo.getIdToRange(false).put(newPartId,
-                        rangePartitionInfo.getIdToRange(false).remove(entry.getValue()));
-
-                rangePartitionInfo.idToInMemory
-                        .put(newPartId, rangePartitionInfo.idToInMemory.remove(entry.getValue()));
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
+                // preserve existing info
+                DataProperty dataProperty = origRangePartitionInfo.getDataProperty(entry.getValue());
+                boolean inMemory = origRangePartitionInfo.getIsInMemory(entry.getValue());
+                DataCacheInfo dataCacheInfo = origRangePartitionInfo.getDataCacheInfo(entry.getValue());
+                Range<PartitionKey> range = origRangePartitionInfo.getIdToRange(false).get(entry.getValue());
+                // replace with new info
+                rangePartitionInfo.addPartition(newPartId, false, range, dataProperty, (short) restoreReplicationNum,
+                        inMemory, dataCacheInfo);
+                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
             }
-        } else {
+        } else if (partitionInfo.isUnPartitioned()) {
             // Single partitioned
+            PartitionInfo origPartitionInfo = (PartitionInfo) partitionInfo.clone();
+            for (Long partitionId : origPartNameToId.values()) {
+                partitionInfo.dropPartition(partitionId);
+            }
+            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
+            idToPartition.clear();
             long newPartId = globalStateMgr.getNextId();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                partitionInfo.idToDataProperty.put(newPartId, partitionInfo.idToDataProperty.remove(entry.getValue()));
-                partitionInfo.idToReplicationNum.remove(entry.getValue());
-                partitionInfo.idToReplicationNum.put(newPartId, (short) restoreReplicationNum);
-                partitionInfo.idToInMemory.put(newPartId, partitionInfo.idToInMemory.remove(entry.getValue()));
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
+                DataProperty dataProperty = origPartitionInfo.getDataProperty(entry.getValue());
+                boolean inMemory = origPartitionInfo.getIsInMemory(entry.getValue());
+                DataCacheInfo dataCacheInfo = origPartitionInfo.getDataCacheInfo(entry.getValue());
+                partitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum, inMemory,
+                        dataCacheInfo);
+                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
             }
+        } else {
+            return new Status(ErrCode.UNSUPPORTED, "List partitioned table does not support restore");
         }
 
         // for each partition, reset rollup index map
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
+            Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxIdToName.size());
             for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
                 MaterializedIndex idx = partition.getIndex(entry2.getKey());
+                origIdToIndex.put(entry2.getKey(), idx);
+                long newIdxId = indexNameToId.get(entry2.getValue());
+                if (newIdxId != baseIndexId) {
+                    // not base table, delete old index
+                    partition.deleteRollupIndex(entry2.getKey());
+                }
+            }
+            for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
                 long newIdxId = indexNameToId.get(entry2.getValue());
                 int schemaHash = indexIdToMeta.get(newIdxId).getSchemaHash();
                 idx.setIdForRestore(newIdxId);
                 if (newIdxId != baseIndexId) {
                     // not base table, reset
-                    partition.deleteRollupIndex(entry2.getKey());
                     partition.createRollupIndex(idx);
                 }
 
