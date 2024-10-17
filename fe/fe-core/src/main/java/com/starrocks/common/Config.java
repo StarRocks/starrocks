@@ -3262,4 +3262,10 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
 }
