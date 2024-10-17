@@ -204,6 +204,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+    // This property only applies to materialized views,
+    // Indicates which tables do not refresh the base table when auto refresh
+    private List<TableName> excludedRefreshTables;
+
     // This property only applies to materialized views
     private List<String> mvSortKeys;
 
@@ -496,18 +500,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildExcludedTriggerTables() {
-        String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
+        excludedTriggerTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        excludedRefreshTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
+        return this;
+    }
+
+    private List<TableName> parseExcludedTables(String propertiesKey) {
+        String excludedTables = properties.getOrDefault(propertiesKey, null);
         List<TableName> tables = Lists.newArrayList();
-        if (excludedRefreshConf != null) {
+        if (excludedTables != null) {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
-                    .splitToList(excludedRefreshConf);
+                    .splitToList(excludedTables);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
         }
-        excludedTriggerTables = tables;
-        return this;
+        return tables;
     }
 
     public TableProperty buildMvSortKeys() {
@@ -854,6 +863,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setExcludedTriggerTables(List<TableName> excludedTriggerTables) {
         this.excludedTriggerTables = excludedTriggerTables;
+    }
+
+    public List<TableName> getExcludedRefreshTables() {
+        return excludedRefreshTables;
+    }
+
+    public void setExcludedRefreshTables(List<TableName> excludedRefreshTables) {
+        this.excludedRefreshTables = excludedRefreshTables;
     }
 
     public List<String> getMvSortKeys() {
