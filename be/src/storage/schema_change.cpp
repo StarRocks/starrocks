@@ -547,7 +547,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            VLOG(1) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
+            VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif

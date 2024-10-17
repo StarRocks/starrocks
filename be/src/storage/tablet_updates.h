@@ -433,7 +433,8 @@ private:
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
-    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock,
+                             bool is_compaction = false);
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
