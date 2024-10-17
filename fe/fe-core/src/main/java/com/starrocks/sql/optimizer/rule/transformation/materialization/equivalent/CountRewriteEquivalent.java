@@ -19,7 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
 
 public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
     public static IAggregateRewriteEquivalent INSTANCE = new CountRewriteEquivalent();
@@ -72,7 +73,7 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
         if (shuttleContext.isRollup()) {
-            return AggregatedMaterializedViewRewriter.getRollupAggregateFunc((CallOperator) eqContext.getInput(), replace, false);
+            return getRollupAggregateFunc((CallOperator) eqContext.getInput(), replace, false);
         } else {
             return replace;
         }
@@ -82,7 +83,7 @@ public class CountRewriteEquivalent extends IAggregateRewriteEquivalent {
     public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
                                                      CallOperator aggFunc,
                                                      ColumnRefOperator replace) {
-        return AggregatedMaterializedViewRewriter.getRollupAggregateFunc(aggFunc, replace, false);
+        return getRollupAggregateFunc(aggFunc, replace, false);
     }
 
     @Override

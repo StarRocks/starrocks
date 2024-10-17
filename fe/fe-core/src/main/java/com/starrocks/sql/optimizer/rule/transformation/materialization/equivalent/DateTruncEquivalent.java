@@ -58,6 +58,9 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
         if (!checkDateTrucFunc(func)) {
             return false;
         }
+        if (!(op1.getChild(0) instanceof ConstantOperator)) {
+            return false;
+        }
         ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
                 ((ConstantOperator) op1.getChild(0)),
                 op2);

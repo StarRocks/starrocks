@@ -72,11 +72,13 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -973,6 +975,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (desiredActive && reloadActive) {
                 setActive();
             }
+            analyzePartitionExprs();
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
@@ -1803,6 +1806,53 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
         }
+    }
+
+    private void analyzePartitionExprs() {
+        try {
+            Map<Table, Expr> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs();
+            ConnectContext connectContext = new ConnectContext();
+            if (refBaseTablePartitionExprs != null) {
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
+                    if (refBaseTableOpt.isEmpty()) {
+                        continue;
+                    }
+                    Table refBaseTable = refBaseTableOpt.get();
+                    if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
+                        continue;
+                    }
+                    Expr partitionExpr = refBaseTablePartitionExprs.get(refBaseTable);
+                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                    analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Analyze partition exprs failed", e);
+        }
+    }
+
+    private void analyzePartitionExpr(ConnectContext connectContext,
+                                      Table refBaseTable,
+                                      TableName tableName,
+                                      Expr partitionExpr) {
+        if (partitionExpr == null) {
+            return;
+        }
+        if (tableName == null) {
+            return;
+        }
+        SelectAnalyzer.SlotRefTableNameCleaner visitor = MVUtils.buildSlotRefTableNameCleaner(
+                connectContext, refBaseTable, tableName);
+        partitionExpr.accept(visitor, null);
+        ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(),
+                        new RelationFields(refBaseTable.getBaseSchema().stream()
+                                .map(col -> new Field(col.getName(), col.getType(),
+                                        tableName, null))
+                                .collect(Collectors.toList()))), connectContext);
+
     }
 
     /**
