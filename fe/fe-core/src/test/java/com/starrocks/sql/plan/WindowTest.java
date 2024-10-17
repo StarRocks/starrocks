@@ -461,7 +461,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
             sql = "select * from (\n" +
                     "    select *, " +
@@ -473,7 +473,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
         }
         {
@@ -488,7 +488,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
             sql = "select * from (\n" +
                     "    select *, " +
@@ -501,11 +501,11 @@ public class WindowTest extends PlanTestBase {
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
         }
         {
-            // Do not support dense_rank by now
+            // support dense_rank
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        dense_rank() over (partition by v3 order by v2) as rk " +
@@ -513,12 +513,14 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:SORT\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
-                    "  |  analytic partition by: 3: v3\n" +
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  type: DENSE_RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  0:OlapScanNode");
         }
         {
             // Support multi partition by.
@@ -532,7 +534,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -545,7 +547,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0");
         }
         FeConstants.runningUnitTest = false;
@@ -565,7 +567,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 5\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
         }
         {
@@ -576,11 +578,11 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "order by rk limit 10, 5";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 15\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
 
             sql = "select * from (\n" +
@@ -594,7 +596,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 15\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
         }
         {
@@ -650,7 +652,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  offset: 0");
         }
         {
-            // Do not support dense_rank by now
+            // support dense_rank by now
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        dense_rank() over (partition by v3 order by v2) as rk " +
@@ -658,12 +660,14 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "order by rk limit 5";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:SORT\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
-                    "  |  analytic partition by: 3: v3\n" +
+            assertContains(plan, "1:PARTITION-TOP-N\n" +
+                    "  |  type: DENSE_RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 5\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  0:OlapScanNode");
         }
         FeConstants.runningUnitTest = false;
     }
@@ -1078,23 +1082,29 @@ public class WindowTest extends PlanTestBase {
                     "where rk = 1 " +
                     "group by v1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:ANALYTIC\n" +
+            assertContains(plan, "3:ANALYTIC\n" +
                     "  |  functions: [, dense_rank(), ]\n" +
                     "  |  partition by: 1: v1\n" +
                     "  |  order by: 3: v3 ASC\n" +
                     "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
-                    "  1:SORT\n" +
+                    "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  analytic partition by: 1: v1\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: t0");
-            assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  type: DENSE_RANK\n" +
+                    "  |  partition by: 1: v1 \n" +
+                    "  |  partition limit: 1\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "6:AGGREGATE (update finalize)\n" +
                     "  |  group by: 1: v1\n" +
                     "  |  \n" +
-                    "  4:Project\n" +
+                    "  5:Project\n" +
                     "  |  <slot 1> : 1: v1");
         }
         {
@@ -1104,23 +1114,29 @@ public class WindowTest extends PlanTestBase {
                     "where rk = 1 " +
                     "group by v1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:ANALYTIC\n" +
+            assertContains(plan, "3:ANALYTIC\n" +
                     "  |  functions: [, dense_rank(), ]\n" +
                     "  |  partition by: 1: v1, 2: v2\n" +
                     "  |  order by: 3: v3 ASC\n" +
                     "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
-                    "  1:SORT\n" +
+                    "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  analytic partition by: 1: v1, 2: v2\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: t0");
-            assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  type: DENSE_RANK\n" +
+                    "  |  partition by: 1: v1 , 2: v2 \n" +
+                    "  |  partition limit: 1\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
                     "  |  group by: 1: v1\n" +
                     "  |  \n" +
-                    "  6:EXCHANGE");
+                    "  7:EXCHANGE");
         }
     }
 

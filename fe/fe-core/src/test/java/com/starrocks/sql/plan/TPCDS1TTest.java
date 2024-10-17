@@ -662,7 +662,7 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "  |  type: RANK\n" +
                 "  |  partition by: [13: i_category, VARCHAR, true] \n" +
                 "  |  partition limit: 1\n" +
-                "  |  order by: [13, VARCHAR, true] ASC, [63, INT, true] ASC, [65, INT, true] ASC\n" +
+                "  |  order by: [63, INT, true] ASC, [65, INT, true] ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 10");
     }
