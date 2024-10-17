@@ -107,6 +107,7 @@ Usage: $0 <options>
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+     --without-avx2     build Backend without avx2(instruction)    
      -h,--help          Show this help message
 
   Eg.
@@ -145,6 +146,7 @@ OPTS=$(getopt \
   -l 'skip-proguard' \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
+  -l 'without-avx2' \
   -l 'help' \
   -- "$@")
 
@@ -272,6 +274,7 @@ else
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --skip-proguard) SKIP_PROGUARD=true; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
