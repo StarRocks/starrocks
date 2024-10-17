@@ -88,7 +88,7 @@ sync;
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
 -- result:
 0
-{"meta":[{"name":"Table","type":"varchar(20)"},{"name":"Create Table","type":"varchar(30)"}],"data":[{"Table":"duplicate_table_with_null","Create Table":"CREATE TABLE `duplicate_table_with_null` (\n  `k1` date NULL COMMENT \"\",\n  `k2` datetime NULL COMMENT \"\",\n  `k3` char(20) NULL COMMENT \"\",\n  `k4` varchar(20) NULL COMMENT \"\",\n  `k5` boolean NULL COMMENT \"\",\n  `k6` tinyint(4) NULL COMMENT \"\",\n  `k7` smallint(6) NULL COMMENT \"\",\n  `k8` int(11) NULL COMMENT \"\",\n  `k9` bigint(20) NULL COMMENT \"\",\n  `k10` largeint(40) NULL COMMENT \"\",\n  `k11` float NULL COMMENT \"\",\n  `k12` double NULL COMMENT \"\",\n  `k13` decimal(27, 9) NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n\"bucket_size\" = \"4294967296\",\n\"compression\" = \"LZ4\",\n\"fast_schema_evolution\" = \"true\",\n\"replicated_storage\" = \"true\",\n\"replication_num\" = \"1\"\n);"}],"statistics":{"scanRows":0,"scanBytes":0,"returnRows":1}}
+{"meta":[{"name":"Table","type":"varchar(20)"},{"name":"Create Table","type":"varchar(30)"}],"data":[{"Table":"duplicate_table_with_null","Create Table":"CREATE TABLE `duplicate_table_with_null` (\n  `k1` date NULL COMMENT \"\",\n  `k2` datetime NULL COMMENT \"\",\n  `k3` char(20) NULL COMMENT \"\",\n  `k4` varchar(20) NULL COMMENT \"\",\n  `k5` boolean NULL COMMENT \"\",\n  `k6` tinyint(4) NULL COMMENT \"\",\n  `k7` smallint(6) NULL COMMENT \"\",\n  `k8` int(11) NULL COMMENT \"\",\n  `k9` bigint(20) NULL COMMENT \"\",\n  `k10` largeint(40) NULL COMMENT \"\",\n  `k11` float NULL COMMENT \"\",\n  `k12` double NULL COMMENT \"\",\n  `k13` decimal(27, 9) NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n\"bucket_size\" = \"4294967296\",\n\"compression\" = \"LZ4\",\n\"fast_schema_evolution\" = \"true\",\n\"replicated_storage\" = \"true\",\n\"replication_num\" = \"1\"\n);"}],"statistics":{"scanRows":0,"scanBytes":0,"scanPartitions":"","returnRows":1}}
 -- !result
 sync;
 -- result:
@@ -96,7 +96,7 @@ sync;
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show variables like \"broadcast_row_limit\";", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
 -- result:
 0
-{"meta":[{"name":"Variable_name","type":"varchar(20)"},{"name":"Value","type":"varchar(20)"}],"data":[{"Variable_name":"broadcast_row_limit","Value":"14000000"}],"statistics":{"scanRows":0,"scanBytes":0,"returnRows":1}}
+{"meta":[{"name":"Variable_name","type":"varchar(20)"},{"name":"Value","type":"varchar(20)"}],"data":[{"Variable_name":"broadcast_row_limit","Value":"14000000"}],"statistics":{"scanRows":0,"scanBytes":0,"scanPartitions":"","returnRows":1}}
 -- !result
 sync;
 -- result:
@@ -165,6 +165,75 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 -- result:
 0
 {"status":"FAILED","code":"1","msg":"Unknown thread id: 314159265432222","message":"Unknown thread id: 314159265432222"}
+-- !result
+sync;
+-- result:
+-- !result
+
+-- name: test_http_output_add_scan_partitions_audit
+create database test_add_scan_partitions_db;
+-- result:
+-- !result
+use test_add_scan_partitions_db;
+-- result:
+-- !result
+CREATE TABLE test_add_scan_partitions_1 (
+  `c1` string,
+  `c2` string,
+  `c3` string,
+  `ds` date
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+PARTITION BY RANGE(`ds`)
+(
+PARTITION p20241001 VALUES [("2024-10-01"), ("2024-10-02")),
+PARTITION p20241002 VALUES [("2024-10-02"), ("2024-10-03")))
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE test_add_scan_partitions_2 (
+    c1 string,
+    c2 string,
+    c3 string,
+    ds varchar(20)
+)
+DUPLICATE KEY(c1)
+PARTITION BY (ds,c3)
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE test_add_scan_partitions_3 (
+  `c1` string,
+  `c2` string,
+  `c3` string,
+  `ds` string
+) ENGINE=OLAP
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_add_scan_partitions_1(c1,c2,c3,ds) values('1','1','1','2024-10-01'),('2','2','2','2024-10-02');
+-- result:
+-- !result
+insert into test_add_scan_partitions_2(c1,c2,c3,ds) values('1','1','1','2024-10-01'),('2','2','2','2024-10-02');
+-- result:
+-- !result
+insert into test_add_scan_partitions_3(c1,c2,c3,ds) values('1','1','1','2024-10-01'),('2','2','2','2024-10-02');
+-- result:
+-- !result
+shell: echo `curl -s -X POST '${url}/api/v1/catalogs/default_catalog/databases/test_add_scan_partitions_db/sql' -u 'root:' -d '{"query": "select count(*) as row_num from test_add_scan_partitions_1 union all select count(*) as row_num from test_add_scan_partitions_2 union all select count(*) as row_num from test_add_scan_partitions_3;", "sessionVariables":{"enable_scan_partitions_audit":true}}' --header "Content-Type: application/json"`   | grep -o '"scanPartitions":"[^"]*"'
+-- result:
+0
+"scanPartitions":"[{catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_1,partitionIds:[p20241001, p20241002]}, {catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_2,partitionIds:[p20241001_1, p20241002_2]}, {catalogName:default_catalog,databaseName:test_add_scan_partitions_db,tableName:test_add_scan_partitions_3,partitionIds:[test_add_scan_partitions_3]}]"
 -- !result
 sync;
 -- result:
