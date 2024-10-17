@@ -16,7 +16,7 @@
 
 #ifdef __ARM_NEON
 #include <arrow/util/bpacking.h>
-#include <arrow/util/bpakcing_neon.h>
+#include <arrow/util/bpacking_neon.h>
 #endif
 #ifdef __AVX2__
 #include <arrow/util/bpacking.h>
