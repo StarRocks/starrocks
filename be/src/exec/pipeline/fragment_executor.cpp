@@ -407,10 +407,10 @@ static Status add_per_driver_scan_ranges_partition_values(RuntimeState* runtime_
     return Status::OK();
 }
 
-static bool has_more_per_driver_scan_ranges(const PerDriverScanRangesMap& map) {
+static bool has_more_per_driver_seq_scan_ranges(const PerDriverScanRangesMap& map) {
     bool has_more = false;
-    for (const auto& [_, sc] : map) {
-        has_more |= ScanMorsel::has_more_scan_ranges(sc);
+    for (const auto& [_, scan_ranges] : map) {
+        has_more |= ScanMorsel::has_more_scan_ranges(scan_ranges);
         if (has_more) return has_more;
     }
     return has_more;
@@ -544,7 +544,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
         RETURN_IF_ERROR(add_per_driver_scan_ranges_partition_values(runtime_state, scan_ranges_per_driver_seq));
         bool has_more_morsel = ScanMorsel::has_more_scan_ranges(scan_ranges) ||
-                               has_more_per_driver_scan_ranges(scan_ranges_per_driver_seq);
+                               has_more_per_driver_seq_scan_ranges(scan_ranges_per_driver_seq);
 
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
@@ -954,7 +954,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 continue;
             }
 
-            bool has_more_morsel = has_more_per_driver_scan_ranges(per_driver_scan_ranges);
+            bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
             for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
                 RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));

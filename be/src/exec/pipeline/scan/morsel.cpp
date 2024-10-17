@@ -120,6 +120,9 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
+// The reason why we want to expand size of this vector is support of incremental scan ranges delivery
+// Think about a case that in the initial round, there is 4 drivers assigned scan ranges, so vector size is 4
+// but in the next round, if there is 5 drivers assigned scan ranges, then we have to expane vector to 5.
 static void ensure_size_of_queue_per_drive_seq(std::vector<MorselQueuePtr>& _queue_per_driver_seq, int driver_seq) {
     int size = _queue_per_driver_seq.size();
     if (driver_seq >= size) {
