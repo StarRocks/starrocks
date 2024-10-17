@@ -42,6 +42,9 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import io.delta.kernel.types.BasePrimitiveType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.paimon.catalog.Catalog;
@@ -293,6 +296,11 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                     .add(new Column("col1", Type.INT))
                     .add(new Column("col2", Type.STRING))
                     .build();
+
+            StructType structType = new StructType(List.of(new StructField("col1",
+                            BasePrimitiveType.createPrimitive("integer"), false),
+                    new StructField("col2", BasePrimitiveType.createPrimitive("string"), false)));
+
             List<String> partitionNames = new ArrayList<>();
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,

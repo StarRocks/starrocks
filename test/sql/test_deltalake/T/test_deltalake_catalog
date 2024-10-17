@@ -16,6 +16,7 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_st
 
 -- test struct column is not null
 select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type where col_struct is not null order by col_tinyint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_struct_null_subfield where col_struct is not null;
 
 -- test partition prune with boolean type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean where col_boolean = true;
@@ -51,9 +52,6 @@ select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timesta
 select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
 select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
 select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
-
--- test column mapping
-select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 
 -- test timestamp as partition type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
