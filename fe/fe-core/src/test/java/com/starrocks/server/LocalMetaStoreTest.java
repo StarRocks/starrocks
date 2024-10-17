@@ -86,7 +86,6 @@ public class LocalMetaStoreTest {
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @Test

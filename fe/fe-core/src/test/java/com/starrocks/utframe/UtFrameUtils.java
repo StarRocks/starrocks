@@ -66,7 +66,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
@@ -83,7 +82,6 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -1041,7 +1039,6 @@ public class UtFrameUtils {
 
     public static void setUpForPersistTest() {
         PseudoJournalReplayer.setUp();
-        PseudoImage.setUpImageVersion();
     }
 
     public static void tearDownForPersisTest() {
@@ -1052,20 +1049,11 @@ public class UtFrameUtils {
      * pseudo image is used to test if image is wrote correctly.
      */
     public static class PseudoImage {
-        private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
         private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        public static void setUpImageVersion() {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
-            metaContext.setThreadLocalInfo();
-            isSetup.set(true);
-        }
-
         public PseudoImage() throws IOException {
-            assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
             imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
             imageWriter.setOutputStream(buffer);
