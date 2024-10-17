@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -51,6 +52,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,6 +95,12 @@ public class ShowMetaInfoAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String action = request.getSingleParameter("action");
+        // check param empty
+        if (Strings.isNullOrEmpty(action)) {
+            response.appendContent("Missing parameter");
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+            return;
+        }
         Gson gson = new Gson();
         response.setContentType("application/json");
 
@@ -107,7 +115,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
                 response.getContent().append(gson.toJson(getHaInfo()));
                 break;
             default:
-                break;
+                // clear content type set above
+                response.setContentType(null);
+                response.appendContent("Invalid parameter");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
         }
         sendResult(request, response);
     }
