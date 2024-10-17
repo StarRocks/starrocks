@@ -79,4 +79,10 @@ public:
 private:
     Allocator* _prev = nullptr;
 };
+
+#define SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalColumnAllocatorSetter(allocator)
+
+;
+
 } // namespace starrocks

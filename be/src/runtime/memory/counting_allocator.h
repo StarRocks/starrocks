@@ -18,7 +18,7 @@
 #include <memory>
 
 #include "common/compiler_util.h"
-#include "exprs/expr_context.h"
+#include "glog/logging.h"
 #include "runtime/memory/allocator.h"
 #include "runtime/memory/mem_hook_allocator.h"
 
