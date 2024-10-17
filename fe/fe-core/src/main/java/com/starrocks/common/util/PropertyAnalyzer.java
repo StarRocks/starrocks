@@ -194,6 +194,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+    public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -502,13 +503,15 @@ public class PropertyAnalyzer {
         return partitionRefreshNumber;
     }
 
-    public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv) {
+    public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
+                                                        String propertiesKey,
+                                                        MaterializedView mv) {
         if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
-            throw new SemanticException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
+            throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
         }
         List<TableName> tables = Lists.newArrayList();
-        if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        if (properties != null && properties.containsKey(propertiesKey)) {
+            String tableStr = properties.get(propertiesKey);
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
@@ -519,7 +522,7 @@ public class PropertyAnalyzer {
                             " is not base table of materialized view " + mv.getName());
                 }
             }
-            properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+            properties.remove(propertiesKey);
         }
         return tables;
     }
@@ -1458,22 +1461,23 @@ public class PropertyAnalyzer {
             }
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
-                StringBuilder tableSb = new StringBuilder();
-                for (int i = 1; i <= tables.size(); i++) {
-                    TableName tableName = tables.get(i - 1);
-                    if (tableName.getDb() == null) {
-                        tableSb.append(tableName.getTbl());
-                    } else {
-                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
-                    }
-                    if (i != tables.size()) {
-                        tableSb.append(",");
-                    }
-                }
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb);
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            // exclude refresh base tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, tableSb);
+                materializedView.getTableProperty().setExcludedRefreshTables(tables);
             }
             // resource_group
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
@@ -1624,6 +1628,23 @@ public class PropertyAnalyzer {
             }
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
+    }
+
+    @NotNull
+    private static String getExcludeString(List<TableName> tables) {
+        StringBuilder tableSb = new StringBuilder();
+        for (int i = 1; i <= tables.size(); i++) {
+            TableName tableName = tables.get(i - 1);
+            if (tableName.getDb() == null) {
+                tableSb.append(tableName.getTbl());
+            } else {
+                tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+            }
+            if (i != tables.size()) {
+                tableSb.append(",");
+            }
+        }
+        return tableSb.toString();
     }
 
     @NotNull
