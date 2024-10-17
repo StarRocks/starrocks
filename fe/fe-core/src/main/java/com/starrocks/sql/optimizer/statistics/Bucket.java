@@ -43,4 +43,8 @@ public class Bucket {
     public Long getUpperRepeats() {
         return upperRepeats;
     }
+
+    public boolean isOverlapped(Bucket other) {
+        return Math.min(upper, other.upper) - Math.max(lower, other.lower) > 0;
+    }
 }

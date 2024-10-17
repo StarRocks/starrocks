@@ -111,6 +111,19 @@ public class StatisticRangeValues {
         return StatisticsEstimateCoefficient.OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT;
     }
 
+    double overlapLength(StatisticRangeValues other) {
+        if (this.isEmpty() || other.isEmpty()) {
+            return 0.0;
+        }
+        // If the low and high values is infinite, it represents either string type or unknown of column statistics.
+        if (this.equals(other) && !isBothInfinite()) {
+            return 1.0;
+        }
+
+        double lengthOfIntersect = min(this.high, other.high) - max(this.low, other.low);
+        return lengthOfIntersect;
+    }
+
     public StatisticRangeValues intersect(StatisticRangeValues other) {
         double newLow = max(low, other.low);
         double newHigh = min(high, other.high);
