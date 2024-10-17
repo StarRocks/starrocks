@@ -65,6 +65,15 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         return partitionItems;
     }
 
+    @Override
+    public boolean isIntersected(PCell o) {
+        if (!(o instanceof PListCell)) {
+            return false;
+        }
+        PListCell other = (PListCell) o;
+        return CollectionUtils.containsAny(partitionItems, other.partitionItems);
+    }
+
     public int getItemSize() {
         if (partitionItems == null) {
             return 0;

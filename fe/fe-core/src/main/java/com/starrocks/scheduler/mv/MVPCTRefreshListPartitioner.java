@@ -48,6 +48,7 @@ import com.starrocks.sql.common.ListPartitionDiff;
 import com.starrocks.sql.common.ListPartitionDiffResult;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -216,8 +217,38 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             }
         } else {
             // check the ref base table
-            return getMvPartitionNamesToRefresh(mvListPartitionNames);
+            Set<String> needRefreshMvPartitionNames = getMvPartitionNamesToRefresh(mvListPartitionNames);
+            Map<Table, Set<String>> baseChangedPartitionNames =
+                    getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
+            if (baseChangedPartitionNames.isEmpty()) {
+                LOG.info("Cannot get associated base table change partitions from mv's refresh partitions {}, mv: {}",
+                        needRefreshMvPartitionNames, mv.getName());
+                return needRefreshMvPartitionNames;
+            }
+            // because the relation of partitions between materialized view and base partition table is n : m,
+            // should calculate the candidate partitions recursively.
+            if (isCalcPotentialRefreshPartition()) {
+                LOG.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+                SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                        mvContext.getRefBaseTableMVIntersectedPartitions(),
+                        mvContext.getMvRefBaseTableIntersectedPartitions(),
+                        mvPotentialPartitionNames);
+                LOG.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+            }
+            return needRefreshMvPartitionNames;
         }
+    }
+
+    public boolean isCalcPotentialRefreshPartition() {
+        // TODO: If base table's list partitions contain multi values, should calculate potential partitions.
+        // Only check base table's partition values intersection with mv's to-refresh partitions later.
+        Map<Table, Map<String, PListCell>> refBaseTableRangePartitionMap =
+                mvContext.getRefBaseTableListPartitionMap();
+        return refBaseTableRangePartitionMap.entrySet()
+                .stream()
+                .anyMatch(e -> e.getValue().values().stream().anyMatch(l -> l.getItemSize() > 1));
     }
 
     @Override
