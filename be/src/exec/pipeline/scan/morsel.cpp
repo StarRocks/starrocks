@@ -68,7 +68,7 @@ size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
 
-Status SharedMorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+Status SharedMorselQueueFactory::append_morsels([[maybe_unused]] int driver_seq, Morsels&& morsels, bool has_more) {
     RETURN_IF_ERROR(_queue->append_morsels(std::move(morsels)));
     _queue->set_has_more(has_more);
     return Status::OK();
@@ -82,8 +82,8 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
     return total;
 }
 
-Status MorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
-    return Status::NotSupported("append_morsels not supported");
+Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels, bool has_more) {
+    return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -106,6 +106,12 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
+Status IndividualMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels, bool has_more) {
+    RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
+    _queue_per_driver_seq[driver_seq]->set_has_more(has_more);
+    return Status::OK();
+}
+
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
                                                                    bool could_local_shuffle)
         : _could_local_shuffle(could_local_shuffle) {
@@ -124,6 +130,12 @@ BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int,
             _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
         }
     }
+}
+
+Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels, bool has_more) {
+    RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
+    _queue_per_driver_seq[driver_seq]->set_has_more(has_more);
+    return Status::OK();
 }
 
 size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
@@ -155,7 +167,7 @@ void MorselQueue::unget(MorselPtr&& morsel) {
 }
 
 Status MorselQueue::append_morsels(Morsels&& morsels) {
-    return Status::NotSupported("append_morsels not supported");
+    return Status::NotSupported("MorselQueue::append_morsels not supported");
 }
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {

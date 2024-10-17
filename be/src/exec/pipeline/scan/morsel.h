@@ -248,7 +248,7 @@ public:
     virtual bool is_shared() const = 0;
     virtual bool could_local_shuffle() const = 0;
 
-    virtual Status append_morsels(Morsels&& morsels, bool has_more);
+    virtual Status append_morsels(int driver_seq, Morsels&& morsels, bool has_more);
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -263,7 +263,7 @@ public:
     bool is_shared() const override { return true; }
     bool could_local_shuffle() const override { return true; }
 
-    Status append_morsels(Morsels&& morsels, bool has_more) override;
+    Status append_morsels(int driver_seq, Morsels&& morsels, bool has_more) override;
 
 private:
     MorselQueuePtr _queue;
@@ -287,6 +287,8 @@ public:
     bool is_shared() const override { return false; }
     bool could_local_shuffle() const override { return _could_local_shuffle; }
 
+    Status append_morsels(int driver_seq, Morsels&& morsels, bool has_more) override;
+
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
     const bool _could_local_shuffle;
@@ -309,6 +311,8 @@ public:
     bool is_shared() const override { return false; }
 
     bool could_local_shuffle() const override { return _could_local_shuffle; }
+
+    Status append_morsels(int driver_seq, Morsels&& morsels, bool has_more) override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
