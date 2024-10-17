@@ -21,6 +21,7 @@
 #include <string>
 #include <thread>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -119,6 +120,9 @@ static Status call_method(const TNetworkAddress& broker, Method method, const Re
                         fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
             }
         } catch (apache::thrift::TException& e) {
+#ifndef BE_TEST
+            (void)conn.reopen(config::thrift_rpc_timeout_ms);
+#endif
             return Status::ThriftRpcError(
                     fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
         }
