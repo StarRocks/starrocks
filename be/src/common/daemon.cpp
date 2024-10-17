@@ -169,7 +169,7 @@ void calculate_metrics(void* arg_this) {
                 "Current memory statistics: process({}), query_pool({}), load({}), "
                 "metadata({}), compaction({}), schema_change({}), "
                 "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
-                "datacache({}), jit({}))",
+                "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
