@@ -8,6 +8,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.TableVersionRange;
@@ -64,7 +66,8 @@ public class DeltaUnityMetadataTest {
         DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(
                 CachingDeltaLakeMetastore.createQueryLevelInstance(unityBackedDeltaLakeMetastore, 10000),
                 false, MetastoreType.UNITY);
-        deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0", metastoreOperations, null);
+        deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0", metastoreOperations, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
     }
 
     @Test

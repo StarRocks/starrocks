@@ -19,6 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
@@ -51,6 +53,7 @@ public class IcebergConnector implements Connector {
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
+    private final ConnectorProperties connectorProperties;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -58,6 +61,7 @@ public class IcebergConnector implements Connector {
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
+        this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -87,7 +91,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties);
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties, connectorProperties);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
