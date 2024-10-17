@@ -725,6 +725,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockT1WithMultiPartitionColumns(); // t1_par
         mockT2WithMultiPartitionColumns(); // t2_par
         mockT1WithNullPartitionColumns(); // t1_par_null
+        mockT2WithNullPartitionColumns(); // t2_par_null
         mockTablesWithSinglePartitionColumn();
         mockOrders();
         mockWithMultiDuplicatePartitionColumns();
@@ -1601,6 +1602,65 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
         mockTables.put(t2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t2, MOCKED_HIVE_CATALOG_NAME),
                 partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+    }
+
+    public static void mockT2WithNullPartitionColumns() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c1", "int", null));
+        cols.add(new FieldSchema("c2", "string", null));
+        cols.add(new FieldSchema("c3", "string", null));
+
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+        Table t1 = new Table("t2_par_null", "partitioned_db", null, 0, 0, 0, sd,
+                ImmutableList.of(new FieldSchema("par_date", "string", null)), Maps.newHashMap(), null, null,
+                "EXTERNAL_TABLE");
+        List<String> partitionNames = Lists.newArrayList("par_date=2020-01-01", "par_date=2020-01-02",
+                "par_date=2020-01-03",  "par_date=2020-01-04", "par_date=__HIVE_DEFAULT_PARTITION__");
+        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+        double avgNumPerPartition = (double) (100 / 3);
+        double rowCount = 100;
+
+        List<PartitionKey> partitionKeyList = Lists.newArrayList();
+        Column partitionColumn1 = new Column("par_date", Type.STRING);
+        List<Column> partitionColumns = ImmutableList.of(partitionColumn1);
+        try {
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("2020-01-01"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("2020-01-02"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("2020-01-03"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("2020-01-04"), partitionColumns));
+            partitionKeyList.add(
+                    PartitionUtil.createPartitionKey(ImmutableList.of("__HIVE_DEFAULT_PARTITION__"), partitionColumns));
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<String> partitionColumnNames = ImmutableList.of("par_date");
+        ColumnStatistic partitionColumnStats1 =
+                getPartitionColumnStatistic(partitionColumn1, partitionKeyList, partitionColumnNames,
+                        hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+        Map<String, ColumnStatistic> columnStatisticMap;
+        List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+        columnStatisticMap =
+                colNames.stream().collect(Collectors.toMap(Function.identity(), col -> ColumnStatistic.unknown()));
+        columnStatisticMap.put("par_date", partitionColumnStats1);
+
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        partitionNames.forEach(
+                k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+
+        mockTables.put(t1.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
+                        partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
     }
 
     public static void mockTablesWithSinglePartitionColumn() {
