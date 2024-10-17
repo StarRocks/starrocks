@@ -28,6 +28,7 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -121,6 +122,9 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
 
+    @SerializedName("location")
+    private Map<String, String> location = new HashMap<>();
+
     // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
     @SerializedName("status")
     private Status status;
@@ -163,6 +167,7 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = Backend.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.location = new HashMap<>();
         this.status = Status.CONNECTING;
     }
 
@@ -182,6 +187,7 @@ public class ComputeNode implements IComputable, Writable {
 
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.location = location;
         this.status = Status.CONNECTING;
     }
 
@@ -282,6 +288,20 @@ public class ComputeNode implements IComputable, Writable {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public Map<String, String> getLocation() {
+        if (location.isEmpty()) {
+            Map<String, String> loc = new HashMap<>();
+            loc.put(SessionVariable.DEFAULT_NODE_LABELS_LOCATION.split(":")[0],
+                    SessionVariable.DEFAULT_NODE_LABELS_LOCATION.split(":")[1]);
+            return loc;
+        }
+        return location;
+    }
+
+    public void setLocation(Map<String, String> location) {
+        this.location = location;
     }
 
     // For TEST ONLY
