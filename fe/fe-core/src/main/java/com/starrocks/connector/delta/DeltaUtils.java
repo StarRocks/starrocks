@@ -43,24 +43,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
+import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class DeltaUtils {
     private static final Logger LOG = LogManager.getLogger(DeltaUtils.class);
 
-    public static void checkTableFeatureSupported(Protocol protocol, Metadata metadata) {
+    public static void checkProtocolAndMetadata(Protocol protocol, Metadata metadata) {
         if (protocol == null || metadata == null) {
             LOG.error("Delta table is missing protocol or metadata information.");
             ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
                     "Delta table is missing protocol or metadata information.");
-        }
-        // check column mapping
-        String columnMappingMode = ColumnMapping.getColumnMappingMode(metadata.getConfiguration());
-        if (!columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NONE)) {
-            LOG.error("Delta table feature column mapping is not supported");
-            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
-                    "Delta table feature [column mapping] is not supported");
         }
     }
 
@@ -85,23 +79,41 @@ public class DeltaUtils {
                     "%s.%s.%s", catalog, dbName, tblName));
         }
 
+        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshot.getMetadata().getConfiguration());
         List<Column> fullSchema = Lists.newArrayList();
         for (StructField field : deltaSchema.fields()) {
             DataType dataType = field.getDataType();
             Type type;
             try {
-                type = ColumnTypeConverter.fromDeltaLakeType(dataType);
+                type = ColumnTypeConverter.fromDeltaLakeType(dataType, columnMappingMode);
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.toString(), catalog, dbName, tblName, e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(field.getName(), type, true);
+            Column column = buildColumnWithColumnMapping(field, type, columnMappingMode);
             fullSchema.add(column);
         }
 
-        return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName,
-                fullSchema, Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
+        return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
+                Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
                 deltaEngine, createTime);
+    }
+
+    public static Column buildColumnWithColumnMapping(StructField field, Type type, String columnMappingMode) {
+        String columnName = field.getName();
+        int columnUniqueId = COLUMN_UNIQUE_ID_INIT_VALUE;
+        String physicalName = "";
+
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+            columnUniqueId = ((Long)  field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
+        }
+        if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+            physicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+        }
+        return new Column(columnName, type, false, null, null, true,
+                null, "", columnUniqueId, physicalName);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {

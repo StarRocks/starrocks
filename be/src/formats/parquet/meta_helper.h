@@ -50,14 +50,13 @@ public:
     virtual ~MetaHelper() = default;
 
     virtual void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                                 const tparquet::RowGroup& row_group,
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                       std::vector<GroupReaderParam::Column>& read_cols,
                                       std::unordered_set<std::string>& existed_column_names) const = 0;
 
-    virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
+    virtual const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const = 0;
 
     const tparquet::ColumnMetaData* get_column_meta(
             const std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
@@ -101,13 +100,12 @@ public:
     ~ParquetMetaHelper() override = default;
 
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                         const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
 
-    const ParquetField* get_parquet_field(const std::string& col_name) const override;
+    const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const override;
 
 private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
@@ -125,12 +123,11 @@ public:
     ~IcebergMetaHelper() override = default;
 
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                         const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
-    const ParquetField* get_parquet_field(const std::string& col_name) const override;
+    const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const override;
 
 private:
     void _init_field_mapping();

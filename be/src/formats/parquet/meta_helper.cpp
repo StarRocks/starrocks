@@ -23,21 +23,44 @@
 namespace starrocks::parquet {
 
 void ParquetMetaHelper::build_column_name_2_pos_in_meta(
-        std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
+        std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
         const std::vector<SlotDescriptor*>& slots) const {
+    auto& schema = _file_metadata->schema();
     for (const auto& slot : slots) {
-        const std::string format_slot_name = Utils::format_name(slot->col_name(), _case_sensitive);
-        for (size_t idx = 0; idx < row_group.columns.size(); idx++) {
-            const auto& column = row_group.columns[idx];
-            // TODO Not support for non-scalar types now.
-            const std::string format_column_name =
-                    Utils::format_name(column.meta_data.path_in_schema[0], _case_sensitive);
-            if (format_column_name == format_slot_name) {
-                // Put SlotDesc's origin column name here!
-                column_name_2_pos_in_meta.emplace(slot->col_name(), idx);
-                break;
-            }
+        const ParquetField* field = nullptr;
+        if (slot->col_unique_id() != -1) {
+            field = schema.get_stored_column_by_field_id(slot->col_unique_id());
+        } else if (!slot->col_physical_name().empty()) {
+            field = schema.get_stored_column_by_column_name(
+                    Utils::format_name(slot->col_physical_name(), _case_sensitive));
+        } else {
+            field = schema.get_stored_column_by_column_name(Utils::format_name(slot->col_name(), _case_sensitive));
         }
+
+        // After the column is added, there is no new column when querying the previously
+        // imported parquet file. It is skipped here, and this column will be set to NULL
+        // in the FileReader::_read_min_max_chunk.
+        if (field == nullptr) continue;
+        // For field which type is complex, the filed physical_column_index in file meta is not same with the column index
+        // in row_group's column metas
+        // For example:
+        // table schema :
+        //  -- col_tinyint tinyint
+        //  -- col_struct  struct
+        //  ----- name     string
+        //  ----- age      int
+        // file metadata schema :
+        //  -- ParquetField(name=col_tinyint, physical_column_index=0)
+        //  -- ParquetField(name=col_struct,physical_column_index=0,
+        //                  children=[ParquetField(name=name, physical_column_index=1),
+        //                            ParquetField(name=age, physical_column_index=2)])
+        // row group column metas:
+        //  -- ColumnMetaData(path_in_schema=[col_tinyint])
+        //  -- ColumnMetaData(path_in_schema=[col_struct, name])
+        //  -- ColumnMetaData(path_in_schema=[col_struct, age])
+        if (field->type.is_complex_type()) continue;
+        // Put SlotDescriptor's origin column name here!
+        column_name_2_pos_in_meta.emplace(slot->col_name(), field->physical_column_index);
     }
 }
 
@@ -45,8 +68,19 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
-        int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
-        if (field_idx < 0) continue;
+        SlotDescriptor* slotDesc = materialized_column.slot_desc;
+
+        int32_t field_idx = -1;
+        if (slotDesc->col_unique_id() != -1) {
+            field_idx = _file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
+            if (field_idx < 0) continue;
+        } else if (!slotDesc->col_physical_name().empty()) {
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_physical_name());
+            if (field_idx < 0) continue;
+        } else {
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
+            if (field_idx < 0) continue;
+        }
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is type is invalid
@@ -87,22 +121,50 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             }
         }
     } else if (parquet_field->type.is_struct_type()) {
-        std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
-        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-            field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
-                                      &type_descriptor->children[idx]);
-        }
-
-        // start to check struct type
-        for (const auto& child_parquet_field : parquet_field->children) {
-            auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
-            if (it == field_name_2_type.end()) {
-                continue;
+        if (!type_descriptor->field_ids.empty()) {
+            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
+            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
             }
 
-            if (_is_valid_type(&child_parquet_field, it->second)) {
-                has_valid_child = true;
-                break;
+            // start to check struct type
+            for (const auto& child_parquet_field : parquet_field->children) {
+                auto it = field_id_2_type.find(child_parquet_field.field_id);
+                if (it == field_id_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second)) {
+                    has_valid_child = true;
+                    break;
+                }
+            }
+        } else {
+            std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type;
+            if (!type_descriptor->field_physical_names.empty()) {
+                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                    field_name_2_type.emplace(
+                            Utils::format_name(type_descriptor->field_physical_names[idx], _case_sensitive),
+                            &type_descriptor->children[idx]);
+                }
+            } else {
+                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                    field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
+                                              &type_descriptor->children[idx]);
+                }
+            }
+
+            // start to check struct type
+            for (const auto& child_parquet_field : parquet_field->children) {
+                auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
+                if (it == field_name_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second)) {
+                    has_valid_child = true;
+                    break;
+                }
             }
         }
     }
@@ -110,8 +172,14 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
-const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_name) const {
-    return _file_metadata->schema().get_stored_column_by_column_name(col_name);
+const ParquetField* ParquetMetaHelper::get_parquet_field(const SlotDescriptor* slot_desc) const {
+    if (slot_desc->col_unique_id() != -1) {
+        return _file_metadata->schema().get_stored_column_by_field_id(slot_desc->col_unique_id());
+    } else if (!slot_desc->col_physical_name().empty()) {
+        return _file_metadata->schema().get_stored_column_by_column_name(slot_desc->col_physical_name());
+    } else {
+        return _file_metadata->schema().get_stored_column_by_column_name(slot_desc->col_name());
+    }
 }
 
 void IcebergMetaHelper::_init_field_mapping() {
@@ -180,7 +248,7 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
 }
 
 void IcebergMetaHelper::build_column_name_2_pos_in_meta(
-        std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
+        std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
         const std::vector<SlotDescriptor*>& slots) const {
     for (const auto& slot : slots) {
         auto it = _field_name_2_iceberg_field.find(Utils::format_name(slot->col_name(), _case_sensitive));
@@ -228,8 +296,8 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
     }
 }
 
-const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {
-    auto it = _field_name_2_iceberg_field.find(Utils::format_name(col_name, _case_sensitive));
+const ParquetField* IcebergMetaHelper::get_parquet_field(const SlotDescriptor* slot_desc) const {
+    auto it = _field_name_2_iceberg_field.find(Utils::format_name(slot_desc->col_name(), _case_sensitive));
     if (it == _field_name_2_iceberg_field.end()) {
         return nullptr;
     }
