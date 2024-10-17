@@ -261,7 +261,9 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
         }
     }
 
-    CHECK(dst->append_strings_overflow(slices, _max_value_legth));
+    bool ok = dst->append_strings_overflow(slices, _max_value_legth);
+    DCHECK(ok) << "append_strings_overflow failed";
+    RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch failed"));
     return Status::OK();
 }
 
