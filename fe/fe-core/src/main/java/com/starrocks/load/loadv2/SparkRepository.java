@@ -110,6 +110,14 @@ public class SparkRepository {
         }
     }
 
+    public String getCurrentDppVersion() {
+        return currentDppVersion;
+    }
+
+    public String getRemoteRepositoryPath() {
+        return remoteRepositoryPath;
+    }
+
     public void prepare() throws LoadException {
         initRepository();
     }
@@ -236,7 +244,7 @@ public class SparkRepository {
         }
     }
 
-    private void getLibraries(String remoteArchivePath, List<SparkLibrary> libraries) throws LoadException {
+    public void getLibraries(String remoteArchivePath, List<SparkLibrary> libraries) throws LoadException {
         List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
         try {
             if (brokerDesc.hasBroker()) {
@@ -360,7 +368,7 @@ public class SparkRepository {
 
     // eg:
     // .../__spark_repository__/__archive_1_0_0
-    private String getRemoteArchivePath(String version) {
+    public String getRemoteArchivePath(String version) {
         return Joiner.on(PATH_DELIMITER).join(remoteRepositoryPath, joinPrefix(PREFIX_ARCHIVE, version));
     }
 
@@ -423,4 +431,19 @@ public class SparkRepository {
             this.size = size;
         }
     }
+
+    public void delete(String destFilePath) throws LoadException {
+        try {
+            if (brokerDesc.hasBroker()) {
+                BrokerUtil.deletePath(destFilePath, brokerDesc);
+            } else {
+                HdfsUtil.deletePath(destFilePath, brokerDesc);
+            }
+            LOG.info("finished to delete file, destFilePath={}", destFilePath);
+        } catch (UserException e) {
+            throw new LoadException("failed to upload lib to repository, " +
+                    "destPath=" + destFilePath + " message=" + e.getMessage());
+        }
+    }
+
 }
