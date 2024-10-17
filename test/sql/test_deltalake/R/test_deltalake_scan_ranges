@@ -234,10 +234,6 @@ select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' a
 2	2024-01-03 04:05:06
 4	2024-01-04 01:02:03
 -- !result
-select * from delta_test_column_mapping;
--- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_33e83c7a4b264588b7f98b97ae9fe93a.delta_test_column_mapping'.")
--- !result
 select * from delta_lake_par_col_timestamp order by col_smallint;
 -- result:
 1	1	2024-01-01 01:01:01
@@ -281,10 +277,6 @@ select * from t_partition_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 0
 1	2024-01-02 01:02:03
 2	2024-01-03 04:05:06
 4	2024-01-04 01:02:03
--- !result
-select * from delta_lake_par_col_double order by col_smallint;
--- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_33e83c7a4b264588b7f98b97ae9fe93a.delta_lake_par_col_double'.")
 -- !result
 select * from delta_lake_par_null order by col_smallint;
 -- result:
