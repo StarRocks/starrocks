@@ -762,7 +762,6 @@ public class OlapTable extends Table {
             Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
             idToPartition.clear();
             physicalPartitionIdToPartitionId.clear();
-            physicalPartitionNameToPartitionId.clear();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 long newPartId = globalStateMgr.getNextId();
                 // preserve existing info
@@ -773,15 +772,7 @@ public class OlapTable extends Table {
                 // replace with new info
                 rangePartitionInfo.addPartition(newPartId, false, range, dataProperty, (short) restoreReplicationNum,
                         inMemory, dataCacheInfo);
-<<<<<<< HEAD
-
-                idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
-                    physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
-                });
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
-=======
                 idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
->>>>>>> 47314a629d ([BugFix] Fix reset ids for restore (#51630))
                 Partition partition = idToPartition.get(newPartId);
                 partition.setIdForRestore(newPartId);
                 List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
@@ -797,7 +788,6 @@ public class OlapTable extends Table {
                         partition.addSubPartition(physicalPartition);
                     }
                     physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
                 });
             }
         } else if (partitionInfo.isUnPartitioned()) {
@@ -809,7 +799,6 @@ public class OlapTable extends Table {
             Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
             idToPartition.clear();
             physicalPartitionIdToPartitionId.clear();
-            physicalPartitionNameToPartitionId.clear();
             long newPartId = globalStateMgr.getNextId();
             for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
                 DataProperty dataProperty = origPartitionInfo.getDataProperty(entry.getValue());
@@ -836,36 +825,7 @@ public class OlapTable extends Table {
                 });
             }
         } else {
-<<<<<<< HEAD
-            // Single partitioned
-            long newPartId = globalStateMgr.getNextId();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                DataProperty dataProperty = partitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = partitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(entry.getValue());
-                partitionInfo.dropPartition(entry.getValue());
-                partitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum, inMemory,
-                        dataCacheInfo);
-
-                idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
-                    physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
-                });
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                partition.getSubPartitions().forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                });
-            }
-=======
             return new Status(ErrCode.UNSUPPORTED, "List partitioned table does not support restore");
->>>>>>> 47314a629d ([BugFix] Fix reset ids for restore (#51630))
         }
 
         // reset replication number for olaptable
