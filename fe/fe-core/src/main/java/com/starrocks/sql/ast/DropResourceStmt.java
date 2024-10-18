@@ -19,15 +19,22 @@ import com.starrocks.sql.parser.NodePosition;
 
 // DROP RESOURCE resource_name
 public class DropResourceStmt extends DdlStmt {
+    private final boolean ifExists;
+
     private final String resourceName;
 
-    public DropResourceStmt(String resourceName) {
-        this(resourceName, NodePosition.ZERO);
+    public DropResourceStmt(boolean ifExists, String resourceName) {
+        this(ifExists, resourceName, NodePosition.ZERO);
     }
 
-    public DropResourceStmt(String resourceName, NodePosition pos) {
+    public DropResourceStmt(boolean ifExists, String resourceName, NodePosition pos) {
         super(pos);
+        this.ifExists = ifExists;
         this.resourceName = resourceName;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     public String getResourceName() {
