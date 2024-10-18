@@ -68,3 +68,76 @@ select array_position(v2, [1.1]) from t;
 select array_position(v3, [[1.1]]) from t;
 select array_position(v2, v1) from t;
 select array_position(v3, v2) from t;
+
+-- name: test_array_contains_all_and_seq
+CREATE TABLE t (
+  k bigint(20) NOT NULL,
+  arr_0 array<bigint(20)> NOT NULL,
+  arr_1 array<bigint(20)>,
+  arr_2 array<bigint(20)>
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t values 
+(1, [1,2,3], [1,2], [1]),
+(2, [1,2,null], [1,null], [null]),
+(3, [1,2,null],[3],[3]),
+(4, [1,2,null], null, [1,2,null]),
+(5, [1,2,null], [1,2,null], null),
+(6, [1,2,3],[],[]),
+(7, [null,null], [null,null,null], [null,null]),
+(8, [1,1,1,1,1,2], [1,2], [1]),
+(9, [1,1,1,1,1,null,2],[1,null,2],[null,2]);
+select array_contains_all(arr_0, arr_1) from t order by k;
+select array_contains_all(arr_1, arr_0) from t order by k;
+select array_contains_all(arr_0, arr_2) from t order by k;
+select array_contains_all(arr_2, arr_0) from t order by k;
+select array_contains_all(arr_1, arr_2) from t order by k;
+select array_contains_all(arr_2, arr_1) from t order by k;
+select array_contains_all([1,2,3,4], arr_0) from t order by k;
+select array_contains_all([1,2,3,4], arr_1) from t order by k;
+select array_contains_all([1,2,3,4,null], arr_1) from t order by k;
+select array_contains_all(arr_0, [1,null]) from t order by k;
+select array_contains_all(arr_0, []) from t order by k;
+select array_contains_all(null, arr_0) from t order by k;
+select array_contains_all(arr_1, null) from t order by k;
+
+set @arr0 = array_repeat("abcdefg", 10000);
+set @arr1 = array_repeat("abcdef", 100000);
+select array_contains_all(@arr0, @arr1);
+set @arr0 = array_generate(10000);
+set @arr1 = array_generate(20000);
+select array_contains_all(@arr0, @arr1);
+select array_contains_all(@arr1, @arr0);
+
+select array_contains_seq(arr_0, arr_1) from t order by k;
+select array_contains_seq(arr_1, arr_0) from t order by k;
+select array_contains_seq(arr_0, arr_2) from t order by k;
+select array_contains_seq(arr_2, arr_0) from t order by k;
+select array_contains_seq(arr_1, arr_2) from t order by k;
+select array_contains_seq(arr_2, arr_1) from t order by k;
+select array_contains_seq([1,2,3,4], arr_0) from t order by k;
+select array_contains_seq([1,2,3,4], arr_1) from t order by k;
+select array_contains_seq([1,2,3,4,null], arr_1) from t order by k;
+select array_contains_seq(arr_0, [1,null]) from t order by k;
+select array_contains_seq(arr_0, []) from t order by k;
+select array_contains_seq(null, arr_0) from t order by k;
+select array_contains_seq(arr_1, null) from t order by k;
+
+select array_contains_seq([1,1,2,3],[1,1]);
+select array_contains_seq([1,1,2,3],[1,2]);
+select array_contains_seq([1,1,2,3],[1,3]);
+select array_contains_seq([1,1,2,3],[2,3]);
+select array_contains_seq([1,1,2,3],[1,1,2]);
+select array_contains_seq([null,null,1,2],[null]);
+select array_contains_seq([null,null,1,2],[null,null]);
+select array_contains_seq([null,null,1,2],[null,1]);
+select array_contains_seq([null,null,1,2],[null,null,1]);
+select array_contains_seq([null,null,1,2],[null,1,2]);
+
+set @arr0 = array_append(array_repeat(1, 10000), 2);
+set @arr1 = array_append(array_repeat(1, 5000), 2);
+select array_contains_seq(@arr0, @arr1);
