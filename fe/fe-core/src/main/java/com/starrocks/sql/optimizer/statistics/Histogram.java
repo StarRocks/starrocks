@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
 
@@ -63,10 +65,6 @@ public class Histogram {
         return sb.toString();
     }
 
-    public List<Bucket> getOverlapped(Bucket bucket) {
-
-    }
-
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
         Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
                 constantOperator.toString());
@@ -108,5 +106,24 @@ public class Histogram {
         }
 
         return Optional.empty();
+    }
+
+    static class Builder {
+        private final List<Bucket> buckets = Lists.newArrayList();
+        private final Map<String, Long> mcv = Maps.newHashMap();
+
+        public Builder addBucket(Bucket bucket) {
+            this.buckets.add(bucket);
+            return this;
+        }
+
+        public Builder addCommonValue(String key, Long count) {
+            this.mcv.put(key, count);
+            return this;
+        }
+
+        public Histogram build() {
+            return new Histogram(buckets, mcv);
+        }
     }
 }
