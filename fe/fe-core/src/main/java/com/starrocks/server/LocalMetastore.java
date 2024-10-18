@@ -4774,11 +4774,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                if (!isOptimize || olapTable.getState() != OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                    throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
-                            + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
-                }
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                    && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
+                throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
+                        + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
             }
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());

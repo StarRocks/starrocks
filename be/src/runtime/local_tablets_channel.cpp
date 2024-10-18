@@ -542,6 +542,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
         cancel_request.set_txn_id(_txn_id);
         cancel_request.set_index_id(_index_id);
         cancel_request.set_reason(abort_reason);
+        cancel_request.set_sink_id(request.sink_id());
 
         auto closure = new ReusableClosure<PTabletWriterCancelResult>();
 
@@ -589,8 +590,9 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
     }
     string commit_tablet_id_list_str;
     JoinInts(commit_tablet_ids, ",", &commit_tablet_id_list_str);
-    LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id()) << " commit "
-              << commit_tablet_ids.size() << " tablets: " << commit_tablet_id_list_str;
+    LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+              << " sink_id: " << request.sink_id() << " commit " << commit_tablet_ids.size()
+              << " tablets: " << commit_tablet_id_list_str;
 
     // abort seconary replicas located on other nodes which have no data
     _abort_replica_tablets(request, "", node_id_to_abort_tablets);
@@ -713,8 +715,16 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     }
     if (_is_replicated_storage) {
         std::stringstream ss;
-        ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
-           << _delta_writers.size() << " delta writers, " << failed_tablet_ids.size() << " failed_tablets: ";
+        ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id())
+           << " sink_id: " << params.sink_id() << " open " << _delta_writers.size() << " delta writer: ";
+        int i = 0;
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+            if (++i > 128) {
+                break;
+            }
+        }
+        ss << failed_tablet_ids.size() << " failed_tablets: ";
         for (auto& tablet_id : failed_tablet_ids) {
             ss << tablet_id << ",";
         }
@@ -759,6 +769,9 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
         if (it != _delta_writers.end()) {
             it->second->cancel(Status::Cancelled(reason));
             it->second->abort(abort_with_exception);
+        } else {
+            LOG(WARNING) << "tablet_id: " << tablet_id << " not found in LocalTabletsChannel txn_id: " << _txn_id
+                         << " load_id: " << _key.id << " index_id: " << _key.index_id;
         }
     }
     string tablet_id_list_str;
@@ -842,7 +855,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
     size_t incremental_tablet_num = 0;
     std::stringstream ss;
     ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id())
-       << " incremental open delta writer: ";
+       << " sink_id: " << params.sink_id() << " incremental open delta writer: ";
 
     for (const PTabletWithPartition& tablet : params.tablets()) {
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
