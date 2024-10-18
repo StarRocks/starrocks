@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.base.Preconditions;
+
 /**
  * Use histogram to estimate cardinality
  */
@@ -52,6 +54,9 @@ public class HistogramEstimator {
 
         // Calculate selectivity
         if (totalArea > 0) {
+            double selectivity = overlapArea / totalArea;
+            Preconditions.checkState(0.0 <= selectivity && selectivity <= 1.0,
+                    "exceptional selectivity: " + selectivity);
             return overlapArea / totalArea;
         } else {
             return null;
