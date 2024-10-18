@@ -396,6 +396,14 @@ bool TimestampValue::check_date(const DatetimeContent* content) const {
     return false;
 }
 
+bool TimestampValue::is_valid_year(const DatetimeContent* content) const {
+    return content->_year >= 1 && content->_year <= 9999;
+}
+
+bool TimestampValue::is_valid_month(const DatetimeContent* content) const {
+    return content->_month >= 1 && content->_month <= 12;
+}
+
 // ============================
 // This codes and associative methods is from DateTimeValue.
 // Uncommon approach to process string content based on format string
@@ -516,7 +524,6 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
                 }
                 content->_day = int_value;
                 val = tmp + std::min(2, (int)(val_end - tmp));
-                date_part_used = true;
                 break;
                 // Hour
             case 'h':
@@ -756,6 +763,18 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
             }
         } else {
             content->_type = TIMESTAMP_TIME;
+        }
+    }
+
+    if (date_part_used && !time_part_used) {
+        if (is_valid_year(content) && ptr == end && val == val_end && content->_month == 0 && content->_day == 0) {
+            // default to the first day of the year if the format is valid and no day provided
+            content->_month = 1;
+            content->_day = 1;
+        } else if (is_valid_year(content) && is_valid_month(content) && ptr == end && val == val_end &&
+                   content->_day == 0) {
+            // default to the first day of the month if the format is valid and no day provided
+            content->_day = 1;
         }
     }
 
