@@ -32,6 +32,34 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet or
 2	Bob	bj
 3	David	None
 -- !result
+create table t00 as select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy order by col_int, col_date;
+-- result:
+-- !result
+select * from t00 order by col_int, col_date;
+-- result:
+1	hello world	2021-01-01	1
+1	hello world	2022-01-01	1
+2	hello wrold	2021-01-01	1
+2	hello wrold	2022-01-01	1
+-- !result
+create table t01 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc order by id;
+-- result:
+-- !result
+select * from t01 order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
+create table t02 as select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet order by id;
+-- result:
+-- !result
+select * from t02 order by id;
+-- result:
+1	Alice	bj
+2	Bob	bj
+3	David	None
+-- !result
 drop catalog hive_sql_test_${uuid0}
 -- result:
 -- !result
