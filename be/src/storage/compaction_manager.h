@@ -112,6 +112,10 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    int32_t compute_max_compaction_task_num() const;
+
+    void set_max_compaction_concurrency(int threads_num);
+
     double max_score();
 
     double last_score();
@@ -127,6 +131,8 @@ public:
     std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
 
     int get_waiting_task_num();
+
+    ThreadPool* get_compaction_thread_pool() { return _compaction_pool.get(); }
 
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
@@ -177,6 +183,9 @@ private:
 
     std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
     std::thread _scheduler_thread;
+
+    mutable std::mutex _compact_threads_mutex;
+    int32_t _max_compaction_concurrency = 0;
 };
 
 } // namespace starrocks
