@@ -34,7 +34,6 @@ create table t_timestamp_ntz as select * from delta_test_${uuid0}.delta_oss_db.t
 -- !result
 create table delta_test_column_mapping as select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 -- result:
-E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
 -- !result
 create table delta_lake_par_col_timestamp as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp ;
 -- result:
@@ -233,6 +232,12 @@ select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' a
 1	2024-01-02 01:02:03
 2	2024-01-03 04:05:06
 4	2024-01-04 01:02:03
+-- !result
+select * from delta_test_column_mapping;
+-- result:
+1	name1	sr
+2	name2	sr
+3	name3	sr
 -- !result
 select * from delta_lake_par_col_timestamp order by col_smallint;
 -- result:

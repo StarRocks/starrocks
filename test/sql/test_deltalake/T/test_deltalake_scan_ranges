@@ -69,7 +69,7 @@ select * from t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' or
 select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
 
 -- -- test column mapping
--- select * from delta_test_column_mapping;
+select * from delta_test_column_mapping;
 
 -- test timestamp as partition type
 select * from delta_lake_par_col_timestamp order by col_smallint;
