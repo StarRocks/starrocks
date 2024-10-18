@@ -172,7 +172,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         });
     }
 
-    private void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
+    void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
         if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
@@ -246,13 +246,23 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             LOG.debug("create routine load task cost(ms): {}, job id: {}",
                     (System.currentTimeMillis() - startTime), routineLoadTaskInfo.getJobId());
         } catch (MetaNotFoundException e) {
-            releaseBeSlot(routineLoadTaskInfo);
-            // this means database or table has been dropped, just stop this routine load job.
-            routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
-                    .updateState(JobState.CANCELLED,
-                            new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
-                            false);
-            throw e;
+            if ((e.getMessage().startsWith("database ") || e.getMessage().startsWith("table "))
+                    && e.getMessage().endsWith(" does not exist")) {
+                releaseBeSlot(routineLoadTaskInfo);
+                // this means database or table has been dropped, just stop this routine load job.
+                routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
+                        .updateState(JobState.CANCELLED,
+                                new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
+                                false);
+                throw e;
+            } else {
+                releaseBeSlot(routineLoadTaskInfo);
+                routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
+                        .updateState(JobState.PAUSED,
+                                new ErrorReason(e.getErrorCode(), "failed to create task: " + e.getMessage()),
+                                false);
+                throw e;
+            }
         } catch (UserException e) {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
