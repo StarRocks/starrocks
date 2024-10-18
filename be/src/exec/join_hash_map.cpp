@@ -324,8 +324,12 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->output_build_column_timer = param.output_build_column_timer;
     }
 
+<<<<<<< HEAD
     _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
+=======
+    _table_items->build_chunk = std::make_shared<SegmentedChunk>(param.build_chunk_segment_size);
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->row_desc = param.row_desc;
@@ -394,6 +398,12 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->build_chunk->append_column(std::move(column), slot->id());
             _table_items->build_column_count++;
         }
+<<<<<<< HEAD
+=======
+    }
+    _table_items->build_chunk->build_columns();
+}
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
 
         if (!param.mor_reader_mode &&
             _table_items->row_desc->get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
@@ -423,13 +433,9 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
 
     for (const auto& key_desc : _table_items->join_keys) {
-        if (key_desc.col_ref) {
-            _table_items->key_columns.emplace_back(nullptr);
-        } else {
-            auto key_column = ColumnHelper::create_column(*key_desc.type, false);
-            key_column->append_default();
-            _table_items->key_columns.emplace_back(key_column);
-        }
+        auto key_column = ColumnHelper::create_column(*key_desc.type, false);
+        key_column->append_default();
+        _table_items->key_columns.emplace_back(key_column);
     }
 }
 
@@ -457,12 +463,12 @@ Status JoinHashTable::build(RuntimeState* state) {
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
 
-    // If the join key is column ref of build chunk, fetch from build chunk directly
+    // build key_columns
     size_t join_key_count = _table_items->join_keys.size();
     for (size_t i = 0; i < join_key_count; i++) {
         if (_table_items->join_keys[i].col_ref != nullptr) {
             SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
-            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
+            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id)->materialize();
         }
     }
 
@@ -538,20 +544,22 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns) {
     Columns& columns = _table_items->build_chunk->columns();
 
+=======
+void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
+    // TODO: simplify the SlotId mapping, if the slot of input chunk is same as build_chunk, we don't need to remap them
+    std::vector<SlotId> slots;
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
-        ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
-
-        if (!columns[i]->is_nullable() && column->is_nullable()) {
-            // upgrade to nullable column
-            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
-        }
-        columns[i]->append(*column);
+        slots.push_back(slot->id());
     }
+    _table_items->build_chunk->append_chunk(chunk, slots);
 
+    // TODO: it's useless for the optimizer, but there're stil some UT depending on it
     for (size_t i = 0; i < _table_items->key_columns.size(); i++) {
         // If the join key is slot ref, will get from build chunk directly,
         // otherwise will append from key_column of input
@@ -585,9 +593,30 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
     }
 
     _table_items->row_count += chunk->num_rows();
+    DCHECK_EQ(_table_items->row_count + 1, _table_items->build_chunk->num_rows());
 }
 
+<<<<<<< HEAD
 StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+=======
+void JoinHashTable::merge_ht(const JoinHashTable& ht) {
+    _table_items->row_count += ht._table_items->row_count;
+
+    auto& columns = _table_items->build_chunk->columns();
+    auto& other_columns = ht._table_items->build_chunk->columns();
+
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
+            // upgrade to nullable column
+            columns[i]->upgrade_to_nullable();
+        }
+    }
+    _table_items->build_chunk->append(ht._table_items->build_chunk, 1);
+}
+
+ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+    DCHECK(chunk != nullptr && chunk->num_rows() > 0);
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
     ChunkPtr output = std::make_shared<Chunk>();
     //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {

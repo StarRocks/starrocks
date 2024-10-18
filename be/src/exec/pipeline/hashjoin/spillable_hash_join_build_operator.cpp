@@ -226,7 +226,12 @@ std::function<StatusOr<ChunkPtr>()> SpillableHashJoinBuildOperator::_convert_has
             _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
             return Status::EndOfFile("eos");
         }
+<<<<<<< HEAD
         auto chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+=======
+
+        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
         RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());

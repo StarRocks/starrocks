@@ -14,6 +14,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "storage/chunk_helper.h"
+#include "util/runtime_profile.h"
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
 #define JOIN_HASH_MAP_H
 
 #include <gen_cpp/PlanNodes_types.h>
@@ -97,8 +102,7 @@ struct HashTableSlotDescriptor {
 };
 
 struct JoinHashTableItems {
-    //TODO: memory continues problem?
-    ChunkPtr build_chunk = nullptr;
+    SegmentedChunkPtr build_chunk = nullptr;
     Columns key_columns;
     Buffer<HashTableSlotDescriptor> build_slots;
     Buffer<HashTableSlotDescriptor> probe_slots;
@@ -284,6 +288,9 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     bool mor_reader_mode = false;
+
+    // TODO: optimize this according to chunk width
+    size_t build_chunk_segment_size = 1 << 16;
 };
 
 template <class T>
@@ -636,9 +643,10 @@ private:
 
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
-    void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
+    void _copy_build_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+                            bool to_nullable);
 
-    void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _copy_build_nullable_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
@@ -781,7 +789,7 @@ public:
     // convert input column to spill schema order
     StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 
-    const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
+    const SegmentedChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }

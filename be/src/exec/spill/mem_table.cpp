@@ -123,6 +123,41 @@ Status OrderedMemTable::done() {
     // do sort
     ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
     _chunk_slice.reset(_chunk);
+<<<<<<< HEAD
+=======
+    return SpillableMemTable::done();
+}
+
+Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) {
+    DCHECK(_is_done) << "done must invoke before finalize";
+    SCOPED_TIMER(_spiller->metrics().mem_table_finalize_timer);
+    // seriealize data, store result into _block
+    auto& serde = _spiller->serde();
+
+    SerdeContext serde_ctx;
+    auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
+    while (!_chunk_slice.empty()) {
+        if (!(output->is_remote() ^ io_ctx->use_local_io_executor)) {
+            TRACE_SPILL_LOG << "yield before serialize";
+            yield_ctx.need_yield = true;
+            io_ctx->use_local_io_executor = !output->is_remote();
+            return Status::OK();
+        }
+        SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
+        ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
+        bool need_aligned = _runtime_state->spill_enable_direct_io();
+
+        RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
+        RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
+    }
+    TRACE_SPILL_LOG << fmt::format("finalize spillable ordered memtable done, rows[{}]", num_rows());
+    // clear all data
+    _chunk_slice.reset(nullptr);
+    int64_t old_consumption = _tracker->consumption();
+    _tracker->release(old_consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -old_consumption);
+    _chunk.reset();
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
     return Status::OK();
 }
 
