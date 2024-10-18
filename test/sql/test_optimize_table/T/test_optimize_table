@@ -1,3 +1,7 @@
+-- name: test_disable_random
+create table t(k int);
+alter table t distributed by random buckets 10;
+
 -- name: test_optimize_table
 create table t(k int) distributed by hash(k) buckets 10;
 show partitions from t;

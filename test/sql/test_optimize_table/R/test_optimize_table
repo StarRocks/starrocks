@@ -1,3 +1,11 @@
+-- name: test_disable_random
+create table t(k int);
+-- result:
+-- !result
+alter table t distributed by random buckets 10;
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
+-- !result
 
 
 
@@ -98,6 +106,7 @@ PROPERTIES (
 
 
 
+
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -117,6 +126,7 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
+
 
 
 
@@ -328,6 +338,7 @@ select count(*) from t;
 -- result:
 63
 -- !result
+
 
 
 
@@ -551,6 +562,7 @@ select * from t;
 19
 20
 -- !result
+
 
 
 
@@ -865,6 +877,7 @@ select count(*) from t;
 -- result:
 63
 -- !result
+
 
 -- name: test_optimize_table_with_special_characters
 create table `t#t`(k int) distributed by hash(k) buckets 10;
