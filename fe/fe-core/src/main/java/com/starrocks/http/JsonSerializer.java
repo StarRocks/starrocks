@@ -47,6 +47,7 @@ public class JsonSerializer {
     private static final String STATISTICS_OBJ_NAME = "statistics";
     private static final String STATISTICS_SCAN_ROWS = "scanRows";
     private static final String STATISTICS_SCAN_BYTES = "scanBytes";
+    private static final String STATISTICS_SCAN_PARTITIONS = "scanPartitions";
     private static final String STATISTICS_RETURN_ROWS = "returnRows";
 
     public static ByteBuf getShowResult(ShowResultSet showResultSet) throws IOException {
@@ -80,6 +81,7 @@ public class JsonSerializer {
         jsonWriter.name(STATISTICS_OBJ_NAME).beginObject();
         jsonWriter.name(STATISTICS_SCAN_ROWS).value(0);
         jsonWriter.name(STATISTICS_SCAN_BYTES).value(0);
+        jsonWriter.name(STATISTICS_SCAN_PARTITIONS).value("");
         jsonWriter.name(STATISTICS_RETURN_ROWS).value(showResultSet.getResultRows().size());
         jsonWriter.endObject();
 
@@ -127,16 +129,19 @@ public class JsonSerializer {
         long scanRows = 0;
         long scanBytes = 0;
         long returnRows = 0;
+        String scanPartitions = "";
         if (null != queryStatistics && null != queryStatistics.statsItems) {
             for (QueryStatisticsItemPB item : queryStatistics.statsItems) {
                 scanRows += item.scanRows;
                 scanBytes += item.scanBytes;
             }
             returnRows = queryStatistics.returnedRows;
+            scanPartitions = queryStatistics.scanPartitions;
         }
 
         jsonWriter.name(STATISTICS_SCAN_ROWS).value(scanRows);
         jsonWriter.name(STATISTICS_SCAN_BYTES).value(scanBytes);
+        jsonWriter.name(STATISTICS_SCAN_PARTITIONS).value(scanPartitions);
         jsonWriter.name(STATISTICS_RETURN_ROWS).value(returnRows);
         jsonWriter.endObject();
         jsonWriter.endObject();

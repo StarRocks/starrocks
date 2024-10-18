@@ -67,7 +67,8 @@ public class HttpResultSender {
     }
 
     // for select
-    public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan, String sql) throws Exception {
+    public RowBatch sendQueryResult(Coordinator coord, ExecPlan execPlan, String sql, 
+                                    String scanPartitionsInfo) throws Exception {
         RowBatch batch;
         ChannelHandlerContext nettyChannel = context.getNettyChannel();
         // if some data already sent to client, when exception occurs,we just close the channel
@@ -89,6 +90,7 @@ public class HttpResultSender {
             }
             if (batch.isEos()) {
                 if (!context.isOnlyOutputResultRaw()) {
+                    batch.getQueryStatistics().scanPartitions = scanPartitionsInfo;
                     ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
                     nettyChannel.writeAndFlush(statisticData);
                 }

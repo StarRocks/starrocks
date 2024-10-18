@@ -74,6 +74,7 @@ public class QueryDetail implements Serializable {
     private String profile;
     private String resourceGroupName;
     private long scanRows = -1;
+    private String scanPartitions = "";
     private long scanBytes = -1;
     private long returnRows = -1;
     private long cpuCostNs = -1;
@@ -139,6 +140,7 @@ public class QueryDetail implements Serializable {
         queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
         queryDetail.scanRows = this.scanRows;
+        queryDetail.scanPartitions = this.scanPartitions;
         queryDetail.scanBytes = this.scanBytes;
         queryDetail.returnRows = this.returnRows;
         queryDetail.cpuCostNs = this.cpuCostNs;
@@ -277,6 +279,14 @@ public class QueryDetail implements Serializable {
 
     public void setScanRows(long scanRows) {
         this.scanRows = scanRows;
+    }
+
+    public String getScanPartitions() {
+        return scanPartitions;
+    }
+
+    public void setScanPartitions(String scanPartitions) {
+        this.scanPartitions = scanPartitions;
     }
 
     public long getScanBytes() {

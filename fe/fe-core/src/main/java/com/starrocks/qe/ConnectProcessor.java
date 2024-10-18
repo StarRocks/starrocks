@@ -206,6 +206,7 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             ctx.getAuditEventBuilder().setSpilledBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
             ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
+            ctx.getAuditEventBuilder().setScanPartitions(statistics.scanPartitions == null ? "" : statistics.scanPartitions);
         }
 
         if (ctx.getState().isQuery()) {
