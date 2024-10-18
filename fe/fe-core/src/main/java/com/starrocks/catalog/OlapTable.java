@@ -739,19 +739,20 @@ public class OlapTable extends Table {
                 // base index
                 baseIndexId = newIdxId;
             }
-            indexIdToMeta.put(newIdxId, origIndexIdToMeta.get(entry.getKey()));
-            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
-            indexIdToMeta.get(newIdxId).setSchemaId(newIdxId);
+            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
+            indexMeta.setIndexIdForRestore(newIdxId);
+            indexMeta.setSchemaId(newIdxId);
+            indexIdToMeta.put(newIdxId, indexMeta);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
-        // generate a partition name to id map
-        Map<String, Long> origPartNameToId = Maps.newHashMap();
-        for (Partition partition : idToPartition.values()) {
-            origPartNameToId.put(partition.getName(), partition.getId());
-            LOG.info("partition id {} sub partition {}", partition.getId(), partition.getSubPartitions());
+        // generate a partition old id to new id map
+        Map<Long, Long> partitionOldIdToNewId = Maps.newHashMap();
+        for (Long id : idToPartition.keySet()) {
+            partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
         }
 
+<<<<<<< HEAD
         // reset partition info and idToPartition map
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
@@ -868,6 +869,35 @@ public class OlapTable extends Table {
             }
         } else {
             return new Status(ErrCode.UNSUPPORTED, "Unsupported partition type: " + partitionInfo.getType());
+=======
+        // reset partiton info
+        partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        // reset partitions
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        idToPartition.clear();
+        physicalPartitionIdToPartitionId.clear();
+        physicalPartitionNameToPartitionId.clear();
+        for (Partition partition : partitions) {
+            long newPartitionId = partitionOldIdToNewId.get(partition.getId());
+            partition.setIdForRestore(newPartitionId);
+            idToPartition.put(newPartitionId, partition);
+            List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                if (physicalPartition.getId() != newPartitionId) {
+                    partition.removeSubPartition(physicalPartition.getId());
+                }
+            });
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                if (physicalPartition.getId() != newPartitionId) {
+                    physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+                    physicalPartition.setParentId(newPartitionId);
+                    partition.addSubPartition(physicalPartition);
+                }
+                physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartitionId);
+                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartitionId);
+            });
+>>>>>>> 9db79768de ([Refactor] Refactor reset ids for restore (#52075))
         }
 
         // reset replication number for olaptable
