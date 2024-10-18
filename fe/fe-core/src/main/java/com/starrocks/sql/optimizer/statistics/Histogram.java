@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -66,35 +67,25 @@ public class Histogram {
         return sb.toString();
     }
 
-    /**
-     * Return overlapped buckets with the provided lower&upper bound
-     */
     public List<Bucket> getOverlappedBuckets(double lower, double upper) {
-        int left = 0;
-        int right = buckets.size() - 1;
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            Bucket bucket = buckets.get(mid);
-
-            // A potential bad case is lower & upper can cover most buckets, then this binary-search will fall back
-            // to an inefficient linear search. But it doesn't hold for the current histogram, because we only
-            // calculate the overlap within two buckets
-            if (bucket.getLower() <= upper && bucket.getUpper() >= lower) {
-                while (mid > 0 && buckets.get(mid - 1).getUpper() >= lower) {
-                    mid--;
-                }
-                int endIndex = mid;
-                while (endIndex < buckets.size() - 1 && buckets.get(endIndex + 1).getLower() <= upper) {
-                    endIndex++;
-                }
-                return buckets.subList(mid, endIndex + 1);
-            } else if (bucket.getUpper() < lower) {
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
+        int startIndex = Collections.binarySearch(buckets, new Bucket(lower, lower, 0L, 0L),
+                Comparator.comparingDouble(Bucket::getUpper));
+        if (startIndex < 0) {
+            startIndex = -startIndex - 1;
         }
-        return Lists.newArrayList();
+
+        // Find the first bucket that overlaps with the upper bound
+        int endIndex = Collections.binarySearch(buckets, new Bucket(upper, upper, 0L, 0L),
+                Comparator.comparingDouble(Bucket::getLower));
+        if (endIndex < 0) {
+            endIndex = -endIndex - 2;
+        }
+
+        if (startIndex <= endIndex) {
+            return buckets.subList(startIndex, endIndex + 1);
+        } else {
+            return Lists.newArrayList();
+        }
     }
 
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
