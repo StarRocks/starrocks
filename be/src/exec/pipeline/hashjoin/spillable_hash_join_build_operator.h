@@ -63,7 +63,13 @@ private:
 
     Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
 
+<<<<<<< HEAD
     ChunkSharedSlice _hash_table_build_chunk_slice;
+=======
+    size_t _hash_table_iterate_idx = 0;
+    std::vector<JoinHashTable*> _hash_tables;
+    SegmentedChunkSlice _hash_table_build_chunk_slice;
+>>>>>>> 5dd0cc5154 ([Enhancement] split chunk of HashTable (#51175))
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
