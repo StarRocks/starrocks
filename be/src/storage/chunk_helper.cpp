@@ -282,8 +282,8 @@ struct ColumnPtrBuilder {
             std::vector<std::string> names;
             std::vector<ColumnPtr> fields;
             for (auto& sub_field : field.sub_fields()) {
-                names.template emplace_back(sub_field.name());
-                fields.template emplace_back(sub_field.create_column());
+                names.emplace_back(sub_field.name());
+                fields.emplace_back(sub_field.create_column());
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
             return NullableIfNeed(struct_column);
@@ -426,8 +426,8 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
         std::vector<std::string> names;
         std::vector<ColumnPtr> fields;
         for (auto& sub_field : field.sub_fields()) {
-            names.template emplace_back(sub_field.name());
-            fields.template emplace_back(sub_field.create_column());
+            names.emplace_back(sub_field.name());
+            fields.emplace_back(sub_field.create_column());
         }
         auto struct_column = StructColumn::create(std::move(fields), std::move(names));
         return NullableIfNeed(struct_column);

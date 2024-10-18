@@ -40,8 +40,16 @@ struct ArrayUnionAggAggregateState {
                 for (int i = 0; i < count; i++) {
                     auto raw_key = column.get_slice(offset + i);
                     KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                    set.lazy_emplace(key, [&](const auto& ctor) {
+#else
                     set.template lazy_emplace(key, [&](const auto& ctor) {
+<<<<<<< HEAD
                         uint8_t* pos = mem_pool->allocate(key.size);
+=======
+#endif
+                        uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+>>>>>>> f56aac479d ([Enhancement] clang-19 compatibility  (#52058))
                         assert(pos != nullptr);
                         memcpy(pos, key.data, key.size);
                         ctor(pos, key.size, key.hash);
