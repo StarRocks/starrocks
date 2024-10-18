@@ -518,7 +518,7 @@ protected:
     DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
-    phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+    phmap::flat_hash_map<int32_t, OperatorStage, StdHash<int32_t>> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     DriverQueue* _in_queue = nullptr;

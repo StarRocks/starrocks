@@ -36,7 +36,7 @@ void HashTableProbeState::consider_probe_time_locality() {
         if ((probe_chunks & (detect_step - 1)) == 0) {
             int window_size = std::min(active_coroutines * 4, 50);
             if (probe_row_count > window_size) {
-                phmap::flat_hash_map<uint32_t, uint32_t> occurrence;
+                phmap::flat_hash_map<uint32_t, uint32_t, StdHash<uint32_t>> occurrence;
                 occurrence.reserve(probe_row_count);
                 uint32_t unique_size = 0;
                 bool enable_interleaving = true;
