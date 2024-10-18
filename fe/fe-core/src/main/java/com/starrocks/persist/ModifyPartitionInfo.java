@@ -58,6 +58,10 @@ public class ModifyPartitionInfo implements Writable {
     private short replicationNum;
     @SerializedName(value = "isInMemory")
     private boolean isInMemory;
+    @SerializedName(value = "externalCoolDownSyncedTimeMs")
+    private long externalCoolDownSyncedTimeMs;
+    @SerializedName(value = "externalCoolDownConsistencyCheckTimeMs")
+    private long externalCoolDownConsistencyCheckTimeMs;
 
     public ModifyPartitionInfo() {
         // for persist
@@ -66,12 +70,22 @@ public class ModifyPartitionInfo implements Writable {
     public ModifyPartitionInfo(long dbId, long tableId, long partitionId,
                                DataProperty dataProperty, short replicationNum,
                                boolean isInMemory) {
+        this(dbId, tableId, partitionId, dataProperty, replicationNum, isInMemory, -1L, -1L);
+    }
+
+    public ModifyPartitionInfo(long dbId, long tableId, long partitionId,
+                               DataProperty dataProperty, short replicationNum,
+                               boolean isInMemory,
+                               long externalCoolDownSyncedTimeMs,
+                               long externalCoolDownConsistencyCheckTimeMs) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
+        this.externalCoolDownSyncedTimeMs = externalCoolDownSyncedTimeMs;
+        this.externalCoolDownConsistencyCheckTimeMs = externalCoolDownConsistencyCheckTimeMs;
     }
 
     public long getDbId() {
@@ -98,6 +112,14 @@ public class ModifyPartitionInfo implements Writable {
         return isInMemory;
     }
 
+    public long getExternalCoolDownSyncedTimeMs() {
+        return externalCoolDownSyncedTimeMs;
+    }
+
+    public long getExternalCoolDownConsistencyCheckTimeMs() {
+        return externalCoolDownConsistencyCheckTimeMs;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hashCode(dbId, tableId);
@@ -114,7 +136,9 @@ public class ModifyPartitionInfo implements Writable {
         ModifyPartitionInfo otherInfo = (ModifyPartitionInfo) other;
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 dataProperty.equals(otherInfo.getDataProperty()) && replicationNum == otherInfo.getReplicationNum()
-                && isInMemory == otherInfo.isInMemory();
+                && isInMemory == otherInfo.isInMemory()
+                && externalCoolDownSyncedTimeMs == otherInfo.externalCoolDownSyncedTimeMs
+                && externalCoolDownConsistencyCheckTimeMs == otherInfo.externalCoolDownConsistencyCheckTimeMs;
     }
 
     @Override

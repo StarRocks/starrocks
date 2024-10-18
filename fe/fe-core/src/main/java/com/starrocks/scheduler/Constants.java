@@ -45,7 +45,8 @@ public class Constants {
         MV,
         INSERT,
         PIPE,
-        DATACACHE_SELECT;
+        DATACACHE_SELECT,
+        EXTERNAL_COOLDOWN;
 
         // Whether the task source is mergeable, only MV is mergeable by default.
         public boolean isMergeable() {

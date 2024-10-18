@@ -79,6 +79,7 @@ public class CreateTableLikeAnalyzer {
             }
 
             com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
+            parsedCreateTableStmt.removeExternalCoolDownConfigProperties();
             stmt.setCreateTableStmt(parsedCreateTableStmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
