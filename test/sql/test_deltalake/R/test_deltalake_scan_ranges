@@ -1,0 +1,320 @@
+-- name: testDeltaLakeScanRanges
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+set enable_connector_incremental_scan_ranges = true;
+-- result:
+-- !result
+set connector_incremental_scan_ranges_size = 1;
+-- result:
+-- !result
+create table string_col_dict_encode as select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode;
+-- result:
+-- !result
+create table delta_lake_data_type as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type;
+-- result:
+-- !result
+create table delta_lake_par_col_boolean as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean;
+-- result:
+-- !result
+create table delta_lake_par_col_date as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date;
+-- result:
+-- !result
+create table delta_lake_par_col_string as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string;
+-- result:
+-- !result
+create table t_timestamp_ntz as select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz;
+-- result:
+-- !result
+create table delta_test_column_mapping as select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
+-- result:
+-- !result
+create table delta_lake_par_col_timestamp as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp ;
+-- result:
+-- !result
+create table t_partition_timestamp_ntz as select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz;
+-- result:
+-- !result
+create table delta_lake_par_col_double as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double;
+-- result:
+E: (1064, 'Table partition by float/double/decimal datatype is not supported')
+-- !result
+create table delta_lake_par_null as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null;
+-- result:
+-- !result
+select * from string_col_dict_encode where c3='a' order by c1;
+-- result:
+1	1	a
+6	2	a
+11	1	a
+16	2	a
+21	1	a
+26	2	a
+31	1	a
+36	2	a
+-- !result
+select * from delta_lake_data_type where col_struct is null;
+-- result:
+6	600	6000	60000	18.840000153	18.849560000	2024-04-29	2024-04-29 12:00:00	sixth_string	321.98	0	6	[16,17,18]	final_binary_data	None	None
+-- !result
+select col_struct from delta_lake_data_type where col_struct is not null order by col_tinyint;
+-- result:
+{"name":"Alice","sex":"female","age":30}
+{"name":"Bob","sex":"male","age":25}
+{"name":"Charlie","sex":"male","age":35}
+{"name":"Diana","sex":"female","age":28}
+{"name":"Edward","sex":"male","age":40}
+{"name":"Fiona","sex":"female","age":33}
+{"name":null,"sex":null,"age":null}
+-- !result
+select * from delta_lake_par_col_boolean where col_boolean = true;
+-- result:
+1	1	1
+2	2	1
+-- !result
+select * from delta_lake_par_col_boolean where col_boolean = false;
+-- result:
+3	3	0
+4	4	0
+-- !result
+select * from delta_lake_par_col_date where col_date = '2024-04-24' order by col_smallint;
+-- result:
+1	100	2024-04-24
+2	200	2024-04-24
+3	300	2024-04-24
+-- !result
+select * from delta_lake_par_col_date where col_date > '2024-04-24' order by col_smallint;
+-- result:
+4	400	2024-04-25
+5	500	2024-04-25
+6	600	2024-04-25
+7	700	2024-04-26
+8	800	2024-04-26
+9	900	2024-04-26
+10	1000	2024-04-27
+11	1100	2024-04-27
+12	1200	2024-04-27
+-- !result
+select * from delta_lake_par_col_date where col_date >= '2024-04-24' and col_date < '2024-04-26' order by col_smallint;
+-- result:
+1	100	2024-04-24
+2	200	2024-04-24
+3	300	2024-04-24
+4	400	2024-04-25
+5	500	2024-04-25
+6	600	2024-04-25
+-- !result
+select * from delta_lake_par_col_date where col_date = '2024-04-24' or col_date = '2024-04-26' order by col_smallint;
+-- result:
+1	100	2024-04-24
+2	200	2024-04-24
+3	300	2024-04-24
+7	700	2024-04-26
+8	800	2024-04-26
+9	900	2024-04-26
+-- !result
+select * from delta_lake_par_col_date where col_date != '2024-04-24' order by col_smallint;
+-- result:
+4	400	2024-04-25
+5	500	2024-04-25
+6	600	2024-04-25
+7	700	2024-04-26
+8	800	2024-04-26
+9	900	2024-04-26
+10	1000	2024-04-27
+11	1100	2024-04-27
+12	1200	2024-04-27
+-- !result
+select count(1) from delta_lake_par_col_date where col_date is NULL;
+-- result:
+0
+-- !result
+select count(1) from delta_lake_par_col_date where col_date is NOT NULL;
+-- result:
+12
+-- !result
+select * from delta_lake_par_col_date where col_date in ('2024-04-24', '2024-04-25') order by col_smallint;
+-- result:
+1	100	2024-04-24
+2	200	2024-04-24
+3	300	2024-04-24
+4	400	2024-04-25
+5	500	2024-04-25
+6	600	2024-04-25
+-- !result
+select * from delta_lake_par_col_date where col_date not in ('2024-04-24', '2024-04-25', '2024-04-26') order by col_smallint;
+-- result:
+10	1000	2024-04-27
+11	1100	2024-04-27
+12	1200	2024-04-27
+-- !result
+select * from delta_lake_par_col_string where col_string = 'value1' order by col_smallint;
+-- result:
+1	100	value1
+2	200	value1
+3	300	value1
+-- !result
+select * from delta_lake_par_col_string where col_string != 'value1' order by col_smallint;
+-- result:
+4	400	value2
+5	500	value2
+6	600	value2
+7	700	value3
+8	800	value3
+9	900	value3
+10	1000	value3
+-- !result
+select * from delta_lake_par_col_string where col_string in ('value1','value2') order by col_smallint;
+-- result:
+1	100	value1
+2	200	value1
+3	300	value1
+4	400	value2
+5	500	value2
+6	600	value2
+-- !result
+select * from delta_lake_par_col_string where col_string not in ('value1','value2') order by col_smallint;
+-- result:
+7	700	value3
+8	800	value3
+9	900	value3
+10	1000	value3
+-- !result
+select col_tinyint,col_array,col_map,col_struct from delta_lake_data_type where col_tinyint < 6 order by col_tinyint;
+-- result:
+1	[1,2,3]	{"key1":"value1","key2":"value2"}	{"name":"Alice","sex":"female","age":30}
+2	[4,5,6]	{"key3":"value3","key4":"value4"}	{"name":"Bob","sex":"male","age":25}
+3	[7,8,9]	{"key5":"value5","key6":"value6"}	{"name":"Charlie","sex":"male","age":35}
+4	[10,11,12]	{"key7":"value7","key8":"value8"}	{"name":"Diana","sex":"female","age":28}
+5	[13,14,15]	{"key9":"value9","key10":"value10"}	{"name":"Edward","sex":"male","age":40}
+-- !result
+select col_timestamp from delta_lake_data_type where col_timestamp = '2024-04-24 12:00:00';
+-- result:
+2024-04-24 12:00:00
+-- !result
+select col_timestamp from delta_lake_data_type where col_timestamp >= '2024-04-24 12:00:00' and col_timestamp < '2024-04-27 12:00:00';
+-- result:
+2024-04-24 12:00:00
+2024-04-25 12:00:00
+2024-04-26 12:00:00
+-- !result
+select * from t_timestamp_ntz order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+3	None
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from t_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+-- result:
+3	None
+-- !result
+select * from t_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+-- !result
+select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+-- !result
+select * from delta_test_column_mapping;
+-- result:
+1	name1	sr
+2	name2	sr
+3	name3	sr
+-- !result
+select * from delta_lake_par_col_timestamp order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+-- !result
+select * from delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+-- !result
+select * from delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+-- result:
+2	2	2023-01-01 01:01:01
+-- !result
+select * from t_partition_timestamp_ntz order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+3	None
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from t_partition_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+-- result:
+3	None
+-- !result
+select * from t_partition_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+5	2024-01-05 04:05:06
+-- !result
+select * from t_partition_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+-- !result
+select * from t_partition_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+-- result:
+1	2024-01-02 01:02:03
+2	2024-01-03 04:05:06
+4	2024-01-04 01:02:03
+-- !result
+select * from delta_lake_par_null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+4	44	None
+-- !result
+select * from delta_lake_par_null where col_timestamp is null order by col_smallint;
+-- result:
+4	44	None
+-- !result
+select * from delta_lake_par_null where col_timestamp is not null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+-- !result
+select col_struct from delta_lake_data_type where col_struct.age=30 order by col_tinyint;
+-- result:
+{"name":"Alice","sex":"female","age":30}
+-- !result
+select col_struct from delta_lake_data_type where col_struct.sex='male' order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Charlie","sex":"male","age":35}
+{"name":"Edward","sex":"male","age":40}
+-- !result
+select col_struct from delta_lake_data_type where col_struct.age<30 order by col_tinyint;
+-- result:
+{"name":"Bob","sex":"male","age":25}
+{"name":"Diana","sex":"female","age":28}
+-- !result
+drop catalog delta_test_${uuid0}
+-- result:
+-- !result

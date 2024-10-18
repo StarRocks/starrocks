@@ -54,6 +54,17 @@ void ScanMorsel::build_scan_morsels(int node_id, const std::vector<TScanRangePar
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
     }
 }
+bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+    bool has_more = false;
+    for (const auto& scan_range : scan_ranges) {
+        if (scan_range.__isset.empty && scan_range.empty) {
+            if (scan_range.__isset.has_more) {
+                has_more = scan_range.has_more;
+            }
+        }
+    }
+    return has_more;
+}
 
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
@@ -68,10 +79,13 @@ size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
 
-Status SharedMorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
+Status SharedMorselQueueFactory::append_morsels([[maybe_unused]] int driver_seq, Morsels&& morsels) {
     RETURN_IF_ERROR(_queue->append_morsels(std::move(morsels)));
-    _queue->set_has_more(has_more);
     return Status::OK();
+}
+
+void SharedMorselQueueFactory::set_has_more(bool v) {
+    _queue->set_has_more(v);
 }
 
 size_t IndividualMorselQueueFactory::num_original_morsels() const {
@@ -82,8 +96,8 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
     return total;
 }
 
-Status MorselQueueFactory::append_morsels(Morsels&& morsels, bool has_more) {
-    return Status::NotSupported("append_morsels not supported");
+Status MorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
+    return Status::NotSupported("MorselQueueFactory::append_morsels not supported");
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -106,6 +120,30 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
+// The reason why we want to expand size of this vector is support of incremental scan ranges delivery
+// Think about a case that in the initial round, there is 4 drivers assigned scan ranges, so vector size is 4
+// but in the next round, if there is 5 drivers assigned scan ranges, then we have to expane vector to 5.
+static void ensure_size_of_queue_per_drive_seq(std::vector<MorselQueuePtr>& _queue_per_driver_seq, int driver_seq) {
+    int size = _queue_per_driver_seq.size();
+    if (driver_seq >= size) {
+        for (int i = 0; i < (driver_seq - size) + 1; i++) {
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+        }
+    }
+}
+
+Status IndividualMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
+    ensure_size_of_queue_per_drive_seq(_queue_per_driver_seq, driver_seq);
+    RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
+    return Status::OK();
+}
+
+void IndividualMorselQueueFactory::set_has_more(bool v) {
+    for (auto& q : _queue_per_driver_seq) {
+        q->set_has_more(v);
+    }
+}
+
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
                                                                    bool could_local_shuffle)
         : _could_local_shuffle(could_local_shuffle) {
@@ -123,6 +161,18 @@ BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int,
         } else {
             _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
         }
+    }
+}
+
+Status BucketSequenceMorselQueueFactory::append_morsels(int driver_seq, Morsels&& morsels) {
+    ensure_size_of_queue_per_drive_seq(_queue_per_driver_seq, driver_seq);
+    RETURN_IF_ERROR(_queue_per_driver_seq[driver_seq]->append_morsels(std::move(morsels)));
+    return Status::OK();
+}
+
+void BucketSequenceMorselQueueFactory::set_has_more(bool v) {
+    for (auto& q : _queue_per_driver_seq) {
+        q->set_has_more(v);
     }
 }
 
@@ -155,7 +205,7 @@ void MorselQueue::unget(MorselPtr&& morsel) {
 }
 
 Status MorselQueue::append_morsels(Morsels&& morsels) {
-    return Status::NotSupported("append_morsels not supported");
+    return Status::NotSupported("MorselQueue::append_morsels not supported");
 }
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
@@ -869,7 +919,10 @@ bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
 }
 
 MorselQueuePtr create_empty_morsel_queue() {
-    return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
+    // instead of creating FixedMorselQueue, DynamicMorselQueue permits to add scan ranges dynamically
+    // because if we have incremental scan ranges delivery, some driver maybe does not have any scan ranges at first
+    // but in the next round, it will have scan ranges to process.
+    return std::make_unique<DynamicMorselQueue>(std::vector<MorselPtr>{}, true);
 }
 
 StatusOr<MorselPtr> DynamicMorselQueue::try_get() {
