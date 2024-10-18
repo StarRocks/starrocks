@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -74,6 +75,8 @@ import java.util.stream.Collectors;
 public class FragmentInstanceExecState {
     private static final Logger LOG = LogManager.getLogger(FragmentInstanceExecState.class);
 
+    private static final List<String> PROFILE_BASIC_INFO = ImmutableList.of("Address", "InstanceId");
+
     private State state = State.CREATED;
 
     private final JobSpec jobSpec;
@@ -89,7 +92,7 @@ public class FragmentInstanceExecState {
     private Future<PExecPlanFragmentResult> deployFuture = null;
 
     private final int fragmentIndex;
-    private final RuntimeProfile profile;
+    private RuntimeProfile profile;
 
     private final ComputeNode worker;
     private final TNetworkAddress address;
@@ -310,6 +313,26 @@ public class FragmentInstanceExecState {
     }
 
     /**
+     * Purse all counters to release memory
+     */
+    public synchronized void purgeInstanceRunningProfile() {
+        RuntimeProfile emptyProfile = new RuntimeProfile(profile.getName());
+        for (String key : PROFILE_BASIC_INFO) {
+            String value = profile.getInfoString(key);
+            if (value != null) {
+                emptyProfile.addInfoString(key, value);
+            }
+        }
+        profile = emptyProfile;
+    }
+
+    public synchronized void updateInstanceRunningProfile(TReportExecStatusParams params) {
+        if (params.isSetProfile()) {
+            profile.update(params.profile);
+        }
+    }
+
+    /**
      * Update the execution state and profile from the report RPC.
      *
      * @param params The report RPC request.
@@ -325,9 +348,6 @@ public class FragmentInstanceExecState {
             case EXECUTING:
             case CANCELLING:
             default:
-                if (params.isSetProfile()) {
-                    profile.update(params.profile);
-                }
                 if (params.isDone()) {
                     if (params.getStatus() == null || params.getStatus().getStatus_code() == TStatusCode.OK) {
                         transitionState(State.FINISHED);
