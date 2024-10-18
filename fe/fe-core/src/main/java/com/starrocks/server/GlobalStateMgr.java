@@ -1411,6 +1411,7 @@ public class GlobalStateMgr {
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointWorker.getId();
+        checkpointWorker.start();
         LOG.info("checkpoint controller thread started. thread id is {}", checkpointThreadId);
 
         portConnectivityChecker.start();

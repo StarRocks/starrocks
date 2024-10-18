@@ -42,8 +42,12 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class Frontend extends JsonWriter {
+    public static final Logger LOG = LogManager.getLogger(Frontend.class);
+
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -158,6 +162,7 @@ public class Frontend extends JsonWriter {
             replayedJournalId = hbResponse.getReplayedJournalId();
             lastUpdateTime = hbResponse.getHbTime();
             startTime = hbResponse.getFeStartTime();
+            LOG.warn("set startTime to {}, isReplay: {}", startTime, isReplay);
             feVersion = hbResponse.getFeVersion();
             heartbeatErrMsg = "";
             heartbeatRetryTimes = 0;

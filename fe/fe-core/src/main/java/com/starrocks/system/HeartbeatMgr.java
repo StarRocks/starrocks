@@ -136,11 +136,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         // send frontend heartbeat
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
-        String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
-            if (NetUtils.isSameIP(frontend.getHost(), MASTER_INFO.get().getNetwork_address().getHostname())) {
-                masterFeNodeName = frontend.getNodeName();
-            }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
