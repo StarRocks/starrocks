@@ -33,17 +33,21 @@ public class LeaderInfo implements Writable {
     private int httpPort;
     @SerializedName("rp")
     private int rpcPort;
+    @SerializedName("ep")
+    private long epoch;
 
     public LeaderInfo() {
         this.ip = "";
         this.httpPort = 0;
         this.rpcPort = 0;
+        this.epoch = 0;
     }
 
-    public LeaderInfo(String ip, int httpPort, int rpcPort) {
+    public LeaderInfo(String ip, int httpPort, int rpcPort, long epoch) {
         this.ip = ip;
         this.httpPort = httpPort;
         this.rpcPort = rpcPort;
+        this.epoch = epoch;
     }
 
     public String getIp() {
@@ -70,8 +74,13 @@ public class LeaderInfo implements Writable {
         this.rpcPort = rpcPort;
     }
 
+    public long getEpoch() {
+        return epoch;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 }
+

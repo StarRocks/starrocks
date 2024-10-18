@@ -62,6 +62,8 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "feVersion")
     private String feVersion;
 
+    private float heapUsedPercent;
+
     public FrontendHbResponse() {
         super(HeartbeatResponse.Type.FRONTEND);
     }
@@ -108,6 +110,14 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
 
     public String getFeVersion() {
         return feVersion;
+    }
+
+    public float getHeapUsedPercent() {
+        return heapUsedPercent;
+    }
+
+    public void setHeapUsedPercent(float heapUsedPercent) {
+        this.heapUsedPercent = heapUsedPercent;
     }
 
     public static FrontendHbResponse read(DataInput in) throws IOException {

@@ -1652,10 +1652,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     private static void changeLeader(Frontend fe) {
-        LeaderInfo leaderInfo = new LeaderInfo();
-        leaderInfo.setIp(fe.getHost());
-        leaderInfo.setHttpPort(80);
-        leaderInfo.setRpcPort(fe.getRpcPort());
+        LeaderInfo leaderInfo = new LeaderInfo(fe.getHost(), 80, fe.getRpcPort(), 2);
         GlobalStateMgr.getCurrentState().getNodeMgr().setLeader(leaderInfo);
     }
 

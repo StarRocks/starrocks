@@ -856,9 +856,15 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
-                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+                dropFrontendHook(fe);
             }
         }
+    }
+
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
     }
 
     public void replayAddFrontend(Frontend fe) {
@@ -1222,11 +1228,11 @@ public class NodeMgr {
         brokerMgr = nodeMgr.brokerMgr;
     }
 
-    public void setLeaderInfo() {
+    public void setLeaderInfo(long epoch) {
         this.leaderIp = FrontendOptions.getLocalHostAddress();
         this.leaderRpcPort = Config.rpc_port;
         this.leaderHttpPort = Config.http_port;
-        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
+        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort, epoch);
         GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
