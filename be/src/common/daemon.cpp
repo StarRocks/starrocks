@@ -40,6 +40,7 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -70,19 +71,6 @@
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
-
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-std::atomic<bool> k_starrocks_exit = false;
-
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -286,7 +274,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
     } else {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     }
-    k_starrocks_exit.store(true);
+    set_process_exit();
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
