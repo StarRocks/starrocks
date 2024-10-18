@@ -237,6 +237,30 @@ public class AggregatePushDownUtils {
         return newAggregate;
     }
 
+    public static CallOperator getRollupPartialAggregate(MvRewriteContext mvRewriteContext,
+                                                          AggregatePushDownContext ctx,
+                                                          CallOperator aggCall) {
+        if (!ctx.isRewrittenByEquivalent(aggCall)) {
+            return aggCall;
+        }
+        int argIdx = 0;
+        ScalarOperator aggArg = null;
+        for (ScalarOperator child : aggCall.getArguments()) {
+            if (!child.isConstant()) {
+                aggArg = child;
+                break;
+            }
+            argIdx += 1;
+        }
+        CallOperator origAggCall = ctx.aggToOrigAggMap.get(aggCall);
+        if (origAggCall == null) {
+            logMVRewrite(mvRewriteContext, "newAggCall is null");
+            return null;
+        }
+        CallOperator newAggregate = replaceAggFuncArgument(mvRewriteContext, origAggCall, aggArg, argIdx);
+        return newAggregate;
+    }
+
     // rewrite it with remapping and final aggregate should use the new input as its argument.
     private static CallOperator replaceAggFuncArgument(MvRewriteContext mvRewriteContext,
                                                        CallOperator aggCall,

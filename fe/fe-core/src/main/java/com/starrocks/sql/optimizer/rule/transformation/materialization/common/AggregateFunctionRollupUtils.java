@@ -16,9 +16,12 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.common;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -33,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 /**
  * `AggregateFunctionRewriter` will try to rewrite some agg functions to some transformations so can be
@@ -145,5 +149,44 @@ public class AggregateFunctionRollupUtils {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Return rollup aggregate of the input agg function.
+     * NOTE: this is only targeted for aggregate functions which are supported by function rollup not equivalent class rewrite.
+     * eg: count(col) -> sum(col)
+     */
+    public static CallOperator getRollupAggregateFunc(CallOperator aggCall,
+                                                      ColumnRefOperator targetColumn,
+                                                      boolean isUnionRewrite) {
+        if (aggCall.getFunction() instanceof AggStateUnionCombinator) {
+            Type[] argTypes = { targetColumn.getType() };
+            String rollupFuncName = aggCall.getFnName();
+            Function rollupFn = findArithmeticFunction(argTypes, rollupFuncName);
+            return new CallOperator(rollupFuncName, aggCall.getFunction().getReturnType(),
+                    Lists.newArrayList(targetColumn), rollupFn);
+        }
+
+        String rollupFuncName = getRollupFunctionName(aggCall, isUnionRewrite);
+        if (rollupFuncName == null) {
+            return null;
+        }
+
+        String aggFuncName = aggCall.getFnName();
+        if (TO_REWRITE_ROLLUP_FUNCTION_MAP.containsKey(aggFuncName)) {
+            Type[] argTypes = { targetColumn.getType() };
+            Function rollupFn = findArithmeticFunction(argTypes, rollupFuncName);
+            return new CallOperator(rollupFuncName, aggCall.getFunction().getReturnType(),
+                    Lists.newArrayList(targetColumn), rollupFn);
+        } else {
+            // NOTE:
+            // 1. Change fn's type  as 1th child has change, otherwise physical plan
+            // will still use old arg input's type.
+            // 2. the rollup function is the same as origin, but use the new column as argument
+            Function newFunc = aggCall.getFunction()
+                    .updateArgType(new Type[] { targetColumn.getType() });
+            return new CallOperator(aggCall.getFnName(), aggCall.getType(), Lists.newArrayList(targetColumn),
+                    newFunc);
+        }
     }
 }

@@ -35,9 +35,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase.getAggFunction;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase.getAggFunction;
 
 public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTestBase {
     @BeforeClass

@@ -23,15 +23,21 @@ import java.util.Map;
 
 public class ReplaceShuttle extends BaseScalarOperatorShuttle {
     private Map<ScalarOperator, ScalarOperator> replaceMap;
+    private final boolean isCheckIntersect;
 
     public ReplaceShuttle(Map<ScalarOperator, ScalarOperator> replaceMap) {
+        this(replaceMap, true);
+    }
+
+    public ReplaceShuttle(Map<ScalarOperator, ScalarOperator> replaceMap, boolean isCheckIntersect) {
         this.replaceMap = replaceMap;
+        this.isCheckIntersect = isCheckIntersect;
     }
 
     public ScalarOperator rewrite(ScalarOperator scalarOperator) {
         ScalarOperator result = scalarOperator.accept(this, null);
         // failed to replace the scalarOperator
-        if (scalarOperator.getUsedColumns().isIntersect(result.getUsedColumns())) {
+        if (isCheckIntersect && scalarOperator.getUsedColumns().isIntersect(result.getUsedColumns())) {
             return null;
         }
         return result;
