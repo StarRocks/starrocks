@@ -569,4 +569,29 @@ public class RangePartitionInfo extends PartitionInfo {
         info.isMultiColumnPartition = partitionColumnIds.size() > 1;
         return info;
     }
+
+    @Override
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        super.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        Map<Long, Range<PartitionKey>> oldIdToRange = this.idToRange;
+        Map<Long, Range<PartitionKey>> oldIdToTempRange = this.idToTempRange;
+
+        this.idToRange = new ConcurrentHashMap<>();
+        this.idToTempRange = new ConcurrentHashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            Range<PartitionKey> range = oldIdToRange.get(oldId);
+            if (range != null) {
+                this.idToRange.put(newId, range);
+            }
+            Range<PartitionKey> tempRange = oldIdToTempRange.get(oldId);
+            if (tempRange != null) {
+                this.idToTempRange.put(newId, tempRange);
+            }
+        }
+    }
 }
