@@ -14,44 +14,77 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.qe.ConnectContext;
-
-import java.util.Collections;
-import java.util.List;
-
 /**
  * Use histogram to estimate cardinality
  */
 public class HistogramEstimator {
-
+    
     /**
-     * Return null if failed to estimate
+     * Estimate the selectivity of two columns with EqualTo operator
+     * Return null if fail to do the estimation
      */
     public static Double estimateEqualToSelectivity(ColumnStatistic left, ColumnStatistic right) {
-        ConnectContext context = ConnectContext.get();
-        if (context != null && !context.getSessionVariable().isCboEnableHistogramJoinEstimation()) {
-            return null;
-        }
-        if (left.getHistogram() == null || right.getHistogram() == null) {
+        // Check if input parameters are valid
+        if (left == null || right == null) {
             return null;
         }
 
-        Histogram lhs = left.getHistogram();
-        Histogram rhs = right.getHistogram();
-        for (Bucket bucket : lhs.getBuckets()) {
-            Collections.binarySearch(rhs.getBuckets(), new Bucket(1, 1, 1, 1));
-            List<Bucket> overlapped = rhs.getOverlapped(bucket);
-            long overlapCount = 0;
-            for (Bucket overlap : overlapped) {
-                StatisticRangeValues leftRange =
-                        new StatisticRangeValues(bucket.getLower(), bucket.getUpper(), bucket.getUpperRepeats());
-                StatisticRangeValues rightRange =
-                        new StatisticRangeValues(overlap.getLower(), overlap.getUpper(), bucket.getUpperRepeats());
-                double overlapLength = leftRange.overlapLength(rightRange);
-                overlapCount += overlapLength;
+        // Get histograms
+        Histogram leftHistogram = left.getHistogram();
+        Histogram rightHistogram = right.getHistogram();
+
+        // If either histogram is empty, estimation is not possible
+        if (leftHistogram == null || rightHistogram == null) {
+            return null;
+        }
+
+        // Calculate the overlapping area of the two histograms
+        double overlapArea = 0.0;
+        double totalArea = 0.0;
+
+        for (Bucket leftBucket : leftHistogram.getBuckets()) {
+            for (Bucket rightBucket : rightHistogram.getBuckets()) {
+                double overlap = calculateBucketOverlap(leftBucket, rightBucket);
+                overlapArea += overlap;
             }
-            return 1.0 * overlapCount / lhs.getTotalRows();
+            totalArea += leftBucket.getCount();
+        }
+
+        // Calculate selectivity
+        if (totalArea > 0) {
+            return overlapArea / totalArea;
+        } else {
+            return null;
         }
     }
 
+    private static double calculateBucketOverlap(Bucket leftBucket, Bucket rightBucket) {
+        double leftLower = leftBucket.getLower();
+        double leftUpper = leftBucket.getUpper();
+        double rightLower = rightBucket.getLower();
+        double rightUpper = rightBucket.getUpper();
+
+        // Calculate overlap interval
+        double overlapLower = Math.max(leftLower, rightLower);
+        double overlapUpper = Math.min(leftUpper, rightUpper);
+
+        // If there's no overlap, return 0
+        if (overlapLower >= overlapUpper) {
+            return 0;
+        }
+
+        // Calculate overlap ratio
+        double leftRange = leftUpper - leftLower;
+        double rightRange = rightUpper - rightLower;
+        double overlapRange = overlapUpper - overlapLower;
+
+        double leftOverlapRatio = overlapRange / leftRange;
+        double rightOverlapRatio = overlapRange / rightRange;
+
+        // Estimate the count of overlapping elements
+        double overlapCount =
+                Math.min(leftBucket.getCount() * leftOverlapRatio, rightBucket.getCount() * rightOverlapRatio);
+
+        return overlapCount;
+    }
 }
