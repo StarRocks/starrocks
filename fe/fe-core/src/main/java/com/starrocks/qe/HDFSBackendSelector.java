@@ -171,6 +171,15 @@ public class HDFSBackendSelector implements BackendSelector {
             return null;
         }
 
+        boolean forceReBalance = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
+                getHdfsBackendSelectorForceRebalance() : false;
+        boolean enableDataCache = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
+                isEnableScanDataCache() : false;
+        // If force-rebalancing is not specified and cache is used, skip the rebalancing directly.
+        if (!forceReBalance && enableDataCache) {
+            return backends.get(0);
+        }
+
         ComputeNode node = null;
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         for (ComputeNode backend : backends) {
