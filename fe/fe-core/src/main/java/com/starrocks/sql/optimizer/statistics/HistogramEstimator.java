@@ -84,13 +84,23 @@ public class HistogramEstimator {
         double rightRange = rightUpper - rightLower;
         double overlapRange = overlapUpper - overlapLower;
 
-        double leftOverlapRatio = overlapRange / leftRange;
-        double rightOverlapRatio = overlapRange / rightRange;
+        double leftOverlapCount;
+        if (leftRange <= 0) {
+            leftOverlapCount = leftBucket.getUpperRepeats();
+        } else {
+            double leftOverlapRatio = overlapRange / leftRange;
+            leftOverlapCount = leftBucket.getCount() * leftOverlapRatio;
+        }
+
+        double rightOverlapCount;
+        if (rightRange <= 0) {
+            rightOverlapCount = rightBucket.getUpperRepeats();
+        } else {
+            double rightOverlapRatio = overlapRange / rightRange;
+            rightOverlapCount = rightBucket.getCount() * rightOverlapRatio;
+        }
 
         // Estimate the count of overlapping elements
-        double overlapCount =
-                Math.min(leftBucket.getCount() * leftOverlapRatio, rightBucket.getCount() * rightOverlapRatio);
-
-        return overlapCount;
+        return Math.min(leftOverlapCount, rightOverlapCount);
     }
 }
