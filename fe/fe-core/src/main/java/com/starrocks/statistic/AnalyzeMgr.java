@@ -332,6 +332,10 @@ public class AnalyzeMgr implements Writable {
         return externalBasicStatsMetaMap;
     }
 
+    public ExternalBasicStatsMeta getExternalTableBasicStatsMeta(String catalogName, String dbName, String tableName) {
+        return externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName));
+    }
+
     public HistogramStatsMeta getHistogramMeta(long tableId, String column) {
         return histogramStatsMetaMap.get(Pair.create(tableId, column));
     }
