@@ -20,8 +20,10 @@
 #include <queue>
 #include <unordered_map>
 
+#include "block_manager.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::spill {
 
@@ -53,6 +55,7 @@ public:
 
     StatusOr<BlockPtr> acquire_block(const AcquireBlockOptions& opts) override;
     Status release_block(BlockPtr block) override;
+    Status release_affinity_group(const BlockAffinityGroup affinity_group) override;
 
 #ifdef BE_TEST
     void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }
@@ -61,10 +64,10 @@ public:
 private:
     StatusOr<LogBlockContainerPtr> get_or_create_container(const DirPtr& dir, const TUniqueId& fragment_instance_id,
                                                            int32_t plan_node_id, const std::string& plan_node_name,
-                                                           bool direct_io);
+                                                           bool direct_io, BlockAffinityGroup affinity_group);
 
 private:
-    typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
+    typedef phmap::flat_hash_map<uint64_t, LogBlockContainerPtr> ContainerMap;
     typedef std::queue<LogBlockContainerPtr> ContainerQueue;
     typedef std::shared_ptr<ContainerQueue> ContainerQueuePtr;
 
@@ -74,11 +77,10 @@ private:
     std::atomic<uint64_t> _next_container_id = 0;
     std::mutex _mutex;
 
-    typedef std::unordered_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
-    typedef std::unordered_map<TUniqueId, std::shared_ptr<PlanNodeContainerMap>> QueryContainerMap;
-    typedef std::unordered_map<std::string, std::shared_ptr<QueryContainerMap>> DirContainerMap;
+    typedef phmap::flat_hash_map<int32_t, ContainerQueuePtr> PlanNodeContainerMap;
+    typedef phmap::flat_hash_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> DirContainerMap;
 
-    std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> _available_containers;
+    phmap::flat_hash_map<BlockAffinityGroup, std::shared_ptr<DirContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
     DirManager* _dir_mgr = nullptr;

@@ -21,6 +21,7 @@
 #include <memory>
 #include <numeric>
 
+#include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/spill/common.h"
@@ -271,7 +272,6 @@ void PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_p
     num_partitions = BitUtil::next_power_of_two(num_partitions);
     num_partitions = std::min<size_t>(num_partitions, 1 << config::spill_max_partition_level);
     num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
-
     _level_to_partitions.clear();
     _id_to_partitions.clear();
     std::fill(_partition_set.begin(), _partition_set.end(), false);
@@ -319,21 +319,28 @@ void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_pt
     std::sort(partitions.begin(), partitions.end(),
               [](const auto& left, const auto& right) { return left->partition_id < right->partition_id; });
     _partition_set[partition->partition_id] = true;
+    _total_partition_num += 1;
 }
 
 void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partition) {
+    auto affinity_group = partition->block_group->get_affinity_group();
+    DCHECK(affinity_group != kDefaultBlockAffinityGroup);
     _id_to_partitions.erase(partition->partition_id);
     size_t level = partition->level;
     auto& partitions = _level_to_partitions[level];
     _partition_set[partition->partition_id] = false;
-    partitions.erase(std::find_if(partitions.begin(), partitions.end(),
-                                  [partition](auto& val) { return val->partition_id == partition->partition_id; }));
+    auto iter = std::find_if(partitions.begin(), partitions.end(),
+                             [partition](auto& val) { return val->partition_id == partition->partition_id; });
+    _total_partition_num -= (iter != partitions.end());
+    partitions.erase(iter);
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
         if (_min_level == level) {
             _min_level = level + 1;
         }
     }
+    WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
+                  fmt::format("release affinity group {} error", affinity_group));
 }
 
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
@@ -466,7 +473,8 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
-        auto block_group = std::make_shared<BlockGroup>();
+        BlockAffinityGroup affinity_group = _spiller->block_manager()->acquire_affinity_group();
+        auto block_group = std::make_shared<BlockGroup>(affinity_group);
         partition->block_group = block_group;
         partition->spill_writer->add_block_group(std::move(block_group));
         auto output = create_spill_output_stream(_spiller, partition->block_group.get(), _spiller->block_manager());
