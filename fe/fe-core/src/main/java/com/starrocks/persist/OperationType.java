@@ -583,7 +583,11 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_KEY = 13512;
-
+    // External cool down config
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG = 13600;
+    @IgnorableOnReplayFailed
+    public static final short OP_EXTERNAL_COOLDOWN_JOB_STATE = 13601;
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
      */

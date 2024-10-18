@@ -52,6 +52,8 @@ public class TaskRunBuilder {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
         } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {
             taskRun.setProcessor(new DataCacheSelectProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.EXTERNAL_COOLDOWN)) {
+            taskRun.setProcessor(new PartitionBasedCooldownProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }
