@@ -35,19 +35,21 @@
 
 namespace starrocks::lake {
 
-class PersistentIndexSstableTest : public ::testing::Test {
+class PersistentIndexSstableTest : public ::testing::Test,
+                                   ::testing::WithParamInterface<starrocks::sstable::CompressionType> {
 public:
-    static void SetUpTestCase() { CHECK_OK(fs::create_directories(kTestDir)); }
+    void SetUp() override { CHECK_OK(fs::create_directories(kTestDir)); }
 
-    static void TearDownTestCase() { (void)fs::remove_all(kTestDir); }
+    void TearDown() override { (void)fs::remove_all(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./persistent_index_sstable_test";
 };
 
-TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
+TEST_P(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     const int N = 10000;
     sstable::Options options;
+    options.compression = GetParam();
     const std::string filename = "test1.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
     sstable::TableBuilder builder(options, file.get());
@@ -77,9 +79,10 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     delete sstable;
 }
 
-TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
+TEST_P(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     const int N = 10000;
     sstable::Options options;
+    options.compression = GetParam();
     const std::string filename = "test2.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
     sstable::TableBuilder builder(options, file.get());
@@ -109,7 +112,7 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     delete sstable;
 }
 
-TEST_F(PersistentIndexSstableTest, test_merge) {
+TEST_P(PersistentIndexSstableTest, test_merge) {
     std::vector<sstable::Iterator*> list;
     std::vector<std::unique_ptr<RandomAccessFile>> read_files;
     std::vector<uint64_t> fileszs;
@@ -118,6 +121,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     const int N = 10000;
     for (int i = 0; i < 3; ++i) {
         sstable::Options options;
+        options.compression = GetParam();
         const std::string filename = fmt::format("test_merge_{}.sst", i);
         ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
         sstable::TableBuilder builder(options, file.get());
@@ -132,6 +136,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
         ASSIGN_OR_ABORT(read_files[i], fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     }
     sstable::Options options;
+    options.compression = GetParam();
     sstable::ReadOptions read_options;
     std::vector<std::unique_ptr<sstable::Table>> sstable_ptrs(3);
     for (int i = 0; i < 3; ++i) {
@@ -145,6 +150,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     phmap::btree_map<std::string, std::string> map;
     {
         sstable::Options options;
+        options.compression = GetParam();
         sstable::Iterator* iter = sstable::NewMergingIterator(options.comparator, &list[0], list.size());
 
         iter->SeekToFirst();
@@ -194,7 +200,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     sstable_ptrs.clear();
 }
 
-TEST_F(PersistentIndexSstableTest, test_empty_iterator) {
+TEST_P(PersistentIndexSstableTest, test_empty_iterator) {
     std::unique_ptr<sstable::Iterator> iter;
     iter.reset(sstable::NewEmptyIterator());
     ASSERT_TRUE(!iter->Valid());
@@ -207,7 +213,7 @@ TEST_F(PersistentIndexSstableTest, test_empty_iterator) {
     ASSERT_ERROR(iter2->status());
 }
 
-TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
+TEST_P(PersistentIndexSstableTest, test_persistent_index_sstable) {
     const int N = 100;
     // 1. build sstable
     const std::string filename = "test_persistent_index_sstable_1.sst";
@@ -422,7 +428,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     }
 }
 
-TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
+TEST_P(PersistentIndexSstableTest, test_index_value_protobuf) {
     IndexValuesWithVerPB index_value_pb;
     for (int i = 0; i < 10; i++) {
         auto* value = index_value_pb.add_values();
@@ -437,5 +443,11 @@ TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
         ASSERT_TRUE(val == IndexValue(((uint64_t)(i * 10 + i) << 32) | (i * 20 + i)));
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(PersistentIndexSstableTest, PersistentIndexSstableTest,
+                         ::testing::Values(starrocks::sstable::CompressionType::kNoCompression,
+                                           starrocks::sstable::CompressionType::kSnappyCompression,
+                                           starrocks::sstable::CompressionType::kLz4FrameCompression,
+                                           starrocks::sstable::CompressionType::kZstdCompression));
 
 } // namespace starrocks::lake

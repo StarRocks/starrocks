@@ -14,6 +14,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/coding.h"
+#include "util/compression/block_compression.h"
 #include "util/crc32c.h"
 
 namespace starrocks::sstable {
@@ -64,6 +65,46 @@ Status Footer::DecodeFrom(Slice* input) {
         *input = Slice(end, input->get_data() + input->get_size() - end);
     }
     return result;
+}
+
+/**
+ * Decompress the input data using the specified compression algorithm.
+ * @param compression_type The compression algorithm to use.
+ * @param input The input data to decompress.
+ * @param length The length of the input data.
+ * @param result The decompressed data.
+ * @return Status::OK() if the decompression was successful, an error otherwise.
+ */
+static Status DecompressBlock(CompressionTypePB compression_type, const char* input, size_t length,
+                              BlockContents* result) {
+    const BlockCompressionCodec* codec = nullptr;
+    // Choose the compression algorithm that we need.
+    RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
+
+    // Get decompressed length from the first 64 bits of the input.
+    uint64_t output_length = DecodeFixed64(input);
+
+    // Allocate memory for the decompressed data.
+    char* output = new char[output_length];
+
+    // Prepare a Slice to hold the decompressed data.
+    Slice output_slice(output, output_length);
+
+    // Prepare a Slice for the compressed data, excluding the first 64 bits used for the length.
+    Slice input_slice(input + sizeof(uint64_t), length - sizeof(uint64_t));
+
+    // Decompress the input data into the output slice.
+    Status status = codec->decompress(input_slice, &output_slice);
+    if (!status.ok()) {
+        delete[] output;
+        return status;
+    }
+
+    // Save the decompressed result in the result structure.
+    result->data = output_slice;
+    result->heap_allocated = true;
+    result->cachable = true;
+    return Status::OK();
 }
 
 Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const BlockHandle& handle, BlockContents* result) {
@@ -125,13 +166,13 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
         size_t ulength = 0;
         if (!snappy::GetUncompressedLength(data, n, &ulength)) {
             delete[] buf;
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (snappy) contents");
         }
         char* ubuf = new char[ulength];
         if (!snappy::RawUncompress(data, n, ubuf)) {
             delete[] buf;
             delete[] ubuf;
-            return Status::Corruption("corrupted compressed block contents");
+            return Status::Corruption("corrupted compressed block (snappy) contents");
         }
         delete[] buf;
         result->data = Slice(ubuf, ulength);
@@ -139,9 +180,29 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
         result->cachable = true;
         break;
     }
-    default:
+    case kLz4FrameCompression: {
+        auto st = DecompressBlock(CompressionTypePB::LZ4_FRAME, data, n, result);
         delete[] buf;
-        return Status::Corruption("bad block type");
+        if (!st.ok()) {
+            LOG(ERROR) << st.to_string();
+            return Status::Corruption("corrupted compressed block (lz4) contents");
+        }
+        break;
+    }
+    case kZstdCompression: {
+        auto st = DecompressBlock(CompressionTypePB::ZSTD, data, n, result);
+        delete[] buf;
+        if (!st.ok()) {
+            LOG(ERROR) << st.to_string();
+            return Status::Corruption("corrupted compressed block (zstd) contents");
+        }
+        break;
+    }
+    default:
+        std::string error_msg = "bad compression type: " + std::to_string(data[n]);
+        delete[] buf;
+        LOG(ERROR) << error_msg;
+        return Status::Corruption(error_msg);
     }
 
     return Status::OK();
