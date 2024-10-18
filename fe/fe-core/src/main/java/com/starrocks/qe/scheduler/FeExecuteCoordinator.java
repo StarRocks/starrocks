@@ -23,12 +23,14 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.sql.common.RyuDouble;
 import com.starrocks.sql.common.RyuFloat;
@@ -37,8 +39,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TResultBatch;
@@ -62,11 +66,22 @@ public class FeExecuteCoordinator extends Coordinator {
     private final ConnectContext connectContext;
 
     private final ExecPlan execPlan;
+    private final QueryRuntimeProfile queryProfile;
 
 
-    public FeExecuteCoordinator(ConnectContext context, ExecPlan execPlan) {
+    public FeExecuteCoordinator(ConnectContext context,
+                                ExecPlan execPlan,
+                                List<PlanFragment> fragments,
+                                List<ScanNode> scanNodes,
+                                TDescriptorTable descTable) {
         this.connectContext = context;
         this.execPlan = execPlan;
+        if (descTable == null) {
+            throw new IllegalArgumentException("TDescriptorTable cannot be null");
+        }
+        JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments,
+                scanNodes, descTable, TQueryType.SELECT);
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, false);
     }
     @Override
     public void startScheduling(boolean needDeploy) throws Exception {
@@ -172,12 +187,17 @@ public class FeExecuteCoordinator extends Coordinator {
 
     @Override
     public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
+        if (connectContext == null || !connectContext.isProfileEnabled()) {
+            return false;
+        }
+        // It's run in FE node, so it's must be finished here, we just record the profile.
+        task.accept(false);
         return false;
     }
 
     @Override
     public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
-
+        queryProfile.setTopProfileSupplier(topProfileSupplier);
     }
 
     @Override
@@ -187,12 +207,12 @@ public class FeExecuteCoordinator extends Coordinator {
 
     @Override
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
-        return null;
+        return queryProfile.buildQueryProfile(needMerge);
     }
 
     @Override
     public RuntimeProfile getQueryProfile() {
-        return null;
+        return queryProfile.getQueryProfile();
     }
 
     @Override
