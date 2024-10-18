@@ -636,82 +636,28 @@ public class OlapTable extends Table {
                 // base index
                 baseIndexId = newIdxId;
             }
-            indexIdToMeta.put(newIdxId, origIndexIdToMeta.get(entry.getKey()));
-            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
+            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
+            indexMeta.setIndexIdForRestore(newIdxId);
+            indexIdToMeta.put(newIdxId, indexMeta);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
-        // generate a partition name to id map
-        Map<String, Long> origPartNameToId = Maps.newHashMap();
-        for (Partition partition : idToPartition.values()) {
-            origPartNameToId.put(partition.getName(), partition.getId());
+        // generate a partition old id to new id map
+        Map<Long, Long> partitionOldIdToNewId = Maps.newHashMap();
+        for (Long id : idToPartition.keySet()) {
+            partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
         }
 
-        // reset partition info and idToPartition map
-        if (partitionInfo.isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            RangePartitionInfo origRangePartitionInfo = (RangePartitionInfo) rangePartitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                rangePartitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                // preserve existing info
-                DataProperty dataProperty = origRangePartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origRangePartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origRangePartitionInfo.getDataCacheInfo(entry.getValue());
-                Range<PartitionKey> range = origRangePartitionInfo.getIdToRange(false).get(entry.getValue());
-                // replace with new info
-                rangePartitionInfo.addPartition(newPartId, false, range, dataProperty, (short) restoreReplicationNum,
-                        inMemory, dataCacheInfo);
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-            }
-        } else if (partitionInfo.isListPartition()) {
-            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            ListPartitionInfo origListPartitionInfo = (ListPartitionInfo) listPartitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                listPartitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                // preserve existing info
-                DataProperty dataProperty = origListPartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origListPartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origListPartitionInfo.getDataCacheInfo(entry.getValue());
-                List<String> values = origListPartitionInfo.getIdToValues().get(entry.getValue());
-                List<List<String>> multiValues = origListPartitionInfo.getIdToMultiValues().get(entry.getValue());
-                // replace with new info
-                try {
-                    listPartitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum,
-                            inMemory, dataCacheInfo, values, multiValues);
-                } catch (AnalysisException e) {
-                    return new Status(ErrCode.COMMON_ERROR, "Failed to add partition " + e.getMessage());
-                }
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-            }
-        } else if (partitionInfo.isUnPartitioned()) {
-            // Single partitioned
-            PartitionInfo origPartitionInfo = (PartitionInfo) partitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                partitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                DataProperty dataProperty = origPartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origPartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origPartitionInfo.getDataCacheInfo(entry.getValue());
-                partitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum, inMemory,
-                        dataCacheInfo);
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-            }
-        } else {
-            return new Status(ErrCode.UNSUPPORTED, "Unsupported partition type: " + partitionInfo.getType());
+        // reset partiton info
+        partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        // reset partitions
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        idToPartition.clear();
+        for (Partition partition : partitions) {
+            long newPartitionId = partitionOldIdToNewId.get(partition.getId());
+            partition.setIdForRestore(newPartitionId);
+            idToPartition.put(newPartitionId, partition);
         }
 
         // for each partition, reset rollup index map
