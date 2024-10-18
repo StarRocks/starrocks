@@ -131,8 +131,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                         Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
                                 IS_NONSTRICT_SUPERTYPE_OF), false);
             }
-
-        } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+        } else if (functionName.equals(FunctionSet.GROUP_CONCAT_V2)) {
             // all children of group_concat are constant
             return fnCall;
         } else if (functionName.equals(FunctionSet.AVG)) {

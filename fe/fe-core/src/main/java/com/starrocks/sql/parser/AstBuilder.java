@@ -6577,7 +6577,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         NodePosition pos = createPos(context);
         String functionName;
         boolean isGroupConcat = false;
-        boolean isLegacyGroupConcat = false;
         boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
@@ -6595,48 +6594,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
-            isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
         } else {
             functionName = FunctionSet.MAX;
         }
+        // order by
         List<OrderByElement> orderByElements = new ArrayList<>();
         if (context.aggregationFunction().ORDER() != null) {
             orderByElements = visit(context.aggregationFunction().sortItem(), OrderByElement.class);
         }
-
-        List<String> hints = Lists.newArrayList();
-        if (context.aggregationFunction().bracketHint() != null) {
-            hints = context.aggregationFunction().bracketHint().identifier().stream().map(
-                    RuleContext::getText).collect(Collectors.toList());
-        }
-        if (context.aggregationFunction().setQuantifier() != null) {
-            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
-        }
-
-        if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
-            throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
-        }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
-        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
-            if (isLegacyGroupConcat) {
-                if (exprs.size() == 1) {
-                    Expr sepExpr;
-                    String sep = ", ";
-                    sepExpr = new StringLiteral(sep, pos);
-                    exprs.add(sepExpr);
-                }
-            } else {
-                Expr sepExpr;
-                String sep = ",";
-                sepExpr = new StringLiteral(sep, pos);
-                exprs.add(sepExpr);
-            }
-        }
+        boolean isContainOrderByElements = !orderByElements.isEmpty();
         if (!orderByElements.isEmpty()) {
             int exprSize = exprs.size();
-            if (isGroupConcat) { // the last expr of group_concat is the separator
-                exprSize--;
-            }
             for (OrderByElement orderByElement : orderByElements) {
                 Expr by = orderByElement.getExpr();
                 if (by instanceof IntLiteral) {
@@ -6652,6 +6621,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // remove const order-by items
             orderByElements = orderByElements.stream().filter(x -> !x.getExpr().isConstant()).collect(toList());
         }
+
+        // hint
+        List<String> hints = Lists.newArrayList();
+        if (context.aggregationFunction().bracketHint() != null) {
+            hints = context.aggregationFunction().bracketHint().identifier().stream().map(
+                    RuleContext::getText).collect(Collectors.toList());
+        }
+
+        // is distinct
+        if (context.aggregationFunction().setQuantifier() != null) {
+            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
+        }
+        if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
+            throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+        }
+
+        // GROUP_CONCAT: use higher version of group_concat if there is order by or distinct clause
+        if (isGroupConcat && (isDistinct || isContainOrderByElements
+                || context.aggregationFunction().SEPARATOR() != null)) {
+            functionName = FunctionSet.GROUP_CONCAT_V2;
+            if (!exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
+                Expr sepExpr;
+                String sep = ",";
+                sepExpr = new StringLiteral(sep, pos);
+                exprs.add(sepExpr);
+            }
+        }
+
         if (CollectionUtils.isNotEmpty(orderByElements)) {
             orderByElements.stream().forEach(e -> exprs.add(e.getExpr()));
         }

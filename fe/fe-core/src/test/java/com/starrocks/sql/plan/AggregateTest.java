@@ -2722,7 +2722,7 @@ public class AggregateTest extends PlanTestBase {
     public void testLegacyGroupConcat() throws Exception {
         String sql = "select /*+ set_var(sql_mode = GROUP_CONCAT_LEGACY) */ group_concat(v1) from t0";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), ', ')");
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR))");
 
         sql =
                 "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
@@ -2741,7 +2741,7 @@ public class AggregateTest extends PlanTestBase {
         sql =
                 "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
     }
 
     @Test

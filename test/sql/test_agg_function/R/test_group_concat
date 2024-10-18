@@ -1469,11 +1469,11 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 -- !result
 select group_concat();
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat should have at least one input.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat requires one or two parameters: group_concat().')
 -- !result
 select group_concat() from ss;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat should have at least one input.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 20. Detail message: group_concat requires one or two parameters: group_concat().')
 -- !result
 select group_concat(',');
 -- result:
@@ -1512,7 +1512,7 @@ select group_concat("中国",name order by 2, "第一", id separator subject) fr
 -- !result
 select group_concat("中国" order by "第一" separator 1) from ss;
 -- result:
-E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', 1).")
+E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat2('中国', 1).")
 -- !result
 select group_concat(  order by score) from ss order by 1;
 -- result:
@@ -1524,7 +1524,7 @@ E: (1064, "Getting syntax error at line 1, column 30. Detail message: Unexpected
 -- !result
 select group_concat([1,2]) from ss;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 25. Detail message: No matching function with signature: group_concat(array<tinyint(4)>, varchar).')
+E: (1064, 'Getting analyzing error from line 1, column 20 to line 1, column 24. Detail message: group_concat requires first parameter to be of getType() STRING: group_concat([1,2]).')
 -- !result
 select group_concat(json_object("2:3")) from ss;
 -- result:
@@ -1532,7 +1532,7 @@ select group_concat(json_object("2:3")) from ss;
 -- !result
 select group_concat(map(2,3)) from ss;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 28. Detail message: No matching function with signature: group_concat(map<tinyint(4),tinyint(4)>, varchar).')
+E: (1064, 'Getting analyzing error from line 1, column 20 to line 1, column 27. Detail message: group_concat requires first parameter to be of getType() STRING: group_concat(map{2:3}).')
 -- !result
 select group_concat(null);
 -- result:
@@ -1708,10 +1708,10 @@ fruit-fruit-fruit-fruit-fruit-fruit
 -- !result
 select /*+ set_var(sql_mode = 'GROUP_CONCAT_LEGACY') */ /*+ set_var(sql_mode = 'ONLY_FULL_GROUP_BY') */ id, group_concat( value, '-' ) from t1 group by id order by id;
 -- result:
-1	fruit-,fruit-,fruit-
-2	fruit-,fruit-,fruit-
+1	fruit-fruit-fruit
+2	fruit-fruit-fruit
 -- !result
 select /*+ set_var(sql_mode = 68719476736) */ /*+ set_var(sql_mode = 32) */ group_concat( value ) from t1;
 -- result:
-fruit,fruit,fruit,fruit,fruit,fruit
+fruit, fruit, fruit, fruit, fruit, fruit
 -- !result

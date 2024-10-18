@@ -4351,6 +4351,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY)) {
+            tResult.setDefault_group_concat_separator(", ");
+        }
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
 

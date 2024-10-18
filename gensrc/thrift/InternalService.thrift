@@ -320,6 +320,7 @@ struct TQueryOptions {
   140: optional string catalog;
 
   141: optional i32 datacache_evict_probability;
+  142: optional string default_group_concat_separator;
 
   150: optional map<string, string> ann_params;
   151: optional double pq_refine_factor;

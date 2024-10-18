@@ -1056,7 +1056,11 @@ public class AstToStringBuilder {
                 sb.append("`" + node.getFnName().getDb() + "`.");
             }
             String functionName = node.getFnName().getFunction();
-            sb.append(functionName);
+            if (functionName.equals(FunctionSet.GROUP_CONCAT_V2)) {
+                sb.append(FunctionSet.GROUP_CONCAT);
+            } else {
+                sb.append(functionName);
+            }
 
             sb.append("(");
             if (fnParams.isStar()) {
@@ -1075,9 +1079,9 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
-            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT_V2)) {
                 int end = 1;
-                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                if (functionName.equals(FunctionSet.GROUP_CONCAT_V2)) {
                     end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
                 }
                 for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
@@ -1087,10 +1091,12 @@ public class AstToStringBuilder {
                     sb.append(visit(node.getChild(i)));
                 }
                 List<OrderByElement> sortClause = fnParams.getOrderByElements();
-                if (sortClause != null) {
+                if (!CollectionUtils.isEmpty(sortClause)) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
                 }
-                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
+                boolean isGroupConcatV2 = functionName.equals(FunctionSet.GROUP_CONCAT_V2) &&
+                        (fnParams.isDistinct() || !CollectionUtils.isEmpty(sortClause));
+                if (isGroupConcatV2 && end < node.getChildren().size() && end > 0) {
                     sb.append(" SEPARATOR ");
                     sb.append(visit(node.getChild(end)));
                 }
