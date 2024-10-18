@@ -110,11 +110,8 @@ int init_test_env(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-<<<<<<< HEAD
     TEST_clear_all_columns_this_thread();
-=======
     exec_env->wait_for_finish();
->>>>>>> e259267bb8 ([BugFix] Fix running fragment count during exec env exit (#52048))
     // delete engine
     StorageEngine::instance()->stop();
     // destroy exec env
