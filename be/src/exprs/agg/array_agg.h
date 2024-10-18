@@ -40,7 +40,11 @@ struct ArrayAggAggregateState {
                 for (int i = 0; i < count; i++) {
                     auto raw_key = column.get_slice(offset + i);
                     KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                    set.lazy_emplace(key, [&](const auto& ctor) {
+#else
                     set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
                         uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                         assert(pos != nullptr);
                         memcpy(pos, key.data, key.size);
