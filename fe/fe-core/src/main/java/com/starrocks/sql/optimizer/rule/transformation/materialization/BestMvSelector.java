@@ -146,8 +146,24 @@ public class BestMvSelector {
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
+            double mv1RowCount = context1.getMvStatistics().getOutputRowCount();
+            double mv2RowCount = context2.getMvStatistics().getOutputRowCount();
+            // compare by mv's real table row number if both row number is greater than 0
+            if (mv1RowCount > 0 && mv2RowCount > 0) {
+                // prefer smaller mv only when the larger mv's row count is at least twice the smaller mv's row count
+                if (Math.max(mv1RowCount, mv2RowCount) > 2 * Math.min(mv1RowCount, mv2RowCount)) {
+                    return Double.compare(mv1RowCount, mv2RowCount);
+                }
+            }
+
+            // larger is better
+            int ret = Integer.compare(context2.sortScore, context1.sortScore);
+            if (ret != 0) {
+                return ret;
+            }
+
             // compare group by key num
-            int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
+            ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
             if (ret != 0) {
                 return ret;
             }
