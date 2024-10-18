@@ -1153,13 +1153,38 @@ public class ExpressionAnalyzer {
                                 " can't cast from " + node.getChild(1).getType().toSql() + " to ARRAY<BOOL>");
                     }
                     break;
-                case FunctionSet.GROUP_CONCAT:
+                case FunctionSet.GROUP_CONCAT: {
+                    if (node.getChildren().size() > 2 || node.getChildren().isEmpty()) {
+                        throw new SemanticException(
+                                "group_concat requires one or two parameters: " + node.toSql(),
+                                node.getPos());
+                    }
+                    if (node.getParams().isDistinct()) {
+                        throw new SemanticException("group_concat does not support DISTINCT", node.getPos());
+                    }
+                    Expr arg0 = node.getChild(0);
+                    if (!Type.canCastTo(arg0.getType(), Type.VARCHAR)) {
+                        throw new SemanticException(
+                                "group_concat requires first parameter to be of getType() STRING: " + node.toSql(),
+                                arg0.getPos());
+                    }
+                    if (node.getChildren().size() == 2) {
+                        Expr arg1 = node.getChild(1);
+                        if (!Type.canCastTo(arg1.getType(), Type.VARCHAR)) {
+                            throw new SemanticException(
+                                    "group_concat requires second parameter to be of getType() STRING: " +
+                                            node.toSql(), arg1.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.GROUP_CONCAT_V2:
                 case FunctionSet.ARRAY_AGG: {
                     if (node.getChildren().size() == 0) {
                         throw new SemanticException(fnName + " should have at least one input", node.getPos());
                     }
                     int start = argumentTypes.length - node.getParams().getOrderByElemNum();
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT_V2)) {
                         if (start < 2) {
                             throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
                                     node.getPos());

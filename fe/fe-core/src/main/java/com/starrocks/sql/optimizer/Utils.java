@@ -750,7 +750,7 @@ public class Utils {
                 if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())) {
                     return true;
                 }
-                if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                if (FunctionSet.GROUP_CONCAT_V2.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
                     return true;
                 } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
                     if (children.size() > 1 || children.get(0).getType().isDecimalOfAnyVersion()) {
