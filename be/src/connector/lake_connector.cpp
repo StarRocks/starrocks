@@ -347,8 +347,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _params.plan_node_id = _morsel->get_plan_node_id();
         _params.scan_range = _morsel->get_scan_range();
     }
-    ASSIGN_OR_RETURN(_reader,
-                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically()));
+    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema), need_split,
+                                                 _provider->could_split_physically(), _morsel->rowsets()));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

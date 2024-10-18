@@ -60,6 +60,19 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {
+    if (!rowsets.empty()) {
+        _rowsets_inited = true;
+        _rowsets = std::move(rowsets);
+    }
+}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
