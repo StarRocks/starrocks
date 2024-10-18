@@ -606,11 +606,7 @@ Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         set_max_compaction_concurrency(max_threads);
         if (max_threads == 0) {
-            Status st = _compaction_pool->update_max_threads(0);
-            if (!st.ok()) {
-                return st;
-            }
-            return Status::OK();
+            return _compaction_pool->update_max_threads(0);
         }
 
         _max_task_num = compute_max_compaction_task_num();
