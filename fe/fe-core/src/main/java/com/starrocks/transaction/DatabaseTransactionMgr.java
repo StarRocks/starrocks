@@ -367,7 +367,7 @@ public class DatabaseTransactionMgr {
                 persistTxnStateInTxnLevelLock(transactionState);
             }
 
-            LOG.info("transaction:[{}] successfully prepare", transactionState);
+            LOG.debug("transaction:[{}] successfully prepare", transactionState);
         } finally {
             transactionState.writeUnlock();
         }
@@ -467,7 +467,7 @@ public class DatabaseTransactionMgr {
             } finally {
                 updateCatalogAfterCommittedSpan.end();
             }
-            LOG.info("transaction:[{}] successfully committed", transactionState);
+            LOG.debug("transaction:[{}] successfully committed", transactionState);
             return waiter;
         } finally {
             transactionState.writeUnlock();
@@ -1549,7 +1549,7 @@ public class DatabaseTransactionMgr {
                     prefix = ", ";
                     expiredTxnMsgs.append(transactionState.getTransactionId());
                     if (expiredTxnMsgs.length() > 4096) {
-                        LOG.info("transaction list [{}] are expired, remove them from transaction manager",
+                        LOG.debug("transaction list [{}] are expired, remove them from transaction manager",
                                 expiredTxnMsgs);
                         expiredTxnMsgs = new StringBuilder(1024);
                     }
@@ -1558,7 +1558,7 @@ public class DatabaseTransactionMgr {
                 }
             }
             if (expiredTxnMsgs.length() > 0) {
-                LOG.info("transaction list [{}] are expired, remove them from transaction manager",
+                LOG.debug("transaction list [{}] are expired, remove them from transaction manager",
                         expiredTxnMsgs);
             }
         } finally {
@@ -1769,22 +1769,22 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
-                LOG.info("remove unknown transaction: {}", transactionState);
+                LOG.debug("remove unknown transaction: {}", transactionState);
                 return;
             }
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                LOG.info("replay a committed transaction {}", transactionState);
+                LOG.debug("replay a committed transaction {}", transactionState);
                 updateCatalogAfterCommitted(transactionState, db);
             } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-                LOG.info("replay a visible transaction {}", transactionState);
+                LOG.debug("replay a visible transaction {}", transactionState);
                 updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState, true);
             if (transactionState.isExpired(System.currentTimeMillis())) {
-                LOG.info("remove expired transaction: {}", transactionState);
+                LOG.debug("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
         } finally {
@@ -1795,7 +1795,7 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
         writeLock();
         try {
-            LOG.info("replay a transaction state batch{}", transactionStateBatch);
+            LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
@@ -1900,7 +1900,7 @@ public class DatabaseTransactionMgr {
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
-        LOG.info("finish transaction {} successfully", transactionState);
+        LOG.debug("finish transaction {} successfully", transactionState);
     }
 
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {

@@ -312,7 +312,7 @@ public class Config extends ConfigBase {
      * In such cases, it is possible to disable this switch.
      */
     @ConfField(mutable = true)
-    public static boolean log_register_and_unregister_query_id = true;
+    public static boolean log_register_and_unregister_query_id = false;
 
     /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
