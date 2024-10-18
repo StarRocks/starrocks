@@ -116,13 +116,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
 
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
-<<<<<<< HEAD
-                locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
-                Map<Long, Long> indexRowCountMap = Maps.newHashMap();
-=======
-                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
->>>>>>> 1df36e49d4 ([BugFix] Fix incorrect materialized view row count (#51944))
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
