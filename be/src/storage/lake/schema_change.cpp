@@ -367,17 +367,37 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
     }
     int64_t txn_id = request.txn_id;
 
+    std::vector<std::future<Status>> features;
+
     for (const auto& tablet_meta_info : request.tabletMetaInfos) {
-        RETURN_IF_ERROR(do_process_update_tablet_meta(tablet_meta_info, txn_id));
+        auto task = std::make_shared<std::packaged_task<Status()>>([=]() {
+            auto result = do_process_update_tablet_meta(tablet_meta_info, txn_id);
+            return result;
+        });
+
+        auto packaged_func = [task]() { (*task)(); };
+        auto st = ExecEnv::GetInstance()->update_tablet_meta_thread_pool()->submit_func(std::move(packaged_func));
+        if (!st.ok()) {
+            RETURN_IF_ERROR(do_process_update_tablet_meta(tablet_meta_info, txn_id));
+        } else {
+            features.push_back(task->get_future());
+        }
     }
 
+    for (auto& f : features) {
+        auto st = f.get();
+        if (!st.ok()) {
+            return st;
+        }
+    }
     return Status::OK();
 }
 
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
     auto timer = MonotonicStopWatch{};
     timer.start();
-    LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
+
+    VLOG(1) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
 
     auto tablet_id = tablet_meta_info.tablet_id;
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));

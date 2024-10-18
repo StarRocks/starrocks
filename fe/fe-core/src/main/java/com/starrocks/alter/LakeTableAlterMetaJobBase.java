@@ -161,7 +161,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             }
 
             this.jobState = JobState.FINISHED_REWRITING;
-            this.finishedTimeMs = System.currentTimeMillis();
+            // this.finishedTimeMs = System.currentTimeMillis();
+            setRewriteFinishedTimeMs(System.currentTimeMillis());
 
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
 
@@ -469,6 +470,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
             this.jobState = other.jobState;
             this.createTimeMs = other.createTimeMs;
+            this.rewriteFinishedTimeMs = other.rewriteFinishedTimeMs;
             this.finishedTimeMs = other.finishedTimeMs;
             this.errMsg = other.errMsg;
             this.timeoutMs = other.timeoutMs;
