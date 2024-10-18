@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
@@ -52,6 +53,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -122,6 +124,14 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
 public class MultiDistinctByCTERewriter {
 
     private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+    private static final Set<String> SUPPORTED_DISTINCT_AGG_FUNCTIONS =
+            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.SUM)
+                    .add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.GROUP_CONCAT)
+                    .add(FunctionSet.GROUP_CONCAT_V2)
+                    .build();
 
     public List<OptExpression> transformImpl(OptExpression input, OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
@@ -237,10 +247,8 @@ public class MultiDistinctByCTERewriter {
         Map<CallOperator, ColumnRefOperator> consumeAggCallMap = Maps.newHashMap();
         for (ColumnRefOperator distinctAggRef : distinctAggList) {
             CallOperator aggCallOperator = aggregate.getAggregations().get(distinctAggRef);
-            if (aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM) ||
-                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG) ||
-                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
+            String fnName = aggCallOperator.getFnName();
+            if (SUPPORTED_DISTINCT_AGG_FUNCTIONS.contains(fnName)) {
                 allCteConsumes.offer(buildCountSumDistinctCTEConsume(distinctAggRef, aggCallOperator,
                         aggregate, cteProduce, factory));
                 consumeAggCallMap.put(aggCallOperator, distinctAggRef);
