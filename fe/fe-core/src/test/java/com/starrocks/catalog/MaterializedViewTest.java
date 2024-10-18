@@ -22,8 +22,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
@@ -40,6 +42,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MVTestUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -819,5 +822,75 @@ public class MaterializedViewTest {
         Assert.assertEquals(10, basePartitionInfo.getFileNumber());
         Assert.assertTrue(basePartitionInfo.toString().contains(
                     "BasePartitionInfo{id=-1, version=-1, lastRefreshTime=123456, lastFileModifiedTime=100, fileNumber=10}"));
+    }
+
+    @Test
+    public void testCreateMVWithCoolDownTime() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.table1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String mvSql = "create materialized view mv_cooldowun_check " +
+                "(k2 ," +
+                " total ," +
+                "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala' " +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"SSD\","
+                + "\"storage_cooldown_time\" = \"9999-12-31 23:59:59\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        // correct behavior
+        starRocksAssert.withMaterializedView(mvSql);
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView baseMv = ((MaterializedView) testDb.getTable("mv_cooldowun_check"));
+        Assert.assertEquals(4, baseMv.getTableProperty().getProperties().size());
+        Assert.assertEquals("253402271999000", baseMv.getTableProperty().getProperties().get("storage_cooldown_time"));
+
+        // Mock add partition
+        Map<String, String> propertiesAddPartitionCase = MvUtils.getPartitionProperties(baseMv);
+        Assert.assertEquals(3, propertiesAddPartitionCase.size());
+        Assert.assertTrue(propertiesAddPartitionCase.containsKey("storage_cooldown_time"));
+
+        Config.tablet_sched_storage_cooldown_second = 2592000;
+        DataProperty mockDataProperty = PropertyAnalyzer.analyzeDataProperty(propertiesAddPartitionCase,
+                DataProperty.getInferredDefaultDataProperty(), false);
+        Assert.assertTrue(mockDataProperty.getCooldownTimeMs() == 253402271999000L);
+        // correct behavior
+
+        // misbehavior
+        starRocksAssert.dropMaterializedView("mv_cooldowun_check");
+        starRocksAssert.withMaterializedView(mvSql);
+        testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        baseMv = ((MaterializedView) testDb.getTable("mv_cooldowun_check"));
+        Assert.assertEquals(4, baseMv.getTableProperty().getProperties().size());
+        Assert.assertEquals("253402271999000", baseMv.getTableProperty().getProperties().get("storage_cooldown_time"));
+
+        //Mock add partition
+        propertiesAddPartitionCase = MvUtils.getPartitionProperties(baseMv);
+        Assert.assertEquals(3, propertiesAddPartitionCase.size());
+        Assert.assertTrue(propertiesAddPartitionCase.containsKey("storage_cooldown_time"));
+        propertiesAddPartitionCase.remove("storage_cooldown_time");
+
+        Config.tablet_sched_storage_cooldown_second = 2592000;
+        mockDataProperty = PropertyAnalyzer.analyzeDataProperty(propertiesAddPartitionCase,
+                DataProperty.getInferredDefaultDataProperty(), false);
+        Assert.assertTrue(mockDataProperty.getCooldownTimeMs() < 253402271999000L);
+        // misbehavior
     }
 }
