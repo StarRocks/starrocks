@@ -18,12 +18,9 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -55,12 +52,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.TO_REWRITE_ROLLUP_FUNCTION_MAP;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.genRollupProject;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupFunctionName;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
 
 /**
  * SPJG materialized view rewriter, based on
@@ -813,44 +808,5 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         }
 
         return rewrittens;
-    }
-
-    /**
-     * Return rollup aggregate of the input agg function.
-     * NOTE: this is only targeted for aggregate functions which are supported by function rollup not equivalent class rewrite.
-     * eg: count(col) -> sum(col)
-     */
-    public static CallOperator getRollupAggregateFunc(CallOperator aggCall,
-                                                      ColumnRefOperator targetColumn,
-                                                      boolean isUnionRewrite) {
-        if (aggCall.getFunction() instanceof AggStateUnionCombinator) {
-            Type[] argTypes = {targetColumn.getType()};
-            String rollupFuncName = aggCall.getFnName();
-            Function rollupFn = findArithmeticFunction(argTypes, rollupFuncName);
-            return new CallOperator(rollupFuncName, aggCall.getFunction().getReturnType(),
-                    Lists.newArrayList(targetColumn), rollupFn);
-        }
-
-        String rollupFuncName = getRollupFunctionName(aggCall, isUnionRewrite);
-        if (rollupFuncName == null) {
-            return null;
-        }
-
-        String aggFuncName = aggCall.getFnName();
-        if (TO_REWRITE_ROLLUP_FUNCTION_MAP.containsKey(aggFuncName)) {
-            Type[] argTypes = {targetColumn.getType()};
-            Function rollupFn = findArithmeticFunction(argTypes, rollupFuncName);
-            return new CallOperator(rollupFuncName, aggCall.getFunction().getReturnType(),
-                    Lists.newArrayList(targetColumn), rollupFn);
-        } else {
-            // NOTE:
-            // 1. Change fn's type  as 1th child has change, otherwise physical plan
-            // will still use old arg input's type.
-            // 2. the rollup function is the same as origin, but use the new column as argument
-            Function newFunc = aggCall.getFunction()
-                    .updateArgType(new Type[] {targetColumn.getType()});
-            return new CallOperator(aggCall.getFnName(), aggCall.getType(), Lists.newArrayList(targetColumn),
-                    newFunc);
-        }
     }
 }
