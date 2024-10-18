@@ -357,8 +357,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     }
                 }
             } else {
-                LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params->done;
+                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                        << ", is_done=" << params->done;
             }
             break;
         }
@@ -402,7 +402,7 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
                              << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
@@ -444,7 +444,7 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
                              << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
         }
     };
 
