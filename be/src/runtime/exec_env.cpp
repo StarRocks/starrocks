@@ -714,20 +714,26 @@ void ExecEnv::destroy() {
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
-    size_t max_loop_cnt_cfg = config::loop_count_wait_fragments_finish;
-    if (max_loop_cnt_cfg == 0) {
+    size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
+    if (max_loop_secs == 0) {
         return;
     }
 
-    size_t running_fragments = _fragment_mgr->running_fragment_count();
-    size_t loop_cnt = 0;
+    size_t running_fragments = _get_running_fragments_count();
+    size_t loop_secs = 0;
 
-    while (running_fragments && loop_cnt < max_loop_cnt_cfg) {
-        DLOG(INFO) << running_fragments << " fragment(s) are still running...";
-        sleep(10);
-        running_fragments = _fragment_mgr->running_fragment_count();
-        loop_cnt++;
+    while (running_fragments > 0 && loop_secs < max_loop_secs) {
+        LOG(INFO) << running_fragments << " fragment(s) are still running...";
+        sleep(1);
+        running_fragments = _get_running_fragments_count();
+        loop_secs++;
     }
+}
+
+size_t ExecEnv::_get_running_fragments_count() const {
+    // fragment is registered in _fragment_mgr in non-pipeline env
+    // while _query_context_mgr is used in pipeline engine.
+    return _fragment_mgr->running_fragment_count() + _query_context_mgr->size();
 }
 
 void ExecEnv::wait_for_finish() {
