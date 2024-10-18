@@ -38,7 +38,7 @@ public:
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
 
-    void submit(std::function<void()>&& report_task, bool priority = false);
+    Status submit(std::function<void()>&& report_task, bool priority = false);
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids) const;
 
