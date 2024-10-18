@@ -513,8 +513,6 @@ public class ListPartitionInfo extends PartitionInfo {
         info.automaticPartition = this.automaticPartition;
         return info;
     }
-<<<<<<< HEAD
-=======
 
     @Override
     public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
@@ -558,13 +556,4 @@ public class ListPartitionInfo extends PartitionInfo {
             }
         }
     }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        super.gsonPostProcess();
-        if (partitionColumnIds.size() <= 0) {
-            partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
-        }
-    }
->>>>>>> 9db79768de ([Refactor] Refactor reset ids for restore (#52075))
 }

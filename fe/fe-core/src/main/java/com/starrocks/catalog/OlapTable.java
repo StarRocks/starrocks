@@ -752,124 +752,6 @@ public class OlapTable extends Table {
             partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
         }
 
-<<<<<<< HEAD
-        // reset partition info and idToPartition map
-        if (partitionInfo.isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            RangePartitionInfo origRangePartitionInfo = (RangePartitionInfo) rangePartitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                rangePartitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            physicalPartitionIdToPartitionId.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                // preserve existing info
-                DataProperty dataProperty = origRangePartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origRangePartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origRangePartitionInfo.getDataCacheInfo(entry.getValue());
-                Range<PartitionKey> range = origRangePartitionInfo.getIdToRange(false).get(entry.getValue());
-                // replace with new info
-                rangePartitionInfo.addPartition(newPartId, false, range, dataProperty, (short) restoreReplicationNum,
-                        inMemory, dataCacheInfo);
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                    }
-                });
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                });
-            }
-        } else if (partitionInfo.isListPartition()) {
-            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            ListPartitionInfo origListPartitionInfo = (ListPartitionInfo) listPartitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                listPartitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            physicalPartitionIdToPartitionId.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                // preserve existing info
-                DataProperty dataProperty = origListPartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origListPartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origListPartitionInfo.getDataCacheInfo(entry.getValue());
-                List<String> values = origListPartitionInfo.getIdToValues().get(entry.getValue());
-                List<List<String>> multiValues = origListPartitionInfo.getIdToMultiValues().get(entry.getValue());
-                // replace with new info
-                try {
-                    listPartitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum,
-                            inMemory, dataCacheInfo, values, multiValues);
-                } catch (AnalysisException e) {
-                    return new Status(ErrCode.COMMON_ERROR, "Failed to add partition " + e.getMessage());
-                }
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                    }
-                });
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                });
-            }
-        } else if (partitionInfo.isUnPartitioned()) {
-            // Single partitioned
-            PartitionInfo origPartitionInfo = (PartitionInfo) partitionInfo.clone();
-            for (Long partitionId : origPartNameToId.values()) {
-                partitionInfo.dropPartition(partitionId);
-            }
-            Map<Long, Partition> origIdToPartition = Maps.newHashMap(idToPartition);
-            idToPartition.clear();
-            physicalPartitionIdToPartitionId.clear();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                DataProperty dataProperty = origPartitionInfo.getDataProperty(entry.getValue());
-                boolean inMemory = origPartitionInfo.getIsInMemory(entry.getValue());
-                DataCacheInfo dataCacheInfo = origPartitionInfo.getDataCacheInfo(entry.getValue());
-                partitionInfo.addPartition(newPartId, dataProperty, (short) restoreReplicationNum, inMemory,
-                        dataCacheInfo);
-                idToPartition.put(newPartId, origIdToPartition.get(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                    }
-                });
-                origPhysicalPartitions.forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                });
-            }
-        } else {
-            return new Status(ErrCode.UNSUPPORTED, "Unsupported partition type: " + partitionInfo.getType());
-=======
         // reset partiton info
         partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
 
@@ -877,7 +759,6 @@ public class OlapTable extends Table {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         idToPartition.clear();
         physicalPartitionIdToPartitionId.clear();
-        physicalPartitionNameToPartitionId.clear();
         for (Partition partition : partitions) {
             long newPartitionId = partitionOldIdToNewId.get(partition.getId());
             partition.setIdForRestore(newPartitionId);
@@ -895,9 +776,7 @@ public class OlapTable extends Table {
                     partition.addSubPartition(physicalPartition);
                 }
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartitionId);
-                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartitionId);
             });
->>>>>>> 9db79768de ([Refactor] Refactor reset ids for restore (#52075))
         }
 
         // reset replication number for olaptable
