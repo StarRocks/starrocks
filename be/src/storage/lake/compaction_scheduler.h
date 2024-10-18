@@ -222,6 +222,8 @@ public:
     // update at runtime
     void update_compact_threads(int32_t new_val);
 
+    void stop();
+
 private:
     friend class CompactionTaskCallback;
 
