@@ -47,7 +47,15 @@ void BinaryColumnBase<T>::check_or_die() const {
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append(const Slice& str) {
+    _bytes.insert(_bytes.end(), str.data, str.data + str.size);
+    _offsets.emplace_back(_bytes.size());
+    _slices_cache = false;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
+    DCHECK(offset + count <= src.size());
     const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
     const unsigned char* p = &b._bytes[b._offsets[offset]];
     const unsigned char* e = &b._bytes[b._offsets[offset + count]];

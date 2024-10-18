@@ -26,6 +26,8 @@ class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
     friend class ColumnFactory<Column, ConstColumn>;
 
 public:
+    using ValueType = void;
+
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 

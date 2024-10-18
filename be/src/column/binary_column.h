@@ -32,7 +32,7 @@ public:
 
     using Offset = T;
     using Offsets = Buffer<T>;
-
+    using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     struct BinaryDataProxyContainer {
@@ -172,11 +172,7 @@ public:
     // No complain about the overloaded-virtual for this function
     DIAGNOSTIC_PUSH
     DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
-    void append(const Slice& str) {
-        _bytes.insert(_bytes.end(), str.data, str.data + str.size);
-        _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
-    }
+    void append(const Slice& str);
     DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
