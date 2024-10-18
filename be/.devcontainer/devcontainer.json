@@ -1,0 +1,15 @@
+{
+	"name": "StarRocks BE",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {}
+	},
+	"workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind",
+	"workspaceFolder": "/workspace/be",
+	"runArgs": [
+		"--network=host"
+	],
+	"remoteUser": "root"
+}
