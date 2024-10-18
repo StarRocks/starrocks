@@ -605,10 +605,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### upload_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -616,10 +616,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### download_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -641,7 +641,18 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: 5
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### move_dir_worker_count
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->

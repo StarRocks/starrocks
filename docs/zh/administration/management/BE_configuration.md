@@ -601,10 +601,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### upload_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -612,10 +612,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### download_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -637,7 +637,18 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：5
 - 类型：Int
 - 单位：-
-- 是否动态：否
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### move_dir_worker_count
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
