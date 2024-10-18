@@ -21,9 +21,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
-
 public class HistogramEstimatorTest {
-    
+
     @ParameterizedTest
     @MethodSource("provideTestCases")
     public void testEstimateEqualToSelectivity(
@@ -40,26 +39,87 @@ public class HistogramEstimatorTest {
     private static Stream<Arguments> provideTestCases() {
         return Stream.of(
                 // Normal case: overlapping histograms
-                Arguments.of(createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
-                        createColumnStatistic(new double[] {3, 7, 12}, new long[] {150, 250}), 0.5),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        createColumnStatistic(new double[] {3, 7, 12}, new long[] {150, 250}),
+                        0.81),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {1, 2}),
+                        createColumnStatistic(new double[] {3, 7, 12}, new long[] {150, 250}),
+                        0.83),
+                Arguments.of(
+                        createColumnStatistic(new double[] {3, 7, 12}, new long[] {150, 250}),
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        0.61),
+
+                // Normal case: diverse bucket
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 100, 200, 300, 400}, new long[] {100, 200, 200, 400}),
+                        createColumnStatistic(new double[] {1, 200, 400}, new long[] {150, 250}),
+                        0.44),
+
+                // Normal case: lots of buckets, but the range is same
+                Arguments.of(
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
+                        1.0),
+                Arguments.of(
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 10)),
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
+                        1.0),
+                Arguments.of(
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 10)),
+                        createColumnStatistic(createUniformedHistogram(800, 128, 1 << 16)),
+                        1.0),
+                Arguments.of(
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 10)),
+                        createColumnStatistic(createUniformedHistogram(10, 10240, 1 << 16)),
+                        1.0),
+
                 // Completely overlapping histograms
-                Arguments.of(createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
-                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}), 1.0),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        1.0),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {10, 20}),
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        1.0),
+
                 // Non-overlapping histograms
-                Arguments.of(createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
-                        createColumnStatistic(new double[] {15, 20, 25}, new long[] {150, 250}), 0.0),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        createColumnStatistic(new double[] {15, 20, 25}, new long[] {150, 250}),
+                        0.0),
+
                 // One empty histogram
-                Arguments.of(createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
-                        createColumnStatistic(), null),
+                Arguments.of(
+                        createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
+                        createColumnStatistic(),
+                        null),
                 // Both empty histograms
                 Arguments.of(createColumnStatistic(), createColumnStatistic(), null),
                 // One null histogram
                 Arguments.of(createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}), null, null));
     }
 
+    private static Histogram createUniformedHistogram(int numBuckets, double bucketRange, long perBucketCount) {
+        Histogram.Builder builder = new Histogram.Builder();
+        double lower = 0.0;
+        for (int i = 0; i < numBuckets; i++) {
+            builder.addBucket(new Bucket(lower, lower + bucketRange, perBucketCount, 1L));
+            lower += bucketRange;
+        }
+        return builder.build();
+    }
+
     // create an empty column statistics
     private static ColumnStatistic createColumnStatistic() {
         return new ColumnStatistic(0, 0, 0, 0, 0, null, ColumnStatistic.StatisticType.ESTIMATE);
+    }
+
+    private static ColumnStatistic createColumnStatistic(Histogram hist) {
+        return new ColumnStatistic(0, 0, 0, 0, 0, hist, ColumnStatistic.StatisticType.ESTIMATE);
     }
 
     private static ColumnStatistic createColumnStatistic(double[] bounds, long[] counts) {
