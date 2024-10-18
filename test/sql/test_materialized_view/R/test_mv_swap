@@ -1,4 +1,4 @@
--- name: test_mv_swap
+-- name: test_mv_swap @sequential
 admin set frontend config('enable_mv_automatic_active_check'='false');
 -- result:
 -- !result
