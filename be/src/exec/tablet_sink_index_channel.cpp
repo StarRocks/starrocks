@@ -791,7 +791,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         }
     }
 
-    std::vector<int64_t> tablet_ids;
+    std::set<int64_t> tablet_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -818,7 +818,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
 
         if (tablet_ids.size() < 128) {
-            tablet_ids.emplace_back(commit_info.tabletId);
+            tablet_ids.insert(commit_info.tabletId);
         }
     }
     for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
