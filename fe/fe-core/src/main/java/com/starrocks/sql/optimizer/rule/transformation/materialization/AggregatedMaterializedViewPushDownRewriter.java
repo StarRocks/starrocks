@@ -459,7 +459,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             List<Table> queryTables = MvUtils.getAllTables(optExpression);
 
             final List<Table> mvTables = MvUtils.getAllTables(materializationContext.getMvExpression());
-            MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+            MatchMode matchMode = getMatchMode(queryTables, mvTables);
             if (matchMode == MatchMode.NOT_MATCH && mvTables.stream().noneMatch(queryTables::contains)) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
