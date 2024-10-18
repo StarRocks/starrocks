@@ -1533,6 +1533,49 @@ PARALLEL_TEST(VecStringFunctionsTest, charTest) {
     ASSERT_EQ("~", v->get_data()[5].to_string());
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, inetAtonInvalidIPv4Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto input_column = BinaryColumn::create();
+    input_column->append("999.999.999.999");
+    input_column->append("abc.def.ghi.jkl");
+    input_column->append("192.168.1.1.1");
+    input_column->append("192.168.1");
+    input_column->append("");
+    input_column->append(nullptr);
+    columns.push_back(input_column);
+
+    auto result = StringFunctions::inet_aton(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::inet_aton(ctx.get(), columns).ok());
+
+    ASSERT_TRUE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+    ASSERT_TRUE(result->is_null(2));
+    ASSERT_TRUE(result->is_null(3));
+    ASSERT_TRUE(result->is_null(4));
+    ASSERT_TRUE(result->is_null(5));
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, inetAtonValidIPv4Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto input_column = BinaryColumn::create();
+    input_column->append("192.168.1.1");
+    input_column->append("0.0.0.0");
+    input_column->append("255.255.255.255");
+    columns.push_back(input_column);
+
+    auto result = StringFunctions::inet_aton(ctx.get(), columns);
+    ASSERT_TRUE(StringFunctions::inet_aton(ctx.get(), columns).ok());
+
+    auto* res_column = down_cast<Int64Column*>(result.value().get());
+    ASSERT_EQ(res_column->get_data()[0], 3232235777);
+    ASSERT_EQ(res_column->get_data()[1], 0);
+    ASSERT_EQ(res_column->get_data()[2], 4294967295);
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, instrTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
