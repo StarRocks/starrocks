@@ -50,6 +50,7 @@ struct CompactionTaskStats {
     int64_t compressed_bytes_read = 0;
     int64_t reader_time_ns = 0;
     int64_t segment_write_ns = 0;
+    int64_t sst_merge_ns = 0;
 
     void accumulate(const OlapReaderStatistics& reader_stats);
     std::string to_json_stats();

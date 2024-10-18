@@ -208,6 +208,7 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
     sstable/block_builder.cpp
