@@ -18,9 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -216,6 +218,49 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, pendingStatus, db, table);
         Assert.assertTrue(stmt.isExternal());
         Assert.assertFalse(stmt.getAnalyzeTypeDesc().isHistogram());
+    }
+
+    @Test
+    public void testCollectStatistics() {
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database database = new Database(1, "test_db");
+        Table table = HiveTable.builder().setTableName("test_table").build();
+        StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.INT, Type.INT),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
+
+        status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col3"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col3"),
+                Lists.newArrayList(Type.INT, Type.STRING),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+        externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
     }
 
     @Test

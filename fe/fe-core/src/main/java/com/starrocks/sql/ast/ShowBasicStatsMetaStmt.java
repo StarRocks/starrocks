@@ -101,7 +101,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
@@ -135,6 +135,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(3, basicStatsMeta.getType().name());
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
+        row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
     }
