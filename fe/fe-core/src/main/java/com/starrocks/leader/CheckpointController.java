@@ -120,29 +120,32 @@ public class CheckpointController extends FrontendDaemon {
             imageJournalId = storage.getImageJournalId();
             // get max finalized journal id
             maxJournalId = journal.getFinalizedJournalId();
-            LOG.info("checkpoint imageVersion {}, logVersion {}", imageJournalId, maxJournalId);
+            LOG.info("checkpoint imageJournalId {}, logJournalId {}", imageJournalId, maxJournalId);
         } catch (IOException e) {
             LOG.error("Failed to get storage info", e);
             return;
         }
 
         // Step 1: create image
-        boolean newImageCreated = false;
+        Pair<Boolean, String> createImageRet = Pair.create(false, "");
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
-            newImageCreated = createImage();
+            createImageRet = createImage();
         }
-        if (newImageCreated) {
+        if (createImageRet.first) {
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
-                nodesToPushImage.add(frontend.getNodeName());
+                // do not push to the worker node
+                if (!frontend.getNodeName().equals(createImageRet.second)) {
+                    nodesToPushImage.add(frontend.getNodeName());
+                }
             }
         }
 
         // Step2: push image
         int needToPushCnt = nodesToPushImage.size();
-        long newImageVersion = newImageCreated ? maxJournalId : imageJournalId;
+        long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
             pushImage(newImageVersion);
         }
@@ -152,13 +155,13 @@ public class CheckpointController extends FrontendDaemon {
         //                delete the old journals immediately.
         //             2. needToPushCnt > 0 means there are other nodes in the cluster,
         //                we must make sure all the other nodes have got the new image and then delete old journals.
-        if ((newImageCreated && needToPushCnt == 0)
+        if ((createImageRet.first && needToPushCnt == 0)
                 || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
             deleteOldJournals(newImageVersion);
         }
 
         // Step4: Delete old image files from local storage.
-        if (newImageCreated) {
+        if (createImageRet.first) {
             List<String> dirsToClean = Lists.newArrayList(imageDir);
             if (belongToGlobalStateMgr) {
                 dirsToClean.add(imageDir + "/v2");
@@ -174,43 +177,41 @@ public class CheckpointController extends FrontendDaemon {
         }
     }
 
-    private boolean createImage() {
+    private Pair<Boolean, String> createImage() {
         result = new ArrayBlockingQueue<>(1);
         workerNodeName = selectWorker();
         if (workerNodeName == null) {
             LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
-            return false;
+            return Pair.create(false, workerNodeName);
         }
 
         // check the worker node is available
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
         if (frontend == null || !frontend.isAlive()) {
             LOG.warn("worker node: {} is not available", workerNodeName);
-            return false;
+            return Pair.create(false, workerNodeName);
         }
 
         try {
             Pair<Boolean, String> ret = result.poll(Config.checkpoint_timeout_s, TimeUnit.SECONDS);
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
-                return false;
+                return Pair.create(false, workerNodeName);
             }
             if (!ret.first) {
                 LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.second);
-                return false;
+                return Pair.create(false, workerNodeName);
             }
 
             // download Image
             downloadImage();
-
+            return Pair.create(true, workerNodeName);
         } catch (Exception e) {
             LOG.warn("create image failed", e);
-            return false;
+            return Pair.create(false, workerNodeName);
         } finally {
             workerNodeName = null;
         }
-
-        return true;
     }
 
     private void downloadImage() throws IOException {
@@ -246,6 +247,7 @@ public class CheckpointController extends FrontendDaemon {
 
     private String selectWorker() {
         List<Frontend> frontends = GlobalStateMgr.getServingState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
+        // sort frontends by heap used percent asc
         frontends.sort((fe1, fe2) -> {
             if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
                 return 0;
@@ -257,7 +259,7 @@ public class CheckpointController extends FrontendDaemon {
         });
 
         for (Frontend frontend : frontends) {
-            if (doCheckpoint(frontend)) {
+            if (frontend.isAlive() && doCheckpoint(frontend)) {
                 return frontend.getNodeName();
             }
         }
@@ -283,6 +285,7 @@ public class CheckpointController extends FrontendDaemon {
                 TDoCheckpointRequest request = new TDoCheckpointRequest();
                 request.setEpoch(epoch);
                 request.setJournal_id(journalId);
+                request.setIs_global_state_mgr(belongToGlobalStateMgr);
                 TDoCheckpointResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(frontend.getHost(), frontend.getRpcPort()),
@@ -294,7 +297,7 @@ public class CheckpointController extends FrontendDaemon {
                     if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
                         errMessage = String.join(",", status.getError_msgs());
                     }
-                    LOG.warn("call doCheckpoint failed from node: {}, error message: {}",
+                    LOG.warn("call doCheckpoint failed for node: {}, error message: {}",
                             frontend.getNodeName(), errMessage);
                     return false;
                 } else {

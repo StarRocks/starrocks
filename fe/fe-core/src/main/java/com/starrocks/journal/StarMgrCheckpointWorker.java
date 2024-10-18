@@ -17,15 +17,14 @@ package com.starrocks.journal;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.staros.StarMgrServer;
 
-import static com.starrocks.staros.StarMgrServer.IMAGE_SUBDIR;
-
 public class StarMgrCheckpointWorker extends CheckpointWorker {
-    public StarMgrCheckpointWorker(String name, Journal journal) {
-        super(name, journal, IMAGE_SUBDIR);
+    public StarMgrCheckpointWorker(Journal journal) {
+        super("star_os_checkpoint_worker", journal, StarMgrServer.IMAGE_SUBDIR);
     }
 
     @Override
     void doCheckpoint(long epoch, long journalId) throws Exception {
+        LOG.info("begin to generate new image: image.{}", journalId);
         StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
         try {
             starMgrServer.replayAndGenerateImage(imageDir, journalId);

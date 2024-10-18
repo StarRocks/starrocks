@@ -1407,7 +1407,7 @@ public class GlobalStateMgr {
 
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
-        checkpointWorker = new GlobalStateCheckpointWorker("global_state_checkpoint_controller", journal);
+        checkpointWorker = new GlobalStateCheckpointWorker(journal);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointWorker.getId();

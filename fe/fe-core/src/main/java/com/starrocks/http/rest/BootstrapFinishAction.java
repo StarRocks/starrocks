@@ -61,12 +61,6 @@ public class BootstrapFinishAction extends RestBaseAction {
 
     private static final String TOKEN = "token";
 
-    public static final String REPLAYED_JOURNAL_ID = "replayedJournalId";
-    public static final String QUERY_PORT = "queryPort";
-    public static final String RPC_PORT = "rpcPort";
-    public static final String FE_START_TIME = "feStartTime";
-    public static final String FE_VERSION = "feVersion";
-
     public BootstrapFinishAction(ActionController controller) {
         super(controller);
     }

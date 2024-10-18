@@ -79,6 +79,18 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         createImage(nextPoint.epoch, nextPoint.journalId);
     }
 
+    private void createImage(long epoch, long journalId) {
+        try {
+            doCheckpoint(epoch, journalId);
+        } catch (Exception e) {
+            LOG.warn("create image failed", e);
+            finishCheckpoint(epoch, journalId, false, e.getMessage());
+            return;
+        }
+
+        finishCheckpoint(epoch, journalId, true, "success");
+    }
+
     private void finishCheckpoint(long epoch, long journalId, boolean isSuccess, String message) {
         if (epoch != servingGlobalState.getEpoch()) {
             LOG.warn("epoch outdated, do not finish checkpoint");
@@ -133,18 +145,6 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             LOG.warn("get image journal id failed", e);
             return 0;
         }
-    }
-
-    private void createImage(long epoch, long journalId) {
-        try {
-            doCheckpoint(epoch, journalId);
-        } catch (Exception e) {
-            LOG.warn("create image failed", e);
-            finishCheckpoint(epoch, journalId, false, e.getMessage());
-            return;
-        }
-
-        finishCheckpoint(epoch, journalId, true, "success");
     }
 
     static class NextPoint {

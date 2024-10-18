@@ -198,8 +198,7 @@ public class StarMgrServer {
     }
 
     private void startCheckpointWorker() {
-        checkpointWorker = new StarMgrCheckpointWorker(
-                "star_os_checkpoint_worker", getJournalSystem().getJournal());
+        checkpointWorker = new StarMgrCheckpointWorker(getJournalSystem().getJournal());
         checkpointThreadId = checkpointWorker.getId();
         LOG.info("star mgr checkpoint worker thread started. thread id is {}.", checkpointThreadId);
     }
