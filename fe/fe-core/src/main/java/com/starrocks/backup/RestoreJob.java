@@ -46,7 +46,9 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -78,7 +80,9 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -90,8 +94,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterViewClause;
+import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -198,6 +206,9 @@ public class RestoreJob extends AbstractJob {
 
     boolean enableColocateRestore = Config.enable_colocate_restore;
 
+    @SerializedName(value = "restoredOlapViews")
+    private Map<View, Boolean> restoredOlapViews = Maps.newConcurrentMap();
+    
     public RestoreJob() {
         super(JobType.RESTORE);
     }
@@ -494,9 +505,15 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isNativeTableOrMaterializedView()) {
-                    status = new Status(ErrCode.COMMON_ERROR, "Only support restore OLAP table: " + tbl.getName());
+                if (!tbl.isSupportBackupRestore()) {
+                    status = new Status(ErrCode.UNSUPPORTED,
+                                        "Table: " + tbl.getName() +
+                                        " can not support backup restore, type: {}" + tbl.getType());
                     return;
+                }
+
+                if (tbl.isOlapView()) {
+                    continue;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -527,6 +544,15 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = globalStateMgr.getLocalMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
+                    if (remoteTbl.isOlapView() && !localTbl.isOlapView()) {
+                        status = new Status(ErrCode.BAD_REPLACE,
+                                            "Table: " + tblInfo.name + " has existed and it is not a View");
+                        return;
+                    } else if (remoteTbl.isOlapView()) {
+                        restoredOlapViews.put((View) remoteTbl, true);
+                        continue;
+                    }
+
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
                         // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
@@ -547,9 +573,10 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isNativeTableOrMaterializedView()) {
-                        status = new Status(ErrCode.COMMON_ERROR,
-                                "Only support retore olap table: " + localTbl.getName());
+                    if (!localTbl.isSupportBackupRestore()) {
+                        status = new Status(ErrCode.UNSUPPORTED,
+                                            "Table: " + localTbl.getName() +
+                                            " can not support backup restore, type: {}" + localTbl.getType());
                         return;
                     }
                     OlapTable localOlapTbl = (OlapTable) localTbl;
@@ -686,6 +713,10 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
                 } else {
+                    if (remoteTbl.isOlapView()) {
+                        restoredOlapViews.put((View) remoteTbl, false);
+                        continue;
+                    }
                     // Table does not exist
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
@@ -763,6 +794,12 @@ public class RestoreJob extends AbstractJob {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
+        // add all restored olap view into globalStateMgr
+        addRestoreOlapView(restoredOlapViews);
+        if (!status.ok()) {
+            return;
+        }
+
         // Send create replica task to BE outside the db lock
         sendCreateReplicaTasks();
         if (!status.ok()) {
@@ -829,6 +866,60 @@ public class RestoreJob extends AbstractJob {
             String idStr = Joiner.on(", ").join(subList);
             status = new Status(ErrCode.COMMON_ERROR,
                     "Failed to create replicas for restore. unfinished marks: " + idStr);
+        }
+    }
+
+    protected void addRestoreOlapView(Map<View, Boolean> restoredOlapViews) {
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        for (Map.Entry<View, Boolean> entry : restoredOlapViews.entrySet()) {
+            View restoredOlapView = entry.getKey();
+            boolean existed = entry.getValue();
+
+            if (existed) {
+                // already existed, need to alter the view
+                AlterViewClause alterViewClause = new AlterViewClause(null,
+                                    restoredOlapView.getQueryStatement(), NodePosition.ZERO);
+                alterViewClause.setInlineViewDef(restoredOlapView.getInlineViewDef());
+                alterViewClause.setColumns(restoredOlapView.getColumns());
+                alterViewClause.setComment(restoredOlapView.getComment());
+                AlterViewStmt alterViewStmt = new AlterViewStmt(
+                                    new TableName(db.getFullName(), restoredOlapView.getName()),
+                                    alterViewClause, NodePosition.ZERO);
+
+                ConnectContext context = new ConnectContext();
+                context.setDatabase(db.getFullName());
+                context.setGlobalStateMgr(globalStateMgr);
+                context.setStartTime();
+                context.setThreadLocalInfo();
+
+                new AlterJobExecutor().process(alterViewStmt, context);
+                LOG.info("replace view {} successfully in restore", restoredOlapView.getName());
+            } else {
+                List<Column> columns = restoredOlapView.getColumns();
+                long tableId = globalStateMgr.getNextId();
+                String viewName = restoredOlapView.getName();
+                View view = new View(tableId, viewName, columns);
+                view.setComment(restoredOlapView.getComment());
+                view.setInlineViewDefWithSqlMode(restoredOlapView.getInlineViewDef(),
+                                                 restoredOlapView.getSqlMode());
+                // init here in case the stmt string from view.toSql() has some syntax error.
+                try {
+                    view.init();
+                } catch (Exception e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "failed to init View in restore" +
+                                        restoredOlapView.getName() + " " + e.getMessage());
+                    return;
+                }
+
+                try {
+                    globalStateMgr.getLocalMetastore().onCreate(db, view, "", false);
+                } catch (DdlException e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "failed to create View in restore" +
+                                        restoredOlapView.getName() + e.getMessage());
+                    return;
+                }
+                LOG.info("successfully create view[" + view.getName() + "-" + view.getId() + "]" + " in restore");
+            }
         }
     }
 
@@ -1120,6 +1211,8 @@ public class RestoreJob extends AbstractJob {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+
+        addRestoreOlapView(restoredOlapViews);
 
         LOG.info("replay check and prepare meta. {}", this);
     }
@@ -1492,7 +1585,7 @@ public class RestoreJob extends AbstractJob {
                                 tblInfo.name);
                         continue;
                     }
-                    if (!tbl.isNativeTableOrMaterializedView()) {
+                    if (!tbl.isSupportBackupRestore()) {
                         continue;
                     }
                     LOG.info("do post actions for table : {}", tbl.getName());
@@ -1729,7 +1822,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isNativeTableOrMaterializedView()) {
+            if (!tbl.isSupportBackupRestore() || tbl.isOlapView()) {
                 continue;
             }
 

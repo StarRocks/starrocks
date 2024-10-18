@@ -65,6 +65,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -134,6 +135,10 @@ public class CatalogMocker {
     // list partition olap table
     public static final String TEST_TBL5_NAME = "test_tbl5";
     public static final long TEST_TBL5_ID = 30005;
+
+    // logical view
+    public static final String TEST_TBL6_NAME = "test_tbl6";
+    public static final long TEST_TBL6_ID = 30006;
 
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
@@ -564,6 +569,9 @@ public class CatalogMocker {
             olapTable5.addPartition(partition1);
 
             db.registerTableUnlocked(olapTable5);
+
+            View view = new View(TEST_TBL6_ID, TEST_TBL6_NAME, TEST_TBL_BASE_SCHEMA);
+            db.registerTableUnlocked(view);
         }
         return db;
     }
