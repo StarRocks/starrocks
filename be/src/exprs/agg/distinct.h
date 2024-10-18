@@ -75,7 +75,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         DCHECK(output.length() == set.dump_bound());
     }
 
-    void deserialize_and_merge(const uint8_t* src, size_t len) {
+    void deserialize_and_merge(FunctionContext* ctx, const uint8_t* src, size_t len) {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
@@ -83,6 +83,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         } else {
             MyHashSet set_src;
             set_src.load(input);
+            // TODO: modify merge
             set.merge(set_src);
         }
     }
@@ -158,8 +159,9 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
         }
     }
 
-    void deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
+    void deserialize_and_merge(FunctionContext* ctx, MemPool* mem_pool, const uint8_t* src, size_t len) {
         const uint8_t* end = src + len;
+        int64_t i = 0;
         while (src < end) {
             uint32_t size = 0;
             memcpy(&size, src, sizeof(uint32_t));
@@ -178,6 +180,12 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
                 ctor(pos, key.size, key.hash);
             });
             src += size;
+            i++;
+            if (i % 4096 == 0) {
+                if (ctx->has_error()) {
+                    return;
+                }
+            }
         }
         DCHECK(src == end);
     }
@@ -219,7 +227,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
         }
     }
 
-    void deserialize_and_merge(const uint8_t* src, size_t len) {
+    void deserialize_and_merge(FunctionContext* ctx, const uint8_t* src, size_t len) {
         size_t size = 0;
         memcpy(&size, src, sizeof(size));
         set.rehash(set.size() + size);
@@ -350,13 +358,13 @@ public:
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
         if constexpr (IsSlice<T>) {
-            this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
+            this->data(state).deserialize_and_merge(ctx, ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         } else {
             // slice size larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`, means which is a hash set
             // that's said, size of hash set serialization data should be larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`
             // otherwise this slice could be reinterpreted as a single value going be to inserted into hashset.
             if (slice.size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA) {
-                this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
+                this->data(state).deserialize_and_merge(ctx, (const uint8_t*)slice.data, slice.size);
             } else {
                 T key;
                 memcpy(&key, slice.data, sizeof(T));
@@ -512,7 +520,7 @@ public:
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
 
-        this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
+        this->data(state).deserialize_and_merge(ctx, ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
 
         agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
     }

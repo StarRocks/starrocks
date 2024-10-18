@@ -808,6 +808,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
@@ -822,6 +823,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
                                                         _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END();
     RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
@@ -831,6 +833,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
@@ -845,6 +848,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
                                            _agg_input_columns[i][0].get(), _tmp_agg_states.data());
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END();
     RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
@@ -854,6 +858,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
@@ -868,6 +873,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
                                                        _tmp_agg_states.data(), _streaming_selection);
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END();
     RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
