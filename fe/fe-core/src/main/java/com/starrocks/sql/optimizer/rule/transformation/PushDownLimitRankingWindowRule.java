@@ -89,9 +89,9 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
         CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
-        // TODO(hcf) we support dense_rank later
         if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equals(callOperator.getFnName())) {
+                !FunctionSet.RANK.equals(callOperator.getFnName()) &&
+                !FunctionSet.DENSE_RANK.equals(callOperator.getFnName())) {
             return false;
         }
 
@@ -127,6 +127,14 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         List<ColumnRefOperator> partitionByColumns = windowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
+        
+        // patition columns should not be included in orderByElements when it's not the only column in orderByElements
+        List<Ordering> orderByElements;
+        if (windowOperator.getOrderByElements() != null && !windowOperator.getOrderByElements().isEmpty()) {
+            orderByElements = windowOperator.getOrderByElements();
+        } else {
+            orderByElements = windowOperator.getEnforceSortColumns();
+        }
 
         Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
         if (!firstOrdering.isAscending()) {
@@ -148,7 +156,7 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         OptExpression newTopNOptExp = OptExpression.create(new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
-                .setOrderByElements(windowOperator.getEnforceSortColumns())
+                .setOrderByElements(orderByElements)
                 .setLimit(limit)
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase)
