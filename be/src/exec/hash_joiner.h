@@ -212,7 +212,7 @@ public:
 
     Status append_spill_task(RuntimeState* state, std::function<StatusOr<ChunkPtr>()>& spill_task);
 
-    Status build_ht(RuntimeState* state);
+    Status build_ht(RuntimeState* state, bool mor_mode = false);
     // probe phase
     void push_chunk(RuntimeState* state, ChunkPtr&& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
