@@ -380,6 +380,7 @@ private:
 
     // level to partition
     std::map<int, std::vector<SpilledPartitionPtr>> _level_to_partitions;
+    size_t _total_partition_num = 0;
 
     std::unordered_map<int, SpilledPartition*> _id_to_partitions;
 
