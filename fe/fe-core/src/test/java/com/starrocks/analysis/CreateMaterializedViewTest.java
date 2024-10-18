@@ -1096,6 +1096,82 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testPartitionByCastDate() throws Exception {
+        final String mvName = "mv_cast_date";
+        final String castPredicate = " WHERE cast(l_shipdate as date) >= '1998-01-01' ";
+        final String commonPredicate = " WHERE dt >= '1998-01-01' ";
+
+        // cast expression
+        {
+            String query =
+                    " select l_partkey, cast(l_shipdate as date) as dt " +
+                            "from hive0.partitioned_db.lineitem_mul_par3";
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view mv_cast_date " + " partition by (dt)" +
+                            " refresh manual as " + query);
+            starRocksAssert.query(query).explainContains(mvName);
+            starRocksAssert.query(query + castPredicate).explainContains(mvName);
+            starRocksAssert.dropMaterializedView("mv_cast_date");
+        }
+
+        // cast in CTE
+        {
+            String query =
+                    " with cte1 as (" +
+                            "   select l_partkey, l_suppkey, l_linenumber, cast(l_shipdate as date) as dt " +
+                            "   from hive0.partitioned_db.lineitem_mul_par3" +
+                            "), cte2 as (" +
+                            "   select l_partkey, dt from cte1" +
+                            ")" +
+                            " select * from cte2";
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view mv_cast_date " + " partition by (dt)" +
+                            " refresh manual as " + query);
+            starRocksAssert.query(query).explainContains(mvName);
+            starRocksAssert.query(query + commonPredicate).explainContains(mvName);
+            starRocksAssert.dropMaterializedView("mv_cast_date");
+        }
+
+        // cast in subquery
+        {
+            String query =
+                    "select l_partkey, cast(l_shipdate as date) as dt " +
+                            "   from ( " +
+                            "   select l_partkey, l_suppkey, l_shipdate " +
+                            "   from hive0.partitioned_db.lineitem_mul_par3 " +
+                            "   where l_partkey > 1" +
+                            ") r";
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view mv_cast_date " +
+                            "partition by (dt)\n" +
+                            "refresh manual as\n" + query);
+            starRocksAssert.query(query).explainContains(mvName);
+            starRocksAssert.query(query + castPredicate).explainContains(mvName);
+            starRocksAssert.dropMaterializedView("mv_cast_date");
+        }
+
+        // cast in subquery
+        {
+            String query =
+                    "select l_partkey, dt " +
+                            "   from ( " +
+                            "   select l_partkey, l_suppkey, cast(l_shipdate as date) as dt " +
+                            "   from hive0.partitioned_db.lineitem_mul_par3 " +
+                            "   where l_partkey > 1" +
+                            ") r";
+            starRocksAssert.withRefreshedMaterializedView(
+                    "create materialized view mv_cast_date " +
+                            "partition by (dt)\n" +
+                            "refresh manual as\n" + query);
+            starRocksAssert.query(query).explainContains(mvName);
+            starRocksAssert.query(query + commonPredicate).explainContains(mvName);
+            starRocksAssert.dropMaterializedView("mv_cast_date");
+        }
+
+        // TODO add more test
+    }
+
+    @Test
     public void testBaseTableNoPartitionColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
