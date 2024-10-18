@@ -29,7 +29,7 @@ Optional:
 
 Other:
 
-[Stream Load](../../docs/loading/StreamLoad.md)
+[Stream Load](../../docs/en/loading/StreamLoad.md)
 
 ### Warn
 
