@@ -14,12 +14,19 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class HistogramEstimatorTest {
 
@@ -32,7 +39,7 @@ public class HistogramEstimatorTest {
             Assertions.assertNull(actualSelectivity);
         } else {
             Assertions.assertNotNull(actualSelectivity);
-            Assertions.assertEquals(expectedSelectivity, actualSelectivity, 0.01);
+            assertEquals(expectedSelectivity, actualSelectivity, 0.01);
         }
     }
 
@@ -130,4 +137,44 @@ public class HistogramEstimatorTest {
         Histogram histogram = builder.build();
         return new ColumnStatistic(0, 0, 0, 0, 0, histogram, ColumnStatistic.StatisticType.ESTIMATE);
     }
+
+    private List<Integer> verifyBucketIndex(Histogram histogram, List<Bucket> buckets) {
+        return buckets.stream().map(x -> histogram.getBuckets().indexOf(x)).collect(Collectors.toList());
+    }
+
+    @Test
+    public void testGetOverlappedBuckets() {
+        Histogram histogram = new Histogram(
+                Lists.newArrayList(
+                        new Bucket(0, 5, 100L, 0L),
+                        new Bucket(5, 10, 200L, 0L),
+                        new Bucket(10, 15, 300L, 0L),
+                        new Bucket(15, 20, 400L, 0L)
+                ),
+                Maps.newHashMap()
+        );
+
+        // totally covered range
+        assertEquals(List.of(0, 1, 2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(0, 100)));
+        assertEquals(List.of(0, 1, 2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(2, 16)));
+        assertEquals(List.of(0, 1, 2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(0, 15)));
+        assertEquals(List.of(0, 1, 2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(5, 17)));
+
+        // partially covered
+        assertEquals(List.of(1, 2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(10, 17)));
+        assertEquals(List.of(0, 1), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(1, 6)));
+        assertEquals(List.of(0, 1), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(0, 5)));
+        assertEquals(List.of(0, 1, 2), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(0, 10)));
+        assertEquals(List.of(2, 3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(15, 20)));
+
+        // boundary overlapped
+        assertEquals(List.of(0), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(-1, 0)));
+        assertEquals(List.of(3), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(20, 21)));
+        assertEquals(List.of(0, 1), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(5, 5)));
+
+        // no overlap
+        assertEquals(List.of(), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(30, 100)));
+        assertEquals(List.of(), verifyBucketIndex(histogram, histogram.getOverlappedBuckets(-10, -1)));
+    }
+    
 }

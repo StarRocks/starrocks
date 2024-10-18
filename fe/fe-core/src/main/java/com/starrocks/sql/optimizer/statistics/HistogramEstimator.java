@@ -45,7 +45,8 @@ public class HistogramEstimator {
         double totalArea = 0.0;
 
         for (Bucket leftBucket : leftHistogram.getBuckets()) {
-            for (Bucket rightBucket : rightHistogram.getBuckets()) {
+            for (Bucket rightBucket :
+                    rightHistogram.getOverlappedBuckets(leftBucket.getLower(), leftBucket.getUpper())) {
                 double overlap = calculateBucketOverlap(leftBucket, rightBucket);
                 overlapArea += overlap;
             }

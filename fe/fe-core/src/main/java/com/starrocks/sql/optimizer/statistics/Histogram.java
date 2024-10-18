@@ -60,9 +60,41 @@ public class Histogram {
         sb.append("MCV: [");
         mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
                 .limit(printMcvSize)
-                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue())
+                        .append("]"));
         sb.append("]");
         return sb.toString();
+    }
+
+    /**
+     * Return overlapped buckets with the provided lower&upper bound
+     */
+    public List<Bucket> getOverlappedBuckets(double lower, double upper) {
+        int left = 0;
+        int right = buckets.size() - 1;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            Bucket bucket = buckets.get(mid);
+
+            // A potential bad case is lower & upper can cover most buckets, then this binary-search will fall back
+            // to an inefficient linear search. But it doesn't hold for the current histogram, because we only
+            // calculate the overlap within two buckets
+            if (bucket.getLower() <= upper && bucket.getUpper() >= lower) {
+                while (mid > 0 && buckets.get(mid - 1).getUpper() >= lower) {
+                    mid--;
+                }
+                int endIndex = mid;
+                while (endIndex < buckets.size() - 1 && buckets.get(endIndex + 1).getLower() <= upper) {
+                    endIndex++;
+                }
+                return buckets.subList(mid, endIndex + 1);
+            } else if (bucket.getUpper() < lower) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+            }
+        }
+        return Lists.newArrayList();
     }
 
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
@@ -88,9 +120,11 @@ public class Histogram {
                 }
 
                 if (constantOperator.getType().isFixedPointType()) {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
+                    rowCount = (long) Math.ceil(
+                            Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
                 } else {
-                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
+                    rowCount =
+                            (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
                 }
 
                 return Optional.of(rowCount);
