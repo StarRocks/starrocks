@@ -147,7 +147,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
-        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+        cntl->SetFailed("missing txn_ids and txn_infos");
         return;
     }
     if (request->tablet_ids_size() == 0) {
@@ -159,6 +159,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
+    CHECK(thread_pool != nullptr);
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
@@ -220,10 +221,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
                     VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
+                            << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                 } else {
                     LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
+                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                 }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -359,13 +360,15 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "] tablets=["
-              << JoinInts(request->tablet_ids(), ",") << "]";
+    LOG(INFO) << "Aborting transactions. request=" << request->DebugString();
 
     // Cancel active tasks.
     if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
-        for (auto txn_id : request->txn_ids()) {
+        for (auto& txn_id : request->txn_ids()) { // For request sent by and older version FE
             load_mgr->abort_txn(txn_id);
+        }
+        for (auto& txn_info : request->txn_infos()) { // For request sent by a new version FE
+            load_mgr->abort_txn(txn_info.txn_id());
         }
     }
 
@@ -377,10 +380,22 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
-        auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
-        auto txn_types = std::span<const int32_t>(request->txn_types().data(), request->txn_types_size());
+        std::vector<TxnInfoPB> txn_infos;
+        if (request->txn_infos_size() > 0) {
+            txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+        } else {
+            // Construct TxnInfoPB from txn_id and txn_type
+            txn_infos.reserve(request->txn_ids_size());
+            auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
+            for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                auto& info = txn_infos.emplace_back();
+                info.set_txn_id(request->txn_ids(i));
+                info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
+                info.set_combined_txn_log(false);
+            }
+        }
         for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types);
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
         }
     };
     auto st = thread_pool->submit_func(task);

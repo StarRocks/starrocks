@@ -97,6 +97,23 @@ inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
 
+inline std::string combined_txn_log_filename(int64_t txn_id) {
+    return fmt::format("{:016X}.logs", txn_id);
+}
+
+inline bool is_combined_txn_log(std::string_view file_name) {
+    return HasSuffixString(file_name, ".logs");
+}
+
+inline int64_t parse_combined_txn_log_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    CHECK_EQ(21, file_name.size());
+    StringParser::ParseResult res;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return txn_id;
+}
+
 inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t version, int64_t expire_time) {
     return fmt::format("{:016X}_{:016X}_{:016X}.lock", tablet_id, version, expire_time);
 }

@@ -106,7 +106,7 @@ enum WriteQuorumTypePB {
 enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
- }
+}
 
  enum ReplicationTxnStatePB {
      TXN_PREPARED = 0;
