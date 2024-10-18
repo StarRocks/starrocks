@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-public class Bucket {
+import org.jetbrains.annotations.NotNull;
+
+import java.util.Objects;
+
+public class Bucket implements Comparable<Bucket> {
     private final double lower;
     private final double upper;
     private final Long count;
@@ -45,6 +49,34 @@ public class Bucket {
     }
 
     public boolean isOverlapped(Bucket other) {
-        return Math.min(upper, other.upper) - Math.max(lower, other.lower) > 0;
+        return Math.min(upper, other.upper) - Math.max(lower, other.lower) >= 0;
+    }
+
+    @Override
+    public int compareTo(@NotNull Bucket o) {
+        int lowerComparison = Double.compare(this.lower, o.lower);
+        if (lowerComparison != 0) {
+            return lowerComparison;
+        }
+        return Double.compare(this.upper, o.upper);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Bucket bucket = (Bucket) o;
+        return Double.compare(lower, bucket.lower) == 0 && Double.compare(upper, bucket.upper) == 0 &&
+                Objects.equals(count, bucket.count) &&
+                Objects.equals(upperRepeats, bucket.upperRepeats);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(lower, upper, count, upperRepeats);
     }
 }
