@@ -614,7 +614,7 @@ Status CompactionManager::update_max_threads(int max_threads) {
                 return Status::OK();
             }
 
-            _max_task_num = compute_max_compaction_concurrency();
+            _max_task_num = compute_max_compaction_task_num();
             max_thread_num = _max_task_num;
         }
 
