@@ -2123,6 +2123,7 @@ public class CreateTableTest {
         String createTableSql = starRocksAssert.showCreateTable("show create table news_rt1;");
         starRocksAssert.dropTable("news_rt1");
         starRocksAssert.withTable(createTableSql);
+        Assert.assertTrue(createTableSql, createTableSql.contains("撒"));
     }
 
     @Test
@@ -2143,6 +2144,7 @@ public class CreateTableTest {
         String createTableSql = starRocksAssert.showCreateTable("show create table news_rt1_non_pk;");
         starRocksAssert.dropTable("news_rt1_non_pk");
         starRocksAssert.withTable(createTableSql);
+        Assert.assertTrue(createTableSql, createTableSql.contains("撒"));
     }
 
     @Test
