@@ -40,9 +40,9 @@ public:
 
     ~CompactionManager() = default;
 
-    void init_max_task_num(int32_t num);
-
     void stop();
+
+    void init_max_task_num(int32_t num);
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
