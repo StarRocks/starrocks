@@ -42,7 +42,10 @@ public:
 
     void stop();
 
-    void init_max_task_num(int32_t num);
+    int32_t max_task_num() {
+        std::lock_guard lg(_tasks_mutex);
+        return _max_task_num;
+    }
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);

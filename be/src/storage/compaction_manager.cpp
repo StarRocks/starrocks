@@ -56,6 +56,7 @@ void CompactionManager::schedule() {
     Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
 
     st = ThreadPoolBuilder("compact_pool")
+                 .set_min_threads(1)
                  .set_max_threads(std::max(1, _max_task_num))
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
@@ -604,13 +605,20 @@ void CompactionManager::set_max_compaction_concurrency(int threads_num) {
 
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
+        int32 max_thread_num = 0;
         set_max_compaction_concurrency(max_threads);
-        if (max_threads == 0) {
-            return _compaction_pool->update_max_threads(0);
+        {
+            std::lock_guard lg(_tasks_mutex);
+            if (max_threads == 0) {
+                _max_task_num = 0;
+                return Status::OK();
+            }
+
+            _max_task_num = compute_max_compaction_concurrency();
+            max_thread_num = _max_task_num;
         }
 
-        _max_task_num = compute_max_compaction_task_num();
-        return _compaction_pool->update_max_threads(std::max(1, _max_task_num));
+        return _compaction_pool->update_max_threads(std::max(1, max_thread_num));
     } else {
         return Status::InternalError("Thread pool not exist");
     }

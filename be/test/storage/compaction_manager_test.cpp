@@ -386,12 +386,15 @@ TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
 
     _engine->compaction_manager()->update_max_threads(3);
     ASSERT_EQ(3, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+    ASSERT_EQ(3, _engine->compaction_manager()->max_task_num());
 
     _engine->compaction_manager()->update_max_threads(0);
-    ASSERT_EQ(0, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+    ASSERT_EQ(3, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+    ASSERT_EQ(0, _engine->compaction_manager()->max_task_num());
 
     _engine->compaction_manager()->update_max_threads(-1);
     ASSERT_EQ(5, _engine->compaction_manager()->get_compaction_thread_pool()->max_threads());
+    ASSERT_EQ(5, _engine->compaction_manager()->max_task_num());
 }
 
 } // namespace starrocks
