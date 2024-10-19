@@ -42,10 +42,6 @@ public:
 
     void stop();
 
-    int32_t max_task_num() {
-        std::lock_guard lg(_tasks_mutex);
-        return _max_task_num;
-    }
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
@@ -97,7 +93,10 @@ public:
         return exceed;
     }
 
-    int32_t max_task_num() { return _max_task_num; }
+    int32_t max_task_num() {
+        std::lock_guard lg(_tasks_mutex);
+        return _max_task_num;
+    }
 
     uint16_t running_cumulative_tasks_num_for_dir(DataDir* data_dir) {
         std::lock_guard lg(_tasks_mutex);
