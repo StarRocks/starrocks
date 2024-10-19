@@ -81,15 +81,14 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
     request.__set_clientId(_client_id);
 
     TBrokerOperationStatus response;
+    Status status;
+    // 500ms is enough
+    BrokerServiceConnection client(_exec_env->broker_client_cache(), addr, 500, &status);
+    if (!status.ok()) {
+        LOG(WARNING) << "Create broker client failed. broker=" << addr << ", status=" << status.message();
+        return;
+    }
     try {
-        Status status;
-        // 500ms is enough
-        BrokerServiceConnection client(_exec_env->broker_client_cache(), addr, 500, &status);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create broker client failed. broker=" << addr << ", status=" << status.message();
-            return;
-        }
-
         try {
             client->ping(response, request);
         } catch (apache::thrift::transport::TTransportException& e) {
@@ -101,6 +100,7 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
             client->ping(response, request);
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(500);
         LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << e.what();
     }
 }
