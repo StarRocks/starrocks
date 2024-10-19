@@ -42,7 +42,6 @@ public:
 
     void stop();
 
-
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);
         return _compaction_candidates.size();
