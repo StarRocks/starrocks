@@ -41,6 +41,8 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TBatchWriteRequest;
+import com.starrocks.thrift.TBatchWriteResult;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -100,6 +102,12 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -1194,6 +1202,26 @@ public class FrontendServiceImplTest {
         doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testRequestBatchWrite() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TBatchWriteRequest request = new TBatchWriteRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setPasswd("");
+        request.setBackend_id(10001);
+        request.setBackend_host("127.0.0.1");
+        request.putToParams(HTTP_ENABLE_BATCH_WRITE, "true");
+        request.putToParams(HTTP_BATCH_WRITE_ASYNC, "true");
+        request.putToParams(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        request.putToParams(HTTP_BATCH_WRITE_PARALLEL, "4");
+
+        TBatchWriteResult result = impl.requestBatchWrite(request);
+        assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        assertNotNull(result.getLabel());
     }
 
     @Test
