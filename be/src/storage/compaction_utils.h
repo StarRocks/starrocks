@@ -34,7 +34,9 @@ enum CompactionAlgorithm {
     // compaction by all columns together.
     HORIZONTAL_COMPACTION = 0,
     // compaction by column group, for tablet with many columns.
-    VERTICAL_COMPACTION = 1
+    VERTICAL_COMPACTION = 1,
+    // compaction for cloud native index
+    CLOUD_NATIVE_INDEX_COMPACTION = 2,
 };
 
 struct Statistics {
