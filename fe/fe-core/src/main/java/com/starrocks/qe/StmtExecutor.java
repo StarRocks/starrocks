@@ -1210,16 +1210,17 @@ public class StmtExecutor {
                     scanPartitionsMap.put("catalogName", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                     scanPartitionsMap.put("databaseName", db.getOriginName());
                     scanPartitionsMap.put("tableName", sn.getTableName());
-                    int selectedPartitionNum = sn.getSelectedPartitionNames().size();
-                    String selectedPartitionIds = "";
-                    if (selectedPartitionNum >= maxScanPartitionsAuditNum) {
+                    List<String> selectedPartitionNames = sn.getSelectedPartitionNames();
+                    Collections.sort(selectedPartitionNames);
+                    String selectedPartitionNamesStr = "";
+                    if (selectedPartitionNames.size() >= maxScanPartitionsAuditNum) {
                         //limit the scan partitions print num in audit log, avoid log file too large
-                        selectedPartitionIds = "[" + sn.getSelectedPartitionNames().get(0) + ",...," +
-                                    sn.getSelectedPartitionNames().get(selectedPartitionNum - 1) + "]";
+                        selectedPartitionNamesStr = "[" + selectedPartitionNames.get(0) + ",...," +
+                                    selectedPartitionNames.get(selectedPartitionNames.size() - 1) + "]";
                     } else {
-                        selectedPartitionIds = sn.getSelectedPartitionNames().toString();
+                        selectedPartitionNamesStr = selectedPartitionNames.toString();
                     }
-                    scanPartitionsMap.put("partitionIds", selectedPartitionIds);
+                    scanPartitionsMap.put("partitionIds", selectedPartitionNamesStr);
                     scanPartitionsList.add(GSON.toJson(scanPartitionsMap));
                 }
             }
