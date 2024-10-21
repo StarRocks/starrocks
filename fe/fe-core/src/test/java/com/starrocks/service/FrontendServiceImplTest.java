@@ -30,6 +30,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -107,7 +111,6 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRIT
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -1219,9 +1222,28 @@ public class FrontendServiceImplTest {
         request.putToParams(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
         request.putToParams(HTTP_BATCH_WRITE_PARALLEL, "4");
 
-        TBatchWriteResult result = impl.requestBatchWrite(request);
-        assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
-        assertNotNull(result.getLabel());
+        new MockUp<BatchWriteMgr>() {
+
+            @Mock
+            public RequestLoadResult requestLoad(
+                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
+            }
+        };
+
+        // test success request
+        {
+            TBatchWriteResult result = impl.requestBatchWrite(request);
+            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            assertEquals("test_label", result.getLabel());
+        }
+
+        // test authentication failure
+        {
+            request.setUser("fake_user");
+            TBatchWriteResult result = impl.requestBatchWrite(request);
+            assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
     }
 
     @Test
