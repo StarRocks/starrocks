@@ -85,6 +85,7 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -677,6 +678,7 @@ public class ConnectContext {
 
     public void setQueryId(UUID queryId) {
         this.queryId = queryId;
+        MDC.put("srid", String.valueOf(queryId));
     }
 
     public UUID getLastQueryId() {
