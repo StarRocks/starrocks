@@ -32,6 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#ifdef WITH_TENANN
 #include "tenann_index_reader.h"
 
 #include "common/config.h"
@@ -96,3 +97,4 @@ Status TenANNReader::range_search(tenann::PrimitiveSeqView query_vector, int k, 
 };
 
 } // namespace starrocks
+#endif
