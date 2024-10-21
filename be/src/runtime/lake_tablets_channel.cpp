@@ -322,7 +322,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
             result->add_immutable_tablet_ids(id);
             result->add_immutable_partition_ids(writer->partition_id());
         }
-        VLOG(1) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
+        VLOG(2) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
                 << _txn_id << ", is_immutable  " << writer->is_immutable();
     }
     COUNTER_SET(_tablets_num, (int64_t)_delta_writers.size());
@@ -618,7 +618,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
                 }
             }
             if (log_flushed) {
-                VLOG(1) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
+                VLOG(2) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
                         << " partition_id: " << writer->partition_id() << " is_immutable: " << writer->is_immutable()
                         << " last_write_ts: " << now - last_write_ts
                         << " job_mem_usage: " << _mem_tracker->consumption()

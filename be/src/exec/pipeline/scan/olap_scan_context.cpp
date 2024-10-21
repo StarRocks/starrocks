@@ -89,7 +89,7 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
         ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
         ASSIGN_OR_RETURN(tablet_rowsets[i], OlapScanNode::capture_tablet_rowsets(tablet, scan_range));
 
-        VLOG(1) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << tablet_rowsets[i].size()
+        VLOG(2) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << tablet_rowsets[i].size()
                 << ", version: " << scan_range->version << ", gtid: " << scan_range->gtid;
 
         _tablets[i] = std::move(tablet);

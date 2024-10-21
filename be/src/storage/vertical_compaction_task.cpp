@@ -138,7 +138,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
         return ret.status();
     }
     int32_t chunk_size = ret.value();
-    VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", column group=" << column_group_index << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.open(reader_params));

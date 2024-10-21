@@ -211,7 +211,7 @@ Status DeltaWriterImpl::check_immutable() {
         if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
         }
-        VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
+        VLOG(2) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
                 << ", immutable_tablet_size=" << _immutable_tablet_size
                 << ", data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
@@ -276,7 +276,7 @@ inline Status DeltaWriterImpl::flush_async() {
                 if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
                 }
-                VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
+                VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
                         << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
                         << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);

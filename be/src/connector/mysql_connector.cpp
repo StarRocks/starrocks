@@ -59,7 +59,7 @@ MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const 
         : _provider(provider) {}
 
 Status MySQLDataSource::_init_params(RuntimeState* state) {
-    VLOG(1) << "MySQLDataSource::init mysql scan params";
+    VLOG(2) << "MySQLDataSource::init mysql scan params";
 
     DCHECK(state != nullptr);
 
@@ -217,7 +217,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 }
 
 Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    VLOG(1) << "MySQLDataSource::GetNext";
+    VLOG(2) << "MySQLDataSource::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr);
 

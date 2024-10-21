@@ -74,7 +74,7 @@ Status MysqlScanner::open() {
         return Status::InternalError("mysql init failed.");
     }
 
-    VLOG(1) << "MysqlScanner::Connect";
+    VLOG(2) << "MysqlScanner::Connect";
 
     if (nullptr == mysql_real_connect(_my_conn, _my_param.host.c_str(), _my_param.user.c_str(),
                                       _my_param.passwd.c_str(), _my_param.db.c_str(), atoi(_my_param.port.c_str()),

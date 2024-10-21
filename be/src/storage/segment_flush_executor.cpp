@@ -55,7 +55,7 @@ public:
                             " txn_id: {}, tablet id: {}, flush token status: {}",
                             _request->txn_id(), _request->tablet_id(), _flush_token->status().to_string()));
         _send_fail_response(status);
-        VLOG(1) << "Segment flush task is destructed with failure response"
+        VLOG(2) << "Segment flush task is destructed with failure response"
                 << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
                 << ", flush token status: " << _flush_token->status();
     }
@@ -106,7 +106,7 @@ public:
     void release() {
         bool expect = false;
         _run_or_released.compare_exchange_strong(expect, true);
-        VLOG(1) << "Segment flush task is released"
+        VLOG(2) << "Segment flush task is released"
                 << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
                 << ", flush token status: " << _flush_token->status();
     }
