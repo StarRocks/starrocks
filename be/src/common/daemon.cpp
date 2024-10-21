@@ -41,6 +41,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -72,6 +73,7 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
+<<<<<<< HEAD
 // NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
 // all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
 // After all existing fragments executed, BE will exit.
@@ -115,6 +117,8 @@ void gc_memory(void* arg_this) {
     }
 }
 
+=======
+>>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116))
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
@@ -317,7 +321,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
     } else {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     }
-    k_starrocks_exit.store(true);
+    set_process_exit();
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {

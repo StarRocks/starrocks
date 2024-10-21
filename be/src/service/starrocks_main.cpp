@@ -52,6 +52,7 @@
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
@@ -249,7 +250,7 @@ int main(int argc, char** argv) {
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
 
-    if (starrocks::k_starrocks_exit_quick.load()) {
+    if (starrocks::process_quick_exit_in_progress()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }
