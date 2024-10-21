@@ -578,20 +578,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of threads used for checking the consistency of tablets.
 - Introduced in: -
 
-<!--
-<<<<<<< HEAD
-=======
-##### update_schema_worker_count
-
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
->>>>>>> 524afa2a2b ([Enhancement] Enhance thread pool configs of backup restore (#52111))
 ##### upload_worker_count
 
 - Default: 0

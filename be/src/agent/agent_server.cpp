@@ -215,19 +215,8 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_compaction);
 
-<<<<<<< HEAD
-        BUILD_DYNAMIC_TASK_THREAD_POOL("upload", 0, config::upload_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_upload);
-=======
-        BUILD_DYNAMIC_TASK_THREAD_POOL("compaction_control", 0, 1, std::numeric_limits<int>::max(),
-                                       _thread_pool_compaction_control);
-
-        BUILD_DYNAMIC_TASK_THREAD_POOL("update_schema", 0, config::update_schema_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_update_schema);
-
         BUILD_DYNAMIC_TASK_THREAD_POOL("upload", 0, calc_real_num_threads(config::upload_worker_count),
                                        std::numeric_limits<int>::max(), _thread_pool_upload);
->>>>>>> 524afa2a2b ([Enhancement] Enhance thread pool configs of backup restore (#52111))
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("download", 0, calc_real_num_threads(config::download_worker_count),
                                        std::numeric_limits<int>::max(), _thread_pool_download);

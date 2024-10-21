@@ -578,20 +578,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：计算 Tablet 的校验和（checksum）的线程数。
 - 引入版本：-
 
-<!--
-<<<<<<< HEAD
-=======
-##### update_schema_worker_count
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
->>>>>>> 524afa2a2b ([Enhancement] Enhance thread pool configs of backup restore (#52111))
 ##### upload_worker_count
 
 - 默认值：0
