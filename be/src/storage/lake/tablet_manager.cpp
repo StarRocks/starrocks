@@ -636,4 +636,19 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     return segment;
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id,
+                                                 const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                                 TabletSchemaPtr tablet_schema) {
+    size_t footer_size_hint = 16 * 1024;
+    return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_metadata_cache,
+                        std::move(tablet_schema));
+}
+
+void TabletManager::stop() {
+    _compaction_scheduler->stop();
+}
+
+>>>>>>> 0fa358566e ([BugFix] fix lake compaction threads not exit properly (#52029))
 } // namespace starrocks::lake
