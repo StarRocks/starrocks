@@ -94,7 +94,7 @@ public:
         return exceed;
     }
 
-    int32_t max_task_num() {
+    int32_t max_task_num() const {
         std::lock_guard lg(_tasks_mutex);
         return _max_task_num;
     }
@@ -135,7 +135,7 @@ public:
 
     int get_waiting_task_num();
 
-    ThreadPool* get_compaction_thread_pool() { return _compaction_pool.get(); }
+    ThreadPool* TEST_get_compaction_thread_pool() { return _compaction_pool.get(); }
 
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
