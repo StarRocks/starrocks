@@ -86,4 +86,10 @@ public class ScalarOperatorUtil {
                         FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
                         oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
     }
+
+    public static boolean isSimpleNotLike(ScalarOperator op) {
+        return Utils.downcast(op, CompoundPredicateOperator.class)
+                .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
+                .orElse(false);
+    }
 }
