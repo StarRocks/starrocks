@@ -88,8 +88,13 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
         ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
         ASSIGN_OR_RETURN(tablet_rowsets[i], OlapScanNode::capture_tablet_rowsets(tablet, scan_range));
 
+<<<<<<< HEAD
         VLOG(1) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << tablet_rowsets[i].size()
                 << ", version: " << scan_range->version;
+=======
+        VLOG(2) << "capture tablet rowsets: " << tablet->full_name() << ", rowsets: " << tablet_rowsets[i].size()
+                << ", version: " << scan_range->version << ", gtid: " << scan_range->gtid;
+>>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
 
         _tablets[i] = std::move(tablet);
     }

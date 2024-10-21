@@ -421,8 +421,13 @@ Status OlapTableSink::_automatic_create_partition() {
     do {
         if (retry_times++ > 1) {
             SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
+<<<<<<< HEAD
             VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
                     << "automatic partition rpc retry " << retry_times;
+=======
+            VLOG(2) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+                    << " automatic partition rpc retry " << retry_times;
+>>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
         }
         RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
                 master_addr.hostname, master_addr.port,

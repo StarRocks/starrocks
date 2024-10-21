@@ -502,7 +502,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
     StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_us);
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
-    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
+    VLOG(2) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
             << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
     return Status::OK();
 }
@@ -564,7 +564,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                                 _is_immutable.store(true, std::memory_order_relaxed);
                             }
-                            VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                            VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                                     << " _immutable_tablet_size=" << _opt.immutable_tablet_size
                                     << ", segment_size=" << (seg ? seg->data_size() : 0)
                                     << ", tablet_data_size=" << _tablet->data_size()
@@ -589,7 +589,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                                 _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                                 _is_immutable.store(true, std::memory_order_relaxed);
                             }
-                            VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                            VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                                     << " _immutable_tablet_size=" << _opt.immutable_tablet_size
                                     << ", segment_size=" << (seg ? seg->data_size() : 0)
                                     << ", tablet_data_size=" << _tablet->data_size()
@@ -608,7 +608,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                     _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
                 }
-                VLOG(1) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
                         << " immutable_tablet_size=" << _opt.immutable_tablet_size
                         << ", segment_size=" << (seg ? seg->data_size() : 0)
                         << ", tablet_data_size=" << _tablet->data_size()
@@ -760,7 +760,7 @@ Status DeltaWriter::commit() {
                                                      _opt.tablet_id, _state_name(state)));
         }
     }
-    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    VLOG(2) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
     StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
     return Status::OK();
@@ -794,7 +794,7 @@ void DeltaWriter::abort(bool with_log) {
         _segment_flush_token->shutdown();
     }
 
-    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
+    VLOG(2) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
             << " load_id: " << print_id(_opt.load_id) << " partition_id: " << partition_id();
 }
 
