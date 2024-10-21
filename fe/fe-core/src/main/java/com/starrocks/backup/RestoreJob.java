@@ -46,7 +46,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
@@ -97,8 +96,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterViewClause;
-import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -207,7 +205,7 @@ public class RestoreJob extends AbstractJob {
     boolean enableColocateRestore = Config.enable_colocate_restore;
 
     @SerializedName(value = "restoredOlapViews")
-    private Map<View, Boolean> restoredOlapViews = Maps.newConcurrentMap();
+    private List<View> restoredOlapViews = Lists.newArrayList();
     
     public RestoreJob() {
         super(JobType.RESTORE);
@@ -544,13 +542,15 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = globalStateMgr.getLocalMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
-                    if (remoteTbl.isOlapView() && !localTbl.isOlapView()) {
-                        status = new Status(ErrCode.BAD_REPLACE,
-                                            "Table: " + tblInfo.name + " has existed and it is not a View");
-                        return;
-                    } else if (remoteTbl.isOlapView()) {
-                        restoredOlapViews.put((View) remoteTbl, true);
-                        continue;
+                    if (remoteTbl.isOlapView()) {
+                        if (!localTbl.isOlapView()) {
+                            status = new Status(ErrCode.BAD_REPLACE,
+                                                "Table: " + tblInfo.name + " has existed and it is not a View");
+                            return;
+                        } else {
+                            restoredOlapViews.add((View) remoteTbl);
+                            continue;
+                        }
                     }
 
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
@@ -714,7 +714,7 @@ public class RestoreJob extends AbstractJob {
                     }
                 } else {
                     if (remoteTbl.isOlapView()) {
-                        restoredOlapViews.put((View) remoteTbl, false);
+                        restoredOlapViews.add((View) remoteTbl);
                         continue;
                     }
                     // Table does not exist
@@ -869,56 +869,26 @@ public class RestoreJob extends AbstractJob {
         }
     }
 
-    protected void addRestoreOlapView(Map<View, Boolean> restoredOlapViews) {
+    protected void addRestoreOlapView(List<View> restoredOlapViews) {
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
-        for (Map.Entry<View, Boolean> entry : restoredOlapViews.entrySet()) {
-            View restoredOlapView = entry.getKey();
-            boolean existed = entry.getValue();
 
-            if (existed) {
-                // already existed, need to alter the view
-                AlterViewClause alterViewClause = new AlterViewClause(null,
-                                    restoredOlapView.getQueryStatement(), NodePosition.ZERO);
-                alterViewClause.setInlineViewDef(restoredOlapView.getInlineViewDef());
-                alterViewClause.setColumns(restoredOlapView.getColumns());
-                alterViewClause.setComment(restoredOlapView.getComment());
-                AlterViewStmt alterViewStmt = new AlterViewStmt(
-                                    new TableName(db.getFullName(), restoredOlapView.getName()),
-                                    alterViewClause, NodePosition.ZERO);
+        ConnectContext context = new ConnectContext();
+        context.setDatabase(db.getFullName());
+        context.setGlobalStateMgr(globalStateMgr);
+        context.setStartTime();
+        context.setThreadLocalInfo();
 
-                ConnectContext context = new ConnectContext();
-                context.setDatabase(db.getFullName());
-                context.setGlobalStateMgr(globalStateMgr);
-                context.setStartTime();
-                context.setThreadLocalInfo();
-
-                new AlterJobExecutor().process(alterViewStmt, context);
-                LOG.info("replace view {} successfully in restore", restoredOlapView.getName());
-            } else {
-                List<Column> columns = restoredOlapView.getColumns();
-                long tableId = globalStateMgr.getNextId();
-                String viewName = restoredOlapView.getName();
-                View view = new View(tableId, viewName, columns);
-                view.setComment(restoredOlapView.getComment());
-                view.setInlineViewDefWithSqlMode(restoredOlapView.getInlineViewDef(),
-                                                 restoredOlapView.getSqlMode());
-                // init here in case the stmt string from view.toSql() has some syntax error.
-                try {
-                    view.init();
-                } catch (Exception e) {
-                    status = new Status(ErrCode.COMMON_ERROR, "failed to init View in restore" +
-                                        restoredOlapView.getName() + " " + e.getMessage());
-                    return;
-                }
-
-                try {
-                    globalStateMgr.getLocalMetastore().onCreate(db, view, "", false);
-                } catch (DdlException e) {
-                    status = new Status(ErrCode.COMMON_ERROR, "failed to create View in restore" +
-                                        restoredOlapView.getName() + e.getMessage());
-                    return;
-                }
-                LOG.info("successfully create view[" + view.getName() + "-" + view.getId() + "]" + " in restore");
+        for (View restoredOlapView : restoredOlapViews) {
+            CreateViewStmt stmt = new CreateViewStmt(false, true, new TableName(db.getFullName(), restoredOlapView.getName()),
+                    Lists.newArrayList(), restoredOlapView.getComment(), restoredOlapView.getQueryStatement(), NodePosition.ZERO);
+            stmt.setColumns(restoredOlapView.getColumns());
+            stmt.setInlineViewDef(restoredOlapView.getInlineViewDef());
+            try {
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
+            } catch (DdlException e) {
+                status = new Status(ErrCode.COMMON_ERROR,
+                                    "Failed to create view for restore. err message: " + e.getMessage());
+                return;
             }
         }
     }

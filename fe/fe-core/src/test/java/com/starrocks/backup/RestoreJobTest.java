@@ -56,7 +56,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -861,6 +860,13 @@ public class RestoreJobTest {
             }
         };
 
+        new MockUp<View>() {
+            @Mock
+            public synchronized QueryStatement getQueryStatement() throws UserException {
+                return null;
+            }
+        };
+
         new Expectations() {
             {
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
@@ -961,51 +967,5 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
-    
-        // exception for view inits
-        db.dropTable(restoredView.getName());
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-        job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
-        {
-            new MockUp<View>() {
-                @Mock
-                public synchronized QueryStatement init() throws UserException {
-                    throw new UserException("test");
-                }
-            };
-            job.run();
-        }
-        Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
-
-        // exception for view onCreate
-        db.dropTable(restoredView.getName());
-        {
-            job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                    jobInfo, false, 3, 100000,
-                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-            job.setRepo(repo);
-            Assert.assertEquals(RestoreJobState.PENDING, job.getState());
-            {
-                new MockUp<View>() {
-                    @Mock
-                    public synchronized QueryStatement init() throws UserException {
-                        return null;
-                    }
-                };
-
-                new MockUp<LocalMetastore>() {
-                    @Mock
-                    public void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists)
-                        throws DdlException {
-                        throw new DdlException("test");
-                    }
-                };
-                job.run();
-            }
-            Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
-        }
     }
 }

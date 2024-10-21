@@ -147,6 +147,8 @@ public class BackupJobInfo implements Writable {
         public Long autoIncrementId;
         @SerializedName(value = "partitions")
         public Map<String, BackupPartitionInfo> partitions = Maps.newHashMap();
+        @SerializedName(value = "tableType")
+        public int tableType;
 
         public boolean containsPart(String partName) {
             return partitions.containsKey(partName);
@@ -307,6 +309,7 @@ public class BackupJobInfo implements Writable {
             BackupTableInfo tableInfo = new BackupTableInfo();
             tableInfo.id = tbl.getId();
             tableInfo.name = tbl.getName();
+            tableInfo.tableType = tbl.getType().ordinal();
             jobInfo.tables.put(tableInfo.name, tableInfo);
 
             if (tbl.isOlapView()) {
@@ -454,9 +457,15 @@ public class BackupJobInfo implements Writable {
             } catch (Exception e) {
                 tblInfo.autoIncrementId = null;
             }
+            try {
+                tblInfo.tableType = tbl.getInt("tableType");
+            } catch (Exception e) {
+                tblInfo.tableType = Table.TableType.OLAP.ordinal();
+            }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
-            if (partsNames == null) {
+            Table.TableType tblType = Table.TableType.values()[tblInfo.tableType];
+            if (tblType == Table.TableType.VIEW && partsNames == null) {
                 // view restore
                 jobInfo.tables.put(tblName, tblInfo);
                 continue;
@@ -599,6 +608,7 @@ public class BackupJobInfo implements Writable {
                 tbl.put("id", tblInfo.id);
             }
             tbl.put("autoIncrementId", tblInfo.autoIncrementId);
+            tbl.put("tableType", tblInfo.tableType);
             JSONObject parts = new JSONObject();
             tbl.put("partitions", parts);
             for (BackupPartitionInfo partInfo : tblInfo.partitions.values()) {
