@@ -56,6 +56,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -843,9 +844,6 @@ public class RestoreJobTest {
         tblInfo.name = CatalogMocker.TEST_TBL6_NAME;
         jobInfo.tables.put(tblInfo.name, tblInfo);
 
-        // drop this table, cause we want to try restoring this table
-        db.dropTable(restoredView.getName());
-
         new MockUp<LocalMetastore>() {
             @Mock
             public Database getDb(String dbName) {
@@ -863,13 +861,6 @@ public class RestoreJobTest {
             }
         };
 
-        new MockUp<View>() {
-            @Mock
-            public synchronized QueryStatement init() throws UserException {
-                return null;
-            }
-        };
-
         new Expectations() {
             {
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
@@ -881,25 +872,41 @@ public class RestoreJobTest {
         List<Table> tbls = Lists.newArrayList();
         tbls.add(restoredView);
         backupMeta = new BackupMeta(tbls);
+
+        // exception for unsupported object
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
-        // 1. pending
         Assert.assertEquals(RestoreJobState.PENDING, job.getState());
-
-        // 2. snapshoting
+        restoredView.setType(Table.TableType.MYSQL);
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
+
+        db.dropTable(restoredView.getName());
+        restoredView.setType(Table.TableType.VIEW);
+
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        {
+            new MockUp<View>() {
+                @Mock
+                public synchronized QueryStatement init() throws UserException {
+                    return null;
+                }
+            };
+            job.run();
+        }
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
         Assert.assertEquals(0, job.getFileMapping().getMapping().size());
 
-        // 3. snapshot finished
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
 
-        // 4. DOWNLOADING
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
@@ -915,5 +922,90 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+
+        // restore when the view already existed
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+
+        {
+            new MockUp<View>() {
+                @Mock
+                public synchronized QueryStatement init() throws UserException {
+                    return null;
+                }
+            };
+            job.run();
+        }
+        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+    
+        // exception for view inits
+        db.dropTable(restoredView.getName());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        {
+            new MockUp<View>() {
+                @Mock
+                public synchronized QueryStatement init() throws UserException {
+                    throw new UserException("test");
+                }
+            };
+            job.run();
+        }
+        Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
+
+        // exception for view onCreate
+        db.dropTable(restoredView.getName());
+        {
+            job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                    jobInfo, false, 3, 100000,
+                    globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+            job.setRepo(repo);
+            Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+            {
+                new MockUp<View>() {
+                    @Mock
+                    public synchronized QueryStatement init() throws UserException {
+                        return null;
+                    }
+                };
+
+                new MockUp<LocalMetastore>() {
+                    @Mock
+                    public void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists)
+                        throws DdlException {
+                        throw new DdlException("test");
+                    }
+                };
+                job.run();
+            }
+            Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
+        }
     }
 }
