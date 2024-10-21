@@ -817,4 +817,8 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
                         std::move(tablet_schema));
 }
 
+void TabletManager::stop() {
+    _compaction_scheduler->stop();
+}
+
 } // namespace starrocks::lake
