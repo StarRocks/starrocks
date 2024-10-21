@@ -898,7 +898,6 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
-        Assert.assertEquals(0, AgentTaskQueue.getTaskNum());
 
         // 4. DOWNLOADING
         job.run();

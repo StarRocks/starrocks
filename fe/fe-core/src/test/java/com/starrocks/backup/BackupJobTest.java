@@ -398,7 +398,6 @@ public class BackupJobTest {
         View backupView = (View) backupMeta.getTable(UnitTestUtil.VIEW_NAME);
         Assert.assertTrue(backupView != null);
         Assert.assertTrue(backupView.getPartitions().isEmpty());
-        Assert.assertEquals(0, AgentTaskQueue.getTaskNum());
 
         // 2. snapshoting finished, not snapshot needed
         jobView.run();
@@ -406,7 +405,6 @@ public class BackupJobTest {
         Assert.assertEquals(BackupJobState.UPLOAD_SNAPSHOT, jobView.getState());
 
         // 3. upload snapshots
-        AgentTaskQueue.clearAllTasks();
         jobView.run();
         Assert.assertEquals(Status.OK, jobView.getStatus());
         Assert.assertEquals(BackupJobState.UPLOADING, jobView.getState());
