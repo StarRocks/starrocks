@@ -100,8 +100,6 @@ VALUES
 -- result:
 -- !result
 SELECT /*+SET_VAR(enable_query_cache=true, pipeline_dop=1) */
-    date_trunc('hour', ts) AS hour,
-    k0,
     sum(v1) AS __c_0
 FROM
     t0
@@ -114,10 +112,10 @@ GROUP BY
 ORDER BY
     hour;
 -- result:
-2022-01-03 05:00:00 z6   -49680.52
-2022-01-03 08:00:00 Nlpz1j3h    217.58
-2022-01-03 18:00:00 7Bh 55723.01
-2022-01-03 19:00:00     -53084.04
+-49680.52
+217.58
+55723.01
+-53084.04
 -- !result
 INSERT INTO t0
 VALUES
@@ -195,8 +193,6 @@ VALUES
 -- result:
 -- !result
 SELECT /*+SET_VAR(enable_query_cache=true, pipeline_dop=1) */
-    date_trunc('hour', ts) AS hour,
-    k0,
     sum(v1) AS __c_0
 FROM
     t0
@@ -209,8 +205,8 @@ GROUP BY
 ORDER BY
     hour;
 -- result:
-2022-01-03 05:00:00 z6  -99361.04
-2022-01-03 08:00:00 Nlpz1j3h    435.16
-2022-01-03 18:00:00 7Bh   111446.02
-2022-01-03 19:00:00     -106168.08
+-99361.04
+435.16
+111446.02
+-106168.08
 -- !result
