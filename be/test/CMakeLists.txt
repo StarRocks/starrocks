@@ -19,6 +19,7 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./column/schema_test.cpp
         ./common/config_test.cpp
+        ./common/process_exit_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
