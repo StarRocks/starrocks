@@ -158,7 +158,7 @@ private:
     // protect by _mutex
     std::set<CompactionCandidate, CompactionCandidateComparator> _compaction_candidates;
 
-    std::mutex _tasks_mutex;
+    mutable std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
     std::map<int64_t, std::unordered_set<CompactionTask*>> _running_tasks;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
