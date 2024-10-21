@@ -76,7 +76,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, _task_info.input_rows_num,
             _task_info.input_rowsets_size, _task_info.segment_iterator_num);
-    VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
