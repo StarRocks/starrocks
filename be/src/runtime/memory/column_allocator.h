@@ -16,8 +16,6 @@
 
 #include <glog/logging.h>
 
-#include <memory>
-
 #include "runtime/memory/mem_hook_allocator.h"
 
 namespace starrocks {
@@ -25,6 +23,7 @@ namespace starrocks {
 extern MemHookAllocator kDefaultColumnAllocator;
 inline thread_local Allocator* tls_column_allocator = &kDefaultColumnAllocator;
 
+// Implement the std::allocator: https://en.cppreference.com/w/cpp/memory/allocator
 template <class T>
 class ColumnAllocator {
 public:
@@ -44,9 +43,10 @@ public:
 
     ~ColumnAllocator() = default;
 
+    // Allocator n elements, throw std::bad_malloc if allocate failed
     T* allocate(size_t n) {
         DCHECK(tls_column_allocator != nullptr);
-        return static_cast<T*>(tls_column_allocator->alloc(n * sizeof(T)));
+        return static_cast<T*>(tls_column_allocator->checked_alloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {
