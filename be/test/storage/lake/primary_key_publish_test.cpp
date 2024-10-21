@@ -1470,6 +1470,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
 TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     if (!GetParam().enable_persistent_index ||
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        GTEST_SKIP() << "this case only for cloud native index";
         return;
     }
     auto version = 1;
