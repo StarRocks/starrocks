@@ -24,7 +24,11 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
+<<<<<<< HEAD
 #include "common/logging.h"
+=======
+#include "common/process_exit.h"
+>>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116))
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/strings/join.h"
@@ -281,7 +285,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " started successfully";
 
-    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+    while (!process_exit_in_progress()) {
         sleep(1);
     }
 

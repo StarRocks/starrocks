@@ -42,6 +42,7 @@
 #include <fstream>
 
 #include "agent/master_info.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
@@ -58,8 +59,6 @@ using std::vector;
 using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 static int64_t reboot_time = 0;
 
@@ -79,8 +78,23 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
+<<<<<<< HEAD
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
+=======
+    if (master_info.encrypted != config::enable_transparent_data_encryption) {
+        LOG(FATAL) << "inconsistent encryption config, FE encrypted:" << master_info.encrypted
+                   << " BE/CN:" << config::enable_transparent_data_encryption;
+    }
+
+    StatusOr<CmpResult> res;
+    // reject master's heartbeat when exit
+    if (process_exit_in_progress()) {
+        res = Status::Shutdown("BE is shutting down");
+    } else {
+        res = compare_master_info(master_info);
+    }
+>>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116))
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
