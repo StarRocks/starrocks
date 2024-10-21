@@ -235,6 +235,7 @@ private:
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             // Apply the compaction operation to the cloud native pk index.
             // This ensures that the pk index is updated with the compaction changes.
+            _builder.remove_compacted_sst(op_compaction);
             RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }

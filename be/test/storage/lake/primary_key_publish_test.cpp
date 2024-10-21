@@ -1520,7 +1520,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() > 10);
+    size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
+    EXPECT_TRUE(sst_cnt > 10);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 4. compaction with sst
     {
@@ -1538,6 +1539,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 1);
+    EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
