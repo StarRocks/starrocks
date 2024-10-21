@@ -208,6 +208,8 @@ public:
 
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
 
+    void stop();
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
