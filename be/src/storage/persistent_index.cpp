@@ -4023,7 +4023,7 @@ Status PersistentIndex::flush_advance() {
                                                   _version.minor_number(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
 
-    VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+    VLOG(2) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
@@ -4128,7 +4128,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete expired index file " << path;
+            VLOG(2) << "delete expired index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
@@ -4144,7 +4144,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                 if ((*version_st) < min_l2_version) {
                     // delete expired l2 file
                     std::string path = dir + "/" + full;
-                    VLOG(1) << "delete expired index file " << path;
+                    VLOG(2) << "delete expired index file " << path;
                     Status st = FileSystem::Default()->delete_file(path);
                     if (!st.ok()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
@@ -4175,7 +4175,7 @@ Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
         std::string full(name);
         if (major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete tmp index file " << path;
+            VLOG(2) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4196,7 +4196,7 @@ Status PersistentIndex::_delete_tmp_index_file() {
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
             !major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete tmp index file " << path;
+            VLOG(2) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();

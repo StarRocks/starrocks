@@ -336,7 +336,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(1) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+    VLOG(2) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
             << " to tablet=" << full_name();
     _timestamped_version_tracker.add_version(rowset->version());
 
@@ -395,7 +395,7 @@ void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_
         rs_metas_to_add.push_back(rs->rowset_meta());
         _rs_version_map[rs->version()] = rs;
         _gtid_to_version_map[rs->rowset_meta()->gtid()] = rs->version().second;
-        VLOG(1) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
+        VLOG(2) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
                 << " to tablet=" << full_name();
 
         _timestamped_version_tracker.add_version(rs->version());
@@ -602,7 +602,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(1) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+    VLOG(2) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
             << " to tablet=" << full_name();
     _inc_rs_version_map[rowset->version()] = rowset;
     if (need_binlog) {
@@ -629,7 +629,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
-        VLOG(1) << "tablet: " << tablet_id()
+        VLOG(2) << "tablet: " << tablet_id()
                 << " too many committed without schema rowset : " << _committed_rs_map.size();
         return false;
     }
@@ -875,7 +875,7 @@ Status Tablet::capture_consistent_rowsets(const int64_t gtid, std::vector<Rowset
         }
         return Status::InvalidArgument(ss.str());
     }
-    VLOG(1) << ss.str();
+    VLOG(2) << ss.str();
     Version spec_version{0, version};
     std::vector<Version> version_path;
     RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
@@ -1458,7 +1458,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with "
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with "
                        "tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
@@ -1473,7 +1473,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with tablet meta"
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
         rs_meta->set_remove_from_rowset_meta();
@@ -1760,20 +1760,20 @@ int64_t Tablet::in_writing_data_size() {
     for (auto& [k, v] : _in_writing_txn_size) {
         size += v;
     }
-    VLOG(1) << "tablet " << tablet_id() << " in writing data size: " << size;
+    VLOG(2) << "tablet " << tablet_id() << " in writing data size: " << size;
     return size;
 }
 
 void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
             << " delta: " << delta << " txn_id: " << txn_id;
     _in_writing_txn_size[txn_id] += delta;
 }
 
 void Tablet::remove_in_writing_data_size(int64_t txn_id) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
             << " txn_id: " << txn_id;
     _in_writing_txn_size.erase(txn_id);
 }

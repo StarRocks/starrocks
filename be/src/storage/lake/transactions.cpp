@@ -148,7 +148,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         CHECK_EQ(new_version, base_version + txns.size());
     }
 
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
+    VLOG(2) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
             << ", new_version: " << new_version;
 
     auto commit_time = txns.back().commit_time();

@@ -102,7 +102,7 @@ Status Rowset::load() {
         RETURN_IF_ERROR(do_load());
         RETURN_IF_ERROR(_rowset_state_machine.on_load());
     }
-    VLOG(1) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
+    VLOG(2) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
             << ", state from ROWSET_UNLOADED to ROWSET_LOADED. tabletid:" << _rowset_meta->tablet_id();
     return Status::OK();
 }
@@ -317,7 +317,7 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
 }
 
 Status Rowset::remove() {
-    VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
+    VLOG(2) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
@@ -399,7 +399,7 @@ Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem
                 for (const auto& column_file : column_files) {
                     auto st = fs->delete_file(column_file);
                     if (st.ok() || st.is_not_found()) {
-                        VLOG(1) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
+                        VLOG(2) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
                     } else {
                         return st;
                     }
@@ -481,7 +481,7 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
             return Status::RuntimeError(
                     fmt::format("Fail to link segment update file, src: {}, dst {}", src_file_path, dst_link_path));
         } else {
-            VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
+            VLOG(2) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
     RETURN_IF_ERROR(_link_delta_column_group_files(kvstore, dir, version));
@@ -515,7 +515,7 @@ Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::strin
                         return Status::RuntimeError(fmt::format("Fail to link segment cols file, src: {}, dst {}",
                                                                 src_file_path, dst_link_path));
                     } else {
-                        VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
+                        VLOG(2) << "success to link " << src_file_path << " to " << dst_link_path;
                     }
                 }
             }
@@ -640,7 +640,7 @@ Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::strin
                         return Status::RuntimeError(fmt::format("Fail to copy segment cols file, src: {}, dst {}",
                                                                 src_file_path, dst_copy_path));
                     } else {
-                        VLOG(1) << "success to copy " << src_file_path << " to " << dst_copy_path;
+                        VLOG(2) << "success to copy " << src_file_path << " to " << dst_copy_path;
                     }
                 }
             }

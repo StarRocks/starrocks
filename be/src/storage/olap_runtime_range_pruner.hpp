@@ -87,7 +87,7 @@ struct RuntimeColumnPredicateBuilder {
 
             for (auto& f : filters) {
                 std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
-                VLOG(1) << "build runtime predicate:" << p->debug_string();
+                VLOG(2) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(std::move(p));
             }

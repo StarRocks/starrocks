@@ -132,12 +132,12 @@ Status ESScanReader::open() {
     }
     // phase open, we cached the first response for `get_next` phase
     Status status = _network_client.execute_post_request(_query, &_cached_response);
-    VLOG(1) << "ES Query:" << _query;
+    VLOG(2) << "ES Query:" << _query;
     if (!status.ok() || _network_client.get_http_status() != 200) {
         std::string err_msg = fmt::format("Failed to connect to ES server, errmsg is: {}", status.message());
         return Status::InternalError(err_msg);
     }
-    VLOG(1) << "open _cached response: " << _cached_response;
+    VLOG(2) << "open _cached response: " << _cached_response;
     return Status::OK();
 }
 
@@ -182,7 +182,7 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
     }
 
     scroll_parser.reset(new T(_doc_value_mode));
-    VLOG(1) << "get_next request ES, returned response: " << response;
+    VLOG(2) << "get_next request ES, returned response: " << response;
     Status status = scroll_parser->parse(response, _exactly_once);
     if (!status.ok()) {
         _eos = true;

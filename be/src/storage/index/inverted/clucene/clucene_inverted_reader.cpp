@@ -53,7 +53,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
     std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
-    VLOG(1) << "begin to query the inverted index from clucene"
+    VLOG(2) << "begin to query the inverted index from clucene"
             << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
 

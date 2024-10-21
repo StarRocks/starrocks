@@ -616,7 +616,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+        VLOG(2) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {

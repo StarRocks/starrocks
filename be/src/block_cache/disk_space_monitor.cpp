@@ -149,7 +149,7 @@ void DiskSpaceMonitor::_update_disk_stats() {
         auto& space_info = ret.value();
         disk.capacity_bytes = space_info.capacity;
         disk.available_bytes = space_info.available;
-        VLOG(1) << "Get disk statistics, capaticy: " << disk.capacity_bytes << ", available: " << disk.available_bytes
+        VLOG(2) << "Get disk statistics, capaticy: " << disk.capacity_bytes << ", available: " << disk.available_bytes
                 << ", used_rate: " << (disk.capacity_bytes - disk.available_bytes) * 100 / disk.capacity_bytes << "%";
     }
 }

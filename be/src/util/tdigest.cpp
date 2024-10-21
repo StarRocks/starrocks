@@ -232,15 +232,15 @@ bool TDigest::isDirty() {
 }
 
 Value TDigest::cdfProcessed(Value x) const {
-    VLOG(1) << "cdf value " << x;
-    VLOG(1) << "processed size " << _processed.size();
+    VLOG(2) << "cdf value " << x;
+    VLOG(2) << "processed size " << _processed.size();
     if (_processed.size() == 0) {
         // no data to examin_e
-        VLOG(1) << "no processed values";
+        VLOG(2) << "no processed values";
 
         return 0.0;
     } else if (_processed.size() == 1) {
-        VLOG(1) << "one processed value "
+        VLOG(2) << "one processed value "
                 << " _min " << _min << " _max " << _max;
         // exactly one centroid, should have _max==_min
         auto width = _max - _min;
@@ -258,20 +258,20 @@ Value TDigest::cdfProcessed(Value x) const {
     } else {
         auto n = _processed.size();
         if (x <= _min) {
-            VLOG(1) << "below _min "
+            VLOG(2) << "below _min "
                     << " _min " << _min << " x " << x;
             return 0;
         }
 
         if (x >= _max) {
-            VLOG(1) << "above _max "
+            VLOG(2) << "above _max "
                     << " _max " << _max << " x " << x;
             return 1;
         }
 
         // check for the left tail
         if (x <= mean(0)) {
-            VLOG(1) << "left tail "
+            VLOG(2) << "left tail "
                     << " _min " << _min << " mean(0) " << mean(0) << " x " << x;
 
             // note that this is different than mean(0) > _min ... this guarantees interpolation works
@@ -284,7 +284,7 @@ Value TDigest::cdfProcessed(Value x) const {
 
         // and the right tail
         if (x >= mean(n - 1)) {
-            VLOG(1) << "right tail"
+            VLOG(2) << "right tail"
                     << " _max " << _max << " mean(n - 1) " << mean(n - 1) << " x " << x;
 
             if (_max - mean(n - 1) > 0) {
@@ -302,7 +302,7 @@ Value TDigest::cdfProcessed(Value x) const {
         auto z2 = (iter)->mean() - x;
         DCHECK_LE(0.0, z1);
         DCHECK_LE(0.0, z2);
-        VLOG(1) << "middle "
+        VLOG(2) << "middle "
                 << " z1 " << z1 << " z2 " << z2 << " x " << x;
 
         return weightedAverage(_cumulative[i - 1], z2, _cumulative[i], z1) / _processed_weight;
@@ -316,7 +316,7 @@ Value TDigest::quantile(Value q) {
 
 Value TDigest::quantileProcessed(Value q) const {
     if (q < 0 || q > 1) {
-        VLOG(1) << "q should be in [0,1], got " << q;
+        VLOG(2) << "q should be in [0,1], got " << q;
         return NAN;
     }
 
@@ -347,7 +347,7 @@ Value TDigest::quantileProcessed(Value q) const {
         auto i = std::distance(_cumulative.cbegin(), iter);
         auto z1 = index - *(iter - 1);
         auto z2 = *(iter)-index;
-        // VLOG(1) << "z2 " << z2 << " index " << index << " z1 " << z1;
+        // VLOG(2) << "z2 " << z2 << " index " << index << " z1 " << z1;
         return weightedAverage(mean(i - 1), z2, mean(i), z1);
     }
 
@@ -527,7 +527,7 @@ void TDigest::mergeProcessed(const std::vector<const TDigest*>& tdigests) {
     }
 
     std::vector<Centroid> sorted;
-    VLOG(1) << "total " << total;
+    VLOG(2) << "total " << total;
     sorted.reserve(total);
 
     while (!pq.empty()) {
@@ -594,9 +594,9 @@ void TDigest::process() {
     }
     _unprocessed.clear();
     _min = std::min(_min, _processed[0].mean());
-    VLOG(1) << "new _min " << _min;
+    VLOG(2) << "new _min " << _min;
     _max = std::max(_max, (_processed.cend() - 1)->mean());
-    VLOG(1) << "new _max " << _max;
+    VLOG(2) << "new _max " << _max;
     updateCumulative();
 }
 
@@ -613,12 +613,12 @@ size_t TDigest::checkWeights(const std::vector<Centroid>& sorted, Value total) {
         auto dq = w / total;
         auto k2 = integratedLocation(q + dq);
         if (k2 - k1 > 1 && w != 1) {
-            VLOG(1) << "Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1 << " k2 " << k2
+            VLOG(2) << "Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1 << " k2 " << k2
                     << " dk " << (k2 - k1) << " w " << w << " q " << q;
             badWeight++;
         }
         if (k2 - k1 > 1.5 && w != 1) {
-            VLOG(1) << "Egregiously Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1
+            VLOG(2) << "Egregiously Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1
                     << " k2 " << k2 << " dk " << (k2 - k1) << " w " << w << " q " << q;
             badWeight++;
         }
