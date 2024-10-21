@@ -65,6 +65,8 @@ public:
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
+    void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);

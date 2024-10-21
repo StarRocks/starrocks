@@ -95,7 +95,10 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
         }
         segment_num_score += current_score;
     }
-    return segment_num_score;
+    // Calculate the number of SSTables and use it as a score
+    uint32_t sst_num_score = metadata->sstable_meta().sstables_size();
+    // Return the maximum score between the segment number score and the SST number score
+    return std::max(segment_num_score, sst_num_score);
 }
 
 double primary_compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {
@@ -459,6 +462,11 @@ double size_tiered_compaction_score(const std::shared_ptr<const TabletMetadataPB
 CompactionPolicy::~CompactionPolicy() = default;
 
 StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
+    // If there are no rowsets, it could be cloud native index compaction, default to CLOUD_NATIVE_INDEX_COMPACTION
+    if (rowsets.empty()) {
+        return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+
     // TODO: support row source mask buffer based on starlet fs
     // The current row source mask buffer is based on posix tmp file,
     // if there is no storage root path, use horizontal compaction.
@@ -466,12 +474,17 @@ StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(cons
         return HORIZONTAL_COMPACTION;
     }
 
+    // Calculate the total number of read iterators across all rowsets
     size_t total_iterator_num = 0;
     for (auto& rowset : rowsets) {
         ASSIGN_OR_RETURN(auto rowset_iterator_num, rowset->get_read_iterator_num());
         total_iterator_num += rowset_iterator_num;
     }
+
+    // Get the number of columns in the tablet schema
     size_t num_columns = _tablet_metadata->schema().column_size();
+
+    // Choose the compaction algorithm based on the number of columns and total iterator number
     return CompactionUtils::choose_compaction_algorithm(num_columns, config::vertical_compaction_max_columns_per_group,
                                                         total_iterator_num);
 }
