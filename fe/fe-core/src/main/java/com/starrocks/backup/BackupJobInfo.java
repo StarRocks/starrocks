@@ -464,7 +464,10 @@ public class BackupJobInfo implements Writable {
             }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
-            Table.TableType tblType = Table.TableType.values()[tblInfo.tableType];
+            Table.TableType tblType = Table.TableType.OLAP;
+            if (tblInfo.tableType < Table.TableType.values().length) {
+                tblType = Table.TableType.values()[tblInfo.tableType];
+            }
             if (tblType == Table.TableType.VIEW && partsNames == null) {
                 // view restore
                 jobInfo.tables.put(tblName, tblInfo);
