@@ -266,6 +266,16 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
     }
 }
 
+void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction) {
+    // remove compacted sst
+    for (auto& input_sstable : op_compaction.input_sstables()) {
+        FileMetaPB file_meta;
+        file_meta.set_name(input_sstable.filename());
+        file_meta.set_size(input_sstable.filesize());
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+    }
+}
+
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                          uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
@@ -320,12 +330,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     });
 
     // remove compacted sst
-    for (auto& input_sstable : op_compaction.input_sstables()) {
-        FileMetaPB file_meta;
-        file_meta.set_name(input_sstable.filename());
-        file_meta.set_size(input_sstable.filesize());
-        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-    }
+    remove_compacted_sst(op_compaction);
 
     // add output rowset
     bool has_output_rowset = false;

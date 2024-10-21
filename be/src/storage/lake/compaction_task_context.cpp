@@ -77,6 +77,7 @@ std::string CompactionTaskStats::to_json_stats() {
     root.AddMember("column_iterator_init_sec", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);
     root.AddMember("in_queue_sec", rapidjson::Value(in_queue_time_sec), allocator);
+    root.AddMember("sst_merge_sec", rapidjson::Value(sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
 
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
