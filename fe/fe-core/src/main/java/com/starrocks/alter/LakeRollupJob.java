@@ -140,6 +140,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.isColocateMVIndex = isColocateMVIndex;
     }
 
+    // for deserialization
+    public LakeRollupJob() {
+        super(JobType.ROLLUP);
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         long numTablets = 0;

@@ -127,6 +127,9 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
+    public PhysicalPartitionImpl() {
+    }
+
     @Override
     public long getId() {
         return this.id;
