@@ -21,22 +21,14 @@
 #include "column/struct_column.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
-<<<<<<< HEAD
 #include "exprs/expr.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
+#include "formats/utils.h"
 #include "gutil/strings/substitute.h"
 #include "io/shared_buffered_input_stream.h"
-=======
-#include "exprs/expr_context.h"
-#include "formats/parquet/complex_column_reader.h"
-#include "formats/parquet/scalar_column_reader.h"
-#include "formats/utils.h"
-#include "gen_cpp/Descriptors_types.h"
-#include "gen_cpp/parquet_types.h"
->>>>>>> e3a62e162f ([Feature] Support column mapping for delta lake (#51807))
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"

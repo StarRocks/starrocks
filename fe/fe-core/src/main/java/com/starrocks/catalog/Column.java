@@ -185,19 +185,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-<<<<<<< HEAD
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
-=======
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
-                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
-        this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
+        ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+        this(name, type, isKey, aggregateType, isAllowNull, defaultValueDef, comment, columnUniqId, "");
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
-                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
-                  String physicalName) {
->>>>>>> e3a62e162f ([Feature] Support column mapping for delta lake (#51807))
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
+        ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId, String physicalName) {
         this.name = name;
         if (this.name == null) {
             this.name = "";

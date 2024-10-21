@@ -126,13 +126,10 @@ public class DeltaLakeScanNode extends ScanNode {
     public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
-<<<<<<< HEAD
-        DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), deltaMetadata);
 
         String catalogName = deltaLakeTable.getCatalogName();
-=======
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
->>>>>>> e3a62e162f ([Feature] Support column mapping for delta lake (#51807))
+
         Engine engine = deltaLakeTable.getDeltaEngine();
         long snapshotId = snapshot.getVersion(engine);
         String dbName = deltaLakeTable.getDbName();
