@@ -48,7 +48,7 @@ public:
     VectorIndexReader() = default;
     virtual ~VectorIndexReader() = default;
 
-#ifdef
+#ifdef WITH_TENANN
     virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) = 0;
 
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
