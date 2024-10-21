@@ -129,13 +129,13 @@ CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
-CONF_Int32(upload_worker_count, "1");
+CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
-CONF_Int32(download_worker_count, "1");
+CONF_mInt32(download_worker_count, "0");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
-CONF_Int32(release_snapshot_worker_count, "5");
+CONF_mInt32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
 CONF_mInt32(report_task_interval_seconds, "10");
 // The interval time(seconds) for agent report disk state to FE.
