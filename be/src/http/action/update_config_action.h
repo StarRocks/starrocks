@@ -60,7 +60,7 @@ private:
     static std::atomic<UpdateConfigAction*> _instance;
     ExecEnv* _exec_env;
     std::once_flag _once_flag;
-    std::unordered_map<std::string, std::function<void()>> _config_callback;
+    std::unordered_map<std::string, std::function<Status()>> _config_callback;
 };
 
 } // namespace starrocks
