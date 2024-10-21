@@ -107,6 +107,11 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
     // init parent open
     RETURN_IF_ERROR(Expr::open(state, context, scope));
 
+    // make sure ExprContext::clone will not open DictQueryExpr again
+    if (scope == FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
+
     TGetDictQueryParamRequest request;
     request.__set_db_name(_dict_query_expr.db_name);
     request.__set_table_name(_dict_query_expr.tbl_name);
