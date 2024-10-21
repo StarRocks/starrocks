@@ -1146,6 +1146,7 @@ public class StmtExecutor {
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
                 && canExecuteInFe(context, execPlan.getPhysicalPlan());
         boolean isEnableScanPartitionsAudit = context.getSessionVariable().isEnableScanPartitionsAudit();
+        int maxScanPartitionsAuditNum = context.getSessionVariable().getMaxScanPartitionsAuditNum();
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -1209,7 +1210,16 @@ public class StmtExecutor {
                     scanPartitionsMap.put("catalogName", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                     scanPartitionsMap.put("databaseName", db.getOriginName());
                     scanPartitionsMap.put("tableName", sn.getTableName());
-                    scanPartitionsMap.put("partitionIds", sn.getSelectedPartitionNames().toString());
+                    int selectedPartitionNum = sn.getSelectedPartitionNames().size();
+                    String selectedPartitionIds = "";
+                    if (selectedPartitionNum >= maxScanPartitionsAuditNum) {
+                        //limit the scan partitions print num in audit log, avoid log file too large
+                        selectedPartitionIds = "[" + sn.getSelectedPartitionNames().get(0) + ",...," +
+                                    sn.getSelectedPartitionNames().get(selectedPartitionNum - 1) + "]";
+                    } else {
+                        selectedPartitionIds = sn.getSelectedPartitionNames().toString();
+                    }
+                    scanPartitionsMap.put("partitionIds", selectedPartitionIds);
                     scanPartitionsList.add(GSON.toJson(scanPartitionsMap));
                 }
             }
