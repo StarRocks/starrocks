@@ -177,8 +177,9 @@ void AggregatorParams::init() {
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
             agg_fn_types[i].is_always_nullable_result =
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
-            // TODO(fixme): move this to FE
-            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat2") {
+            // To be compatible with old versions, check group_concat/group_concat2 both.
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat" ||
+                fn.name.function_name == "group_concat2") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -564,7 +565,7 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             DCHECK_LE(1, fn.arg_types.size());
             TypeDescriptor arg_type = arg_types[0];
 
-            // To be compatible with old versions, change group_concat2 name to group_concat if the intermediate type is string.
+            // To be compatible with old versions, change group_concat to group_concat2 if the intermediate type is struct.
             if (fn.name.function_name == "group_concat" && serde_type.type == TYPE_STRUCT) {
                 func_name = "group_concat2";
             }
