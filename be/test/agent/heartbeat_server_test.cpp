@@ -18,6 +18,7 @@
 
 namespace starrocks {
 
+// defined in common/process_exit.cpp
 extern std::atomic<bool> k_starrocks_exit;
 
 TEST(HeartbeatServerTest, test_shutdown_heartbeat) {

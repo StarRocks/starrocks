@@ -49,6 +49,7 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -86,17 +87,8 @@
 
 namespace starrocks {
 
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
-
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
-
-namespace {
-static bool is_shutdown_in_progress() {
-    return k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed);
-}
-} // namespace
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
@@ -303,7 +295,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (is_shutdown_in_progress()) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -335,7 +327,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (is_shutdown_in_progress()) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -1247,7 +1239,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (is_shutdown_in_progress()) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }
