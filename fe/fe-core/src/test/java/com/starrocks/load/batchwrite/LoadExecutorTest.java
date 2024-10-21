@@ -104,7 +104,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
     }
 
     @Test
-    public void testLoadSuccess() throws Exception {
+    public void testLoadSuccess() {
         LoadExecutor executor = new LoadExecutor(
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
                 label,

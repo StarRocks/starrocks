@@ -157,14 +157,14 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
                 backends = null;
                 LOG.error(errMsg);
             }
-        } catch (Throwable throwable) {
+        } catch (Exception exception) {
             status.setStatus_code(TStatusCode.INTERNAL_ERROR);
             String msg = String.format("Unexpected exception happen when getting backends, db: %s, table: %s, " +
                         "warehouse: %s, load id: %s, error: %s", tableId.getDbName(), tableId.getTableName(),
-                                warehouseName, id, throwable.getMessage());
+                                warehouseName, id, exception.getMessage());
             status.setError_msgs(Collections.singletonList(msg));
             LOG.error("Failed to get backends, db: {}, table: {}, warehouse: {}, load id: {}",
-                    tableId.getDbName(), tableId.getTableName(), warehouseName, id, throwable);
+                    tableId.getDbName(), tableId.getTableName(), warehouseName, id, exception);
         }
         return new RequestCoordinatorBackendResult(status, backends);
     }

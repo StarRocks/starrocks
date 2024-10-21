@@ -113,7 +113,7 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             builder.addHeader(entry.getKey(), entry.getValue());
         }
         builder.put(RequestBody.create(new byte[0]));
-        builder.url(String.format(BASE_URL + "/api/%s/%s/_stream_load", DB_NAME, TABLE_NAME));
+        builder.url(String.format("%s/api/%s/%s/_stream_load", BASE_URL, DB_NAME, TABLE_NAME));
         return builder.build();
     }
 

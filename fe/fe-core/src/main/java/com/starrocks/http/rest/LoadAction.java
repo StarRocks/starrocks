@@ -186,7 +186,7 @@ public class LoadAction extends RestBaseAction {
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
-        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr.toString(), dbName, tableName);
+        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
         redirectTo(request, response, redirectAddr);
     }
 

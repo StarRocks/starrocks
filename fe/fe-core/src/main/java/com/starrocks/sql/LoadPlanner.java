@@ -137,7 +137,6 @@ public class LoadPlanner {
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-    private Set<Long> candidateBackendIds = new HashSet<>();
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 

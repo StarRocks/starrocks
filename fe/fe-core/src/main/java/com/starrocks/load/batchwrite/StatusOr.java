@@ -29,7 +29,7 @@ public abstract class StatusOr<T> {
     protected final TStatus status;
     protected final T value;
 
-    public StatusOr(TStatus status, T value) {
+    protected StatusOr(TStatus status, T value) {
         Preconditions.checkArgument((
                 status.status_code == TStatusCode.OK && value != null)
                 || (status.status_code != TStatusCode.OK && value == null));
