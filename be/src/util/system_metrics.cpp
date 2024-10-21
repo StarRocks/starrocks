@@ -35,7 +35,9 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#ifdef WITH_TENANN
 #include <tenann/index/index_cache.h>
+#endif
 
 #include <cstdio>
 #include <memory>
