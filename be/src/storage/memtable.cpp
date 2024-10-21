@@ -267,7 +267,7 @@ Status MemTable::finalize() {
                 int64_t t2 = MonotonicMicros();
                 _aggregate(true);
                 int64_t t3 = MonotonicMicros();
-                VLOG(1) << strings::Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+                VLOG(2) << strings::Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
             } else {
                 // if there is only one data chunk and merge once,
                 // no need to perform an additional merge.
@@ -346,7 +346,7 @@ Status MemTable::flush(SegmentPB* seg_info) {
     auto flush_bytes = memory_usage();
     StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(flush_bytes);
     StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(io_stat.write_bytes);
-    VLOG(1) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
+    VLOG(2) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
             << "io time: " << io_time_us << "us, memory bytes: " << flush_bytes
             << ", disk bytes: " << io_stat.write_bytes;
     return Status::OK();
@@ -362,7 +362,7 @@ Status MemTable::_merge() {
     int64_t t2 = MonotonicMicros();
     _aggregate(false);
     int64_t t3 = MonotonicMicros();
-    VLOG(1) << strings::Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+    VLOG(2) << strings::Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
     ++_merge_count;
     return Status::OK();
 }
