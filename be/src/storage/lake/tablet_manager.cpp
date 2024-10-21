@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/horizontal_compaction_task.h"
@@ -675,10 +676,13 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     if (algorithm == VERTICAL_COMPACTION) {
         return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
                                                         std::move(tablet_schema));
-    } else {
-        DCHECK(algorithm == HORIZONTAL_COMPACTION);
+    } else if (algorithm == HORIZONTAL_COMPACTION) {
         return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
                                                           std::move(tablet_schema));
+    } else {
+        DCHECK(algorithm == CLOUD_NATIVE_INDEX_COMPACTION);
+        return std::make_shared<CloudNativeIndexCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                                std::move(tablet_schema));
     }
 }
 
