@@ -186,12 +186,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-        ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+                  ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
         this(name, type, isKey, aggregateType, isAllowNull, defaultValueDef, comment, columnUniqId, "");
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-        ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId, String physicalName) {
+                  ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId, String physicalName) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
