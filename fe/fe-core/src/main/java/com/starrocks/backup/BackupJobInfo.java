@@ -460,18 +460,18 @@ public class BackupJobInfo implements Writable {
             try {
                 tblInfo.tableType = tbl.getInt("tableType");
             } catch (Exception e) {
-                tblInfo.tableType = Table.TableType.OLAP.ordinal();
+                tblInfo.tableType = -1;
             }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
-            Table.TableType tblType = Table.TableType.OLAP;
-            if (tblInfo.tableType < Table.TableType.values().length) {
-                tblType = Table.TableType.values()[tblInfo.tableType];
-            }
-            if (tblType == Table.TableType.VIEW && partsNames == null) {
-                // view restore
-                jobInfo.tables.put(tblName, tblInfo);
-                continue;
+            if (tblInfo.tableType != -1 &&
+                    tblInfo.tableType < Table.TableType.values().length) {
+                Table.TableType tblType = Table.TableType.values()[tblInfo.tableType];
+                if (tblType == Table.TableType.VIEW && partsNames == null) {
+                    // view restore
+                    jobInfo.tables.put(tblName, tblInfo);
+                    continue;
+                }
             }
             for (String partName : partsNames) {
                 BackupPartitionInfo partInfo = new BackupPartitionInfo();
