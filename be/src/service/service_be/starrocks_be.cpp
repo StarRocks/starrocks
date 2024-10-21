@@ -36,6 +36,7 @@
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
@@ -325,6 +326,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
