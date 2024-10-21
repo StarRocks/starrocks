@@ -24,11 +24,8 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
-<<<<<<< HEAD
 #include "common/logging.h"
-=======
 #include "common/process_exit.h"
->>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116))
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/strings/join.h"

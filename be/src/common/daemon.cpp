@@ -71,20 +71,6 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
-<<<<<<< HEAD
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-std::atomic<bool> k_starrocks_exit = false;
-
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
-
 class ReleaseColumnPool {
 public:
     explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
@@ -115,8 +101,6 @@ void gc_memory(void* arg_this) {
     }
 }
 
-=======
->>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116))
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
