@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class RemoteFileInfo {
+    public static RemoteFileInfo EMPTY = new RemoteFileInfo();
+
     private RemoteFileInputFormat format;
     private List<RemoteFileDesc> files;
     private String fullPath;
@@ -62,6 +64,11 @@ public class RemoteFileInfo {
 
     public void setAttachment(Object attachment) {
         this.attachment = attachment;
+    }
+
+    @SuppressWarnings("unchecked")
+    public  <T extends RemoteFileInfo> T cast() {
+        return (T) this;
     }
 
     @Override
