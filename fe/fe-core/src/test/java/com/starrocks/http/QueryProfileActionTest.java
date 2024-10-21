@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.http;
 
-import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.QueryProfileAction;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -22,8 +21,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
-
-import static org.junit.Assert.assertTrue;
 
 public class QueryProfileActionTest extends StarRocksHttpTestCase {
 
