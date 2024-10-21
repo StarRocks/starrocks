@@ -18,26 +18,8 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/exec/hash_map.h
 using AggDataPtr = uint8_t*;
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr>;
 using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr>;
-=======
-// defined in common/process_exit.cpp
-extern std::atomic<bool> k_starrocks_exit;
-
-TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
-    HeartbeatServer server;
-    THeartbeatResult result;
-    TMasterInfo info;
-
-    k_starrocks_exit = true;
-    server.heartbeat(result, info);
-    EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
-    Status status(result.status);
-    EXPECT_TRUE(status.is_shutdown());
-    k_starrocks_exit = false;
-}
->>>>>>> f59b0ac3b2 ([Refactor] refactor backend process exit code (#52116)):be/test/agent/heartbeat_server_test.cpp
 
 } // namespace starrocks
