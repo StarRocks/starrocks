@@ -579,48 +579,54 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 
 <!--
+<<<<<<< HEAD
+=======
+##### update_schema_worker_count
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> 524afa2a2b ([Enhancement] Enhance thread pool configs of backup restore (#52111))
 ##### upload_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the upload tasks of backup jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### download_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the download tasks of restore jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The maximum number of threads for the make snapshot tasks on a BE node.
 - Introduced in: -
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the release snapshot tasks on a BE node.
 - Introduced in: -
--->
 
 ##### max_download_speed_kbps
 
