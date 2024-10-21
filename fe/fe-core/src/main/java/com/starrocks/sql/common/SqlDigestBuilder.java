@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -42,6 +43,18 @@ public class SqlDigestBuilder {
             }
             sb.append(" ? ");
             return sb.toString();
+        }
+
+        @Override
+        public String visitInPredicate(InPredicate node, Void context) {
+            if (node.isLiteralChildren()) {
+                StringBuilder builder = new StringBuilder();
+                String isNotIn = node.isNotIn() ? "NOT " : "";
+                builder.append(node.getChild(0)).append(" ").append(isNotIn).append("IN (?)");
+                return builder.toString();
+            } else {
+                return super.visitInPredicate(node, context);
+            }
         }
     }
 }
