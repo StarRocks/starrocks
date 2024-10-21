@@ -143,6 +143,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String ENABLE_PROFILE = "enable_profile";
     public static final String ENABLE_SCAN_PARTITIONS_AUDIT = "enable_scan_partitions_audit";
+    //limit the scan partitions print num in audit log, avoid log file too large
+    public static final String MAX_SCAN_PARTITIONS_AUDIT_NUM = "max_scan_partitions_audit_num";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -942,6 +944,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_PARTITIONS_AUDIT)
     private boolean enableScanPartitionsAudit = false;
+
+    @VariableMgr.VarAttr(name = MAX_SCAN_PARTITIONS_AUDIT_NUM)
+    private int maxScanPartitionsAuditNum = 20;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -2618,6 +2623,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableScanPartitionsAudit = enableScanPartitionsAudit;
     }
 
+    public int getMaxScanPartitionsAuditNum() {
+        return maxScanPartitionsAuditNum;
+    }
+        
     public boolean isEnableLoadProfile() {
         return enableLoadProfile;
     }
