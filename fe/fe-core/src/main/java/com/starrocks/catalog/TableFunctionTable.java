@@ -560,11 +560,12 @@ public class TableFunctionTable extends Table {
         return columns;
     }
 
-    public List<ImportColumnDesc> getColumnExprList() {
+    public List<ImportColumnDesc> getColumnExprList(Set<String> scanColumns) {
         List<ImportColumnDesc> exprs = new ArrayList<>();
         List<Column> columns = super.getFullSchema();
         for (Column column : columns) {
-            exprs.add(new ImportColumnDesc(column.getName()));
+            String colName = column.getName();
+            exprs.add(new ImportColumnDesc(colName, scanColumns.contains(colName)));
         }
         return exprs;
     }
