@@ -112,7 +112,7 @@ public class DeltaUtils {
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
             physicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
         }
-        return new Column(columnName, type, false, null, null, true,
+        return new Column(columnName, type, false, null, true,
                 null, "", columnUniqueId, physicalName);
     }
 
