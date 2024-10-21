@@ -660,6 +660,9 @@ public class OlapTable extends Table {
             idToPartition.put(newPartitionId, partition);
         }
 
+        // reset replication number for olaptable
+        setReplicationNum((short) restoreReplicationNum);
+
         // for each partition, reset rollup index map
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
@@ -693,13 +696,7 @@ public class OlapTable extends Table {
                     return status;
                 }
             }
-
-            // reset partition id
-            partition.setIdForRestore(entry.getKey());
         }
-
-        // reset replication number for olaptable
-        setReplicationNum((short) restoreReplicationNum);
 
         return Status.OK;
     }
