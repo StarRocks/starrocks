@@ -73,6 +73,14 @@ public class SelectStmtWithMultiLikeTest {
     private static Stream<Arguments> multiLikeTestCases() {
         String sqlFormat = "select count(1) from t0 where %s";
         String[][] testCases = new String[][] {
+                {"order_date > '2024-01-1' and site = 'ABC' and income = 10.0 and ship_mode = 3 and " +
+                        "ship_code = 3 and region not like '%ABC%' and region not like '%DEF%'",
+                        "Predicates: [2: order_date, DATE, false] > '2024-01-01', " +
+                                "[3: site, VARCHAR, false] = 'ABC', " +
+                                "cast([4: income, DECIMAL64(7,0), false] as DECIMAL64(8,1)) = 10.0, " +
+                                "[5: ship_mode, INT, false] = 3, [6: ship_code, INT, true] = 3, " +
+                                "NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$')"
+                },
                 {"region like '%ABC' or region like 'DEF_G'",
                         "Predicates: " +
                                 "1: region REGEXP '^((.*ABC)|(DEF.G))$'"},

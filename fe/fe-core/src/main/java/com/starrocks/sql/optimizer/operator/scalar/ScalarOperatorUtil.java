@@ -84,4 +84,10 @@ public class ScalarOperatorUtil {
                         likeOp.getChild(1).isConstantRef())
                 .orElse(false);
     }
+
+    public static boolean isSimpleNotLike(ScalarOperator op) {
+        return Utils.downcast(op, CompoundPredicateOperator.class)
+                .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
+                .orElse(false);
+    }
 }
