@@ -184,8 +184,6 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
         if (consolidatedDisjuncts.stream().noneMatch(p -> p.second.isPresent())) {
             return Optional.empty();
         }
-        consolidatedDisjuncts.stream()
-                .map(p -> p.second.orElseGet(() -> new ArrayList<ScalarOperator>(p.first)));
 
         List<ScalarOperator> newDisjuncts = Stream.concat(
                         otherDisjuncts.stream(),
@@ -195,6 +193,50 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
                                 .flatMap(Collection::stream))
                 .collect(Collectors.toList());
         return Optional.of(newDisjuncts);
+    }
+
+    private static Optional<List<ScalarOperator>> handleConjuncts(
+            List<ScalarOperator> conjuncts, int consolidateMin) {
+        if (conjuncts.size() < consolidateMin) {
+            return Optional.empty();
+        }
+        if (conjuncts.stream().filter(ScalarOperatorUtil::isSimpleNotLike).count() < consolidateMin) {
+            return Optional.empty();
+        }
+
+        Map<Boolean, List<ScalarOperator>> conjunctGroups = conjuncts.stream()
+                .collect(Collectors.partitioningBy(ScalarOperatorUtil::isSimpleNotLike));
+        List<ScalarOperator> notLikeOps = conjunctGroups.get(true);
+        List<ScalarOperator> otherConjuncts = conjunctGroups.get(false);
+
+        Map<ColumnRefOperator, List<LikePredicateOperator>> likeOpGroups = notLikeOps.stream()
+                .map(conj -> Utils.mustCast(conj, CompoundPredicateOperator.class).getChild(0))
+                .map(likeOp -> Utils.mustCast(likeOp, LikePredicateOperator.class))
+                .collect(Collectors.groupingBy(likeOp ->
+                        Utils.mustCast(likeOp.getChild(0), ColumnRefOperator.class)));
+
+        List<Pair<List<LikePredicateOperator>, Optional<List<ScalarOperator>>>> consolidatedConjuncts =
+                likeOpGroups.values()
+                        .stream()
+                        .map(likePredicateOperators -> Pair.create(
+                                likePredicateOperators,
+                                consolidate(likePredicateOperators, consolidateMin)
+                                        .map(ops -> ops.stream().map(CompoundPredicateOperator::not)
+                                                .collect(Collectors.toList()))))
+                        .collect(Collectors.toList());
+
+        if (consolidatedConjuncts.stream().noneMatch(p -> p.second.isPresent())) {
+            return Optional.empty();
+        }
+
+        List<ScalarOperator> newConjuncts = Stream.concat(
+                        otherConjuncts.stream(),
+                        consolidatedConjuncts
+                                .stream()
+                                .map(p -> p.second.orElseGet(() -> new ArrayList<ScalarOperator>(p.first)))
+                                .flatMap(Collection::stream))
+                .collect(Collectors.toList());
+        return Optional.of(newConjuncts);
     }
 
     @Override
@@ -211,14 +253,8 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
             List<ScalarOperator> disjuncts = Utils.extractDisjunctive(predicate);
             return handleDisjuncts(disjuncts, consolidateMin).map(Utils::compoundOr).orElse(predicate);
         } else if (predicate.isAnd()) {
-            NegateFilterShuttle negateShuttle = NegateFilterShuttle.getInstance();
-            List<ScalarOperator> disjuncts = Utils.extractConjuncts(predicate).stream()
-                    .map(negateShuttle::negateFilter)
-                    .collect(Collectors.toList());
-            return handleDisjuncts(disjuncts, consolidateMin)
-                    .map(Utils::compoundOr)
-                    .map(negateShuttle::negateFilter)
-                    .orElse(predicate);
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+            return handleConjuncts(conjuncts, consolidateMin).map(Utils::compoundAnd).orElse(predicate);
         } else {
             return predicate;
         }
