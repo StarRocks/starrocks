@@ -72,7 +72,7 @@ public class BatchWriteMgr extends FrontendDaemon {
     }
 
     @Override
-    public void start() {
+    public synchronized void start() {
         super.start();
         this.coordinatorBackendAssigner.start();
         LOG.info("Start batch write manager");

@@ -105,7 +105,7 @@ public class LoadExecutor implements Runnable {
             beginTxn();
             executeLoad();
             commitAndPublishTxn();
-        } catch (Throwable e) {
+        } catch (Exception e) {
             failure.set(e);
             abortTxn(e);
             LOG.error("Failed to execute load, label: {}, load id: {}, txn id: {}",

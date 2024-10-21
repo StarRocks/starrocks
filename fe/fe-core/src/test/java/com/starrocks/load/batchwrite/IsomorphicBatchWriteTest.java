@@ -274,7 +274,11 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
             LoadExecutor loadExecutor = (LoadExecutor) runnable;
             Thread thread = new Thread(loadExecutor);
             thread.start();
+            long endTime = System.currentTimeMillis() + 120000;
             while (loadExecutor.getTimeTrace().joinPlanTimeMs.get() <= 0) {
+                if (System.currentTimeMillis() > endTime) {
+                    throw new Exception("Load executor execute plan timeout");
+                }
                 Thread.sleep(10);
             }
             DefaultCoordinator coordinator = (DefaultCoordinator) loadExecutor.getCoordinator();

@@ -216,9 +216,9 @@ public class StreamLoadPlannerTest {
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
         UUID uuid = UUID.randomUUID();
         TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
+        StreamLoadInfo.fromHttpStreamLoadRequest(loadId, 100, Optional.of(100), param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+        StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
     }
 
     @Test

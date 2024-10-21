@@ -23,6 +23,7 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
 
     @Override
     public void start() {
+        // TODO implement this method
     }
 
     @Override
