@@ -1722,10 +1722,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
             status.addToError_msgs(authenticationException.getMessage());
             result.setStatus(status);
-        } catch (Throwable throwable) {
+        } catch (Exception exception) {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-            status.addToError_msgs(throwable.getMessage());
+            status.addToError_msgs(exception.getMessage());
             result.setStatus(status);
         }
         return result;
