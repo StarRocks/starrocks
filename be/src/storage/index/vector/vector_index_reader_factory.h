@@ -22,9 +22,11 @@
 namespace starrocks {
 
 class VectorIndexReaderFactory {
+#ifdef WITH_TENANN
 public:
     static Status create_from_file(const std::string& index_path, const std::shared_ptr<tenann::IndexMeta>& index_meta,
                                    std::shared_ptr<VectorIndexReader>* vector_index_reader);
+#endif
 };
 
 } // namespace starrocks
