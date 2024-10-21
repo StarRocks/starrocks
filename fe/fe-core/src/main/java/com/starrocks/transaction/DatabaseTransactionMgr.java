@@ -467,7 +467,7 @@ public class DatabaseTransactionMgr {
             } finally {
                 updateCatalogAfterCommittedSpan.end();
             }
-            LOG.debug("transaction:[{}] successfully committed", transactionState);
+            LOG.info("transaction:[{}] successfully committed", transactionState);
             return waiter;
         } finally {
             transactionState.writeUnlock();
@@ -1549,7 +1549,7 @@ public class DatabaseTransactionMgr {
                     prefix = ", ";
                     expiredTxnMsgs.append(transactionState.getTransactionId());
                     if (expiredTxnMsgs.length() > 4096) {
-                        LOG.debug("transaction list [{}] are expired, remove them from transaction manager",
+                        LOG.info("transaction list [{}] are expired, remove them from transaction manager",
                                 expiredTxnMsgs);
                         expiredTxnMsgs = new StringBuilder(1024);
                     }
@@ -1558,7 +1558,7 @@ public class DatabaseTransactionMgr {
                 }
             }
             if (expiredTxnMsgs.length() > 0) {
-                LOG.debug("transaction list [{}] are expired, remove them from transaction manager",
+                LOG.info("transaction list [{}] are expired, remove them from transaction manager",
                         expiredTxnMsgs);
             }
         } finally {
@@ -1766,6 +1766,7 @@ public class DatabaseTransactionMgr {
     }
 
     public void replayUpsertTransactionState(TransactionState transactionState) {
+        boolean isCheckpoint = GlobalStateMgr.isCheckpointThread();
         writeLock();
         try {
             if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
@@ -1776,14 +1777,23 @@ public class DatabaseTransactionMgr {
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                if (!isCheckpoint) {
+                    LOG.info("replay a committed transaction {}", transactionState.getBrief());
+                }
                 LOG.debug("replay a committed transaction {}", transactionState);
                 updateCatalogAfterCommitted(transactionState, db);
             } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                if (!isCheckpoint) {
+                    LOG.info("replay a visible transaction {}", transactionState.getBrief());
+                }
                 LOG.debug("replay a visible transaction {}", transactionState);
                 updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState, true);
             if (transactionState.isExpired(System.currentTimeMillis())) {
+                if (!isCheckpoint) {
+                    LOG.info("remove expired transaction: {}", transactionState.getBrief());
+                }
                 LOG.debug("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
@@ -1900,7 +1910,7 @@ public class DatabaseTransactionMgr {
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
-        LOG.debug("finish transaction {} successfully", transactionState);
+        LOG.info("finish transaction {} successfully", transactionState);
     }
 
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {

@@ -809,6 +809,25 @@ public class TransactionState implements Writable {
         return sb.toString();
     }
 
+    public String getBrief() {
+        StringBuilder sb = new StringBuilder("TransactionState. ");
+        sb.append("txn_id: ").append(transactionId);
+        sb.append(", db id: ").append(dbId);
+        sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
+        sb.append(", error replicas num: ").append(errorReplicas.size());
+        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (commitTime > prepareTime) {
+            sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
+        }
+        if (finishTime > commitTime && commitTime > 0) {
+            sb.append(", publish total cost: ").append(finishTime - commitTime).append("ms");
+        }
+        if (finishTime > prepareTime) {
+            sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
+        }
+        return sb.toString();
+    }
+
     public LoadJobSourceType getSourceType() {
         return sourceType;
     }
