@@ -54,7 +54,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -361,7 +361,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dataSize = 0L;
                 if (tabletMeta.isLakeTablet()) {
-                    Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+                    PhysicalPartition partition = exportTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
                     if (partition != null) {
                         MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
                         if (index != null) {
