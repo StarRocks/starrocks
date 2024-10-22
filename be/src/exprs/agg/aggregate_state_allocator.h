@@ -44,7 +44,7 @@ public:
 
     T* allocate(size_t n) {
         DCHECK(tls_agg_state_allocator != nullptr);
-        return static_cast<T*>(tls_agg_state_allocator->alloc(n * sizeof(T)));
+        return static_cast<T*>(tls_agg_state_allocator->checked_alloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {

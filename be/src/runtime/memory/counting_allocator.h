@@ -135,6 +135,9 @@ public:
 #else
         *_counter += (result != nullptr) ? n * sizeof(T) : 0;
 #endif
+        if (UNLIKELY(result == nullptr)) {
+            throw std::bad_alloc();
+        }
 
         return result;
     }
