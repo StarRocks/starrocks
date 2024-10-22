@@ -3291,6 +3291,10 @@ public class GlobalStateMgr {
         return localMetastore.getPartitionsIncludeRecycleBin(table);
     }
 
+    public PhysicalPartition getPhysicalPartitionIncludeRecycleBin(OlapTable table, long partitionId) {
+        return localMetastore.getPhysicalPartitionIncludeRecycleBin(table, partitionId);
+    }
+
     public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable table) {
         return localMetastore.getAllPartitionsIncludeRecycleBin(table);
     }
