@@ -1981,7 +1981,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+            olapTable.setState(OlapTableState.OPTIMIZE);
+        } else {
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        }
 
         // 2. add schemaChangeJob
         addAlterJobV2(schemaChangeJob);
