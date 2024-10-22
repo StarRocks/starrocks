@@ -794,12 +794,6 @@ public class RestoreJob extends AbstractJob {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
-        // add all restored olap view into globalStateMgr
-        addRestoreOlapView(restoredOlapViews);
-        if (!status.ok()) {
-            return;
-        }
-
         // Send create replica task to BE outside the db lock
         sendCreateReplicaTasks();
         if (!status.ok()) {
@@ -808,6 +802,12 @@ public class RestoreJob extends AbstractJob {
 
         // add all restored partition and tbls to globalStateMgr
         addRestorePartitionsAndTables(db);
+        if (!status.ok()) {
+            return;
+        }
+
+        // add all restored olap view into globalStateMgr
+        addRestoreOlapView(restoredOlapViews);
         if (!status.ok()) {
             return;
         }
@@ -883,6 +883,7 @@ public class RestoreJob extends AbstractJob {
                     Lists.newArrayList(), restoredOlapView.getComment(), restoredOlapView.getQueryStatement(), NodePosition.ZERO);
             stmt.setColumns(restoredOlapView.getColumns());
             stmt.setInlineViewDef(restoredOlapView.getInlineViewDef());
+            context.getSessionVariable().setSqlMode(restoredOlapView.getSqlMode());
             try {
                 GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
             } catch (DdlException e) {
