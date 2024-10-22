@@ -58,8 +58,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -518,7 +520,8 @@ public class BackupJob extends AbstractJob {
                 String tblName = tableRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
-                    copiedTables.add(tbl);
+                    View view = (View) tbl;
+                    copiedTables.add((Table) DeepCopy.copyWithGson(view, View.class));
                     continue;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
