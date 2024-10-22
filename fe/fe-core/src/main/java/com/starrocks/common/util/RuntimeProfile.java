@@ -817,7 +817,7 @@ public class RuntimeProfile {
                     RuntimeProfile child = profile.getChild(childName);
                     if (child == null) {
                         identical = false;
-                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                        LOG.debug("find non-isomorphic children, profileName={}, requiredChildName={}",
                                 profile.name, childName);
                         continue;
                     }

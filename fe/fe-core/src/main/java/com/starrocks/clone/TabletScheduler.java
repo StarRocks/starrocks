@@ -491,7 +491,7 @@ public class TabletScheduler extends FrontendDaemon {
                         GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
         if (System.currentTimeMillis() - lastClusterLoadLoggingTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
-            LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+            LOG.debug("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
             lastClusterLoadLoggingTime = System.currentTimeMillis();
         }
         this.loadStatistic = clusterLoadStatistic;
@@ -647,7 +647,7 @@ public class TabletScheduler extends FrontendDaemon {
             if (AgentTaskQueue.addTask(task)) {
                 stat.counterCloneTask.incrementAndGet();
             }
-            LOG.info("add task to agent task queue: {}", task);
+            LOG.debug("add task to agent task queue: {}", task);
         }
 
         // send task immediately
@@ -1774,7 +1774,7 @@ public class TabletScheduler extends FrontendDaemon {
         runningTablets.remove(tabletCtx.getTabletId());
         allTabletIds.remove(tabletCtx.getTabletId());
         schedHistory.add(tabletCtx);
-        LOG.info("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
+        LOG.debug("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
     }
 
     @VisibleForTesting
