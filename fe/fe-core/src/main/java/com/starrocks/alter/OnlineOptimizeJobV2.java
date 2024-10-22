@@ -295,7 +295,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
+            Preconditions.checkState(tbl.getState() == OlapTableState.OPTIMIZE);
             tbl.addDoubleWritePartition(sourcePartitionName, tmpPartitionName);
             LOG.info("job {} add double write partition {} to {}", jobId, tmpPartitionName, sourcePartitionName);
         } finally {
@@ -306,7 +306,6 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     private void disableDoubleWritePartition(Database db, OlapTable tbl) {
         try (AutoCloseableLock ignored =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
-            Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             tbl.clearDoubleWritePartition();
             LOG.info("job {} clear double write partitions", jobId);
         }
@@ -596,7 +595,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                 return;
             }
             // set table state
-            tbl.setState(OlapTableState.SCHEMA_CHANGE);
+            tbl.setState(OlapTableState.OPTIMIZE);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }

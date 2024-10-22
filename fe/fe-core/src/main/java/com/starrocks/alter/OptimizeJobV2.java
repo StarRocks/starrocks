@@ -619,7 +619,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             // set table state
-            tbl.setState(OlapTableState.SCHEMA_CHANGE);
+            tbl.setState(OlapTableState.OPTIMIZE);
         }
 
         this.jobState = JobState.PENDING;
