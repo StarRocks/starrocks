@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -24,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -40,11 +42,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 // When a column used in a SQL query's Group By statement has a unique attribute, aggregation can be eliminated,
 // and the LogicalAggregationOperator can be replaced with a LogicalProjectOperator.
@@ -80,63 +80,51 @@ public class EliminateAggRule extends TransformationRule {
 
     private static final EliminateAggRule INSTANCE = new EliminateAggRule();
 
+    private static final Set<String> SUPPORTED_AGG_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.SUM, FunctionSet.COUNT, FunctionSet.AVG, FunctionSet.FIRST_VALUE,
+            FunctionSet.MAX, FunctionSet.MIN, FunctionSet.GROUP_CONCAT
+    );
+
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
+        OptExpression childOpt = input.inputAt(0);
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
-            if (entry.getValue().isDistinct()) {
-                return false;
-            }
-            String fnName = entry.getValue().getFnName();
-            if (!(fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.COUNT) ||
-                    fnName.equals(FunctionSet.AVG) ||
-                    fnName.equals(FunctionSet.FIRST_VALUE) ||
-                    fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
-                    fnName.equals(FunctionSet.GROUP_CONCAT))) {
-                return false;
-            }
+        List<ColumnRefOperator> groupBys = aggOp.getGroupingKeys();
+        if (groupBys.isEmpty()) {
+            return false;
         }
 
-        // collect uk pk key
+        boolean supportedAllAggFunctions = aggOp.getAggregations().values().stream()
+                .allMatch(call -> !call.isDistinct() && SUPPORTED_AGG_FUNCTIONS.contains(call.getFnName()));
+        if (!supportedAllAggFunctions) {
+            return false;
+        }
+
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         input.getOp().accept(collector, input, null);
 
-        OptExpression childOptExpression = input.inputAt(0);
-        Map<Integer, UKFKConstraints.UniqueConstraintWrapper> uniqueKeys =
-                childOptExpression.getConstraints().getTableUniqueKeys();
+        List<UKFKConstraints.UniqueConstraintWrapper> uniqueKeys = childOpt.getConstraints().getAggUniqueKeys();
         if (uniqueKeys.isEmpty()) {
             return false;
         }
-        if (uniqueKeys.size() != groupKeys.size()) {
-            return false;
-        }
 
-        Set<Integer> groupColumnRefIds = groupKeys.stream()
-                .map(ColumnRefOperator::getId)
-                .collect(Collectors.toSet());
-
-        Set<Integer> uniqueColumnRefIds = new HashSet<>(uniqueKeys.keySet());
-        if (!groupColumnRefIds.equals(uniqueColumnRefIds)) {
-            return false;
-        }
-
-        return true;
+        ColumnRefSet groupByIds = new ColumnRefSet();
+        groupBys.stream().map(ColumnRefOperator::getId).forEach(groupByIds::union);
+        return uniqueKeys.stream().anyMatch(constraint -> groupByIds.containsAll(constraint.ukColumnRefs));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             ColumnRefOperator aggColumnRef = entry.getKey();
             CallOperator callOperator = entry.getValue();
             ScalarOperator newOperator = handleAggregationFunction(callOperator.getFnName(), callOperator);
             newProjectMap.put(aggColumnRef, newOperator);
         }
-
         aggOp.getGroupingKeys().forEach(ref -> newProjectMap.put(ref, ref));
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
 
@@ -184,8 +172,7 @@ public class EliminateAggRule extends TransformationRule {
         if (callOperator.getType().equals(argument.getType())) {
             return argument;
         }
-        ScalarOperator scalarOperator = new CastOperator(callOperator.getType(), argument);
-        return scalarOperator;
+        return new CastOperator(callOperator.getType(), argument);
     }
 
 }
