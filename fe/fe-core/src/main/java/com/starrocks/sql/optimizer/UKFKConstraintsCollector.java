@@ -81,10 +81,12 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         constraints.inheritForeignKey(childConstraints, outputColumns);
         constraints.inheritRelaxedUniqueKey(childConstraints, outputColumns);
 
-        ColumnRefSet groupByColumnRefs = new ColumnRefSet(aggOp.getGroupingKeys());
-        if (!groupByColumnRefs.isEmpty() && outputColumns.containsAll(groupByColumnRefs)) {
-            constraints.addAggUniqueKey(
-                    new UKFKConstraints.UniqueConstraintWrapper(null, new ColumnRefSet(), false, groupByColumnRefs));
+        if (!aggOp.isOnlyLocalAggregate()) {
+            ColumnRefSet groupBys = new ColumnRefSet(aggOp.getGroupingKeys());
+            if (!groupBys.isEmpty() && outputColumns.containsAll(groupBys)) {
+                constraints.addAggUniqueKey(
+                        new UKFKConstraints.UniqueConstraintWrapper(null, new ColumnRefSet(), false, groupBys));
+            }
         }
 
         optExpression.setConstraints(constraints);
