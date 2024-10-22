@@ -80,10 +80,10 @@ TEST(HeartbeatServerTest, test_print_master_info_some_fields_null) {
 
     // Only some fields are set, others remain unset
     info.network_address = "127.0.0.1";
-    info.__isset.cluster_id = false;  // Unset
+    info.__isset.cluster_id = false; // Unset
     info.__isset.epoch = true;
     info.epoch = 100;
-    info.__isset.token = false;  // Unset
+    info.__isset.token = false; // Unset
     info.__isset.backend_ip = true;
     info.backend_ip = "192.168.1.1";
 
