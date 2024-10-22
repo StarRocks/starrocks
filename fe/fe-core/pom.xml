@@ -1048,6 +1048,12 @@ under the License.
             <artifactId>odps-sdk-table-api</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
+        <dependency>
+            <groupId>org.owasp.encoder</groupId>
+            <artifactId>encoder</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.carrotsearch</groupId>
             <artifactId>junit-benchmarks</artifactId>
