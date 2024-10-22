@@ -530,6 +530,9 @@ public:
     static ColumnPtr create_const_null_column(size_t chunk_size);
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
+
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
 
 // Hold a slice of chunk
