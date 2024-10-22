@@ -236,14 +236,16 @@ public:
     // new rowset.
     // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
-    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, const TabletSchemaCSPtr& tablet_schema = nullptr) const {
+    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, bool skip_schema = false,
+                          const TabletSchemaCSPtr& tablet_schema = nullptr) const {
         *rs_meta_pb = *_rowset_meta_pb;
-        const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
-
-        if (target_schema != nullptr) {
-            rs_meta_pb->clear_tablet_schema();
-            TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-            target_schema->to_schema_pb(ts_pb);
+        if (!skip_schema) {
+            const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
+            if (target_schema != nullptr) {
+                rs_meta_pb->clear_tablet_schema();
+                TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
+                target_schema->to_schema_pb(ts_pb);
+            }
         }
     }
 
@@ -274,6 +276,9 @@ public:
 
     bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
 
+    void set_skip_tablet_schema(bool skip_tablet_schema) { _skip_tablet_schema = skip_tablet_schema; }
+    bool skip_tablet_schema() { return _skip_tablet_schema; }
+
 private:
     bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb->ParseFromArray(value.data(), value.size());
@@ -294,8 +299,8 @@ private:
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }
         }
-        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
 
+        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
         // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();
         std::unique_ptr<RowsetMetaPB> ptr = std::make_unique<RowsetMetaPB>(*_rowset_meta_pb);
@@ -329,6 +334,7 @@ private:
     bool _is_removed_from_rowset_meta = false;
     TabletSchemaCSPtr _schema = nullptr;
     bool _has_tablet_schema_pb = false;
+    bool _skip_tablet_schema = false;
 };
 
 } // namespace starrocks
