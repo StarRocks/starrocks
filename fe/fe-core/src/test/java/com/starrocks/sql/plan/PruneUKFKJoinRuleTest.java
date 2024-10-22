@@ -491,7 +491,7 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ65() throws Exception {
-        assertPlans(Q65, false);
+        assertPlans(Q65, true);
     }
 
     @Test
