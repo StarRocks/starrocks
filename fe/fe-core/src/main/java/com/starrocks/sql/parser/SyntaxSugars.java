@@ -36,6 +36,7 @@ public class SyntaxSugars {
                 .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+                .put(FunctionSet.DS_HLL, SyntaxSugars::hllSketchCount)
                 .build();
     }
 
