@@ -70,6 +70,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
@@ -396,9 +397,10 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
+        String pattern = fmtLiteral.getVarchar();
+        DateTimeFormatter builder = getUnixDatetimeFormatBuilder(pattern).toFormatter();
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
-        if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
+        if (HAS_TIME_PART.matcher(pattern).matches()) {
             LocalDateTime ldt;
             try {
                 ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
@@ -418,10 +420,26 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        DateTimeFormatterBuilder builder = getUnixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+    }
+
+    /**
+     * Get the unixDatetimeFormatBuilder using the given pattern.
+     * If the pattern is year or year month format will set the default value for
+     *   MONTH_OF_YEAR and DAY_OF_MONTH
+     * @param pattern the dateTimeFormat pattern
+     * @return
+     */
+    private static DateTimeFormatterBuilder getUnixDatetimeFormatBuilder(String pattern) {
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(pattern, false);
+        if (DateUtils.MONTH_YEAR_FORMATTER_PATTERN.matcher(pattern).matches()) {
+            builder.parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+                    .parseDefaulting(ChronoField.DAY_OF_MONTH, 1);
+        }
+        return builder;
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)

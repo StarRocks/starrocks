@@ -425,10 +425,15 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("1998-02-21 00:00:00",
                 ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("98-02-21"),
                         ConstantOperator.createVarchar("%y-%m-%d")).toString());
-
-        Assert.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("201905"),
-                        ConstantOperator.createVarchar("%Y%m")).getDatetime());
+        assertEquals("2019-05-01 00:00:00",
+                ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("201905"),
+                        ConstantOperator.createVarchar("%Y%m")).toString());
+        assertEquals("2019-05-01 00:00:00",
+                ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2019-05"),
+                        ConstantOperator.createVarchar("%Y-%m")).toString());
+        assertEquals("2019-01-01 00:00:00",
+                ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2019"),
+                        ConstantOperator.createVarchar("%Y")).toString());
 
         Assert.assertThrows(DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("20190507"),
