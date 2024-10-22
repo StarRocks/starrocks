@@ -163,7 +163,7 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
   - String types are used for unionizing other types.
 - Generally, the STRING type can be used to unionize all data types.
 
-You can refer to [Example 6](#example-6).
+You can refer to Example 5.
 
 If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
 
@@ -409,12 +409,9 @@ See [FILES() for loading - Parameters - StorageCredentialParams](#storagecredent
 
 #### unload_data_param
 
-From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.
-
 ```sql
--- Supported from v3.2 onwards.
-unload_data_param::=
-    "compression" = "<compression_method>",
+unload_data_param ::=
+    "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
     "target_max_file_size" = "<int>"
@@ -423,13 +420,13 @@ unload_data_param::=
 | **Key**          | **Required** | **Description**                                              |
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
-| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
+| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
 | single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
 | target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
 
 ## Examples
 
-#### Example 1
+#### Example 1: Query the data from a file
 
 Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
 
@@ -450,7 +447,7 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-#### Example 2
+#### Example 2: Insert the data rows from a file
 
 Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
@@ -467,7 +464,7 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-#### Example 3
+#### Example 3: CTAS with data rows from a file
 
 Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
 
@@ -484,7 +481,7 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-#### Example 4
+#### Example 4: Query the data from a file and extract the key/value information in its path
 
 Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
 
@@ -506,27 +503,7 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-#### Example 5
-
-Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
-
-```SQL
-INSERT INTO 
-FILES(
-    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
-    "format" = "parquet",
-    "hadoop.security.authentication" = "simple",
-    "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
-)
-SELECT * FROM sales_records;
-```
-
-#### Example 6
-
-Automatic schema detection and Unionization.
+#### Example 5: Automatic schema detection and Unionization
 
 The following example is based on two Parquet files in the S3 bucket:
 
@@ -637,9 +614,9 @@ PROPERTIES (
 1 row in set (0.27 sec)
 ```
 
-#### Example 7
+#### Example 6: View the schema of a file
 
-View the schema of parquet file `lineorder` stored in AWS S3 using DESC.
+View the schema of the Parquet file `lineorder` stored in AWS S3 using DESC.
 
 ```Plain
 DESC FILES(
@@ -672,4 +649,22 @@ DESC FILES(
 | lo_shipmode      | varchar(1048576) | YES  |
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
+```
+
+#### Example 7: Unload data
+
+Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
+    "format" = "parquet",
+    "hadoop.security.authentication" = "simple",
+    "username" = "xxxxx",
+    "password" = "xxxxx",
+    "compression" = "lz4",
+    "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
 ```
