@@ -150,7 +150,8 @@ public class DiskAndTabletLoadReBalancerTest {
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
                 result = partition;
                 minTimes = 0;
 
@@ -312,7 +313,8 @@ public class DiskAndTabletLoadReBalancerTest {
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
                 result = partition;
                 minTimes = 0;
 
@@ -494,11 +496,13 @@ public class DiskAndTabletLoadReBalancerTest {
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin((OlapTable) any, partitionId1);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, partitionId1);
                 result = partition1;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin((OlapTable) any, partitionId2);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, partitionId2);
                 result = partition2;
                 minTimes = 0;
 
@@ -685,7 +689,8 @@ public class DiskAndTabletLoadReBalancerTest {
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
                 result = partition;
                 minTimes = 0;
 

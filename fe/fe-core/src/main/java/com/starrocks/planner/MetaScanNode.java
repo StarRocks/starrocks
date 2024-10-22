@@ -20,7 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
@@ -65,8 +65,8 @@ public class MetaScanNode extends ScanNode {
     }
 
     public void computeRangeLocations() {
-        Collection<Partition> partitions = olapTable.getPartitions();
-        for (Partition partition : partitions) {
+        Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
+        for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
             List<Tablet> tablets = index.getTablets();

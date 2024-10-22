@@ -14,9 +14,17 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import org.junit.Test;
+
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
@@ -33,4 +41,15 @@ public class PartitionUtilsTest {
         assertEquals(20150301120000L, result);
     }
 
+    @Test
+    public void testClearTabletsFromInvertedIndex() throws Exception {
+        List<Partition> partitions = Lists.newArrayList();
+        MaterializedIndex materializedIndex = new MaterializedIndex();
+        HashDistributionInfo distributionInfo =
+                new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
+
+        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
+        partitions.add(p1);
+        PartitionUtils.clearTabletsFromInvertedIndex(partitions);
+    }
 }
