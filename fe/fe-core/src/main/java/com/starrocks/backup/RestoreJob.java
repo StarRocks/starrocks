@@ -203,9 +203,6 @@ public class RestoreJob extends AbstractJob {
     private AgentBatchTask batchTask;
 
     boolean enableColocateRestore = Config.enable_colocate_restore;
-
-    @SerializedName(value = "restoredOlapViews")
-    private List<View> restoredOlapViews = Lists.newArrayList();
     
     public RestoreJob() {
         super(JobType.RESTORE);
@@ -542,17 +539,6 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = globalStateMgr.getLocalMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
-                    if (remoteTbl.isOlapView()) {
-                        if (!localTbl.isOlapView()) {
-                            status = new Status(ErrCode.BAD_REPLACE,
-                                                "Table: " + tblInfo.name + " has existed and it is not a View");
-                            return;
-                        } else {
-                            restoredOlapViews.add((View) remoteTbl);
-                            continue;
-                        }
-                    }
-
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
                         // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
@@ -713,10 +699,6 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
                 } else {
-                    if (remoteTbl.isOlapView()) {
-                        restoredOlapViews.add((View) remoteTbl);
-                        continue;
-                    }
                     // Table does not exist
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
@@ -807,6 +789,8 @@ public class RestoreJob extends AbstractJob {
         }
 
         // add all restored olap view into globalStateMgr
+        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
+                                       .map(x -> (View) x).collect(Collectors.toList());
         addRestoreOlapView(restoredOlapViews);
         if (!status.ok()) {
             return;
@@ -879,6 +863,13 @@ public class RestoreJob extends AbstractJob {
         context.setThreadLocalInfo();
 
         for (View restoredOlapView : restoredOlapViews) {
+            Table localTbl = db.getTable(restoredOlapView.getId());
+            if (localTbl != null && !localTbl.isOlapView()) {
+                status = new Status(ErrCode.BAD_REPLACE,
+                                    "Table: " + localTbl.getName() + " has existed and it is not a View");
+                return;
+            }
+
             CreateViewStmt stmt = new CreateViewStmt(false, true, new TableName(db.getFullName(), restoredOlapView.getName()),
                     Lists.newArrayList(), restoredOlapView.getComment(), restoredOlapView.getQueryStatement(), NodePosition.ZERO);
             stmt.setColumns(restoredOlapView.getColumns());
@@ -1183,6 +1174,8 @@ public class RestoreJob extends AbstractJob {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
+        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
+                                       .map(x -> (View) x).collect(Collectors.toList());
         addRestoreOlapView(restoredOlapViews);
 
         LOG.info("replay check and prepare meta. {}", this);

@@ -147,8 +147,6 @@ public class BackupJobInfo implements Writable {
         public Long autoIncrementId;
         @SerializedName(value = "partitions")
         public Map<String, BackupPartitionInfo> partitions = Maps.newHashMap();
-        @SerializedName(value = "tableType")
-        public int tableType;
 
         public boolean containsPart(String partName) {
             return partitions.containsKey(partName);
@@ -306,15 +304,14 @@ public class BackupJobInfo implements Writable {
 
         // tbls
         for (Table tbl : tbls) {
-            BackupTableInfo tableInfo = new BackupTableInfo();
-            tableInfo.id = tbl.getId();
-            tableInfo.name = tbl.getName();
-            tableInfo.tableType = tbl.getType().ordinal();
-            jobInfo.tables.put(tableInfo.name, tableInfo);
-
             if (tbl.isOlapView()) {
                 continue;
             }
+
+            BackupTableInfo tableInfo = new BackupTableInfo();
+            tableInfo.id = tbl.getId();
+            tableInfo.name = tbl.getName();
+            jobInfo.tables.put(tableInfo.name, tableInfo);
             
             OlapTable olapTbl = (OlapTable) tbl;
             // partitions
@@ -457,22 +454,8 @@ public class BackupJobInfo implements Writable {
             } catch (Exception e) {
                 tblInfo.autoIncrementId = null;
             }
-            try {
-                tblInfo.tableType = tbl.getInt("tableType");
-            } catch (Exception e) {
-                tblInfo.tableType = -1;
-            }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
-            if (tblInfo.tableType != -1 &&
-                    tblInfo.tableType < Table.TableType.values().length) {
-                Table.TableType tblType = Table.TableType.values()[tblInfo.tableType];
-                if (tblType == Table.TableType.VIEW && partsNames == null) {
-                    // view restore
-                    jobInfo.tables.put(tblName, tblInfo);
-                    continue;
-                }
-            }
             for (String partName : partsNames) {
                 BackupPartitionInfo partInfo = new BackupPartitionInfo();
                 partInfo.name = partName;
@@ -611,7 +594,6 @@ public class BackupJobInfo implements Writable {
                 tbl.put("id", tblInfo.id);
             }
             tbl.put("autoIncrementId", tblInfo.autoIncrementId);
-            tbl.put("tableType", tblInfo.tableType);
             JSONObject parts = new JSONObject();
             tbl.put("partitions", parts);
             for (BackupPartitionInfo partInfo : tblInfo.partitions.values()) {
