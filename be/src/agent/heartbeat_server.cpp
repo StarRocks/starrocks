@@ -158,7 +158,7 @@ std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) c
         master_info.printTo(out);
     } else {
         TMasterInfo master_info_copy(master_info);
-        master_info_copy.__set_token = "<hidden>";
+        master_info_copy.__set_token("<hidden>");
         master_info_copy.printTo(out);
     }
     return out.str();
