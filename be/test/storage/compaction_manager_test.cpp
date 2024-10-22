@@ -30,7 +30,75 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 TEST(CompactionManagerTest, test_candidates) {
+=======
+class CompactionManagerTest : public testing::Test {
+public:
+    ~CompactionManagerTest() override {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
+
+    void SetUp() override {
+        config::min_cumulative_compaction_num_singleton_deltas = 2;
+        //config::max_cumulative_compaction_num_singleton_deltas = 5;
+        config::max_compaction_concurrency = 10;
+        config::enable_event_based_compaction_framework = false;
+        config::vertical_compaction_max_columns_per_group = 5;
+        Compaction::init(config::max_compaction_concurrency);
+
+        _default_storage_root_path = config::storage_root_path;
+        config::storage_root_path = std::filesystem::current_path().string() + "/compaction_manager_test";
+        fs::remove_all(config::storage_root_path);
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
+        std::vector<StorePath> paths;
+        paths.emplace_back(config::storage_root_path);
+
+        starrocks::EngineOptions options;
+        options.store_paths = paths;
+        options.compaction_mem_tracker = _compaction_mem_tracker.get();
+        if (_engine == nullptr) {
+            Status s = starrocks::StorageEngine::open(options, &_engine);
+            ASSERT_TRUE(s.ok()) << s.to_string();
+        }
+
+        _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
+        ASSERT_OK(fs::create_directories(_schema_hash_path));
+
+        _metadata_mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_pool = std::make_unique<MemPool>();
+
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+    }
+
+    void TearDown() override {
+        if (fs::path_exist(config::storage_root_path)) {
+            ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
+        }
+        config::storage_root_path = _default_storage_root_path;
+        config::max_compaction_concurrency = -1;
+        config::enable_event_based_compaction_framework = true;
+        config::max_compaction_candidate_num = 40960;
+        config::cumulative_compaction_num_threads_per_disk = 1;
+        config::base_compaction_num_threads_per_disk = 1;
+    }
+
+protected:
+    StorageEngine* _engine = nullptr;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::string _schema_hash_path;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
+    std::unique_ptr<MemTracker> _compaction_mem_tracker;
+    std::unique_ptr<MemPool> _mem_pool;
+    std::string _default_storage_root_path;
+};
+
+TEST_F(CompactionManagerTest, test_candidates) {
+>>>>>>> 6e55970b35 ([BugFix] Setting max_compaction_concurrency to -1/0 via dynamic parameter is not as expected. (#50875))
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i <= 10; i++) {
@@ -155,4 +223,99 @@ TEST(CompactionManagerTest, test_next_compaction_task_id) {
     ASSERT_LT(0, start_task_id);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(CompactionManagerTest, test_compaction_parallel) {
+    std::vector<TabletSharedPtr> tablets;
+    std::vector<std::shared_ptr<MockCompactionTask>> tasks;
+    DataDir data_dir("./data_dir");
+    // generate compaction task
+    config::max_compaction_concurrency = 10;
+    int tablet_num = 3;
+    int task_id = 0;
+    // each tablet has 3 compaction tasks
+    for (int i = 0; i < tablet_num; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
+        compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+        tablet->set_compaction_context(compaction_context);
+        tablets.push_back(tablet);
+
+        // create base compaction
+        std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(BASE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction1
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction2
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+    }
+
+    _engine->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
+
+    for (int i = 0; i < 9; i++) {
+        bool ret = _engine->compaction_manager()->register_task(tasks[i].get());
+        ASSERT_TRUE(ret);
+    }
+
+    ASSERT_EQ(9, _engine->compaction_manager()->running_tasks_num());
+
+    _engine->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
+TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
+    config::max_compaction_concurrency = 10;
+    config::cumulative_compaction_num_threads_per_disk = 2;
+    config::base_compaction_num_threads_per_disk = 2;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(4, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = 0;
+    config::base_compaction_num_threads_per_disk = 0;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(0, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = -1;
+    config::base_compaction_num_threads_per_disk = -1;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(5, compaction_concurrency);
+
+    _engine->compaction_manager()->init_max_task_num(compaction_concurrency);
+    _engine->compaction_manager()->schedule();
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(3);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(3, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(0);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(0, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(-1);
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(5, _engine->compaction_manager()->max_task_num());
+}
+
+>>>>>>> 6e55970b35 ([BugFix] Setting max_compaction_concurrency to -1/0 via dynamic parameter is not as expected. (#50875))
 } // namespace starrocks
