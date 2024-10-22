@@ -153,10 +153,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 }
 
 std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
-    MasterInfo info(master_info);
+    MasterInfo master_info_copy(master_info);
 
-    if (info.__isset.token) {
-        info.__set_token = "<hidden>";
+    if (master_info_copy.__isset.token) {
+        master_info_copy.__set_token = "<hidden>";
     }
 
     std::ostringstream out;
