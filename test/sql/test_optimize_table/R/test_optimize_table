@@ -98,6 +98,7 @@ PROPERTIES (
 
 
 
+
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -117,6 +118,7 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
+
 
 
 
@@ -328,6 +330,7 @@ select count(*) from t;
 -- result:
 63
 -- !result
+
 
 
 
@@ -551,6 +554,7 @@ select * from t;
 19
 20
 -- !result
+
 
 
 
@@ -866,6 +870,7 @@ select count(*) from t;
 63
 -- !result
 
+
 -- name: test_optimize_table_with_special_characters
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 -- result:
@@ -931,4 +936,199 @@ PROPERTIES (
 -- !result
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
+-- !result
+-- name: test_online_optimize_table_expr_partition
+create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
+distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY date_trunc('day', k1)
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-02'),(5, '2020-07-01'),(6, '2020-08-02');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-02'),(6, '2020-08-02');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-03'),(5, '2020-07-01'),(6, '2020-08-03');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-03'),(6, '2020-08-03');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-04');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-04'),(5, '2020-07-04'),(6, '2020-08-04');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-05'),(5, '2020-07-01'),(6, '2020-08-05');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-05'),(6, '2020-08-05');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-06'),(5, '2020-07-06'),(6, '2020-08-06');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-06');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-07'),(5, '2020-07-01'),(6, '2020-08-07');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-07'),(5, '2020-07-07'),(6, '2020-08-07');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-03'),(5, '2020-07-01'),(6, '2020-08-04');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-03'),(5, '2020-07-01'),(6, '2020-08-04');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-04'),(5, '2020-07-01'),(6, '2020-08-06');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-04'),(5, '2020-07-01'),(6, '2020-08-06');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-10'),(5, '2020-07-10'),(6, '2020-08-10');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+insert into t values(4, '2020-06-10'),(5, '2020-07-10'),(6, '2020-08-10');
+-- result:
+-- !result
+select sleep(1);
+-- result:
+1
+-- !result
+select count(*) from t;
+-- result:
+63
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY date_trunc('day', k1)
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select count(*) from t;
+-- result:
+63
 -- !result
