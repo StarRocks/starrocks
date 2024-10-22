@@ -16,12 +16,12 @@
 
 #include <utility>
 
+#include "column/chunk_helper.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
-#include "storage/chunk_helper.h"
 #include "util/race_detect.h"
 
 namespace starrocks::pipeline {

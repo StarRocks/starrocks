@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 
+#include "column/chunk_helper.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/query_context.h"
@@ -23,7 +24,6 @@
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
-#include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {

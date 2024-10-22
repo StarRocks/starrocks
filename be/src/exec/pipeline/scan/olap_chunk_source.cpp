@@ -18,6 +18,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "column/chunk_helper.h"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"

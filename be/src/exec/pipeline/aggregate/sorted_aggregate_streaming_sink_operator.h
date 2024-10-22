@@ -16,9 +16,9 @@
 
 #include <memory>
 
+#include "column/chunk_helper.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 // TODO: implements cache-relation method

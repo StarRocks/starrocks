@@ -21,6 +21,7 @@
 
 #include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_helper.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -33,7 +34,6 @@
 #include "exprs/lambda_function.h"
 #include "runtime/user_function_cache.h"
 #include "simd/simd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}

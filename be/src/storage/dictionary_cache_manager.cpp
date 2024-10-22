@@ -72,11 +72,12 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     // OlapTableSchemaParam->indexes()[0]->column_param->columns: col1, col2, col3, col4 (with nullable attribute)
     // chunk schema: col1, col2, col3, col4 (with nullable attribute)
     // dictionary_schema: col2, col3, col1, col4 (without nullable attribute)
-    SchemaPtr dictionary_schema = ChunkHelper::convert_schema((schema->indexes()[0])->column_param->columns, col_names);
+    SchemaPtr dictionary_schema =
+            SchemaHelper::convert_schema((schema->indexes()[0])->column_param->columns, col_names);
     DCHECK(dictionary_schema != nullptr);
     std::vector<int> keys(dictionary_schema->fields().size(), 1);
     // remove the nullable attribute if necessary
-    dictionary_schema = ChunkHelper::get_non_nullable_schema(dictionary_schema, &keys);
+    dictionary_schema = SchemaHelper::get_non_nullable_schema(dictionary_schema, &keys);
 
     std::vector<ColumnId> key_col_ids(request->key_size());
     std::vector<ColumnId> value_col_ids(dictionary_schema->fields().size() - request->key_size());
@@ -86,8 +87,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     SchemaPtr key_schema = std::make_shared<Schema>(dictionary_schema.get(), key_col_ids);
     SchemaPtr value_schema = std::make_shared<Schema>(dictionary_schema.get(), value_col_ids);
 
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(*key_schema.get(), chunk->num_rows());
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(*value_schema.get(), chunk->num_rows());
+    ChunkPtr key_chunk = SchemaHelper::new_chunk(*key_schema.get(), chunk->num_rows());
+    ChunkPtr value_chunk = SchemaHelper::new_chunk(*value_schema.get(), chunk->num_rows());
 
     for (size_t i = 0; i < key_slot_ids.size(); ++i) {
         const auto& key_slot_id = key_slot_ids[i];

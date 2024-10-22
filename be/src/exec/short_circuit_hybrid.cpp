@@ -17,6 +17,7 @@
 
 #include "exec/short_circuit_hybrid.h"
 
+#include "column/chunk_helper.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"

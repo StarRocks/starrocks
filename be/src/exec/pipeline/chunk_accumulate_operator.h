@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "column/chunk_helper.h"
 #include "exec/pipeline/operator.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

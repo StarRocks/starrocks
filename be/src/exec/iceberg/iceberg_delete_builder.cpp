@@ -14,8 +14,6 @@
 
 #include "exec/iceberg/iceberg_delete_builder.h"
 
-#include <storage/chunk_helper.h>
-
 #include "column/vectorized_fwd.h"
 #include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
@@ -23,6 +21,7 @@
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

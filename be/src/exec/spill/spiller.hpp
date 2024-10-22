@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/chunk_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -29,7 +30,6 @@
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 

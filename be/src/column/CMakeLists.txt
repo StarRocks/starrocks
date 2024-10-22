@@ -19,6 +19,7 @@ add_library(Column STATIC
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp
+        chunk_helper.cpp
         column.cpp
         column_access_path.cpp
         column_helper.cpp
