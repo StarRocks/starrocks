@@ -135,13 +135,8 @@ public:
 
     int get_waiting_task_num();
 
-<<<<<<< HEAD
-=======
     ThreadPool* TEST_get_compaction_thread_pool() { return _compaction_pool.get(); }
 
-    void disable_table_compaction(int64_t table_id, int64_t deadline);
-
->>>>>>> 6e55970b35 ([BugFix] Setting max_compaction_concurrency to -1/0 via dynamic parameter is not as expected. (#50875))
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
