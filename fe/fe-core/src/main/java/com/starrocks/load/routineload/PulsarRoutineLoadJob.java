@@ -396,9 +396,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         summary.put("unselectedRows", unselectedRows);
         summary.put("receivedBytes", receivedBytes);
         summary.put("taskExecuteTimeMs", totalTaskExcutionTimeMs);
-        summary.put("receivedBytesRate", receivedBytes / totalTaskExcutionTimeMs * 1000);
+        summary.put("receivedBytesRate", receivedBytes * 1000 / totalTaskExcutionTimeMs);
         summary.put("loadRowsRate",
-                (totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000);
+                (totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs);
         summary.put("committedTaskNum", committedTaskNum);
         summary.put("abortedTaskNum", abortedTaskNum);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
