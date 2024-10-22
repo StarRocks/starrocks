@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "agent/heartbeat_server.h"
+#include "gen_cpp/Types_types.h"
 
 #include "gtest/gtest.h"
 
