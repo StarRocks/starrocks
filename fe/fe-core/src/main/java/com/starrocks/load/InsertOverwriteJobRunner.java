@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -374,9 +375,11 @@ public class InsertOverwriteJobRunner {
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            // hash set is able to deduplicate the elements
-                            sourceTablets.addAll(index.getTablets());
+                        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                                    MaterializedIndex.IndexExtState.ALL)) {
+                                sourceTablets.addAll(index.getTablets());
+                            }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
@@ -426,8 +429,10 @@ public class InsertOverwriteJobRunner {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        sourceTablets.addAll(index.getTablets());
+                    }
                 }
             });
 

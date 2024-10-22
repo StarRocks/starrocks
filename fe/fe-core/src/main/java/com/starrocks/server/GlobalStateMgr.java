@@ -89,6 +89,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -3289,6 +3290,10 @@ public class GlobalStateMgr {
 
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
         return localMetastore.getPartitionsIncludeRecycleBin(table);
+    }
+
+    public PhysicalPartition getPhysicalPartitionIncludeRecycleBin(OlapTable table, long partitionId) {
+        return localMetastore.getPhysicalPartitionIncludeRecycleBin(table, partitionId);
     }
 
     public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable table) {
