@@ -180,21 +180,8 @@ Status StorageEngine::start_bg_threads() {
             }
         }
     } else {
-        int32_t max_task_num = 0;
-        // new compaction framework
-        if (config::base_compaction_num_threads_per_disk >= 0 &&
-            config::cumulative_compaction_num_threads_per_disk >= 0) {
-            max_task_num = static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                (config::cumulative_compaction_num_threads_per_disk +
-                                                 config::base_compaction_num_threads_per_disk));
-        } else {
-            // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
-            // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
-            max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
-        }
-        if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < max_task_num) {
-            max_task_num = config::max_compaction_concurrency;
-        }
+        _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
+        int32_t max_task_num = _compaction_manager->compute_max_compaction_task_num();
 
         (void)Compaction::init(max_task_num);
 
