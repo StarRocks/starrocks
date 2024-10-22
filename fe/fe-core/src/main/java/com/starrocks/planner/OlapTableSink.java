@@ -296,7 +296,7 @@ public class OlapTableSink extends DataSink {
                 tSink2.unsetPartition();
                 tSink2.unsetLocation();
                 TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                        enableAutomaticPartition, automaticBucketSize, doubleWritePartitionIds);
+                        false, automaticBucketSize, doubleWritePartitionIds);
                 tSink2.setPartition(partitionParam2);
                 tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, warehouseId));
                 tSink2.setIgnore_out_of_partition(true);

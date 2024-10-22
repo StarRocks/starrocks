@@ -196,7 +196,8 @@ public class OlapTable extends Table {
          * The query plan which is generate during this state is invalid because the meta
          * during the creation of the logical plan and the physical plan might be inconsistent.
         */
-        UPDATING_META
+        UPDATING_META,
+        OPTIMIZE
     }
 
     @SerializedName(value = "state")
