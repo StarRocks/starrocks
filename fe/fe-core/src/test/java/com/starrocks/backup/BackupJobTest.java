@@ -431,11 +431,6 @@ public class BackupJobTest {
             View view = (View) restoreMetaInfo.getTable(viewId);
             Assert.assertNotNull(view);
             Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.VIEW_NAME));
-
-            restoreJobInfo = BackupJobInfo.fromFile(jobView.getLocalJobInfoFilePath());
-            Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
-            Assert.assertEquals(jobView.getLabel(), restoreJobInfo.name);
-            Assert.assertEquals(1, restoreJobInfo.tables.size());
         } catch (IOException e) {
             e.printStackTrace();
             Assert.fail();

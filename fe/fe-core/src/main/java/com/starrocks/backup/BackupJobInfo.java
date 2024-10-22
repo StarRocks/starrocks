@@ -304,16 +304,11 @@ public class BackupJobInfo implements Writable {
 
         // tbls
         for (Table tbl : tbls) {
-            if (tbl.isOlapView()) {
-                continue;
-            }
-
+            OlapTable olapTbl = (OlapTable) tbl;
             BackupTableInfo tableInfo = new BackupTableInfo();
             tableInfo.id = tbl.getId();
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
-            
-            OlapTable olapTbl = (OlapTable) tbl;
             // partitions
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();

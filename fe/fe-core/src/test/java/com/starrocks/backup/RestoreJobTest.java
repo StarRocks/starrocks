@@ -838,10 +838,6 @@ public class RestoreJobTest {
         jobInfo.success = true;
 
         View restoredView = (View) db.getTable(CatalogMocker.TEST_TBL6_ID);
-        BackupTableInfo tblInfo = new BackupTableInfo();
-        tblInfo.id = CatalogMocker.TEST_TBL6_ID;
-        tblInfo.name = CatalogMocker.TEST_TBL6_NAME;
-        jobInfo.tables.put(tblInfo.name, tblInfo);
 
         new MockUp<LocalMetastore>() {
             @Mock
@@ -879,19 +875,7 @@ public class RestoreJobTest {
         tbls.add(restoredView);
         backupMeta = new BackupMeta(tbls);
 
-        // exception for unsupported object
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-        job.setRepo(repo);
-        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
-        restoredView.setType(Table.TableType.MYSQL);
-        job.run();
-        Assert.assertEquals(RestoreJobState.CANCELLED, job.getState());
-
         db.dropTable(restoredView.getName());
-        restoredView.setType(Table.TableType.VIEW);
-
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
