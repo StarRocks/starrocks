@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -201,6 +202,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('day', 25: k1) < '2024-01-01 01:00:00', 25: k1 >= '2024-01-01 01:00:00'");
         starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropMaterializedView("test_mv2");
     }
 
     @Test
@@ -239,13 +241,15 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
 
     @Test
     public void testAggTimeSeriesWithRollupFunctionsOneByOne() throws Exception {
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         String mvAggArg = "v1";
         String queryAggArg = "v1";
         for (Map.Entry<String, String> e : REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
             String funcName = e.getKey();
             String mvAggFunc = getAggFunction(funcName, mvAggArg);
             String queryAggFunc = getAggFunction(funcName, queryAggArg);
-            starRocksAssert.withRefreshedMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
+            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
                     "PARTITION BY (dt)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s as agg_v1 " +
@@ -271,6 +275,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
 
     @Test
     public void testAggTimeSeriesWithMultiRollupFunctions() throws Exception {
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         // one query contains multi agg functions, all can be rewritten.
         String aggArg = "v1";
         List<String> aggFuncs = Lists.newArrayList();
@@ -305,6 +311,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
 
     @Test
     public void testAggTimeSeriesWithMultiRepeatedRollupFunctions() throws Exception {
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
         // one query contains multi same agg functions, all can be rewritten.
         String aggArg = "v1";
         List<String> aggFuncs = Lists.newArrayList();
@@ -324,7 +332,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
                 repeatAggs.add(String.format("%s as agg%s", aggFunc, i));
             }
             String agg = Joiner.on(", ").join(repeatAggs);
-            starRocksAssert.withRefreshedMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
+            starRocksAssert.withMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
                     "PARTITION BY (dt)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "as select date_trunc('day', k1) as dt, %s " +
