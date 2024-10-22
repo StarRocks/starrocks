@@ -163,7 +163,7 @@ CSV 格式示例：
   - 其他类型统一为字符串类型用。
 - 一般情况下，STRING 类型可用于统一所有数据类型。
 
-您可以参考[示例六](#示例六)。
+您可以参考示例五。
 
 如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
 
@@ -409,12 +409,9 @@ FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_pa
 
 #### unload_data_param
 
-从 v3.2 版本开始，FILES() 支持在远程存储中定义可写入文件以进行数据导出。有关详细说明，请参阅[使用 INSERT INTO FILES 导出数据](../../../unloading/unload_using_insert_into_files.md)。
-
 ```sql
--- 自 v3.2 版本起支持。
-unload_data_param::=
-    "compression" = "<compression_method>",
+unload_data_param ::=
+    "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
     "target_max_file_size" = "<int>"
@@ -423,13 +420,13 @@ unload_data_param::=
 | **参数**          | **必填** | **说明**                                                          |
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
-| partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
+| partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例七。 |
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 | target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
 
 ## 示例
 
-#### 示例一
+#### 示例一：查询文件中的数据
 
 查询 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/par-dup.parquet** 中的数据
 
@@ -450,7 +447,7 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-#### 示例二
+#### 示例二：导入文件中的数据
 
 将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
 
@@ -467,7 +464,7 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-#### 示例三
+#### 示例三：使用文件中的数据建表
 
 基于 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据创建表 `ctas_wiki_edit`：
 
@@ -484,7 +481,7 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-#### 示例四
+#### 示例四：查询文件中的数据并提取其路径中的 Key/Value 信息
 
 查询 HDFS 集群内 Parquet 文件 **/geo/country=US/city=LA/file1.parquet** 中的数据（其中仅包含两列 - `id` 和 `user`），并提取其路径中的 Key/Value 信息作为返回的列。
 
@@ -506,27 +503,7 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-#### 示例五
-
-将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
-
-```SQL
-INSERT INTO 
-FILES(
-    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
-    "format" = "parquet",
-    "hadoop.security.authentication" = "simple",
-    "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
-)
-SELECT * FROM sales_records;
-```
-
-#### 示例六
-
-自动 Schema 检测和 Union 操作
+#### 示例五：自动 Schema 检测和 Union 操作
 
 以下示例基于 S3 桶中两个 Parquet 文件 File 1 和 File 2：
 
@@ -637,7 +614,7 @@ PROPERTIES (
 1 row in set (0.27 sec)
 ```
 
-#### 示例七
+#### 示例六：查看文件的 Schema 信息
 
 使用 DESC 查看 AWS S3 中 Parquet 文件 `lineorder` 的 Schema 信息。
 
@@ -672,4 +649,22 @@ DESC FILES(
 | lo_shipmode      | varchar(1048576) | YES  |
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
+```
+
+#### 示例七：导出数据
+
+将 `sales_records` 中的所有数据行导出为多个 Parquet 文件，存储在 HDFS 集群的路径 **/unload/partitioned/** 下。这些文件存储在不同的子路径中，这些子路径根据列 `sales_time` 中的值来区分。
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
+    "format" = "parquet",
+    "hadoop.security.authentication" = "simple",
+    "username" = "xxxxx",
+    "password" = "xxxxx",
+    "compression" = "lz4",
+    "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
 ```
