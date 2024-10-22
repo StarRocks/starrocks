@@ -706,7 +706,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPersistentIndexType() {
-        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
+        String default_type = Config.enable_cloud_native_persistent_index_by_default ? "CLOUD_NATIVE" : "LOCAL";
+        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, default_type);
         if (type.equals("LOCAL")) {
             persistentIndexType = TPersistentIndexType.LOCAL;
         } else if (type.equals("CLOUD_NATIVE")) {
