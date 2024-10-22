@@ -338,6 +338,7 @@ public class FunctionSet {
     public static final String ARRAY_AVG = "array_avg";
     public static final String ARRAY_CONTAINS = "array_contains";
     public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
+    public static final String ARRAY_CONTAINS_SEQ = "array_contains_seq";
     public static final String ARRAY_CUM_SUM = "array_cum_sum";
 
     public static final String ARRAY_JOIN = "array_join";
@@ -740,6 +741,8 @@ public class FunctionSet {
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
             .add(ARRAY_CONTAINS)
+            .add(ARRAY_CONTAINS_ALL)
+            .add(ARRAY_CONTAINS_SEQ)
             .add(ARRAY_POSITION)
             .build();
 
