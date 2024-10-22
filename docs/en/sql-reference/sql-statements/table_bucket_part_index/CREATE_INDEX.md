@@ -22,17 +22,12 @@ CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 
 ## Parameter
 
-<<<<<<< HEAD
-1. Only support bitmap index in the current version.
-2. Create BITMAP index only in a single column.
-=======
 | **Parameter** | **Required**   | **Description**                                                              |
 | ------------- | -------------- | ---------------------------------------------------------------------------- |
 | index_name    | Yes            | The index name. For naming conventions, see [System Limits](../../System_limit.md). |
 | table_name    | Yes            | The name of the table.                                                       |
 | column_name   | Yes            | The name of the column to build index on. One column can have only one BITMAP index. If a column already has an index, you cannot create one more index on it. |
 | COMMENT       | No             | The comment for the index.                                                   |
->>>>>>> aea84405ba ([Doc] Fix EN CREATE INDEX reference (#52085))
 
 ## Examples
 
