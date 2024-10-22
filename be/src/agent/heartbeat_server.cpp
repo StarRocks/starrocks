@@ -166,7 +166,7 @@ std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) c
         << "epoch=" << to_string(epoch);
     out << ", "
         << "token=";
-    (__isset.token ? (out << to_string(token)) : (out << "<null>"));
+    (__isset.token ? (out << "<hidden>" : (out << "<null>"));
     out << ", "
         << "backend_ip=";
     (__isset.backend_ip ? (out << to_string(backend_ip)) : (out << "<null>"));
