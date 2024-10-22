@@ -449,9 +449,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         summary.put("unselectedRows", Long.valueOf(unselectedRows));
         summary.put("receivedBytes", Long.valueOf(receivedBytes));
         summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
-        summary.put("receivedBytesRate", Long.valueOf(receivedBytes / totalTaskExcutionTimeMs * 1000));
+        summary.put("receivedBytesRate", Long.valueOf(receivedBytes * 1000 / totalTaskExcutionTimeMs));
         summary.put("loadRowsRate",
-                Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
+                Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
