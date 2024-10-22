@@ -366,8 +366,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
-        scanContext.setLocalParallelism(icebergProperties.getIcebergJobPlanningThreadNum());
-        scanContext.setLocalPlanningMaxSlotSize(icebergProperties.getLocalPlanningMaxSlotBytes());
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());

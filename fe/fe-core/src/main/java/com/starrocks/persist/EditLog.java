@@ -73,7 +73,6 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -494,7 +493,6 @@ public class EditLog {
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
-                    MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
                     break;
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
@@ -721,6 +719,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
                 case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
                 case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+                case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1619,6 +1618,10 @@ public class EditLog {
 
     public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
+    }
+
+    public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

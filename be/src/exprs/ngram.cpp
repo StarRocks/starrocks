@@ -294,7 +294,7 @@ private:
     }
 
     static NgramHash getAsciiHash(const Gram* ch, size_t gram_num) {
-        return crc_hash_32(ch, gram_num, CRC_HASH_SEED1) & (0xffffu);
+        return crc_hash_32(ch, gram_num, CRC_HASH_SEEDS::CRC_HASH_SEED1) & (0xffffu);
     }
 };
 

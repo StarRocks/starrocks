@@ -264,7 +264,7 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
             }
         }
 
-        auto chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
         RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());

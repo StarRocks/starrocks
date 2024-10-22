@@ -66,7 +66,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
@@ -81,7 +80,6 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
@@ -124,6 +122,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -554,18 +553,17 @@ public class UtFrameUtils {
             Tracers.register(connectContext);
             Tracers.init(connectContext, Tracers.Mode.LOGS, module);
             try {
-
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
                 Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
                 return Pair.create(planPair.first, planAndTrace);
             } catch (Exception e) {
+                throw e;
+            } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
                     System.out.println(pr);
                 }
-                throw e;
-            } finally {
                 Tracers.close();
             }
         }
@@ -1040,7 +1038,6 @@ public class UtFrameUtils {
 
     public static void setUpForPersistTest() {
         PseudoJournalReplayer.setUp();
-        PseudoImage.setUpImageVersion();
     }
 
     public static void tearDownForPersisTest() {
@@ -1051,20 +1048,11 @@ public class UtFrameUtils {
      * pseudo image is used to test if image is wrote correctly.
      */
     public static class PseudoImage {
-        private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
         private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        public static void setUpImageVersion() {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
-            metaContext.setThreadLocalInfo();
-            isSetup.set(true);
-        }
-
         public PseudoImage() throws IOException {
-            assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
             imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
             imageWriter.setOutputStream(buffer);
@@ -1239,6 +1227,18 @@ public class UtFrameUtils {
         }
     }
 
+    public static void mockLogicalScanIsEmptyOutputRows(boolean expect) {
+        new MockUp<LogicalOlapScanOperator>() {
+            /**
+             * {@link LogicalOlapScanOperator#isEmptyOutputRows()}
+             */
+            @Mock
+            public boolean isEmptyOutputRows() {
+                return expect;
+            }
+        };
+    }
+
     public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
         new MockUp<MvRefreshArbiter>() {
             /**
@@ -1325,6 +1325,15 @@ public class UtFrameUtils {
         };
 
         mockDML();
+    }
+
+    public static void mockQueryExecute(Runnable runnable) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                runnable.run();
+            }
+        };
     }
 
     public static void mockDML() {

@@ -83,19 +83,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-
-    // if !_tablet_meta->all_rs_metas()[0]->tablet_schema(),
-    // that mean the tablet_meta is still no upgrade to support-light-schema-change versions.
-    // Before support-light-schema-change version, rowset metas don't have tablet schema.
-    // And when upgrade to starrocks support-light-schema-change version,
-    // all rowset metas will be set the tablet schema from tablet meta.
-    if (_tablet_meta->all_rs_metas().empty() || !_tablet_meta->all_rs_metas()[0]->tablet_schema()) {
-        _max_version_schema = BaseTablet::tablet_schema();
-    } else {
-        _max_version_schema =
-                TabletMeta::rowset_meta_with_max_rowset_version(_tablet_meta->all_rs_metas())->tablet_schema();
-    }
-
+    _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -172,8 +160,8 @@ Status Tablet::init() {
 
 // should save tablet meta to remote meta store
 // if it's a primary replica
-void Tablet::save_meta() {
-    auto st = _tablet_meta->save_meta(_data_dir);
+void Tablet::save_meta(bool skip_tablet_schema) {
+    auto st = _tablet_meta->save_meta(_data_dir, skip_tablet_schema);
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
@@ -348,7 +336,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(1) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+    VLOG(2) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
             << " to tablet=" << full_name();
     _timestamped_version_tracker.add_version(rowset->version());
 
@@ -407,7 +395,7 @@ void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_
         rs_metas_to_add.push_back(rs->rowset_meta());
         _rs_version_map[rs->version()] = rs;
         _gtid_to_version_map[rs->rowset_meta()->gtid()] = rs->version().second;
-        VLOG(1) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
+        VLOG(2) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
                 << " to tablet=" << full_name();
 
         _timestamped_version_tracker.add_version(rs->version());
@@ -583,7 +571,11 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     RowsetMetaPB rowset_meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    if (rowset->rowset_meta()->skip_tablet_schema()) {
+        rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    }
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
     // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
     // (RowsetStatePB = COMMITTED) saved in rocksdb. Here modify the rowset to visible, and save it again
@@ -610,7 +602,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(1) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+    VLOG(2) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
             << " to tablet=" << full_name();
     _inc_rs_version_map[rowset->version()] = rowset;
     if (need_binlog) {
@@ -633,6 +625,26 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
                               << " " << st;
     ++_newly_created_rowset_num;
     return Status::OK();
+}
+
+bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
+        VLOG(2) << "tablet: " << tablet_id()
+                << " too many committed without schema rowset : " << _committed_rs_map.size();
+        return false;
+    }
+
+    if (rowset->rowset_meta()->check_schema_id(_max_version_schema->id())) {
+        _committed_rs_map[rowset->rowset_id()] = rowset;
+        return true;
+    }
+    return false;
+}
+
+void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
+    if (rowset != nullptr) {
+        _committed_rs_map.erase(rowset->rowset_id());
+    }
 }
 
 void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -863,7 +875,7 @@ Status Tablet::capture_consistent_rowsets(const int64_t gtid, std::vector<Rowset
         }
         return Status::InvalidArgument(ss.str());
     }
-    VLOG(1) << ss.str();
+    VLOG(2) << ss.str();
     Version spec_version{0, version};
     std::vector<Version> version_path;
     RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
@@ -1436,7 +1448,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         return;
     }
     LOG(INFO) << "start to do tablet meta checkpoint, tablet=" << full_name();
-    save_meta();
+    save_meta(config::skip_schema_in_rowset_meta);
     // if save meta successfully, then should remove the rowset meta existing in tablet
     // meta from rowset meta store
     for (auto& rs_meta : _tablet_meta->all_rs_metas()) {
@@ -1446,7 +1458,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with "
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with "
                        "tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
@@ -1461,7 +1473,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with tablet meta"
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
         rs_meta->set_remove_from_rowset_meta();
@@ -1748,20 +1760,20 @@ int64_t Tablet::in_writing_data_size() {
     for (auto& [k, v] : _in_writing_txn_size) {
         size += v;
     }
-    VLOG(1) << "tablet " << tablet_id() << " in writing data size: " << size;
+    VLOG(2) << "tablet " << tablet_id() << " in writing data size: " << size;
     return size;
 }
 
 void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
             << " delta: " << delta << " txn_id: " << txn_id;
     _in_writing_txn_size[txn_id] += delta;
 }
 
 void Tablet::remove_in_writing_data_size(int64_t txn_id) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
             << " txn_id: " << txn_id;
     _in_writing_txn_size.erase(txn_id);
 }
@@ -1806,9 +1818,27 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
+// for non-pk tablet, all published rowset will be rewrite when save `tablet_meta`
+// for pk tablet, we need to get the rowset which without `tablet_schema` and rewrite
+// the rowsets in `_committed_rs_map` is committed success but not publish yet, so if we update the
+// tablet schema, we need to rewrite.
+void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs) {
+    for (auto& [_, rs] : _committed_rs_map) {
+        if (rs->rowset_meta()->skip_tablet_schema()) {
+            rewrite_meta_rs.emplace_back(rs);
+        }
+    }
+
+    if (_updates) {
+        _updates->rewrite_rs_meta();
+    }
+}
+
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);
+    DeferOp defer([&]() { _update_schema_running.store(false); });
+    _update_schema_running.store(true);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         if (tablet_schema->id() == TabletSchema::invalid_id()) {
@@ -1816,7 +1846,10 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
-        _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
+        std::vector<RowsetSharedPtr> rewrite_meta_rs;
+        _get_rewrite_meta_rs(rewrite_meta_rs);
+        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
+        _committed_rs_map.clear();
     }
 }
 

@@ -45,7 +45,6 @@
 #include "agent/agent_server.h"
 #include "block_cache/block_cache.h"
 #include "common/configbase.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
@@ -103,13 +102,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
                 mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
             }
-            size_t mem_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+            size_t mem_size = 0;
+            Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to update datacache mem size";
+                return;
+            }
             (void)BlockCache::instance()->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() {
             std::vector<DirSpace> spaces;
-            Status st = parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
-                                                         config::ignore_broken_disk, &spaces);
+            Status st = DataCacheUtils::parse_conf_datacache_disk_spaces(
+                    config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk, &spaces);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to update datacache disk spaces";
                 return;
@@ -173,6 +177,21 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MAKE_SNAPSHOT,
+                                                                 config::make_snapshot_worker_count);
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::RELEASE_SNAPSHOT,
+                                                                 config::release_snapshot_worker_count);
+        });
+        _config_callback.emplace("upload_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPLOAD, config::upload_worker_count);
+        });
+        _config_callback.emplace("download_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::DOWNLOAD, config::download_worker_count);
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MOVE, config::download_worker_count);
         });
         _config_callback.emplace("replication_threads", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT,

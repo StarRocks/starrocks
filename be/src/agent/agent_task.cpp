@@ -36,6 +36,7 @@
 #include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
+#include "storage/task/engine_compaction_control_task.h"
 #include "storage/task/engine_manual_compaction_task.h"
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
@@ -551,6 +552,29 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
+void run_compaction_control_task(const std::shared_ptr<CompactionControlTaskRequest>& agent_task_req,
+                                 ExecEnv* exec_env) {
+    const TCompactionControlReq& compaction_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    EngineCompactionControlTask engine_task(compaction_req.table_to_disable_deadline);
+    (void)StorageEngine::instance()->execute_task(&engine_task);
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+}
+
 void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
@@ -607,7 +631,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 continue;
             }
             tablet->update_max_version_schema(ret.value());
-            VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+            VLOG(2) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
                     << " to " << schema_version;
         }
     }

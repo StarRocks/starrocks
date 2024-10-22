@@ -54,6 +54,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+
+    public static final PushDownPredicateScanRule ICEBERG_EQUALITY_DELETE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
     public static final PushDownPredicateScanRule KUDU_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_KUDU_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =

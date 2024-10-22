@@ -31,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
+#include "util/hash.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 #include "util/time.h"
@@ -349,7 +350,7 @@ private:
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
 
     std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 

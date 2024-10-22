@@ -57,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -99,7 +100,7 @@ public:
     void register_tablet_into_dir();
     void deregister_tablet_from_dir();
 
-    void save_meta();
+    void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
@@ -335,6 +336,13 @@ public:
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
+    [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    void set_update_schema_running(bool is_running) { _update_schema_running.store(is_running); }
+    std::shared_mutex& get_schema_lock() { return _schema_lock; }
+    bool add_committed_rowset(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset(const RowsetSharedPtr& rowset);
+    int64_t committed_rowset_size() { return _committed_rs_map.size(); }
+
     void on_shutdown() override;
 
 private:
@@ -372,6 +380,7 @@ private:
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
     void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
+    void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -415,6 +424,12 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
+    // Keep the rowsets committed but not publish which rowset meta without schema
+    phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
+            _committed_rs_map;
+
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;
 
@@ -456,6 +471,7 @@ private:
     bool _will_be_force_replaced = false;
 
     std::atomic<bool> _is_dropping{false};
+    std::atomic<bool> _update_schema_running{false};
 };
 
 inline bool Tablet::init_succeeded() {

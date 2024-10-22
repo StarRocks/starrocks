@@ -79,7 +79,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
             ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
-            VLOG(1) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
+            VLOG(2) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
                     << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
             ctx->outer_common_exprs.insert({slot_id, child});
@@ -110,12 +110,9 @@ Status LambdaFunction::collect_lambda_argument_ids() {
 }
 
 SlotId LambdaFunction::max_used_slot_id() const {
-    std::vector<SlotId> ids;
-    for (auto child : _children) {
-        child->get_slot_ids(&ids);
-    }
-    DCHECK(!ids.empty());
-    return *std::max_element(ids.begin(), ids.end());
+    SlotId max_slot_id = 0;
+    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
+    return max_slot_id;
 }
 
 Status LambdaFunction::collect_common_sub_exprs() {
@@ -216,12 +213,13 @@ StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk
 }
 
 int LambdaFunction::get_slot_ids(std::vector<SlotId>* slot_ids) const {
+    // get_slot_ids only return capture slot ids,
+    // if expr is already prepared, we can get result from _captured_slot_ids, otherwise, get result from lambda expr
     if (_is_prepared) {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
-        slot_ids->insert(slot_ids->end(), _arguments_ids.begin(), _arguments_ids.end());
-        return _captured_slot_ids.size() + _arguments_ids.size();
+        return _captured_slot_ids.size();
     } else {
-        return Expr::get_slot_ids(slot_ids);
+        return get_child(0)->get_slot_ids(slot_ids);
     }
 }
 

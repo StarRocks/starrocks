@@ -4864,38 +4864,50 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
+##### replication_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum time interval at which the replication tasks are scheduled.
+- Introduced in: v3.3.5
+
 ##### replication_max_parallel_table_count
 
 - Default: 100
 - Type: Int
-- Unit:
+- Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
+- Introduced in: v3.3.5
 
-<!--
-##### replication_max_parallel_data_size_mb
+##### replication_max_parallel_replica_count
 
 - Default: 10240
 - Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- Default: 1048576
+- Type: Int
 - Unit: MB
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum size of data allowed for concurrent synchronization.
+- Introduced in: v3.3.5
 
-<!--
 ##### replication_transaction_timeout_sec
 
-- Default: 1 * 60 * 60
+- Default: 86400
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The timeout duration for synchronization tasks.
+- Introduced in: v3.3.5
 
 ##### jdbc_meta_default_cache_enable
 
@@ -4941,6 +4953,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
+
+##### query_detail_explain_level
+
+- Default: COSTS
+- Type: String
+- Unit: -
+- Is mutable: true
+- Description: The detail level of query plan returned by the EXPLAIN statement. Valid values: COSTS, NORMAL, VERBOSE.
+- Introduced in: v3.2.12, v3.3.5
 
 <!--
 ##### max_varchar_length

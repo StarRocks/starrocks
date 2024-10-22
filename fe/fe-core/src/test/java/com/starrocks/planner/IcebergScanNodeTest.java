@@ -75,7 +75,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(icebergTable);
-        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode", tupleDesc);
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
 
         mockedNativeTableC.newRowDelta().addRows(FILE_B_1).addDeletes(FILE_C_1).commit();
         mockedNativeTableC.refresh();
@@ -103,9 +103,8 @@ public class IcebergScanNodeTest extends TableTestBase {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        TupleDescriptor eqTupleDesc = descTable.createTupleDescriptor("eqTuple");
         tupleDesc.setTable(icebergTable);
-        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode", eqTupleDesc);
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         // FILE_A_DELETES = positionalDelete / FILE_A2_DELETES = equalityDelete
@@ -121,12 +120,10 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertTrue(scanRange.isSetHdfs_scan_range());
         THdfsScanRange hdfsScanRange = scanRange.hdfs_scan_range;
         Assert.assertEquals("/path/to/data-a.parquet", hdfsScanRange.full_path);
-        Assert.assertEquals(2, hdfsScanRange.delete_files.size());
+        Assert.assertEquals(1, hdfsScanRange.delete_files.size());
         TIcebergDeleteFile tDeleteFile = hdfsScanRange.delete_files.get(0);
-        Assert.assertEquals("/path/to/data-a2-deletes.orc", tDeleteFile.full_path);
-        Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, tDeleteFile.file_content);
-        Assert.assertEquals(2147473647, hdfsScanRange.delete_column_slot_ids.get(0).intValue());
-        Assert.assertEquals(1, hdfsScanRange.delete_column_slot_ids.size());
-        Assert.assertEquals(1, eqTupleDesc.getSlots().size());
+        Assert.assertEquals("/path/to/data-a-deletes.orc", tDeleteFile.full_path);
+        Assert.assertEquals(TIcebergFileContent.POSITION_DELETES, tDeleteFile.file_content);
+        Assert.assertFalse(hdfsScanRange.isSetDelete_column_slot_ids());
     }
 }

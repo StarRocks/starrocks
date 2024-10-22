@@ -17,6 +17,7 @@
 #include <chrono>
 #include <thread>
 
+#include "compaction_manager.h"
 #include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
@@ -162,7 +163,7 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
         }
         for (auto& candidate : candidates) {
             if (candidate.tablet->enable_compaction()) {
-                VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
+                VLOG(2) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
                 if (candidate.type == CompactionType::BASE_COMPACTION) {
                     StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(1);
@@ -211,6 +212,19 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         return false;
     }
 
+    // check if the table base compaction is disabled
+    if (candidate.type == CompactionType::BASE_COMPACTION &&
+        _table_to_disable_deadline_map.find(tablet->tablet_meta()->table_id()) !=
+                _table_to_disable_deadline_map.end()) {
+        int64_t deadline = _table_to_disable_deadline_map[tablet->tablet_meta()->table_id()];
+        if (deadline > 0 && UnixSeconds() < deadline) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because table is disabled";
+            return false;
+        } else {
+            _table_to_disable_deadline_map.erase(tablet->tablet_meta()->table_id());
+        }
+    }
+
     int64_t last_failure_ts = 0;
     DataDir* data_dir = tablet->data_dir();
     if (candidate.type == CUMULATIVE_COMPACTION) {
@@ -249,7 +263,7 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
     int64_t now_ms = UnixMillis();
     if (candidate.type == CompactionType::CUMULATIVE_COMPACTION) {
         if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
-            VLOG(1) << "Too often to schedule failure compaction, skip it."
+            VLOG(2) << "Too often to schedule failure compaction, skip it."
                     << "compaction_type=" << starrocks::to_string(candidate.type)
                     << ", min_cumulative_compaction_failure_interval_sec="
                     << config::min_cumulative_compaction_failure_interval_sec
@@ -258,7 +272,7 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         }
     } else if (candidate.type == CompactionType::BASE_COMPACTION) {
         if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
-            VLOG(1) << "Too often to schedule failure compaction, skip it."
+            VLOG(2) << "Too often to schedule failure compaction, skip it."
                     << "compaction_type=" << starrocks::to_string(candidate.type)
                     << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
                     << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
@@ -340,7 +354,7 @@ void CompactionManager::update_tablet(const TabletSharedPtr& tablet) {
     if (_disable_update_tablet) {
         return;
     }
-    VLOG(1) << "update tablet " << tablet->tablet_id();
+    VLOG(2) << "update tablet " << tablet->tablet_id();
     if (tablet->need_compaction()) {
         CompactionCandidate candidate;
         candidate.tablet = tablet;
@@ -595,6 +609,12 @@ int64_t CompactionManager::cumulative_compaction_concurrency() {
 
 int CompactionManager::get_waiting_task_num() {
     return _compaction_candidates.size();
+}
+
+void CompactionManager::disable_table_compaction(int64_t table_id, int64_t deadline) {
+    std::lock_guard lg(_candidates_mutex);
+    VLOG(2) << "disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
+    _table_to_disable_deadline_map[table_id] = deadline;
 }
 
 } // namespace starrocks

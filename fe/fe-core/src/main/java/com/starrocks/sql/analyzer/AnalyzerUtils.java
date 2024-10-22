@@ -946,6 +946,7 @@ public class AnalyzerUtils {
         }
     }
 
+    // The conception is not very clear, be careful when use it.
     private static class ExternalTableCollector extends TableCollector {
         List<Table> tables;
         Predicate<Table> predicate;
@@ -958,9 +959,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            boolean internal = CatalogMgr.isInternalCatalog(table.getCatalogName())
-                    || table.isNativeTableOrMaterializedView()
-                    || table.isOlapView();
+            boolean internal = table.isNativeTableOrMaterializedView() || table.isOlapView();
             if (!internal && predicate.test(table)) {
                 tables.add(table);
             }
@@ -1336,7 +1335,7 @@ public class AnalyzerUtils {
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
-                            + "_" + partitionName.hashCode();
+                            + "_" + Integer.toHexString(partitionName.hashCode());
                 }
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,

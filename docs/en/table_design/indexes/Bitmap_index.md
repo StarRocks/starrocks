@@ -278,7 +278,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 
 **Query performance analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
 
-Total time: 2.7 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
+Total time: 2.077 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
 
 ```Bash
 PullRowNum: 20.566M (20566493) // Number of rows in the result set.
@@ -408,7 +408,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **Query performance analysis**: Since the table queried does not have a bitmap index, pages containing the `lo_partkey` column data are read and then predicate filtering is applied.
 
-Total time: approximately 0.43 ms, **including 0.39 ms for data loading** and 0.02 ms for predicate filtering.
+Total time: approximately 0.43 seconds, **including 0.39 seconds for data loading** and 0.02 seconds for predicate filtering.
 
 ```Bash
 PullRowNum: 255 // Number of rows in the result set.

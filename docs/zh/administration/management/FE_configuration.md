@@ -4859,38 +4859,50 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 引入版本：-
 -->
 
-<!--
+##### replication_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：调度执行同步任务的最小时间间隔。
+- 引入版本：v3.3.5
+
 ##### replication_max_parallel_table_count
 
 - 默认值：100
 - 类型：Int
-- Unit:
+- 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。
+- 引入版本：v3.3.5
 
-<!--
-##### replication_max_parallel_data_size_mb
+##### replication_max_parallel_replica_count
 
 - 默认值：10240
 - 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：允许并发同步的 Tablet 副本数。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- 默认值：1048576
+- 类型：Int
 - 单位：MB
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：允许并发同步的数据量。
+- 引入版本：v3.3.5
 
-<!--
 ##### replication_transaction_timeout_sec
 
-- 默认值：1 * 60 * 60
+- 默认值：86400
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：同步任务的超时时间。
+- 引入版本：v3.3.5
 
 ##### jdbc_meta_default_cache_enable
 
@@ -4936,6 +4948,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
+
+##### query_detail_explain_level
+
+- 默认值：COSTS
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
+- 引入版本：v3.2.12，v3.3.5
 
 <!--
 ##### max_varchar_length

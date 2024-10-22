@@ -1846,6 +1846,21 @@ class StarrocksSQLApiLib(object):
                     return False
             return True
 
+        def is_all_finished3():
+            show_sql = f"""select STATE from information_schema.task_runs a 
+                join information_schema.materialized_views b 
+                on a.task_name=b.task_name 
+                where b.table_name='{mv_name}' 
+                    and a.`database`='{current_db}'"""
+            print(show_sql)
+            res = self.execute_sql(show_sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "show mv state error")
+            success_cnt = get_success_count(res["result"])
+            if success_cnt >= check_count:
+                return True
+            return False
+
         # information_schema.task_runs result
         def get_success_count(results):
             cnt = 0
@@ -1866,21 +1881,9 @@ class StarrocksSQLApiLib(object):
                 time.sleep(1)
                 count += 1
         else:
-            show_sql = f"""select STATE from information_schema.task_runs a 
-                join information_schema.materialized_views b 
-                on a.task_name=b.task_name 
-                where b.table_name='{mv_name}' 
-                    and a.`database`='{current_db}'"""
             while count < max_loop_count:
-                print(show_sql)
-                res = self.execute_sql(show_sql, True)
-                if not res["status"]:
-                    tools.assert_true(False, "show mv state error")
-
-                success_cnt = get_success_count(res["result"])
-                if success_cnt >= check_count:
-                    is_all_ok = True
-                    # sleep to avoid FE's async action.
+                is_all_ok = is_all_finished1() and is_all_finished3()
+                if is_all_ok:
                     time.sleep(1)
                     break
                 time.sleep(1)
@@ -2576,7 +2579,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "explain costs %s" % query
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            plan_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan:\n %s" % (expect, plan_string))
 
     def assert_trace_values_contains(self, query, *expects):
         """

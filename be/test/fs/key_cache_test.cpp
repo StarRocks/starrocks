@@ -91,6 +91,13 @@ TEST_F(KeyCacheTest, AddKey) {
     ASSERT_EQ(2, cache.size());
     std::string result;
     ASSERT_TRUE(execute_script("System.print(ExecEnv.key_cache_info())", result).ok());
+    ASSERT_TRUE(execute_script("System.print(StorageEngine.decode_encryption_meta("
+                               "\"Ch4IARiztZ64BiAAKAE6EHp8EnQlAIgiy8dgbPRP53kKPAgCEAEYs7WeuAYgACgBMiyZegO5j9P16bHelpUAU"
+                               "xEj1c5P4xWQsJSy6sc2yIKC0g/rRPqsGNumdy6WQgo0EAIgACgBMixDCSo3rP5l8oiZLcgtts8x7xJ+M4+/"
+                               "INZvGPhCOA1m9zf2vpCRbjbVoOl2EQ==\"))",
+                               result)
+                        .ok());
+    ASSERT_TRUE(result.find("keyHierarchy") != result.npos);
 }
 
 static void wrap_unwrap_test(int num_level) {

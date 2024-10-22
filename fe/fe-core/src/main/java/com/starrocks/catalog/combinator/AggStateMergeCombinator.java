@@ -56,8 +56,15 @@ public final class AggStateMergeCombinator extends AggregateFunction {
                     new AggStateMergeCombinator(functionName, imtermediateType, aggFunc.getReturnType());
             aggStateMergeFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateMergeFunc.setPolymorphic(aggFunc.isPolymorphic());
-            aggStateMergeFunc.setAggStateDesc(new AggStateDesc(aggFunc));
-            LOG.info("Register agg state function: {}", aggStateMergeFunc.functionName());
+            AggStateDesc aggStateDesc;
+            if (aggFunc.getAggStateDesc() != null) {
+                aggStateDesc = aggFunc.getAggStateDesc().clone();
+            } else {
+                aggStateDesc = new AggStateDesc(aggFunc);
+            }
+            aggStateMergeFunc.setAggStateDesc(aggStateDesc);
+            // use agg state desc's nullable as `agg_state` function's nullable
+            aggStateMergeFunc.setIsNullable(aggStateDesc.getResultNullable());
             return Optional.of(aggStateMergeFunc);
         } catch (Exception e) {
             LOG.warn("Failed to create AggStateMergeCombinator for function: {}", aggFunc.functionName(), e);

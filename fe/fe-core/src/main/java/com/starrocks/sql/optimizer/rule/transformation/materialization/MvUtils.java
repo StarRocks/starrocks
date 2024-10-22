@@ -36,7 +36,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
@@ -1375,7 +1374,9 @@ public class MvUtils {
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
-            Preconditions.checkState(statementBases.size() == 1);
+            if (statementBases.size() != 1) {
+                return null;
+            }
             StatementBase stmt = statementBases.get(0);
             Analyzer.analyze(stmt, connectContext);
             return stmt;
@@ -1454,8 +1455,7 @@ public class MvUtils {
         partitionProperties.put("storage_medium", materializedView.getStorageMedium());
         String storageCooldownTime =
                 materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+        if (storageCooldownTime != null) {
             // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
             String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
             partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);

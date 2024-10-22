@@ -24,6 +24,7 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/strings/join.h"
@@ -37,6 +38,7 @@
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
@@ -85,7 +87,8 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         if (global_env->process_mem_tracker()->has_limit()) {
             mem_limit = global_env->process_mem_tracker()->limit();
         }
-        cache_options.mem_space_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
+                                                                      &cache_options.mem_space_size));
         if (config::datacache_disk_path.value().empty()) {
             // If the disk cache does not be configured for datacache, set default path according storage path.
             std::vector<std::string> datacache_paths;
@@ -94,12 +97,13 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                 // Clear the residual datacache files
                 std::filesystem::path sp(root_path.path);
                 auto old_path = sp.parent_path() / "datacache";
-                clean_residual_datacache(old_path.string());
+                DataCacheUtils::clean_residual_datacache(old_path.string());
             });
             config::datacache_disk_path = JoinStrings(datacache_paths, ";");
         }
-        RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
-                                                         config::ignore_broken_disk, &cache_options.disk_spaces));
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_disk_spaces(
+                config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk,
+                &cache_options.disk_spaces));
 
         size_t total_quota_byts = 0;
         for (auto& space : cache_options.disk_spaces) {
@@ -298,7 +302,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " started successfully";
 
-    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+    while (!process_exit_in_progress()) {
         sleep(1);
     }
 
@@ -327,6 +331,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif

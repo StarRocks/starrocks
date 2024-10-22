@@ -130,9 +130,9 @@ None
 select array_map((x,y)->k, [1,2],[2,3]) from t order by k;
 -- result:
 [1,1]
-[1,1]
-[1,1]
-[1,1]
+[2,2]
+[3,3]
+[4,4]
 -- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,3],[3,4]) from t;
 -- result:
@@ -154,4 +154,16 @@ None
 None
 None
 None
+-- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3]]);
+-- result:
+[[101,102,103]]
+-- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3], [null]]);
+-- result:
+[[101,102,103],[null]]
+-- !result
+select array_map(x->array_map(x->array_map(x->x+100,x),x), [[[1,2,3]]]);
+-- result:
+[[[101,102,103]]]
 -- !result

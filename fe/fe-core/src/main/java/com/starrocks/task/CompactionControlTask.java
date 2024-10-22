@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/meta/MetaContext.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/task/CheckConsistencyTask.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,39 +32,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.meta;
+package com.starrocks.task;
 
-/*
- * MetaContext saved the current meta version.
- * And we need to create a thread local meta context for all threads which are about to reading meta.
- */
-public class MetaContext {
+import com.google.common.collect.Maps;
+import com.starrocks.thrift.TCompactionControlReq;
+import com.starrocks.thrift.TTaskType;
 
-    private int starrocksMetaVersion;
+import java.util.Map;
 
-    private static ThreadLocal<MetaContext> threadLocalInfo = new ThreadLocal<MetaContext>();
+public class CompactionControlTask extends AgentTask {
 
-    public MetaContext() {
+    private Map<Long, Long> tableToDisableDeadline = Maps.newHashMap();
 
+    public CompactionControlTask(long backendId, Map<Long, Long> tableToDisableDeadline) {
+        super(null, backendId, TTaskType.COMPACTION_CONTROL, -1, -1, -1, -1, -1);
+        this.tableToDisableDeadline = tableToDisableDeadline;
     }
 
-    public void setStarRocksMetaVersion(int starrocksVersion) {
-        this.starrocksMetaVersion = starrocksVersion;
-    }
-
-    public int getStarRocksMetaVersion() {
-        return this.starrocksMetaVersion;
-    }
-
-    public void setThreadLocalInfo() {
-        threadLocalInfo.set(this);
-    }
-
-    public static MetaContext get() {
-        return threadLocalInfo.get();
-    }
-
-    public static void remove() {
-        threadLocalInfo.remove();
+    public TCompactionControlReq toThrift() {
+        TCompactionControlReq req = new TCompactionControlReq();
+        req.setTable_to_disable_deadline(tableToDisableDeadline);
+        return req;
     }
 }

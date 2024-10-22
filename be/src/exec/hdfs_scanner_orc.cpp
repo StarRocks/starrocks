@@ -322,14 +322,20 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, &_need_skip_rowids,
-                                                      _scanner_params.datacache_options);
+    const auto iceberg_delete_builder =
+            std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, _runtime_state, _scanner_params);
 
-    for (const auto& tdelete_file : _scanner_params.deletes) {
-        RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
-                                                         _scanner_params.mor_params.equality_slots, _runtime_state,
-                                                         _mor_processor));
+    for (const auto& delete_file : _scanner_params.deletes) {
+        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
+        } else {
+            const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                               delete_file->file_content);
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
+        }
     }
+
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
     return Status::OK();
 }
@@ -570,6 +576,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
 }

@@ -83,8 +83,9 @@ protected:
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
