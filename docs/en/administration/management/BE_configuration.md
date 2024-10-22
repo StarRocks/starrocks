@@ -1122,7 +1122,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction.
+- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction. This parameter is mutable when the Event-based Compaction Framework is enabled.
 - Introduced in: -
 
 ##### compaction_trace_threshold

@@ -26,7 +26,7 @@ Explanation:
 
 * **BE Configuration**
 
-| Name | Default| Description|  
+| Name | Default| Description|
 | --- | --- | --- |
 | vector_chunk_size | 4096 | Number of chunk rows |
 | mem_limit | 90% | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server. |
@@ -34,7 +34,7 @@ Explanation:
 | write_buffer_size | 104857600 |  The capacity limit of a single MemTable, exceeding which a disk swipe will be performed. |
 | load_process_max_memory_limit_bytes | 107374182400 | The upper limit of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `mem_limit * load_process_max_memory_limit_percent / 100` and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered.  |
 | load_process_max_memory_limit_percent | 30 | The maximum percentage of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `mem_limit * load_process_max_memory_limit_percent / 100` and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered. |
-| default_load_mem_limit | 2147483648 | If the memory limit on the receiving side is reached for a single import instance, a disk swipe will be triggered. This needs to be modified with the Session variable `load_mem_limit` to take effect. |
+| default_load_mem_limit | 2147483648 | If the memory limit on the receiving side is reached for a single import instance, a disk swipe will be triggered. This needs to be modified with the Session variable `load_mem_limit` to take effect. This parameter is mutable when the Event-based Compaction Framework is enabled.|
 | max_compaction_concurrency | -1 | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | cumulative_compaction_check_interval_seconds | 1 | Interval of compaction check|
 
