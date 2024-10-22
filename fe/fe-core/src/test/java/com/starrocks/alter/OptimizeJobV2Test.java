@@ -154,7 +154,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
-        Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
+        Assert.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
     }
 
     // start a schema change, then finished

@@ -51,7 +51,7 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
             optimizeJob.setWarehouseId(warehouseId);
             return optimizeJob;
         } else {
-            LOG.info("Online optimize job is created, table: {}", table.getName());
+            LOG.info("Online optimize job {} is created, table: {}", jobId, table.getName());
             OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
                     jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
             onlineOptimizeJob.setWarehouseId(warehouseId);
