@@ -310,15 +310,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     }
 
     private void disableDoubleWritePartition(Database db, OlapTable tbl) {
-<<<<<<< HEAD
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-=======
-        try (AutoCloseableLock ignored =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
->>>>>>> 6f54f6a3b9 ([BugFix] Fix online optimize conflict with expression partition (#52074))
             tbl.clearDoubleWritePartition();
             LOG.info("job {} clear double write partitions", jobId);
         } finally {
