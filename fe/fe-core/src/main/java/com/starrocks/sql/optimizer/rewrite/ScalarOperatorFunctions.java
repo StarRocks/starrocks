@@ -70,6 +70,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
@@ -396,32 +397,49 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
+        String pattern = fmtLiteral.getVarchar();
+        DateTimeFormatter formatter = getUnixDatetimeFormatBuilder(pattern).toFormatter();
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
-        if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
+        if (HAS_TIME_PART.matcher(pattern).matches()) {
             LocalDateTime ldt;
             try {
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                ldt = LocalDateTime.from(formatter.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             } catch (DateTimeParseException e) {
                 // If parsing fails, it can be re-parsed from the position of the successful prefix string.
                 // This way datetime string can use incomplete format
                 // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                ldt = LocalDateTime.from(formatter.withResolverStyle(ResolverStyle.STRICT)
                         .parse(dateStr.substring(0, e.getErrorIndex())));
             }
             return ConstantOperator.createDatetimeOrNull(ldt);
         } else {
-            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            LocalDate ld = LocalDate.from(formatter.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
         }
     }
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        DateTimeFormatterBuilder builder = getUnixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+    }
+
+    /**
+     * Get the unixDatetimeFormatBuilder using the given pattern.
+     * If the pattern is year or year month format will set the default value for
+     *   MONTH_OF_YEAR and DAY_OF_MONTH
+     * @param pattern the dateTimeFormat pattern
+     * @return
+     */
+    private static DateTimeFormatterBuilder getUnixDatetimeFormatBuilder(String pattern) {
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(pattern, false);
+        if (DateUtils.MONTH_YEAR_FORMATTER_PATTERN.matcher(pattern).matches()) {
+            builder.parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+                    .parseDefaulting(ChronoField.DAY_OF_MONTH, 1);
+        }
+        return builder;
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)

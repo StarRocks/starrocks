@@ -37,6 +37,7 @@ import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.WeekFields;
+import java.util.regex.Pattern;
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -68,6 +69,9 @@ public class DateUtils {
     public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
     public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
+    // A regular expressions that will support the dateTimeFormat pattern in year format or year month format
+    // For example '%y%m', '%y-%m'
+    public static final Pattern MONTH_YEAR_FORMATTER_PATTERN = Pattern.compile("%[yY](-)?(%c|%m)?");
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATETIME_PRINTER =
             (dateTime, type, cx) -> new JsonPrimitive(dateTime.format(DATE_TIME_FORMATTER_UNIX));
