@@ -57,7 +57,9 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
         }
     });
 
-    int child_num = expr->get_num_children();
+    // for the lambda function, we only consider extracting the outer common expression from the lambda expr,
+    // not its arguments
+    int child_num = expr->is_lambda_function() ? 1 : expr->get_num_children();
     std::vector<SlotId> slot_ids;
 
     for (int i = 0; i < child_num; i++) {
