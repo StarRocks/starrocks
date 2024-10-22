@@ -196,8 +196,11 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
-            LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
-                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            // ignore log query
+            if (params.getLoad_type() != null) {
+                LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                        DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            }
             result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
             return result;
@@ -268,8 +271,10 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             TReportExecStatusResult result = new TReportExecStatusResult();
             final QueryInfo info = coordinatorMap.get(params.query_id);
             if (info == null) {
-                LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
-                        DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+                if (params.getLoad_type() != null) {
+                    LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                            DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+                }
                 result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
                 result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
                 resultList.addToStatus_list(result.getStatus());
