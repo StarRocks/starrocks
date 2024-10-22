@@ -500,4 +500,17 @@ public class KafkaRoutineLoadJobTest {
         Assert.assertEquals("['$.category','$.price','$.author']", newJob.getJsonPaths());
         Assert.assertEquals("", newJob.getJsonRoot());
     }
+
+    @Test
+    public void testGetStatistic() {
+        RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
+        Deencapsulation.setField(job, "receivedBytes", 10);
+        Deencapsulation.setField(job, "totalRows", 20);
+        Deencapsulation.setField(job, "errorRows", 2);
+        Deencapsulation.setField(job, "unselectedRows", 2);
+        Deencapsulation.setField(job, "totalTaskExcutionTimeMs", 1000);
+        String statistic = job.getStatistic();
+        Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
+        Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
+    }
 }
