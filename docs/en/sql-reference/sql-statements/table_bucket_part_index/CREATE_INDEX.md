@@ -16,19 +16,48 @@ This operation requires the ALTER privilege on the target table. You can follow 
 
 ## Syntax
 
-```sql
-CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala']
+```SQL
+CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 ```
 
-Note:
+## Parameter
 
+<<<<<<< HEAD
 1. Only support bitmap index in the current version.
 2. Create BITMAP index only in a single column.
+=======
+| **Parameter** | **Required**   | **Description**                                                              |
+| ------------- | -------------- | ---------------------------------------------------------------------------- |
+| index_name    | Yes            | The index name. For naming conventions, see [System Limits](../../System_limit.md). |
+| table_name    | Yes            | The name of the table.                                                       |
+| column_name   | Yes            | The name of the column to build index on. One column can have only one BITMAP index. If a column already has an index, you cannot create one more index on it. |
+| COMMENT       | No             | The comment for the index.                                                   |
+>>>>>>> aea84405ba ([Doc] Fix EN CREATE INDEX reference (#52085))
 
 ## Examples
 
-1. Create bitmap index for `siteid` on `table1`.
+Create a table `sales_records` as follows:
 
-    ```sql
-    CREATE INDEX index_name ON table1 (siteid) USING BITMAP COMMENT 'balabala';
-    ```
+```SQL
+CREATE TABLE sales_records
+(
+    record_id int,
+    seller_id int,
+    item_id int
+)
+DISTRIBUTED BY hash(record_id)
+PROPERTIES (
+    "replication_num" = "3"
+);
+```
+
+Create an index `index` on the `item_id` column of `sales_records`。
+
+```SQL
+CREATE INDEX index3 ON sales_records (item_id) USING BITMAP COMMENT '';
+```
+
+## Relevant SQLs
+
+- [SHOW INDEX](SHOW_INDEX.md)
+- [DROP INDEX](DROP_INDEX.md)
