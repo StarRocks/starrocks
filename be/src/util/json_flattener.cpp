@@ -965,7 +965,8 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
             continue;
         }
         // leaf node
-        DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_ROOT);
+        DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_ROOT ||
+               child->op == JsonFlatPath::OP_NEW_LEVEL);
         builder->addUnchecked(k.data(), k.size(), v);
     }
     for (auto& [child_name, child] : root->children) {
