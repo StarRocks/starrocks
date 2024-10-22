@@ -39,7 +39,8 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_hidden) {
     HeartbeatServer server;
     TMasterInfo master_info;
 
-    master_info.__set_network_address(TNetworkAddress("127.0.0.1", 8080));
+    master_info.network_address.__set_hostname("127.0.0.1");
+    master_info.network_address.__set_port(8080);
     master_info.__set_epoch(100);
     master_info.__set_backend_ip("192.168.1.1");
 
@@ -56,7 +57,8 @@ TEST(HeartbeatServerTest, test_print_master_info_with_hidden_token) {
     HeartbeatServer server;
     TMasterInfo master_info;
 
-    master_info.__set_network_address(TNetworkAddress("127.0.0.1", 8080));
+    master_info.network_address.__set_hostname("127.0.0.1");
+    master_info.network_address.__set_port(8080);
     master_info.__set_cluster_id(12345);
     master_info.__set_epoch(100);
     master_info.__set_token("secret_token");
