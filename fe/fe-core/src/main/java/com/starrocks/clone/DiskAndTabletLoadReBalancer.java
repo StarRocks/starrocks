@@ -1013,14 +1013,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return 0;
             }
 
-<<<<<<< HEAD
-            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, partitionId);
-            if (partition == null) {
-=======
-            PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
+            PhysicalPartition physicalPartition = globalStateMgr
                     .getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
             if (physicalPartition == null) {
->>>>>>> 609614df99 ([BugFix] Fix physical partition for rebalance (#46402))
                 return 0;
             }
 
@@ -1465,14 +1460,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return result;
             }
 
-<<<<<<< HEAD
-            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, partitionId);
-            if (partition == null) {
-=======
-            PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
+            PhysicalPartition physicalPartition = globalStateMgr
                     .getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
             if (physicalPartition == null) {
->>>>>>> 609614df99 ([BugFix] Fix physical partition for rebalance (#46402))
                 return result;
             }
 
@@ -1546,14 +1536,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         try {
-<<<<<<< HEAD
             db.readLock();
-            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
-=======
-            locker.lockDatabase(db.getId(), LockType.READ);
-            PhysicalPartition partition = globalStateMgr.getLocalMetastore()
-                    .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
->>>>>>> 609614df99 ([BugFix] Fix physical partition for rebalance (#46402))
+            PhysicalPartition partition = globalStateMgr.getPhysicalPartitionIncludeRecycleBin(
+                    olapTable, tabletMeta.getPhysicalPartitionId());
             if (partition == null) {
                 return true;
             }
@@ -1568,13 +1553,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return true;
             }
 
-<<<<<<< HEAD
             short replicaNum = globalStateMgr
-                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
-=======
-            short replicaNum = globalStateMgr.getLocalMetastore()
                     .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
->>>>>>> 609614df99 ([BugFix] Fix physical partition for rebalance (#46402))
             if (replicaNum == (short) -1) {
                 return true;
             }
