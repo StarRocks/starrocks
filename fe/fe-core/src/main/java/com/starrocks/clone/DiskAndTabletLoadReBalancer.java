@@ -1543,15 +1543,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         Locker locker = new Locker();
         try {
-<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
-            Partition partition = globalStateMgr.getLocalMetastore()
-                    .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
-=======
-            locker.lockDatabase(db.getId(), LockType.READ);
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
->>>>>>> 609614df99 ([BugFix] Fix physical partition for rebalance (#46402))
             if (partition == null) {
                 return true;
             }
