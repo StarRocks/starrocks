@@ -379,7 +379,11 @@ public class MaterializationContext {
                 // select sum(v1) from t1 group by a, b, d;
                 // query: select sum(v1) from t1 where b = 'a' group by a;
 
-                // when many mvs satisfy query, prefer mv with less rows, so choose mv1.
+                // When many mvs satisfy query, prefer mv with fewer rows, like mv1.
+                // But `RewriteOrdering` is only used for sorting when there are too many candidate mvs
+                // and candidate mv list need to be trimmed to a limited size.
+                // So `mv1` in above example is just a candidate, it doesn't mean mv1 is the final chosen mv.
+                // Actually `BestMvSelector` is the final place to judge which mv is used after rewrite rule.
                 boolean mvHasDifferentRows = orderingRowCount(o1) != 0 && orderingRowCount(o2) != 0
                         && orderingRowCount(o1) != orderingRowCount(o2);
                 return Comparator
