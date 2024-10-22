@@ -36,7 +36,6 @@
 
 #include <fmt/format.h>
 #include <thrift/TProcessor.h>
-#include <thrift/TToString.h>
 
 #include <atomic>
 #include <ctime>
@@ -154,46 +153,16 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 }
 
 std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
-    using ::apache::thrift::to_string;
+    MasterInfo info(master_info);
+
+    if (info.__isset.token) {
+        info.__set_token = "<hidden>";
+    }
 
     std::ostringstream out;
-    out << "TMasterInfo(";
-    out << "network_address=" << to_string(master_info.network_address);
-    out << ", "
-        << "cluster_id=";
-    (master_info.__isset.cluster_id ? (out << to_string(master_info.cluster_id)) : (out << "<null>"));
-    out << ", "
-        << "epoch=" << to_string(master_info.epoch);
-    out << ", "
-        << "token=";
-    (master_info.__isset.token ? (out << "<hidden>" : (out << "<null>"));
-    out << ", "
-        << "backend_ip=";
-    (master_info.__isset.backend_ip ? (out << to_string(master_info.backend_ip)) : (out << "<null>"));
-    out << ", "
-        << "http_port=";
-    (master_info.__isset.http_port ? (out << to_string(master_info.http_port)) : (out << "<null>"));
-    out << ", "
-        << "heartbeat_flags=";
-    (master_info.__isset.heartbeat_flags ? (out << to_string(master_info.heartbeat_flags)) : (out << "<null>"));
-    out << ", "
-        << "backend_id=";
-    (master_info.__isset.backend_id ? (out << to_string(master_info.backend_id)) : (out << "<null>"));
-    out << ", "
-        << "min_active_txn_id=";
-    (master_info.__isset.min_active_txn_id ? (out << to_string(master_info.min_active_txn_id)) : (out << "<null>"));
-    out << ", "
-        << "run_mode=";
-    (master_info.__isset.run_mode ? (out << to_string(master_info.run_mode)) : (out << "<null>"));
-    out << ", "
-        << "disabled_disks=";
-    (master_info.__isset.disabled_disks ? (out << to_string(master_info.disabled_disks)) : (out << "<null>"));
-    out << ", "
-        << "decommissioned_disks=";
-    (master_info.__isset.decommissioned_disks ? (out << to_string(master_info.decommissioned_disks)) : (out << "<null>"));
-    out << ", "
-        << "encrypted=";
-    (master_info.__isset.encrypted ? (out << to_string(master_info.encrypted)) : (out << "<null>"));
+
+    master_info_copy.printTo(out);
+
     return out.str();
 }
 
