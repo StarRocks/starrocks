@@ -182,9 +182,6 @@ Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_da
 }
 
 Status FlatJsonColumnCompactor::finish() {
-    for (const auto& js : _json_datas) {
-        DCHECK_GT(js->size(), 0);
-    }
     RETURN_IF_ERROR(_compact_columns(_json_datas));
     _json_datas.clear(); // release after write
     for (auto& iter : _flat_writers) {
