@@ -87,6 +87,10 @@ public class EliminateAggRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableUKFKOpt()) {
+            return false;
+        }
+
         LogicalAggregationOperator aggOp = input.getOp().cast();
         OptExpression childOpt = input.inputAt(0);
 
@@ -101,8 +105,7 @@ public class EliminateAggRule extends TransformationRule {
             return false;
         }
 
-        UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
-        input.getOp().accept(collector, input, null);
+        UKFKConstraintsCollector.collectColumnConstraints(input);
 
         List<UKFKConstraints.UniqueConstraintWrapper> uniqueKeys = childOpt.getConstraints().getAggUniqueKeys();
         if (uniqueKeys.isEmpty()) {

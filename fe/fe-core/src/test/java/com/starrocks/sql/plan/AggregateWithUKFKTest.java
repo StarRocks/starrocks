@@ -398,4 +398,102 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  4:HASH JOIN");
     }
 
+    @Test
+    public void testEliminateAggAfterAgg() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select c15, c16 from (" +
+                "select c15, c16 from tt1 group by c15, c16" +
+                ")t group by c15, c16";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 5: c15, 6: c16\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select c15, c15+1 from (" +
+                "select c15 from tt1 group by c15" +
+                ")t group by 1, 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 5> : 5: c15\n" +
+                "  |  <slot 7> : CAST(5: c15 AS BIGINT) + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 5: c15\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select c16, sum_c11, count(sum_c11) from (" +
+                "select c16, sum(c11) as sum_c11 from tt1 group by c16" +
+                ")t group by c16, sum_c11";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 6> : 6: c16\n" +
+                "  |  <slot 7> : 7: sum\n" +
+                "  |  <slot 8> : if(7: sum IS NULL, 0, 1)\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: c11)\n" +
+                "  |  group by: 6: c16\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select c16, count(sum_c11) from (" +
+                "select c15, c16, sum(c11) as sum_c11 from tt1 group by c15, c16 " +
+                ")t group by c16";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(7: sum)\n" +
+                "  |  group by: 6: c16\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 6> : 6: c16\n" +
+                "  |  <slot 7> : 7: sum\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: c11)\n" +
+                "  |  group by: 5: c15, 6: c16\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select c15, c16, count(sum_c11) from (" +
+                "select c11, c15, c16, sum(c11) as sum_c11 from tt1 group by c11, c15, c16 " +
+                ")t group by c15, c16";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(7: sum)\n" +
+                "  |  group by: 5: c15, 6: c16\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 5> : 5: c15\n" +
+                "  |  <slot 6> : 6: c16\n" +
+                "  |  <slot 7> : CAST(1: c11 AS BIGINT)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select c11, c16, count(sum_c11) from (" +
+                "select c11, c15, c16, sum(c11) as sum_c11 from tt1 group by c11, c15, c16 " +
+                ")t group by c11, c16";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: c11\n" +
+                "  |  <slot 6> : 6: c16\n" +
+                "  |  <slot 8> : if(CAST(1: c11 AS BIGINT) IS NULL, 0, 1)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
 }
