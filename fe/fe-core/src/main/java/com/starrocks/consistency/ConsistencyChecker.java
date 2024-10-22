@@ -237,7 +237,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                     }
 
                     // validate partition
-                    long partitionId = tabletMeta.getPartitionId();
+                    long partitionId = tabletMeta.getPhysicalPartitionId();
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         partition = recycleBin.getPhysicalPartition(partitionId);
