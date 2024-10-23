@@ -777,8 +777,8 @@ private:
     uint32_t _size;
 };
 
-SegmentedColumn::SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index)
-        : _chunk(std::move(chunk)), _column_index(column_index), _segment_size(_chunk->segment_size()) {}
+SegmentedColumn::SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index)
+        : _chunk(chunk), _column_index(column_index), _segment_size(chunk->segment_size()) {}
 
 SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size)
         : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
@@ -833,14 +833,14 @@ std::vector<ColumnPtr> SegmentedColumn::columns() const {
         return _cached_columns;
     }
     std::vector<ColumnPtr> columns;
-    for (auto& segment : _chunk->segments()) {
+    for (auto& segment : _chunk.lock()->segments()) {
         columns.push_back(segment->get_column_by_index(_column_index));
     }
     return columns;
 }
 
 void SegmentedColumn::upgrade_to_nullable() {
-    for (auto& segment : _chunk->segments()) {
+    for (auto& segment : _chunk.lock()->segments()) {
         auto& column = segment->get_column_by_index(_column_index);
         column = NullableColumn::wrap_if_necessary(column);
     }
