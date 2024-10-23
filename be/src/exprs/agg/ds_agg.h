@@ -28,12 +28,11 @@ enum SketchType {
     HLL = 0,
     QUANTILE = 1,
     FREQUENT = 2,
-    THETA =3,
+    THETA = 3,
 };
 
 template <LogicalType LT, SketchType ST>
-struct DSSketchState {
-};
+struct DSSketchState {};
 
 template <LogicalType LT>
 struct DSSketchState<LT, HLL> {
@@ -48,16 +47,15 @@ struct DSSketchState<LT, HLL> {
         ds_sketch_wrapper = std::make_unique<DataSketchesHll>(log_k, tgt_type, &memory_usage);
     }
 
-    bool is_inited() const {
-        return ds_sketch_wrapper != nullptr;
-    }
+    bool is_inited() const { return ds_sketch_wrapper != nullptr; }
 
     void merge(const BinaryColumn* sketch_data_column, size_t row_num) {
         DSSketchState<LT, HLL> other_state;
         other_state.deserialize(sketch_data_column->get(row_num).get_slice(), &memory_usage);
         if (UNLIKELY(!is_inited())) {
-            ds_sketch_wrapper = std::make_unique<DataSketchesHll>(
-                    other_state.ds_sketch_wrapper->get_lg_config_k(), other_state.ds_sketch_wrapper->get_target_type(), &memory_usage);
+            ds_sketch_wrapper =
+                    std::make_unique<DataSketchesHll>(other_state.ds_sketch_wrapper->get_lg_config_k(),
+                                                      other_state.ds_sketch_wrapper->get_target_type(), &memory_usage);
         }
         ds_sketch_wrapper->merge(*other_state.ds_sketch_wrapper);
     }
@@ -101,13 +99,9 @@ struct DSSketchState<LT, HLL> {
         }
     }
 
-    size_t serialize(uint8_t* dst) const {
-        return ds_sketch_wrapper->serialize(dst);
-    }
+    size_t serialize(uint8_t* dst) const { return ds_sketch_wrapper->serialize(dst); }
 
-    size_t serialize_size() const {
-        return ds_sketch_wrapper->serialize_size();
-    }
+    size_t serialize_size() const { return ds_sketch_wrapper->serialize_size(); }
 
     void deserialize(const Slice& slice, int64_t* memory_usage) {
         ds_sketch_wrapper = std::make_unique<DataSketchesHll>(slice, memory_usage);
@@ -124,9 +118,7 @@ struct DSSketchState<LT, HLL> {
         }
     }
 
-    static std::string getFunName() {
-        return "ds_hll_count_distinct";
-    }
+    static std::string getFunName() { return "ds_hll_count_distinct"; }
 
 private:
     // parse log_k and target type from args
@@ -162,7 +154,6 @@ struct DSSketchState<LT, QUANTILE> {
     std::unique_ptr<SketchWarapperType> ds_sketch_wrapper = nullptr;
     int64_t memory_usage = 0;
 
-
     void init(FunctionContext* ctx) {
         DatumArray datum_array;
         uint16_t k;
@@ -186,9 +177,7 @@ struct DSSketchState<LT, QUANTILE> {
         ds_sketch_wrapper = std::make_unique<SketchWarapperType>(k, &memory_usage);
     }
 
-    bool is_inited() const {
-        return ds_sketch_wrapper != nullptr;
-    }
+    bool is_inited() const { return ds_sketch_wrapper != nullptr; }
 
     void update(const Column* data_column, size_t row_num) const {
         const ColumnType* column = down_cast<const ColumnType*>(data_column);
@@ -215,8 +204,8 @@ struct DSSketchState<LT, QUANTILE> {
                 *ranks_prt = other_state.ranks.get()[i];
                 ranks_prt++;
             }
-            ds_sketch_wrapper = std::make_unique<SketchWarapperType>(
-                    other_state.ds_sketch_wrapper->get_k(), &memory_usage);
+            ds_sketch_wrapper = 
+                    std::make_unique<SketchWarapperType>(other_state.ds_sketch_wrapper->get_k(), &memory_usage);
         }
         ds_sketch_wrapper->merge(*other_state.ds_sketch_wrapper);
     }
@@ -228,7 +217,7 @@ struct DSSketchState<LT, QUANTILE> {
         memcpy(dst + offset, ranks.get(), ranks_size * sizeof(double));
         offset = offset + ranks_size * sizeof(double);
         size_t ser_sketch_size = ds_sketch_wrapper->serialize(dst + offset);
-        return   offset + ser_sketch_size;
+        return offset + ser_sketch_size;
     }
 
     size_t serialize_size() const {
@@ -244,11 +233,10 @@ struct DSSketchState<LT, QUANTILE> {
         }
         offset = offset + sizeof(uint32_t);
         ranks = std::make_unique<double[]>(ranks_size);
-        memcpy(ranks.get(), ptr + offset,  ranks_size * sizeof(double));
+        memcpy(ranks.get(), ptr + offset, ranks_size * sizeof(double));
         offset = offset + ranks_size * sizeof(double);
         const Slice sketch_data_slice = Slice(slice.get_data() + offset, slice.size - offset);
         ds_sketch_wrapper = std::make_unique<SketchWarapperType>(sketch_data_slice, memory_usage);
-
     }
 
     void get_values(Column* dst, size_t start, size_t end) const {
@@ -263,7 +251,7 @@ struct DSSketchState<LT, QUANTILE> {
             result = ds_sketch_wrapper->get_quantiles(ranks.get(), ranks_size);
         }
 
-        uint32_t index =0;
+        uint32_t index = 0;
         for (size_t row = start; row < end; row++) {
             for (CppType result_data : result) {
                 result_column->append(result_data);
@@ -274,9 +262,7 @@ struct DSSketchState<LT, QUANTILE> {
         }
     }
 
-    static std::string getFunName() {
-        return "ds_quantile";
-    }
+    static std::string getFunName() { return "ds_quantile"; }
 
 private:
     // parse k and rank_arr from args
@@ -320,7 +306,7 @@ struct SpecialCppType<TYPE_BINARY> {
 };
 template <>
 struct SpecialCppType<TYPE_VARBINARY> {
-        using CppType = std::string;
+    using CppType = std::string;
 };
 template <>
 struct SpecialCppType<TYPE_CHAR> {
@@ -348,13 +334,11 @@ struct DSSketchState<LT, FREQUENT> {
         ds_sketch_wrapper = std::make_unique<SketchWarapperType>(lg_max_map_size, lg_start_map_size, &memory_usage);
     }
 
-    bool is_inited() const {
-        return ds_sketch_wrapper != nullptr;
-    }
+    bool is_inited() const { return ds_sketch_wrapper != nullptr; }
 
     void update(const Column* data_column, size_t row_num) const {
         if constexpr (!IsSlice<OriginalCppType>) {
-            const ColumnType* column = down_cast<const ColumnType *>(data_column);
+            const ColumnType* column = down_cast<const ColumnType*>(data_column);
             const auto& values = column->get_data();
             ds_sketch_wrapper->update(values[row_num]);
         } else {
@@ -366,7 +350,7 @@ struct DSSketchState<LT, FREQUENT> {
 
     void update_batch_single_state_with_frame(const Column* data_column, int64_t frame_start, int64_t frame_end) const {
         if constexpr (!IsSlice<OriginalCppType>) {
-            const ColumnType* column = down_cast<const ColumnType *>(data_column);
+            const ColumnType* column = down_cast<const ColumnType*>(data_column);
             const auto& values = column->get_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 ds_sketch_wrapper->update(values[i]);
@@ -377,7 +361,6 @@ struct DSSketchState<LT, FREQUENT> {
                 const Slice data = column->get_slice(i);
                 ds_sketch_wrapper->update(std::string(data.get_data(), data.size));
             }
-
         }
     }
 
@@ -402,7 +385,7 @@ struct DSSketchState<LT, FREQUENT> {
         memcpy(dst + offset, &lg_start_map_size, sizeof(uint8_t));
         offset = offset + sizeof(uint8_t);
         size_t ser_sketch_size = ds_sketch_wrapper->serialize(dst + offset);
-        return   offset + ser_sketch_size;
+        return offset + ser_sketch_size;
     }
 
     size_t serialize_size() const {
@@ -419,8 +402,8 @@ struct DSSketchState<LT, FREQUENT> {
         memcpy(&lg_start_map_size, ptr + offset, sizeof(uint8_t));
         offset = offset + sizeof(uint8_t);
         const Slice sketch_data_slice = Slice(slice.get_data() + offset, slice.size - offset);
-        ds_sketch_wrapper = std::make_unique<SketchWarapperType>(sketch_data_slice, lg_max_map_size,
-                lg_start_map_size, memory_usage);
+        ds_sketch_wrapper = std::make_unique<SketchWarapperType>(sketch_data_slice, lg_max_map_size, lg_start_map_size,
+                                                                 memory_usage);
     }
 
     void get_values(Column* dst, size_t start, size_t end) const {
@@ -439,7 +422,7 @@ struct DSSketchState<LT, FREQUENT> {
         if (LIKELY(ds_sketch_wrapper != nullptr)) {
             result = ds_sketch_wrapper->get_frequent_items(0);
         }
-        uint32_t index =0;
+        uint32_t index = 0;
         for (size_t row = start; row < end; row++) {
             uint32_t counter_num_index = 0;
             for (FrequentRow<CppType> frequentRow : result) {
@@ -466,9 +449,7 @@ struct DSSketchState<LT, FREQUENT> {
         }
     }
 
-    static std::string getFunName() {
-        return "ds_frequent";
-    }
+    static std::string getFunName() { return "ds_frequent"; }
 
 private:
     // parse threshold lg_max_map_size and lg_start_map_size from args
@@ -489,7 +470,6 @@ private:
             lg_max_map_size = lg_start_map_size;
         }
         return {counter_num, lg_max_map_size, lg_start_map_size};
-
     }
 };
 
@@ -502,13 +482,9 @@ struct DSSketchState<LT, THETA> {
     std::unique_ptr<SketchWarapperType> ds_sketch_wrapper = nullptr;
     int64_t memory_usage = 0;
 
-    void init(FunctionContext* ctx) {
-        ds_sketch_wrapper = std::make_unique<SketchWarapperType>(&memory_usage);
-    }
+    void init(FunctionContext* ctx) { ds_sketch_wrapper = std::make_unique<SketchWarapperType>(&memory_usage); }
 
-    bool is_inited() const {
-        return ds_sketch_wrapper != nullptr;
-    }
+    bool is_inited() const { return ds_sketch_wrapper != nullptr; }
 
     void merge(const BinaryColumn* sketch_data_column, size_t row_num) {
         DSSketchState<LT, THETA> other_state;
@@ -558,13 +534,9 @@ struct DSSketchState<LT, THETA> {
         }
     }
 
-    size_t serialize(uint8_t* dst) const {
-        return ds_sketch_wrapper->serialize(dst);
-    }
+    size_t serialize(uint8_t* dst) const { return ds_sketch_wrapper->serialize(dst); }
 
-    size_t serialize_size() const {
-        return ds_sketch_wrapper->serialize_size();
-    }
+    size_t serialize_size() const { return ds_sketch_wrapper->serialize_size(); }
 
     void deserialize(const Slice& slice, int64_t* memory_usage) {
         ds_sketch_wrapper = std::make_unique<SketchWarapperType>(slice, memory_usage);
@@ -581,9 +553,7 @@ struct DSSketchState<LT, THETA> {
         }
     }
 
-    static std::string getFunName() {
-        return "ds_theta";
-    }
+    static std::string getFunName() { return "ds_theta"; }
 };
 
 template <LogicalType LT, SketchType ST, typename StateType = DSSketchState<LT, ST>, typename T = RunTimeCppType<LT>>
