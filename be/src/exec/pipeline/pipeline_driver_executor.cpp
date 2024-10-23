@@ -346,8 +346,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
             if (!status.ok()) {
                 if (status.is_not_found()) {
-                    LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
-                              << print_id(fragment_id);
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                            << print_id(fragment_id);
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;

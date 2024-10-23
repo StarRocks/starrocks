@@ -114,7 +114,7 @@ void CompactionTask::run() {
     DataDir* data_dir = _tablet->data_dir();
     if (data_dir->capacity_limit_reached(input_rowsets_size())) {
         std::ostringstream sstream;
-        sstream << "compaction task:" << _task_info.task_id << "failed, skip tablet:" << _tablet->tablet_id()
+        sstream << "compaction task:" << _task_info.task_id << " failed, skip tablet:" << _tablet->tablet_id()
                 << " because data dir reaches capacity limit. input rowsets size:" << input_rowsets_size();
         Status st = Status::InternalError(sstream.str());
         _failure_callback(st);
