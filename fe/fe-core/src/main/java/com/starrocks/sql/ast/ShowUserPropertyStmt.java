@@ -79,6 +79,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
         for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {
             rows.add(Lists.newArrayList(String.format("%s.%s", "session", entry.getKey()), entry.getValue()));
         }
+        rows.add(Lists.newArrayList(UserProperty.PROP_LABELS_LOCATION, String.valueOf(userProperty.getLabelsLocation())));
 
         if (pattern == null) {
             return rows;
