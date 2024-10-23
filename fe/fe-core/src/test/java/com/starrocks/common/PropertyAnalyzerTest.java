@@ -292,7 +292,7 @@ public class PropertyAnalyzerTest {
     public void testPersistentIndexType() throws AnalysisException {
         // empty property
         Map<String, String> property = new HashMap<>();
-        Assert.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property));
+        Assert.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
 
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
