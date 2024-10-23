@@ -776,4 +776,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.VIEW) &&
                 !isConnectorView();
     }
+
+    public boolean isSupportBackupRestore() {
+        return isOlapTableOrMaterializedView() || isOlapView();
+    }
 }
