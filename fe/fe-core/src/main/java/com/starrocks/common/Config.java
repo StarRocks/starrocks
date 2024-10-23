@@ -2110,10 +2110,10 @@ public class Config extends ConfigBase {
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_small_table_interval = 6 * 60 * 60; // unit: second, default 6h
+    public static long connector_table_query_trigger_analyze_small_table_interval = 2 * 3600; // unit: second, default 2h
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_large_table_interval = 24 * 60 * 60; // unit: second, default 24h
+    public static long connector_table_query_trigger_analyze_large_table_interval = 12 * 3600; // unit: second, default 12h
 
     @ConfField(mutable = true)
     public static int connector_table_query_trigger_analyze_max_running_task_num = 2;
