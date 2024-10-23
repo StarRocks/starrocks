@@ -371,6 +371,12 @@ public class Config extends ConfigBase {
     public static int loads_history_sync_interval_second = 60;
 
     /**
+     * The default retention days of load history.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_retained_days = 30;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
