@@ -197,6 +197,8 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownJobExecutor;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownMgr;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -301,6 +303,7 @@ public class GlobalStateMgr {
     private final StreamLoadMgr streamLoadMgr;
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
+    private final ExternalCooldownMgr externalCooldownMgr;
 
     private final ConsistencyChecker consistencyChecker;
     private final BackupHandler backupHandler;
@@ -397,6 +400,8 @@ public class GlobalStateMgr {
     private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
     private final MVJobExecutor mvMVJobExecutor;
+
+    private final ExternalCooldownJobExecutor externalCooldownJobExecutor;
 
     private final SmallFileMgr smallFileMgr;
 
@@ -633,6 +638,7 @@ public class GlobalStateMgr {
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
+        this.externalCooldownMgr = new ExternalCooldownMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
@@ -698,6 +704,7 @@ public class GlobalStateMgr {
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
+        this.externalCooldownJobExecutor = new ExternalCooldownJobExecutor();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1378,6 +1385,7 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        externalCooldownJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1519,6 +1527,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                     .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                     .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                    .put(SRMetaBlockID.EXTERNAL_COOLDOWN_MGR, externalCooldownMgr::load)
                     .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1717,6 +1726,7 @@ public class GlobalStateMgr {
                 replicationMgr.save(imageWriter);
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
+                externalCooldownMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2135,6 +2145,14 @@ public class GlobalStateMgr {
 
     public MaterializedViewMgr getMaterializedViewMgr() {
         return this.materializedViewMgr;
+    }
+
+    public ExternalCooldownMgr getExternalCooldownMgr() {
+        return this.externalCooldownMgr;
+    }
+
+    public ExternalCooldownJobExecutor getExternalCooldownJobExecutor() {
+        return this.externalCooldownJobExecutor;
     }
 
     public SmallFileMgr getSmallFileMgr() {

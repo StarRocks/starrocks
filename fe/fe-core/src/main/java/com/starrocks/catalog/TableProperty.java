@@ -53,6 +53,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -77,6 +78,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -303,6 +305,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
+    private ExternalCooldownConfig externalCoolDownConfig;
 
     private Multimap<String, String> location;
 
@@ -394,9 +397,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
                 break;
+            case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG:
+                buildExternalCooldownConfig();
+                break;
             default:
                 break;
         }
+        return this;
+    }
+
+    public TableProperty buildExternalCoolDownProperties() {
         return this;
     }
 
@@ -431,6 +441,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // just modify binlogConfig, not properties
     public void setBinlogConfig(BinlogConfig binlogConfig) {
         this.binlogConfig = binlogConfig;
+    }
+
+    public TableProperty buildExternalCooldownConfig() {
+        String externalCoolDownTarget = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+        String externalCoolDownSchedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
+        long externalCoolDownWaitSecond = Long.parseLong(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND,
+                String.valueOf(-1L)));
+        externalCoolDownConfig = new ExternalCooldownConfig(
+                externalCoolDownTarget, externalCoolDownSchedule, externalCoolDownWaitSecond);
+        return this;
+    }
+
+    // just modify externalCoolDownConfig, not properties
+    public void setExternalCoolDownConfig(ExternalCooldownConfig externalCoolDownConfig) {
+        this.externalCoolDownConfig = externalCoolDownConfig;
     }
 
     public TableProperty buildDynamicProperty() {
@@ -1009,6 +1035,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public ExternalCooldownConfig getExternalCoolDownConfig() {
+        return externalCoolDownConfig;
+    }
+
     public List<UniqueConstraint> getUniqueConstraints() {
         return uniqueConstraints;
     }
@@ -1057,6 +1087,28 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+    public String getExternalCoolDownTarget() {
+        if (externalCoolDownConfig == null) {
+            return null;
+        }
+        return externalCoolDownConfig.getTarget();
+    }
+
+    public String getExternalCoolDownSchedule() {
+        if (externalCoolDownConfig == null) {
+            return null;
+        }
+        return externalCoolDownConfig.getSchedule();
+    }
+
+    public long getExternalCoolDownWaitSecond() {
+        if (externalCoolDownConfig == null) {
+            return 0;
+        }
+        Long waitSecond = externalCoolDownConfig.getWaitSecond();
+        return Objects.requireNonNullElse(waitSecond, 0L);
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -1094,5 +1146,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
+        buildExternalCooldownConfig();
     }
 }
