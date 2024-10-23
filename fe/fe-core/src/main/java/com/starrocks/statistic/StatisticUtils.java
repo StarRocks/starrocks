@@ -477,12 +477,16 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
+        return alterSystemTableReplicationNumIfNecessary(tableName, null);
+    }
+
     /**
      * Change the replication_num of system table according to cluster status
      * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
      * 3. When scale-in to less than 3 node, change it to retainedBackendNum
      */
-    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName, String key) {
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         int replica = GlobalStateMgr.getCurrentState()
@@ -491,8 +495,8 @@ public class StatisticUtils {
                 .orElse((short) 1);
 
         if (replica != expectedReplicationNum) {
-            String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
-                    StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
+            String sql = String.format("ALTER TABLE %s.%s SET ('%s'='%d')",
+                    StatsConstants.STATISTICS_DB_NAME, tableName, key != null ? key : "replication_num", expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
                 RepoExecutor.getInstance().executeDDL(sql);
             }
