@@ -47,7 +47,7 @@ struct ChunksPartitionStatistics {
 class ChunksPartitioner {
 public:
     ChunksPartitioner(const bool has_nullable_partition_column, const std::vector<ExprContext*>& partition_exprs,
-                      std::vector<PartitionColumnType> partition_types);
+                      std::vector<PartitionColumnType> partition_types, MemPool* mem_pool);
 
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
@@ -125,7 +125,6 @@ public:
 
         if (is_hash_map_eos()) {
             _hash_map_variant.reset();
-            _mem_pool.reset();
             _obj_pool.reset();
         }
 
@@ -148,7 +147,7 @@ private:
                                    PartitionChunkConsumer&& partition_chunk_consumer) {
         if (!_is_passthrough) {
             _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
-                    chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
+                    chunk, _partition_columns, _mem_pool, _obj_pool.get(),
                     std::forward<NewPartitionCallback>(new_partition_cb),
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }
@@ -250,7 +249,7 @@ private:
     const std::vector<PartitionColumnType> _partition_types;
 
     RuntimeState* _state = nullptr;
-    std::unique_ptr<MemPool> _mem_pool = nullptr;
+    MemPool* _mem_pool = nullptr;
     std::unique_ptr<ObjectPool> _obj_pool = nullptr;
 
     Columns _partition_columns;

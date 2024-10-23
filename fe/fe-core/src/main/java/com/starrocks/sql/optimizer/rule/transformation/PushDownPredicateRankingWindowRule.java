@@ -104,6 +104,10 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                     secondWindowOperator.getEnforceSortColumns());
         }
 
+        if (!context.getSessionVariable().getEnablePushDownPreAggWithRank()) {
+            return false;
+        }
+
         if (childExpr.inputAt(0).inputAt(0) != null &&
                 childExpr.inputAt(0).inputAt(0).getOp() instanceof LogicalWindowOperator) {
             LogicalWindowOperator thirdWindowOperator = childExpr.inputAt(0).inputAt(0).getOp().cast();
@@ -155,6 +159,10 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
             AggregateFunction function = (AggregateFunction) callOperator.getFunction();
             // if any function is only window function, we can't support this optimization.
             if (!function.isAggregateFn()) {
+                return false;
+            }
+            // if any function has at least two column, we don't support this optimization.
+            if (callOperator.getArguments().size() > 1) {
                 return false;
             }
         }
@@ -249,11 +257,15 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
             Type intermediateType = getIntermediateType(aggregation);
             // For merge agg function, we need to replace the agg input args to the update agg function result
             if (isGlobal) {
+                // make window function's input always nullable
+                // so In BE for every partition with topn elements left, we can output one column as window's input like below:
+                // row1  row2 ... row(n-1)   row(n)
+                // null  null      null      sum(column)
                 List<ScalarOperator> arguments = Lists.newArrayList(
-                        new ColumnRefOperator(column.getId(), intermediateType, column.getName(), column.isNullable()));
+                        new ColumnRefOperator(column.getId(), intermediateType, column.getName(), true));
                 appendConstantColumns(arguments, aggregation);
                 Function newFn = aggregation.getFunction().copy();
-                newFn.getArgs()[0] = intermediateType;
+                //                newFn.getArgs()[0] = intermediateType;
                 callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
                         newFn);
             } else {
@@ -261,8 +273,9 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                         aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());
             }
 
+            // output column always nullable
             newAggregationMap.put(
-                    new ColumnRefOperator(column.getId(), column.getType(), column.getName(), column.isNullable()),
+                    new ColumnRefOperator(column.getId(), column.getType(), column.getName(), true),
                     callOperator);
         }
 

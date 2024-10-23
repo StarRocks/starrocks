@@ -109,7 +109,9 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalAnalytic(OptExpression optExpression, Void context) {
             PhysicalWindowOperator operator = (PhysicalWindowOperator) optExpression.getOp();
-            checkFuncCall(operator.getAnalyticCall());
+            if (!operator.isInputIsBinary()) {
+                checkFuncCall(operator.getAnalyticCall());
+            }
             visit(optExpression, context);
             return null;
         }

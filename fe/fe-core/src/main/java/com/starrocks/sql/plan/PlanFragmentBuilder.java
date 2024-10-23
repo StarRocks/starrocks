@@ -2528,23 +2528,28 @@ public class PlanFragmentBuilder {
             }
 
             List<Expr> preAggFnCallExprs = new ArrayList<>();
+            List<SlotId> preAggOutputColumnIds = new ArrayList<>();
             if (preAggFnCalls != null) {
+                TupleDescriptor newTuple = context.getDescTbl().createTupleDescriptor();
                 for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
                     Expr preAggFunction = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
                     preAggFnCallExprs.add(preAggFunction);
 
+                    SlotId outputColumnId = new SlotId(entry.getKey().getId());
                     SlotDescriptor slotDesc =
-                            context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(entry.getKey().getId()));
+                            context.getDescTbl().addSlotDescriptor(newTuple, outputColumnId);
                     slotDesc.initFromExpr(preAggFunction);
                     slotDesc.setIsMaterialized(true);
                     slotDesc.setIsNullable(preAggFunction.isNullable());
                     slotDesc.setType(preAggFunction.getType());
                     context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDesc));
 
-                    resolvedTupleExprs.add(preAggFunction);
+                    //                    resolvedTupleExprs.add(preAggFunction);
                     outputColumnRefSet.except(List.of(entry.getKey()));
+
+                    preAggOutputColumnIds.add(outputColumnId);
                 }
             }
 
@@ -2573,6 +2578,7 @@ public class PlanFragmentBuilder {
                     orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
             sortInfo.setMaterializedTupleInfo(sortTuple, resolvedTupleExprs);
 
+
             SortNode sortNode = new SortNode(
                     context.getNextNodeId(),
                     inputFragment.getPlanRoot(),
@@ -2581,6 +2587,7 @@ public class PlanFragmentBuilder {
                     limit == Operator.DEFAULT_LIMIT,
                     0);
             sortNode.setTopNType(topNType);
+            sortNode.setPreAggFnCalls(preAggFnCallExprs);
             sortNode.setPreAggFnCalls(preAggFnCallExprs);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);

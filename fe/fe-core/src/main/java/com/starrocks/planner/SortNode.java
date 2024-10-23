@@ -43,6 +43,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.IdGenerator;
@@ -65,6 +66,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
@@ -89,6 +91,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private boolean withRuntimeFilters = false;
 
     private List<Expr> preAggFnCalls;
+
+    private List<SlotId> preAggOutputColumnId;
 
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
@@ -186,6 +190,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         buildRuntimeFilters.clear();
     }
 
+    public void setPreAggOutputColumnId(List<SlotId> preAggOutputColumnId) {
+        this.preAggOutputColumnId = preAggOutputColumnId;
+    }
+
     @Override
     protected String debugString() {
         List<String> strings = Lists.newArrayList();
@@ -249,8 +257,13 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
         }
-        if (preAggFnCalls != null) {
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
             msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
+        }
+        if (preAggOutputColumnId != null && !preAggOutputColumnId.isEmpty()) {
+            List<Integer> outputColumnsId = preAggOutputColumnId.stream().map(slotId -> slotId.asInt()).collect(
+                    Collectors.toList());
+            msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
         }
     }
 
@@ -297,6 +310,23 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             output.append(isAsc.next() ? "ASC" : "DESC");
         }
         output.append("\n");
+
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
+            output.append(detailPrefix).append("pre agg functions: ");
+            List<String> strings = Lists.newArrayList();
+
+            for (Expr fnCall : preAggFnCalls) {
+                strings.add("[");
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    strings.add(fnCall.toSql());
+                } else {
+                    strings.add(fnCall.explain());
+                }
+                strings.add("]");
+            }
+            output.append(Joiner.on(", ").join(strings));
+            output.append("\n");
+        }
 
         if (!analyticPartitionExprs.isEmpty()) {
             output.append(detailPrefix).append("analytic partition by: ");

@@ -312,6 +312,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
+    _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
+
     return _prepare_processing_mode(state, runtime_profile);
 }
 
@@ -339,7 +341,8 @@ Status Analytor::open(RuntimeState* state) {
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
-        _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+        _managed_fn_states.emplace_back(
+                std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
         return Status::OK();
     };
 
@@ -949,9 +952,16 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
             // instead of _partition.end to refer to the current right boundary.
             frame_end = std::min<int64_t>(frame_end, _partition.end);
         }
-        _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
-                partition_start, partition_end, frame_start, frame_end);
+        if (_is_merge_funcs) {
+            for (size_t j = frame_start; j < frame_end; j++) {
+                _agg_functions[i]->merge(_agg_fn_ctxs[i], data_columns[0],
+                                         _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], j);
+            }
+        } else {
+            _agg_functions[i]->update_batch_single_state_with_frame(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
+                    partition_start, partition_end, frame_start, frame_end);
+        }
     }
 }
 
