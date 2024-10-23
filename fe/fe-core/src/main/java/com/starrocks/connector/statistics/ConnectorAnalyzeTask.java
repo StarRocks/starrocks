@@ -21,11 +21,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ColumnStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
@@ -35,9 +36,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -48,7 +51,7 @@ public class ConnectorAnalyzeTask {
     private final String catalogName;
     private final Database db;
     private final Table table;
-    private final Set<String> columns;
+    private Set<String> columns;
 
     public ConnectorAnalyzeTask(Triple<String, Database, Table> tableTriple, Set<String> columns) {
         this.catalogName = Preconditions.checkNotNull(tableTriple.getLeft());
@@ -69,16 +72,17 @@ public class ConnectorAnalyzeTask {
         this.columns.removeAll(columns);
     }
 
-    private boolean skipAnalyzeUseLastUpdateTime(LocalDateTime lastUpdateTime) {
-        // do not know the table row count, use small table analyze interval
-        if (lastUpdateTime.plusSeconds(Config.connector_table_query_trigger_analyze_small_table_interval).
-                isAfter(LocalDateTime.now())) {
-            LOG.info("Table {}.{}.{} is already analyzed at {}, skip it", catalogName, db.getFullName(),
-                    table.getName(), lastUpdateTime);
-            return true;
-        } else {
-            return false;
+    private boolean needAnalyze(String column, LocalDateTime lastAnalyzedTime) {
+        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        // check table update time is after last analyzed time
+        if (tableUpdateTime != null) {
+            if (lastAnalyzedTime.isAfter(tableUpdateTime)) {
+                LOG.info("Table {}.{}.{} column {} last update time: {}, last analyzed time: {}, skip analyze",
+                        catalogName, db.getFullName(), table.getName(), column, tableUpdateTime, lastAnalyzedTime);
+                return false;
+            }
         }
+        return true;
     }
 
     public Optional<AnalyzeStatus> run() {
@@ -91,35 +95,50 @@ public class ConnectorAnalyzeTask {
                 .filter(status -> !status.getStatus().equals(StatsConstants.ScheduleStatus.FAILED))
                 .max(Comparator.comparing(ExternalAnalyzeStatus::getStartTime));
         if (lastAnalyzedStatus.isPresent()) {
+            // Do not analyze the table if the last analyze status is PENDING or RUNNING
             StatsConstants.ScheduleStatus lastScheduleStatus = lastAnalyzedStatus.get().getStatus();
             if (lastScheduleStatus == StatsConstants.ScheduleStatus.PENDING ||
                     lastScheduleStatus == StatsConstants.ScheduleStatus.RUNNING) {
                 LOG.info("Table {}.{}.{} analyze status is {}, skip it", catalogName, db.getFullName(),
                         table.getName(), lastScheduleStatus);
                 return Optional.empty();
-            } else {
-                // analyze status is Finished
-                // check the analyzed columns
-                List<String> analyzedColumns = lastAnalyzedStatus.get().getColumns();
-                if (analyzedColumns == null || analyzedColumns.isEmpty()) {
-                    // analyzed all columns in last analyzed time, check the update time
-                    if (skipAnalyzeUseLastUpdateTime(lastAnalyzedStatus.get().getStartTime())) {
-                        return Optional.empty();
-                    }
-                } else {
-                    Set<String> lastAnalyzedColumnsSet = new HashSet<>(analyzedColumns);
-                    if (lastAnalyzedColumnsSet.containsAll(columns)) {
-                        if (skipAnalyzeUseLastUpdateTime(lastAnalyzedStatus.get().getStartTime())) {
-                            return Optional.empty();
-                        }
+            }
+        }
+
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta(catalogName, db.getFullName(), table.getName());
+        Optional<LocalDateTime> lastEarliestAnalyzedTime = Optional.empty();
+        if (externalBasicStatsMeta != null) {
+            Map<String, LocalDateTime> columnLastAnalyzedTime = externalBasicStatsMeta.getColumnStatsMetaMap().values()
+                    .stream().collect(
+                            Collectors.toMap(ColumnStatsMeta::getColumnName, ColumnStatsMeta::getUpdateTime));
+            Set<String> needAnalyzeColumns = new HashSet<>(columns);
+
+            for (String column : columns) {
+                if (columnLastAnalyzedTime.containsKey(column)) {
+                    LocalDateTime lastAnalyzedTime = columnLastAnalyzedTime.get(column);
+                    Preconditions.checkNotNull(lastAnalyzedTime, "Last analyzed time is null");
+                    if (needAnalyze(column, lastAnalyzedTime)) {
+                        // need analyze columns, compare the last analyzed time, get the earliest time
+                        lastEarliestAnalyzedTime = lastEarliestAnalyzedTime.
+                                map(localDateTime -> localDateTime.isAfter(lastAnalyzedTime) ? lastAnalyzedTime : localDateTime).
+                                or(() -> Optional.of(lastAnalyzedTime));
                     } else {
-                        if (skipAnalyzeUseLastUpdateTime(lastAnalyzedStatus.get().getStartTime())) {
-                            columns.removeAll(lastAnalyzedColumnsSet);
-                        }
+                        needAnalyzeColumns.remove(column);
                     }
                 }
             }
+            columns = needAnalyzeColumns;
         }
+
+        if (columns.isEmpty()) {
+            LOG.info("Table {}.{}.{} columns {} are all up to date, skip analyze", catalogName, db.getFullName(),
+                    table.getName(), columns.stream().map(Object::toString).collect(Collectors.joining(",")));
+            return Optional.empty();
+        }
+
+        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table,
+                lastEarliestAnalyzedTime.orElse(LocalDateTime.MIN));
 
         // Init new analyze status
         AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
@@ -134,13 +153,14 @@ public class ConnectorAnalyzeTask {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setThreadLocalInfo();
         try {
-            return Optional.of(executeAnalyze(statsConnectCtx, analyzeStatus));
+            return Optional.of(executeAnalyze(statsConnectCtx, analyzeStatus, updatedPartitions));
         } finally {
             ConnectContext.remove();
         }
     }
 
-    public AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus) {
+    public AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus,
+                                        Set<String> updatedPartitions) {
         List<String> columnNames = Lists.newArrayList(columns);
         List<Type> columnTypes = columnNames.stream().map(col -> {
             Column column = table.getColumn(col);
@@ -150,7 +170,7 @@ public class ConnectorAnalyzeTask {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         return statisticExecutor.collectStatistics(statsConnectCtx,
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                        catalogName, db, table, null,
+                        catalogName, db, table, updatedPartitions == null ? null : new ArrayList<>(updatedPartitions),
                         columnNames, columnTypes,
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE, Maps.newHashMap()),
