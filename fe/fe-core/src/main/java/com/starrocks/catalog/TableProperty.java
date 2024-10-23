@@ -93,6 +93,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
+    public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
+    public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
@@ -706,10 +709,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPersistentIndexType() {
-        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
-        if (type.equals("LOCAL")) {
+        String defaultType = Config.enable_cloud_native_persistent_index_by_default ? CLOUD_NATIVE_INDEX_TYPE : LOCAL_INDEX_TYPE;
+        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, defaultType);
+        if (type.equals(LOCAL_INDEX_TYPE)) {
             persistentIndexType = TPersistentIndexType.LOCAL;
-        } else if (type.equals("CLOUD_NATIVE")) {
+        } else if (type.equals(CLOUD_NATIVE_INDEX_TYPE)) {
             persistentIndexType = TPersistentIndexType.CLOUD_NATIVE;
         }
         return this;
@@ -718,9 +722,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static String persistentIndexTypeToString(TPersistentIndexType type) {
         switch (type) {
             case LOCAL:
-                return "LOCAL";
+                return LOCAL_INDEX_TYPE;
             case CLOUD_NATIVE:
-                return "CLOUD_NATIVE";
+                return CLOUD_NATIVE_INDEX_TYPE;
             default:
                 // shouldn't happen
                 // for it has been checked outside

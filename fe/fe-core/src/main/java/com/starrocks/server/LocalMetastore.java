@@ -3833,7 +3833,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         tableProperty.buildEnablePersistentIndex();
 
         if (table.isCloudNativeTable()) {
-            // now default to LOCAL
+            // now default to CLOUD_NATIVE
             tableProperty.buildPersistentIndexType();
         }
 

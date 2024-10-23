@@ -227,7 +227,7 @@ public class CreateLakeTableTest {
             Assert.assertTrue(enablePersistentIndex);
             // check table persistentIndexType
             String indexType = lakeTable.getPersistentIndexTypeString();
-            Assert.assertEquals(indexType, "LOCAL");
+            Assert.assertEquals(indexType, "CLOUD_NATIVE");
 
             String sql = "show create table lake_test.table_with_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
@@ -245,7 +245,7 @@ public class CreateLakeTableTest {
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +
                         "PRIMARY KEY(c0)\n" +
                         "distributed by hash(c0) buckets 2\n" +
-                        "properties('enable_persistent_index' = 'true');"));
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'LOCAL');"));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.table_in_be_and_cn\n" +
@@ -256,7 +256,7 @@ public class CreateLakeTableTest {
             LakeTable lakeTable = getLakeTable("lake_test", "table_in_be_and_cn");
             // check table persistentIndex
             boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
-            Assert.assertFalse(enablePersistentIndex);
+            Assert.assertTrue(enablePersistentIndex);
 
             String sql = "show create table lake_test.table_in_be_and_cn";
             ShowCreateTableStmt showCreateTableStmt =
