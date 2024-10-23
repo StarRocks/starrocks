@@ -65,6 +65,7 @@ INSERT INTO t2 VALUES
   (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
   (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
 
+set cbo_extract_common_plan=false;
 set materialized_view_union_rewrite_mode=2;
 
 -- NOTE: test mv with the single table

@@ -273,7 +273,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalLimit(LogicalLimitOperator node, Void context) {
-        return "LogicalLimitOperator" + " {limit=" + node.getLimit() +
+        return "LogicalLimitOperator {" + node.getPhase().name() + " limit=" + node.getLimit() +
                 ", offset=" + node.getOffset() +
                 "}";
     }

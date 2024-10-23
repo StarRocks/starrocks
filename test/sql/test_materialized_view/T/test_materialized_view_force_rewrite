@@ -44,6 +44,7 @@ refresh materialized view mv1 with sync mode;
 
 analyze full table mv1;
 
+set cbo_extract_common_plan=false;
 set enable_force_rule_based_mv_rewrite=false;
 set materialized_view_rewrite_mode="disable";
 -- hit
