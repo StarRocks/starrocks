@@ -10,6 +10,45 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.5
+
+发布日期：2024 年 10 月 23 日
+
+### 新增功能
+
+- DATETIME 类型支持毫秒和微秒。
+- 资源组支持 CPU 硬隔离。
+
+### 功能优化
+
+- 优化了 Flat JSON 的性能和抽取策略。[#50696](https://github.com/StarRocks/starrocks/pull/50696)
+- 优化了以下 ARRAY 函数的内存占用：
+  - array_contains/array_position [#50912](https://github.com/StarRocks/starrocks/pull/50912)
+  - array_filter [#51363](https://github.com/StarRocks/starrocks/pull/51363)
+  - array_match [#51377](https://github.com/StarRocks/starrocks/pull/51377)
+  - array_map [#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- 优化了 Not Null 属性的 List 分区键导入 Null 值时的报错信息。[#51086](https://github.com/StarRocks/starrocks/pull/51086)
+- 优化了 Files 函数在认证信息错误时的报错信息。[#51697](https://github.com/StarRocks/starrocks/pull/51697)
+- 优化了 INSERT OVERWRITE 内部的统计信息。[#50417](https://github.com/StarRocks/starrocks/pull/50417)
+- 存算分离集群支持持久化索引文件的 GC。[#51684](https://github.com/StarRocks/starrocks/pull/51684)
+- 增加 FE 日志以定位 FE OOM 问题。[#51528](https://github.com/StarRocks/starrocks/pull/51528)
+- 支持从 FE 的元数据路径中恢复元数据。[#51040](https://github.com/StarRocks/starrocks/pull/51040)
+
+### 问题修复
+
+修复如下问题：
+
+- PIPE 因异常而导致死锁。 [#50841](https://github.com/StarRocks/starrocks/pull/50841)
+- 动态分区创建失败而堵塞后续分区创建。[#51440](https://github.com/StarRocks/starrocks/pull/51440)
+- UNION ALL 查询中加入 ORDER BY 报错。[#51647](https://github.com/StarRocks/starrocks/pull/51647)
+- UPDATE 语句中包含 CTE 导致 Hint 失效。[#51458](https://github.com/StarRocks/starrocks/pull/51458)
+- 系统视图 `statistics.loads_history` 中的 `load_finish_time` 字段在导入任务结束后依旧不符合预期的变更。[#51174](https://github.com/StarRocks/starrocks/pull/51174)
+- UDTF 错漏多字节 UTF-8。[#51232](https://github.com/StarRocks/starrocks/pull/51232)
+
+### 行为变更
+
+- 更改 EXPLAIN 语句的返回内容，更改后其返回内容等同于 EXPLAIN COST。您可以通过 FE 的动态参数`query_detail_explain_level` 来设置 EXPLAIN 返回的信息级别，默认为 `COSTS`，其他有效值包括 `NORMAL` 和 `VERBOSE`。 [#51439](https://github.com/StarRocks/starrocks/pull/51439)
+
 ## 3.3.4
 
 发布日期：2024 年 9 月 30 日
