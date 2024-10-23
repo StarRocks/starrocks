@@ -117,6 +117,7 @@ class SegmentedChunk;
 using SegmentedColumnPtr = std::shared_ptr<SegmentedColumn>;
 using SegmentedColumns = std::vector<SegmentedColumnPtr>;
 using SegmentedChunkPtr = std::shared_ptr<SegmentedChunk>;
+using SegmentedChunkWeakPtr = std::weak_ptr<SegmentedChunk>;
 
 using SchemaPtr = std::shared_ptr<Schema>;
 
