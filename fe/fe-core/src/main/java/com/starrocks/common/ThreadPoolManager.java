@@ -79,7 +79,8 @@ public class ThreadPoolManager {
 
     private static Map<String, ThreadPoolExecutor> nameToThreadPoolMap = Maps.newConcurrentMap();
 
-    private static String[] poolMerticTypes = {"pool_size", "active_thread_num", "task_in_queue"};
+    private static final String[] poolMerticTypes = {"pool_size", "active_thread_num", "task_in_queue",
+            "completed_task_count"};
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
@@ -104,6 +105,8 @@ public class ThreadPoolManager {
                                     return threadPool.getActiveCount();
                                 case "task_in_queue":
                                     return threadPool.getQueue().size();
+                                case "completed_task_count":
+                                    return (int) threadPool.getCompletedTaskCount();
                                 default:
                                     return 0;
                             }
