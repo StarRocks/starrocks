@@ -102,11 +102,13 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (tabletMeta.getTableId() != table.getId()) {
                 continue;
             }
-            if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
+            if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
                 continue;
             }
-            dirtyPartitionSet.add(tabletMeta.getPartitionId());
+            dirtyPartitionSet.add(tabletMeta.getPhysicalPartitionId());
+            LOG.info("add dirty partition: {} from tablet {}", tabletMeta.getPhysicalPartitionId(),
+                    finishedTablets.get(i).getTabletId());
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
