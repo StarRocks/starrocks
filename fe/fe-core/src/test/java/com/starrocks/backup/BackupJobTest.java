@@ -43,6 +43,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -85,6 +86,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BackupJobTest {
 
     private BackupJob job;
+    private BackupJob jobView;
     private Database db;
 
     private long dbId = 1;
@@ -94,6 +96,7 @@ public class BackupJobTest {
     private long tabletId = 5;
     private long backendId = 10000;
     private long version = 6;
+    private long viewId = 10;
 
     private long repoId = 20000;
     private AtomicLong id = new AtomicLong(50000);
@@ -165,6 +168,8 @@ public class BackupJobTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.AGG_KEYS);
+        View view = UnitTestUtil.createTestView(viewId);
+        db.registerTableUnlocked(view);
 
         new Expectations(globalStateMgr) {
             {
@@ -185,6 +190,10 @@ public class BackupJobTest {
                 globalStateMgr.getLocalMetastore().getTable("testDb", "testTable");
                 minTimes = 0;
                 result = db.getTable(tblId);
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", UnitTestUtil.VIEW_NAME);
+                minTimes = 0;
+                result = db.getTable(viewId);
 
                 globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
                 minTimes = 0;
@@ -227,6 +236,10 @@ public class BackupJobTest {
         List<TableRef> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
         job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+
+        List<TableRef> viewRefs = Lists.newArrayList();
+        viewRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.VIEW_NAME), null));
+        jobView = new BackupJob("label-view", dbId, UnitTestUtil.DB_NAME, viewRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
     @Test
@@ -370,5 +383,71 @@ public class BackupJobTest {
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());
+    }
+
+    @Test
+    public void testRunViewNormal() {
+        // 1.pending
+        Assert.assertEquals(BackupJobState.PENDING, jobView.getState());
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.SNAPSHOTING, jobView.getState());
+
+        BackupMeta backupMeta = jobView.getBackupMeta();
+        Assert.assertEquals(1, backupMeta.getTables().size());
+        View backupView = (View) backupMeta.getTable(UnitTestUtil.VIEW_NAME);
+        Assert.assertTrue(backupView != null);
+        Assert.assertTrue(backupView.getPartitions().isEmpty());
+
+        // 2. snapshoting finished, not snapshot needed
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.UPLOAD_SNAPSHOT, jobView.getState());
+
+        // 3. upload snapshots
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.UPLOADING, jobView.getState());
+
+        // 4. uploading
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.SAVE_META, jobView.getState());
+
+        // 5. save meta
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.UPLOAD_INFO, jobView.getState());
+        File metaInfo = new File(jobView.getLocalMetaInfoFilePath());
+        Assert.assertTrue(metaInfo.exists());
+        File jobInfo = new File(jobView.getLocalJobInfoFilePath());
+        Assert.assertTrue(jobInfo.exists());
+
+        BackupMeta restoreMetaInfo = null;
+        BackupJobInfo restoreJobInfo = null;
+        try {
+            restoreMetaInfo = BackupMeta.fromFile(jobView.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
+            Assert.assertEquals(1, restoreMetaInfo.getTables().size());
+            View view = (View) restoreMetaInfo.getTable(viewId);
+            Assert.assertNotNull(view);
+            Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.VIEW_NAME));
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        Assert.assertNull(jobView.getBackupMeta());
+        Assert.assertNull(jobView.getJobInfo());
+
+        // 6. upload_info
+        jobView.run();
+        Assert.assertEquals(Status.OK, jobView.getStatus());
+        Assert.assertEquals(BackupJobState.FINISHED, jobView.getState());
+
+        try {
+            // test get backup info
+            jobView.getInfo();
+        } catch (Exception ignore) {
+        }
     }
 }

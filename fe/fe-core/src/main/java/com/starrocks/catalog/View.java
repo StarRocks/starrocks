@@ -132,6 +132,10 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+    public long getSqlMode() {
+        return sqlMode;
+    }
+
     /**
      * Initializes the originalViewDef, inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.
