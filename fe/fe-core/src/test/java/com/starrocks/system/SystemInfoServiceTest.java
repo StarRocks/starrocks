@@ -21,6 +21,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -180,6 +181,9 @@ public class SystemInfoServiceTest {
 
         LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
@@ -189,12 +193,16 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
         service.addBackend(be);
         be.setStarletPort(1001);
-        service.dropBackend("newHost", 1000, false);
+        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }

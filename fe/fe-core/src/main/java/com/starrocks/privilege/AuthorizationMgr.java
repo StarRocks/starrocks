@@ -148,7 +148,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
-                    ObjectType.STORAGE_VOLUME);
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
                         provider.getAvailablePrivType(objectType));
@@ -195,9 +196,11 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    List.of(PrivilegeType.NODE),
+                    List.of(PrivilegeType.NODE, PrivilegeType.CREATE_WAREHOUSE),
                     null,
                     false);
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, ObjectType.WAREHOUSE,
+                    provider.getAvailablePrivType(ObjectType.WAREHOUSE));
             rolePrivilegeCollection.disableMutable();
 
             // 4. user_admin
@@ -270,7 +273,8 @@ public class AuthorizationMgr {
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
-                || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);

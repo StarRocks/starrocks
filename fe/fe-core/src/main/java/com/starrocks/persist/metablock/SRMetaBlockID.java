@@ -97,6 +97,11 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
 
+    /**
+     * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
+     */
+    public static final SRMetaBlockID WAREHOUSE_MGR = new SRMetaBlockID(20001);
+
     @Override
     public String toString() {
         return String.valueOf(id);

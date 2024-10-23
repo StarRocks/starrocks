@@ -34,9 +34,11 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
@@ -412,6 +414,22 @@ public class Authorizer {
             } catch (AccessDeniedException e) {
                 return new Pair<>(false, true);
             }
+        }
+    }
+
+    public static void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+                                            PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkWarehouseAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        // Any user has an implicit usage permission on the default_warehouse
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(name);
+        if (warehouse.getId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                    .checkAnyActionOnWarehouse(currentUser, roleIds, name);
         }
     }
 }

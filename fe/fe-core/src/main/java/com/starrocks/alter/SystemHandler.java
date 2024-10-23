@@ -161,7 +161,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddBackendClause(AddBackendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(clause);
             });
             return null;
         }
@@ -291,7 +291,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddComputeNodeClause(AddComputeNodeClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(clause);
             });
             return null;
         }
@@ -299,7 +299,7 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitDropComputeNodeClause(DropComputeNodeClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNodes(clause.getHostPortPairs());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropComputeNodes(clause);
             });
             return null;
         }
