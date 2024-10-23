@@ -116,6 +116,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
 
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
+                locker.lockTableWithIntensiveDbLock(db, table, LockType.READ);
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 try {
                     OlapTable olapTable = (OlapTable) table;
