@@ -23,7 +23,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
@@ -310,12 +309,7 @@ public class StatisticsCollectJobFactory {
                                                    Database db, Table table, List<String> columnNames,
                                                    List<Type> columnTypes) {
         // get updated partitions
-        Set<String> updatedPartitions = null;
-        try {
-            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(statisticsUpdateTime, 60);
-        } catch (Exception e) {
-            // ConnectorPartitionTraits do not support all type of table, ignore exception
-        }
+        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
         LOG.info("create external full statistics job for table: {}, partitions: {}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,

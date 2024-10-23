@@ -73,6 +73,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -229,6 +230,17 @@ public class StatisticUtils {
                 return null;
             }
         }
+    }
+
+    public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+        // get updated partitions
+        Set<String> updatedPartitions = null;
+        try {
+            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(checkTime, 60);
+        } catch (Exception e) {
+            // ConnectorPartitionTraits do not support all type of table, ignore exception
+        }
+        return updatedPartitions;
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
