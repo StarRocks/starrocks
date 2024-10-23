@@ -31,7 +31,6 @@ displayed_sidebar: docs
 - 优化了 Files 函数在认证信息错误时的报错信息。[#51697](https://github.com/StarRocks/starrocks/pull/51697)
 - 优化了 INSERT OVERWRITE 内部的统计信息。[#50417](https://github.com/StarRocks/starrocks/pull/50417)
 - 存算分离集群支持持久化索引文件的 GC。[#51684](https://github.com/StarRocks/starrocks/pull/51684)
-- 优化 staros listShard agent，删除不必要冗余信息。[#51628](https://github.com/StarRocks/starrocks/pull/51628)
 - 增加 FE 日志以定位 FE OOM 问题。[#51528](https://github.com/StarRocks/starrocks/pull/51528)
 - 支持从 FE 的元数据路径中恢复元数据。[#51040](https://github.com/StarRocks/starrocks/pull/51040)
 
