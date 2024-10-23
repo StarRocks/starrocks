@@ -10,6 +10,45 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.5
+
+Release date: October 23, 2024
+
+### New Features
+
+- Supports millisecond and microsecond precision in the DATETIME type.
+- Resource groups support CPU hard isolation.
+
+### Improvements
+
+- Optimized performance and extraction strategy for Flat JSON. [#50696](https://github.com/StarRocks/starrocks/pull/50696)
+- Reduced memory usage for the following ARRAY functions:
+  - array_contains/array_position [#50912](https://github.com/StarRocks/starrocks/pull/50912)
+  - array_filter [#51363](https://github.com/StarRocks/starrocks/pull/51363)
+  - array_match [#51377](https://github.com/StarRocks/starrocks/pull/51377)
+  - array_map [#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- Optimized error messages when loading `Null` values into List partition keys with the `Not Null` attribute. [#51086](https://github.com/StarRocks/starrocks/pull/51086)
+- Optimized error messages for Files() when authentication fails in the Files function. [#51697](https://github.com/StarRocks/starrocks/pull/51697)
+- Optimized internal statistics for `INSERT OVERWRITE`. [#50417](https://github.com/StarRocks/starrocks/pull/50417)
+- Shared-data clusters support garbage collection (GC) for persistent index files. [#51684](https://github.com/StarRocks/starrocks/pull/51684)
+- Added FE logs to help diagnose FE out-of-memory (OOM) issues. [#51528](https://github.com/StarRocks/starrocks/pull/51528)
+- Supports recovering metadata from the metadata directory of FE. [#51040](https://github.com/StarRocks/starrocks/pull/51040)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- A deadlock issue caused by PIPE exceptions. [#50841](https://github.com/StarRocks/starrocks/pull/50841)
+- Dynamic partition creation failures block subsequent partition creation. [#51440](https://github.com/StarRocks/starrocks/pull/51440)
+- An error is returned for `UNION ALL` queries with `ORDER BY`. [#51647](https://github.com/StarRocks/starrocks/pull/51647)
+- CTE in UPDATE statements causes hints to be ignored. [#51458](https://github.com/StarRocks/starrocks/pull/51458)
+- The `load_finish_time` field in the system-defined view `statistics.loads_history` does not update as expected after a loading task is completed. [#51174](https://github.com/StarRocks/starrocks/pull/51174)
+- UDTF mishandles multibyte UTF-8 characters. [#51232](https://github.com/StarRocks/starrocks/pull/51232)
+
+### Behavior Changes
+
+- Modified the return content of the `EXPLAIN` statement. After the change, the return content is equivalent to `EXPLAIN COST`. You can configure the level of details returned by `EXPLAIN` using the dynamic FE parameter `query_detail_explain_level`. The default value is `COSTS`, with other valid values being `NORMAL` and `VERBOSE`.  [#51439](https://github.com/StarRocks/starrocks/pull/51439)
+
 ## 3.3.4
 
 Release date: September 30, 2024
