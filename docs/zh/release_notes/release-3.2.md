@@ -4,6 +4,33 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.12
+
+发布日期：2024 年 10 月 23 日
+
+### 功能优化
+
+- 优化在部分复杂查询场景下 BE 内存分配和统计，避免 OOM。[#51382](https://github.com/StarRocks/starrocks/pull/51382)
+- 优化在 Schema Change 场景下 FE 的内存使用。[#48569](https://github.com/StarRocks/starrocks/pull/48569)
+- 优化从 Follower FE 节点查询系统定义视图 `information_schema.routine_load_jobs` 时 Job 状态的展示。[#51763](https://github.com/StarRocks/starrocks/pull/51763)
+- 支持备份还原 List 分区表。[#51993](https://github.com/StarRocks/starrocks/pull/51993)
+
+### 问题修复
+
+修复了如下问题：
+
+- 写入 Hive 失败后，报错信息丢失。[#33167](https://github.com/StarRocks/starrocks/pull/33167)
+- 函数 `array_map` 在常量参数过多时导致 Crash。[#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- 表达式分区表的分区列里有特殊字符会导致 FE CheckPoint 失败。[#51677](https://github.com/StarRocks/starrocks/pull/51677)
+- 访问系统定义视图 `information_schema.fe_locks` 导致 Crash。[#51742](https://github.com/StarRocks/starrocks/pull/51742)
+- 查询生成列报错。[#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- 表名存在特殊字符时执行 Optimize Table 失败。[#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- 某些场景下 Tablet 无法 Balance。[#51828](https://github.com/StarRocks/starrocks/pull/51828)
+
+### 行为变更
+
+- 支持动态修改备份还原相关的参数。[#52111](https://github.com/StarRocks/starrocks/pull/52111)
+
 ## 3.2.11
 
 发布日期：2024 年 9 月 9 日
