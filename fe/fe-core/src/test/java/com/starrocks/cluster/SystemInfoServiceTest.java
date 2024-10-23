@@ -48,10 +48,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -93,6 +96,9 @@ public class SystemInfoServiceTest {
 
     @Before
     public void setUp() throws IOException {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
         new Expectations() {
             {
                 editLog.logAddBackend((Backend) any);
@@ -137,6 +143,10 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
@@ -236,7 +246,8 @@ public class SystemInfoServiceTest {
     @Test
     public void addBackendTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
@@ -247,13 +258,13 @@ public class SystemInfoServiceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("already exists"));
         }
@@ -277,7 +288,8 @@ public class SystemInfoServiceTest {
     @Test
     public void addComputeNodeTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -290,7 +302,7 @@ public class SystemInfoServiceTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
             Assert.fail();
         }
@@ -299,7 +311,7 @@ public class SystemInfoServiceTest {
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("Compute node already exists with same host"));
         }
@@ -308,7 +320,8 @@ public class SystemInfoServiceTest {
     @Test
     public void removeBackendTest() throws AnalysisException {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
@@ -319,12 +332,13 @@ public class SystemInfoServiceTest {
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt);
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt = new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        DropBackendClause dropStmt =
+                new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt), new ConnectContext(null));
         try {
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropStmt);
@@ -366,16 +380,18 @@ public class SystemInfoServiceTest {
             }
         };
 
-        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt2), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt2.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(stmt2);
         } catch (DdlException e) {
             e.printStackTrace();
         }
 
-        DropBackendClause dropStmt2 = new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        DropBackendClause dropStmt2 =
+                new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(dropStmt2), new ConnectContext(null));
 
         try {
@@ -396,7 +412,8 @@ public class SystemInfoServiceTest {
     @Test
     public void testSeqChooseComputeNodes() {
         clearAllBackend();
-        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME, NodePosition.ZERO);
 
         com.starrocks.sql.analyzer.Analyzer analyzer = new com.starrocks.sql.analyzer.Analyzer(
                 com.starrocks.sql.analyzer.Analyzer.AnalyzerVisitor.getInstance());
@@ -409,7 +426,7 @@ public class SystemInfoServiceTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
 
         try {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNodes(stmt);
         } catch (DdlException e) {
             Assert.fail();
         }

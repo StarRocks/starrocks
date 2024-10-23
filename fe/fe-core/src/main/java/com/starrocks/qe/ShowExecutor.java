@@ -83,6 +83,7 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -146,6 +147,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -229,6 +231,8 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -242,6 +246,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2673,6 +2678,78 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, ConnectContext context) {
             List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                throw ErrorReportException.report(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+            }
+
+            PatternMatcher matcher = null;
+            if (!statement.getPattern().isEmpty()) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.WAREHOUSE.getCaseSensibility());
+            }
+            PatternMatcher finalMatcher = matcher;
+
+            List<List<String>> rowSet = warehouseMgr.getAllWarehouses().stream()
+                    .filter(warehouse -> finalMatcher == null || finalMatcher.match(warehouse.getName()))
+                    .filter(warehouse -> {
+                        try {
+                            Authorizer.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), warehouse.getName());
+                        } catch (AccessDeniedException e) {
+                            return false;
+                        }
+                        return true;
+                    }).sorted(Comparator.comparing(Warehouse::getId)).map(Warehouse::getWarehouseInfo)
+                    .collect(Collectors.toList());
+            return new ShowResultSet(statement.getMetaData(), rowSet);
+        }
+
+        @Override
+        public ShowResultSet visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+
+            // filter by pattern or warehouseName
+            String warehouseName = null;
+            PatternMatcher matcher = null;
+            if (statement.getWarehouseName() != null) {
+                warehouseName = statement.getWarehouseName();
+            } else if (statement.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.WAREHOUSE.getCaseSensibility());
+            }
+
+            List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().stream().filter(
+                    warehouse -> {
+                        try {
+                            Authorizer.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), warehouse.getName());
+                        } catch (AccessDeniedException e) {
+                            return false;
+                        }
+                        return true;
+                    }
+            ).collect(Collectors.toList());
+
+            for (Warehouse wh : warehouseList) {
+                if (warehouseName != null && !wh.getName().equalsIgnoreCase(warehouseName)) {
+                    continue;
+                }
+
+                if (matcher != null && !matcher.match(wh.getName())) {
+                    continue;
+                }
+
+                rows.addAll(wh.getWarehouseNodesInfo());
+            }
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
