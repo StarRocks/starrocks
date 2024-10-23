@@ -78,9 +78,9 @@ public class PaimonScanNodeTest {
         writer.complete();
 
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
 
         DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
@@ -103,9 +103,9 @@ public class PaimonScanNodeTest {
         writer.complete();
 
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
 
         DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)

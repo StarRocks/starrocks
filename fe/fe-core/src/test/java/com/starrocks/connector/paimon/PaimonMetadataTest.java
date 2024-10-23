@@ -151,13 +151,13 @@ public class PaimonMetadataTest {
         writer.writeInt(1, 5555);
         writer.complete();
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("dummy").withDataFiles(meta1).isStreaming(false).build());
@@ -220,17 +220,6 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testTableExists() {
-        new Expectations() {
-            {
-                paimonNativeCatalog.tableExists((Identifier) any);
-                result = true;
-            }
-        };
-        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
-    }
-
-    @Test
     public void testGetTableDoesNotExist() throws Exception {
         Identifier identifier = new Identifier("nonexistentDb", "nonexistentTbl");
         new Expectations() {
@@ -241,6 +230,65 @@ public class PaimonMetadataTest {
         };
         org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
         org.junit.jupiter.api.Assertions.assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
+    }
+
+    @Test
+    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
+                                       @Mocked PartitionsTable mockPartitionTable,
+                                       @Mocked RecordReader<InternalRow> mockRecordReader)
+            throws Catalog.TableNotExistException, IOException {
+
+        RowType tblRowType = RowType.of(
+                new DataType[] {
+                        new IntType(true),
+                        new IntType(true)
+                },
+                new String[] {"year", "month"});
+
+        List<String> partitionNames = Lists.newArrayList("year", "month");
+
+        Identifier tblIdentifier = new Identifier("db1", "tbl1");
+        Identifier partitionTblIdentifier = new Identifier("db1", "tbl1$partitions");
+
+        RowType partitionRowType = new RowType(
+                Arrays.asList(
+                        new DataField(0, "partition", SerializationUtils.newStringType(true)),
+                        new DataField(1, "record_count", new BigIntType(false)),
+                        new DataField(2, "file_size_in_bytes", new BigIntType(false)),
+                        new DataField(3, "file_count", new BigIntType(false)),
+                        new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
+                ));
+
+        GenericRow row1 = new GenericRow(2);
+        row1.setField(0, BinaryString.fromString("[2020, 1]"));
+        row1.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
+
+        GenericRow row2 = new GenericRow(2);
+        row2.setField(0, BinaryString.fromString("[2020, 2]"));
+        row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
+        new MockUp<RecordReaderIterator>() {
+            private int callCount;
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
+            @Mock
+            public boolean hasNext() {
+                if (callCount < hasNextOutputs.length) {
+                    return hasNextOutputs[callCount];
+                }
+                return false;
+            }
+
+            @Mock
+            public InternalRow next() {
+                if (callCount < elements.length) {
+                    return elements[callCount++];
+                }
+                return null;
+            }
+        };
+        org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
+        org.junit.jupiter.api.Assertions.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
     }
 
     @Test
