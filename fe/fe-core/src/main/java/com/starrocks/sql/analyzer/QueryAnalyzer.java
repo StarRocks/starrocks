@@ -55,8 +55,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1362,7 +1360,6 @@ public class QueryAnalyzer {
             }
 
             MetaUtils.checkDbNullAndReport(db, dbName);
-            Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
@@ -1373,6 +1370,7 @@ public class QueryAnalyzer {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
+<<<<<<< HEAD
                         try {
                             // Add read lock to avoid concurrent problems.
                             locker.lockDatabase(db, LockType.READ);
@@ -1384,6 +1382,14 @@ public class QueryAnalyzer {
                         } finally {
                             locker.unLockDatabase(db, LockType.READ);
                         }
+=======
+                        // Add read lock to avoid concurrent problems.
+                        OlapTable mvOlapTable = new OlapTable();
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                        table = mvOlapTable;
+>>>>>>> 77ecc912fd ([BugFix] Remove query sync mv read lock (#52239))
                     }
                 }
             } else {
