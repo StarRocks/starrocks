@@ -4,6 +4,33 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.12
+
+Release date: October 23, 2024
+
+### Improvements
+
+- Optimized memory allocation and statistics in BE for certain complex query scenarios to avoid OOM. [#51382](https://github.com/StarRocks/starrocks/pull/51382)
+- Optimized memory usage in FE in Schema Change scenarios. [#48569](https://github.com/StarRocks/starrocks/pull/48569)
+- Optimized the job status display when querying the system-defined view `information_schema.routine_load_jobs` from Follower FE nodes. [#51763](https://github.com/StarRocks/starrocks/pull/51763)
+- Supports Backup and Restore of with the List partitioned tables. [#51993](https://github.com/StarRocks/starrocks/pull/51993)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The error message was lost after writing to Hive failed. [#33167](https://github.com/StarRocks/starrocks/pull/33167)
+- The `array_map` function causes a crash when excessive constant parameters are used. [#51244](https://github.com/StarRocks/starrocks/pull/51244)
+- Special characters in the PARTITION BY columns of expression partitioned tables cause FE CheckPoint failures. [#51677](https://github.com/StarRocks/starrocks/pull/51677)
+- Accessing the system-defined view `information_schema.fe_locks` causes a crash. [#51742](https://github.com/StarRocks/starrocks/pull/51742)
+- Querying generated columns causes an error. [#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- Optimize Table fails when the table name contains special characters. [#51755](https://github.com/StarRocks/starrocks/pull/51755)
+- Tablets could not be balanced in certain scenarios. [#51828](https://github.com/StarRocks/starrocks/pull/51828)
+
+### Behavior Changes
+
+- Supports dynamic modification of Backup and Restore-related parameters.[#52111](https://github.com/StarRocks/starrocks/pull/52111)
+
 ## 3.2.11
 
 Release date: September 9, 2024
