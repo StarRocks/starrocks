@@ -46,6 +46,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -76,8 +77,10 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -87,7 +90,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -191,7 +197,7 @@ public class RestoreJob extends AbstractJob {
     private AgentBatchTask batchTask;
 
     boolean enableColocateRestore = Config.enable_colocate_restore;
-
+    
     public RestoreJob() {
         super(JobType.RESTORE);
     }
@@ -484,9 +490,15 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isNativeTableOrMaterializedView()) {
-                    status = new Status(ErrCode.COMMON_ERROR, "Only support restore OLAP table: " + tbl.getName());
+                if (!tbl.isSupportBackupRestore()) {
+                    status = new Status(ErrCode.UNSUPPORTED,
+                                        "Table: " + tbl.getName() +
+                                        " can not support backup restore, type: {}" + tbl.getType());
                     return;
+                }
+
+                if (tbl.isOlapView()) {
+                    continue;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -535,9 +547,10 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isNativeTableOrMaterializedView()) {
-                        status = new Status(ErrCode.COMMON_ERROR,
-                                "Only support retore olap table: " + localTbl.getName());
+                    if (!localTbl.isSupportBackupRestore()) {
+                        status = new Status(ErrCode.UNSUPPORTED,
+                                            "Table: " + localTbl.getName() +
+                                            " can not support backup restore, type: {}" + localTbl.getType());
                         return;
                     }
                     OlapTable localOlapTbl = (OlapTable) localTbl;
@@ -762,6 +775,14 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
+        // add all restored olap view into globalStateMgr
+        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
+                                       .map(x -> (View) x).collect(Collectors.toList());
+        addRestoreOlapView(restoredOlapViews);
+        if (!status.ok()) {
+            return;
+        }
+
         LOG.info("finished to prepare meta. begin to make snapshot. {}", this);
 
         // begin to make snapshots for all replicas
@@ -816,6 +837,38 @@ public class RestoreJob extends AbstractJob {
             String idStr = Joiner.on(", ").join(subList);
             status = new Status(ErrCode.COMMON_ERROR,
                     "Failed to create replicas for restore. unfinished marks: " + idStr);
+        }
+    }
+
+    protected void addRestoreOlapView(List<View> restoredOlapViews) {
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+
+        ConnectContext context = new ConnectContext();
+        context.setDatabase(db.getFullName());
+        context.setGlobalStateMgr(globalStateMgr);
+        context.setStartTime();
+        context.setThreadLocalInfo();
+
+        for (View restoredOlapView : restoredOlapViews) {
+            Table localTbl = db.getTable(restoredOlapView.getId());
+            if (localTbl != null && !localTbl.isOlapView()) {
+                status = new Status(ErrCode.BAD_REPLACE,
+                                    "Table: " + localTbl.getName() + " has existed and it is not a View");
+                return;
+            }
+
+            CreateViewStmt stmt = new CreateViewStmt(false, true, new TableName(db.getFullName(), restoredOlapView.getName()),
+                    Lists.newArrayList(), restoredOlapView.getComment(), restoredOlapView.getQueryStatement(), NodePosition.ZERO);
+            stmt.setColumns(restoredOlapView.getColumns());
+            stmt.setInlineViewDef(restoredOlapView.getInlineViewDef());
+            context.getSessionVariable().setSqlMode(restoredOlapView.getSqlMode());
+            try {
+                GlobalStateMgr.getCurrentState().createView(stmt);
+            } catch (DdlException e) {
+                status = new Status(ErrCode.COMMON_ERROR,
+                                    "Failed to create view for restore. err message: " + e.getMessage());
+                return;
+            }
         }
     }
 
@@ -1099,6 +1152,10 @@ public class RestoreJob extends AbstractJob {
         } finally {
             db.writeUnlock();
         }
+
+        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
+                                       .map(x -> (View) x).collect(Collectors.toList());
+        addRestoreOlapView(restoredOlapViews);
 
         LOG.info("replay check and prepare meta. {}", this);
     }
@@ -1461,7 +1518,7 @@ public class RestoreJob extends AbstractJob {
                                 tblInfo.name);
                         continue;
                     }
-                    if (!tbl.isNativeTableOrMaterializedView()) {
+                    if (!tbl.isSupportBackupRestore()) {
                         continue;
                     }
                     LOG.info("do post actions for table : {}", tbl.getName());
@@ -1692,7 +1749,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isNativeTableOrMaterializedView()) {
+            if (!tbl.isSupportBackupRestore() || tbl.isOlapView()) {
                 continue;
             }
 

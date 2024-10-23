@@ -825,4 +825,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.VIEW) &&
                 !type.equals(TableType.HIVE_VIEW);
     }
+
+    public boolean isSupportBackupRestore() {
+        return isOlapTableOrMaterializedView() || isOlapView();
+    }
 }
