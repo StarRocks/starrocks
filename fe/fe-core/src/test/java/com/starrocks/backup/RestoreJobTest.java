@@ -53,8 +53,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -62,6 +64,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -765,5 +768,188 @@ public class RestoreJobTest {
 
         Config.enable_colocate_restore = false;
     }
-}
 
+    @Test
+    public void testRestoreView() {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = id.incrementAndGet();
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        new Expectations() {
+            {
+                editLog.logBackupJob((BackupJob) any);
+                minTimes = 0;
+                result = new Delegate() {
+                    public void logBackupJob(BackupJob job) {
+                        System.out.println("log backup job: " + job);
+                    }
+                };
+            }
+        };
+
+        new Expectations() {
+            {
+                repo.upload(anyString, anyString);
+                result = Status.OK;
+                minTimes = 0;
+
+                List<BackupMeta> backupMetas = Lists.newArrayList();
+                repo.getSnapshotMetaFile(label, backupMetas, -1, -1);
+                minTimes = 0;
+                result = new Delegate() {
+                    public Status getSnapshotMetaFile(String label, List<BackupMeta> backupMetas) {
+                        backupMetas.add(backupMeta);
+                        return Status.OK;
+                    }
+                };
+            }
+        };
+
+        new MockUp<MarkedCountDownLatch>() {
+            @Mock
+            boolean await(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
+        Locker locker = new Locker();
+
+        // gen BackupJobInfo
+        jobInfo = new BackupJobInfo();
+        jobInfo.backupTime = System.currentTimeMillis();
+        jobInfo.dbId = CatalogMocker.TEST_DB_ID;
+        jobInfo.dbName = CatalogMocker.TEST_DB_NAME;
+        jobInfo.name = label;
+        jobInfo.success = true;
+
+        View restoredView = (View) db.getTable(CatalogMocker.TEST_TBL6_ID);
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+        new MockUp<View>() {
+            @Mock
+            public synchronized QueryStatement getQueryStatement() throws UserException {
+                return null;
+            }
+        };
+
+        new Expectations() {
+            {
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                minTimes = 0;
+                result = com.starrocks.common.Status.OK;
+            }
+        };
+
+        List<Table> tbls = Lists.newArrayList();
+        tbls.add(restoredView);
+        backupMeta = new BackupMeta(tbls);
+
+        db.dropTable(restoredView.getName());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+        {
+            new MockUp<View>() {
+                @Mock
+                public synchronized QueryStatement init() throws UserException {
+                    return null;
+                }
+            };
+            job.run();
+        }
+        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+
+        // restore when the view already existed
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        Assert.assertEquals(RestoreJobState.PENDING, job.getState());
+
+        {
+            new MockUp<View>() {
+                @Mock
+                public synchronized QueryStatement init() throws UserException {
+                    return null;
+                }
+            };
+            job.run();
+        }
+        Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+        Assert.assertEquals(0, job.getFileMapping().getMapping().size());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.DOWNLOADING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMIT, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.COMMITTING, job.getState());
+
+        job.run();
+        Assert.assertEquals(Status.OK, job.getStatus());
+        Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+    }
+}
