@@ -123,6 +123,11 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
         }
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        if (getCanLocalShuffle()) {
+            msg.nestloop_join_node.setInterpolate_passthrough(sv.isHashJoinInterpolatePassthrough());
+        }
+
 
         if (!buildRuntimeFilters.isEmpty()) {
             msg.nestloop_join_node.setBuild_runtime_filters(
