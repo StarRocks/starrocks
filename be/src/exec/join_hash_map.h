@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "storage/chunk_helper.h"
+#include "column/chunk_helper.h"
 #include "util/runtime_profile.h"
 #define JOIN_HASH_MAP_H
 

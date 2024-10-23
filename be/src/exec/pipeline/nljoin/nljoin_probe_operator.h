@@ -16,12 +16,12 @@
 
 #include <utility>
 
+#include "column/chunk_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

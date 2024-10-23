@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "column/chunk_helper.h"
 #include "column/stream_chunk.h"
 #include "common/status.h"
-#include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/tablet.h"
 

@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "column/chunk_helper.h"
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

@@ -18,6 +18,7 @@
 #include <memory>
 #include <numeric>
 
+#include "column/chunk_helper.h"
 #include "exec/cross_join_node.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/spill/executor.h"
@@ -27,7 +28,6 @@
 #include "exprs/expr.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

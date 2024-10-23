@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/chunk_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -31,7 +32,6 @@
 #include "exprs/expr_context.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class RuntimeFilterBuildDescriptor;

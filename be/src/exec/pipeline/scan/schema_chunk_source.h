@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include "column/chunk_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class SchemaScannerParam;

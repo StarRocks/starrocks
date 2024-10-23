@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "column/chunk_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
@@ -26,7 +27,6 @@
 #include "exec/spill/spiller.hpp"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
-#include "storage/chunk_helper.h"
 #include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
 

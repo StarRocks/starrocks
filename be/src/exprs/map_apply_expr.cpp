@@ -17,9 +17,8 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "column/chunk_helper.h"
 #include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
@@ -27,8 +26,6 @@
 #include "exprs/lambda_function.h"
 #include "exprs/map_expr.h"
 #include "glog/logging.h"
-#include "runtime/user_function_cache.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 

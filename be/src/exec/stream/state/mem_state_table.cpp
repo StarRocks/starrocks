@@ -14,6 +14,8 @@
 
 #include "mem_state_table.h"
 
+#include "storage/chunk_helper.h"
+
 namespace starrocks::stream {
 namespace {
 
