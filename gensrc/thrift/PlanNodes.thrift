@@ -705,6 +705,7 @@ struct TNestLoopJoinNode {
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
+    5: optional bool interpolate_passthrough = false
 }
 
 enum TAggregationOp {

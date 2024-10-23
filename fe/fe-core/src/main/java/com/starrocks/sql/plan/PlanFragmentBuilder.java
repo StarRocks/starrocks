@@ -2719,7 +2719,7 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            if (node.getCanLocalShuffle()) {
+            if (!node.getOutputRequireHashPartition()) {
                 joinNode.setCanLocalShuffle(true);
             }
 
