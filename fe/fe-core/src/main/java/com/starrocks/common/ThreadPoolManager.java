@@ -251,5 +251,21 @@ public class ThreadPoolManager {
             executor.setMaximumPoolSize(poolSize);
         }
     }
+
+    /**
+     * Calculate the number of CPU cores available on the machine.
+     *
+     * @return The number of CPU cores available.
+     */
+    public static int cpuCores() {
+        return Runtime.getRuntime().availableProcessors();
+    }
+
+    /**
+     * Use at most 3/4 to execute cpu-intensive background tasks
+     */
+    public static int cpuIntensiveThreadPoolSize() {
+        return Integer.max(2, cpuCores() * 3 / 4);
+    }
 }
 
