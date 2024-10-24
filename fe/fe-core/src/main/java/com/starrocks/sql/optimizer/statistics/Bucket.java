@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.util.Objects;
+
 public class Bucket {
     private final double lower;
     private final double upper;
@@ -42,5 +44,24 @@ public class Bucket {
 
     public Long getUpperRepeats() {
         return upperRepeats;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Bucket bucket = (Bucket) o;
+        return Double.compare(lower, bucket.lower) == 0 && Double.compare(upper, bucket.upper) == 0 &&
+                Objects.equals(count, bucket.count) &&
+                Objects.equals(upperRepeats, bucket.upperRepeats);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(lower, upper, count, upperRepeats);
     }
 }

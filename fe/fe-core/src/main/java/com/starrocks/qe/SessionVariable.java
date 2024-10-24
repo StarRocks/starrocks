@@ -356,6 +356,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+    public static final String CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION = "cbo_enable_histogram_join_estimation";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -1489,6 +1490,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownGroupingSetReshuffle = true;
+
+    @VarAttr(name = CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION, flag = VariableMgr.INVISIBLE)
+    private boolean cboEnableHistogramJoinEstimation = true;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
@@ -3477,6 +3481,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownDistinctBelowWindow(boolean flag) {
         this.cboPushDownDistinctBelowWindow = flag;
+    }
+
+    public boolean isCboEnableHistogramJoinEstimation() {
+        return cboEnableHistogramJoinEstimation;
     }
 
     public boolean isCboPushDownDistinctBelowWindow() {
