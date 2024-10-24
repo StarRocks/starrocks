@@ -615,6 +615,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // always exclude the current mv name from rewrite
         mvSessionVariable.setQueryExcludingMVNames(materializedView.getName());
+        mvConnectCtx.setUseConnectorMetadataCache(Optional.of(true));
     }
 
     private boolean isMVPropertyContains(String key) {

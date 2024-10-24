@@ -105,8 +105,9 @@ public class InsertAnalyzer {
 
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            tables.stream().map(table -> (HiveTable) table)
-                    .forEach(table -> table.useMetadataCache(false));
+            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
+                session.setUseConnectorMetadataCache(Optional.of(false));
+            }
         } finally {
             if (!isLockTaken) {
                 // Take the PlannerMetaLock
