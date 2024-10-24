@@ -283,6 +283,83 @@ public class WarehouseManagerTest {
         Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
+    @Test
+    public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
+            throws UserException {
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        b1.setBePort(9060);
+        b1.setAlive(false);
+        b1.setWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return systemInfo;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return b1;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+                if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
+                    return Lists.newArrayList(b1.getId());
+                }
+                return Lists.newArrayList();
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockWarehouseMgr;
+            }
+
+        };
+
+        ComputeNode livingCn = new ComputeNode();
+        livingCn.setAlive(true);
+        new Expectations() {
+            {
+                // This is the point of the test -- we only want to call this once even though we're calling
+                // addScanRangeLocations multiple times.
+                mockWarehouseMgr.getAliveComputeNodes(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                times = 1;
+                result = Lists.newArrayList(livingCn);
+            }
+        };
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        OlapScanNode scanNode = newOlapScanNode();
+        Partition partition = new Partition(123, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
+        // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
+        // getAliveComputeNodes.
+        scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
+    }
+
     private OlapScanNode newOlapScanNode() {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
