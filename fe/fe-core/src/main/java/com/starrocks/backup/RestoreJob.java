@@ -1175,8 +1175,6 @@ public class RestoreJob extends AbstractJob {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
-        addRestoreOlapView(restoredViews);
-
         LOG.info("replay check and prepare meta. {}", this);
     }
 

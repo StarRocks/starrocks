@@ -509,6 +509,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                     tbl.setName(tblRef.getExplicitAlias());   
                 }
                 restoredViews.add((View) tbl);
+                continue;
             }
 
             if (!jobInfo.containsTbl(tblName)) {
