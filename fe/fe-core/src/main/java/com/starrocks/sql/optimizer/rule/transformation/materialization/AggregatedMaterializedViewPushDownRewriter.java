@@ -81,9 +81,10 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
     public OptExpression doRewrite(MvRewriteContext mvContext) {
         OptExpression input = mvContext.getQueryExpression();
 
-        // try push down
-        OptExpression inputDuplicator = duplicateOptExpression(mvContext, input);
-        AggRewriteInfo rewriteInfo = process(inputDuplicator, AggregatePushDownContext.EMPTY);
+        OptExpression cloned = OptExpressionCloner.clone(input);
+        deriveLogicalProperty(cloned);
+
+        AggRewriteInfo rewriteInfo = process(cloned, AggregatePushDownContext.EMPTY);
         if (rewriteInfo.hasRewritten()) {
             Optional<OptExpression> res = rewriteInfo.getOp();
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite success");
@@ -95,41 +96,6 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             Utils.setOpBit(input, Operator.OP_PUSH_DOWN_BIT);
             return null;
         }
-    }
-
-    /**
-     * Since the aggregate pushdown rewriter may break original opt expression's structure, duplicate it first.
-     */
-    private static OptExpression duplicateOptExpression(MvRewriteContext mvRewriteContext,
-                                                        OptExpression input) {
-        Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
-                MvUtils.getColumnRefMap(input, mvRewriteContext.getMaterializationContext().getQueryRefFactory());
-
-        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvRewriteContext.getMaterializationContext());
-        OptExpression newQueryInput = duplicator.duplicate(input);
-
-        List<ColumnRefOperator> originalOutputColumns =
-                queryColumnRefMap.keySet().stream().collect(Collectors.toList());
-        List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
-        Map<ColumnRefOperator, ScalarOperator> newProjectionMap = Maps.newHashMap();
-        for (int i = 0; i < originalOutputColumns.size(); i++) {
-            newProjectionMap.put(originalOutputColumns.get(i), newQueryOutputColumns.get(i));
-        }
-        Operator newOp = newQueryInput.getOp();
-        if (newOp.getProjection() == null) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
-        deriveLogicalProperty(newQueryInput);
-        return newQueryInput;
     }
 
     @VisibleForTesting
