@@ -70,6 +70,7 @@ public class HiveViewTest extends PlanTestBase {
     public void testHive3() throws Exception {
         String sql = "select o_orderkey, o_custkey, c_name, c_address, n_name from orders join hive0.tpch.customer_nation_view " +
                 "on orders.o_custkey = customer_nation_view.c_custkey";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
