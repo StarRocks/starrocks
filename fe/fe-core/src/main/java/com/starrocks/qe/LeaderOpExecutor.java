@@ -254,5 +254,51 @@ public class LeaderOpExecutor {
     public void setResult(TMasterOpResult result) {
         this.result = result;
     }
+<<<<<<< HEAD
+=======
+
+    public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
+        TMasterOpRequest params = new TMasterOpRequest();
+        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        params.setSql(originStmt.originStmt);
+        params.setStmtIdx(originStmt.idx);
+        params.setUser(ctx.getQualifiedUser());
+        params.setCatalog(ctx.getCurrentCatalog());
+        params.setDb(ctx.getDatabase());
+        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
+        params.setUser_ip(ctx.getRemoteIP());
+        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
+        params.setStmt_id(ctx.getStmtId());
+        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
+        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setForward_times(forwardTimes);
+        params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
+
+        TUserRoles currentRoles = new TUserRoles();
+        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
+        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
+        params.setUser_roles(currentRoles);
+
+        params.setIsLastStmt(ctx.getIsLastStmt());
+
+        TQueryOptions queryOptions = new TQueryOptions();
+        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
+        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
+        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
+        params.setQuery_options(queryOptions);
+
+        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
+        }
+
+        params.setWarehouse_id(ctx.getCurrentWarehouseId());
+
+        return params;
+    }
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
 }
 
