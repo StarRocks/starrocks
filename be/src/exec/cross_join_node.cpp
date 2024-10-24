@@ -701,7 +701,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
-    if (_interpolate_passthrough && !context->is_colocate_group()) {
+    if (_interpolate_passthrough) {
         left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
                                                                          context->degree_of_parallelism(), true);
     }
