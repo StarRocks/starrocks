@@ -180,6 +180,10 @@ public class OlapScanNode extends ScanNode {
 
     private long totalScanRangeBytes = 0;
 
+    // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
+    // Set just once per query.
+    private boolean alreadyFoundSomeLivingCn = false;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -469,6 +473,25 @@ public class OlapScanNode extends ScanNode {
         return newLocations;
     }
 
+
+    private void checkSomeAliveComputeNode() throws ErrorReportException {
+        // Note that it's theoretically possible that there were some living CN earlier in this query's execution, and then
+        // they all died, but in that case, the problem this will be surfaced later anyway.
+        if (alreadyFoundSomeLivingCn) {
+            return;
+        }
+        // We prefer to call getAliveComputeNodes infrequently, as it can come to dominate the execution time of a query in the
+        // frontend if there are many calls per request (e.g. one per partition when there are many partitions).
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
+                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+            }
+        }
+        alreadyFoundSomeLivingCn = true;
+    }
+
     public void addScanRangeLocations(Partition partition,
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
@@ -485,6 +508,10 @@ public class OlapScanNode extends ScanNode {
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
+<<<<<<< HEAD
+=======
+        checkSomeAliveComputeNode();
+>>>>>>> f581449f14 ([Enhancement] only call getAliveComputeNodes once per OlapScanNode (#52168))
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
