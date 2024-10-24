@@ -99,6 +99,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
