@@ -63,6 +63,19 @@ public:
         THREAD_LOCAL,
     };
 
+    // Query options for query runtime.
+    struct QueryOptions {
+        // min value is 4, default is 1024
+        ssize_t group_concat_max_len = 1024;
+        std::string default_group_concat_separator = ",";
+
+    public:
+        void set_group_concat_max_len(ssize_t len) { this->group_concat_max_len = len < 4 ? 4 : len; }
+        void set_default_group_concat_separator(std::string separator) {
+            this->default_group_concat_separator = separator;
+        }
+    };
+
     /// Create a FunctionContext for a UDF. Caller is responsible for deleting it.
     static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
                                            const FunctionContext::TypeDesc& return_type,
@@ -168,9 +181,7 @@ public:
 
     void release_mems();
 
-    ssize_t get_group_concat_max_len() { return group_concat_max_len; }
-    // min value is 4, default is 1024
-    void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
+    FunctionContext::QueryOptions& get_ctx_query_options() { return _query_options; }
 
     bool error_if_overflow() const;
 
@@ -223,7 +234,7 @@ private:
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;
     bool _is_distinct = false;
-    ssize_t group_concat_max_len = 1024;
+    QueryOptions _query_options;
 
     // used for ngram bloom filter to speed up some function
     std::unique_ptr<NgramBloomFilterState> _ngramState;

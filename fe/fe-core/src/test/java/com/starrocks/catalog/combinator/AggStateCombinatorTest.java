@@ -95,6 +95,9 @@ public class AggStateCombinatorTest extends MvRewriteTestBase {
             if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator)) {
                 continue;
             }
+            if (!AggStateUtils.isSupportedAggStateFunction((AggregateFunction) func)) {
+                continue;
+            }
             builtInAggregateFunctions.add((AggregateFunction) func);
         }
         Assert.assertTrue(builtInAggregateFunctions.size() > 0);
@@ -529,6 +532,7 @@ public class AggStateCombinatorTest extends MvRewriteTestBase {
                 Joiner.on(",\n").join(columns) +
                 ") DISTRIBUTED BY HASH(k1) \n" +
                 "PROPERTIES (  \"replication_num\" = \"1\");";
+        System.out.println(sql);
         starRocksAssert.withTable(sql,
                 () -> {
                     Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
@@ -1152,5 +1156,90 @@ public class AggStateCombinatorTest extends MvRewriteTestBase {
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
-}
 
+    @Test
+    public void testCreateAggStateTableWithGroupConcat() throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes);
+
+        // test _state
+        List<String> stateColumns = Lists.newArrayList();
+        List<String> unionColumns = Lists.newArrayList();
+        List<String> mergeColumns = Lists.newArrayList();
+
+        List<String> aggTableColNames = Lists.newArrayList();
+        List<String> aggTableCols = Lists.newArrayList();
+        int j = 0;
+        for (int k = 0; k < funcNames.size(); k++) {
+            List<String> argTypes = aggArgTypes.get(k);
+            String fnName = funcNames.get(k);
+            if (!FunctionSet.GROUP_CONCAT.equals(fnName)) {
+                continue;
+            }
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String stateCol = String.format("%s(%s)", FunctionSet.getAggStateName(fnName), arg);
+            stateColumns.add(stateCol);
+            // agg state tabll
+            String aggColName = "v" + j++;
+            aggTableColNames.add(aggColName);
+            String aggCol = buildAggStateColumn(fnName, argTypes, aggColName);
+            aggTableCols.add(aggCol);
+            // union
+            String unionCol = String.format("%s(%s)", FunctionSet.getAggStateUnionName(fnName), aggColName);
+            unionColumns.add(unionCol);
+            // merge
+            String mergeCol = String.format("%s(%s)", FunctionSet.getAggStateMergeName(fnName), aggColName);
+            mergeColumns.add(mergeCol);
+        }
+
+        String sql = " CREATE TABLE test_agg_state_table ( \n" +
+                "k1  date, \n" +
+                Joiner.on(",\n").join(aggTableCols) +
+                ") DISTRIBUTED BY HASH(k1) \n" +
+                "PROPERTIES (  \"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        System.out.println(sql);
+
+        // multi_distinct_sum_state
+        {
+            String sql1 = "select k1, " + Joiner.on(", ").join(stateColumns) + " from t1;";
+            System.out.println(sql1);
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "  |  32 <-> group_concat_state[([26: c24, VARCHAR, true]); " +
+                    "args: VARCHAR; result: VARBINARY; args nullable: true; result nullable: true]\n" +
+                    "  |  33 <-> group_concat_state[([26: c24, VARCHAR, true], [26: c24, VARCHAR, true]); " +
+                    "args: VARCHAR,VARCHAR; result: VARBINARY; args nullable: true; result nullable: true]");
+        }
+
+        // _union
+        {
+            String sql1 = "select k1, " + Joiner.on(", ").join(unionColumns)
+                    + " from test_agg_state_table group by k1;";
+            System.out.println(sql1);
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "  |  aggregate: group_concat_union[([2: v0, VARBINARY, true]); " +
+                    "args: VARBINARY; result: VARBINARY; args nullable: true; result nullable: true], " +
+                    "group_concat_union[([3: v1, VARBINARY, true]); args: VARBINARY; result: VARBINARY; " +
+                    "args nullable: true; result nullable: true]\n");
+        }
+
+        // _merge
+        {
+            String sql1 = "select k1, " + Joiner.on(", ").join(mergeColumns)
+                    + " from test_agg_state_table group by k1;";
+            System.out.println(sql1);
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "  |  aggregate: group_concat_merge[([2: v0, VARBINARY, true]); " +
+                    "args: VARBINARY; result: VARCHAR; args nullable: true; result nullable: true], " +
+                    "group_concat_merge[([3: v1, VARBINARY, true]); args: VARBINARY; " +
+                    "result: VARCHAR; args nullable: true; result nullable: true]\n");
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("test_agg_state_table");
+    }
+}

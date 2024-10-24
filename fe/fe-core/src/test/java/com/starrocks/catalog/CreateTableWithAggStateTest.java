@@ -24,7 +24,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class CreateTableWithAggStateTest {
@@ -270,7 +269,7 @@ public class CreateTableWithAggStateTest {
                 });
     }
 
-    @Ignore
+    @Test
     public void testCreateTableWithAggStateGroupConcat() {
         starRocksAssert.withTable("\n" +
                         "CREATE TABLE test_agg_tbl1(\n" +
@@ -294,15 +293,15 @@ public class CreateTableWithAggStateTest {
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
-                            "`k10` struct<col1 array<varchar(1048576)>> group_concat(largeint(40)) NULL COMMENT \"\", " +
-                            "`k11` struct<col1 array<varchar(1048576)>> group_concat(float) NULL COMMENT \"\", " +
-                            "`k12` struct<col1 array<varchar(1048576)>> group_concat(double) NULL COMMENT \"\", " +
-                            "`k13` struct<col1 array<varchar(1048576)>> group_concat(decimal(21, 10)) NULL COMMENT \"\", " +
-                            "`k2` struct<col1 array<varchar(1048576)>> group_concat(datetime) NULL COMMENT \"\", " +
-                            "`k6` struct<col1 array<varchar(1048576)>> group_concat(tinyint(4)) NULL COMMENT \"\", " +
-                            "`k7` struct<col1 array<varchar(1048576)>> group_concat(smallint(6)) NULL COMMENT \"\", " +
-                            "`k8` struct<col1 array<varchar(1048576)>> group_concat(int(11)) NULL COMMENT \"\", " +
-                            "`k9` struct<col1 array<varchar(1048576)>> group_concat(bigint(20)) NULL COMMENT \"\"]";
+                            "`k10` varbinary group_concat(largeint(40)) NULL COMMENT \"\", " +
+                            "`k11` varbinary group_concat(float) NULL COMMENT \"\", " +
+                            "`k12` varbinary group_concat(double) NULL COMMENT \"\", " +
+                            "`k13` varbinary group_concat(decimal(21, 10)) NULL COMMENT \"\", " +
+                            "`k2` varbinary group_concat(datetime) NULL COMMENT \"\", " +
+                            "`k6` varbinary group_concat(tinyint(4)) NULL COMMENT \"\", " +
+                            "`k7` varbinary group_concat(smallint(6)) NULL COMMENT \"\", " +
+                            "`k8` varbinary group_concat(int(11)) NULL COMMENT \"\", " +
+                            "`k9` varbinary group_concat(bigint(20)) NULL COMMENT \"\"]";
                     Assert.assertEquals(expect, columns);
                 });
     }

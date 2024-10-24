@@ -343,9 +343,9 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
 
             if (statementBase instanceof QueryStatement) {
+                String sql = AstToSQLBuilder.toSQL(statementBase);
                 StatementBase viewStatement =
-                        com.starrocks.sql.parser.SqlParser.parse(AstToSQLBuilder.toSQL(statementBase),
-                                connectContext.getSessionVariable()).get(0);
+                        com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
                 Analyzer.analyze(viewStatement, connectContext);
             }
 
