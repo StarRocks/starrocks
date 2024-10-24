@@ -1242,7 +1242,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "  1:PARTITION-TOP-N\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] \n" +
                 "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  order by: [5, DOUBLE, false] DESC\n" +
                 "  |  offset: 0");
 
         // rank
@@ -1262,7 +1262,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] \n" +
                 "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC");
+                "  |  order by: [5, DOUBLE, false] DESC");
 
         // mul-column partition by
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
@@ -1281,7 +1281,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  type: RANK\n" +
                 "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
                 "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
+                "  |  order by: [5, DOUBLE, false] DESC\n" +
                 "  |  offset: 0");
 
         // partition column with expr
