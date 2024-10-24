@@ -789,9 +789,16 @@ SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_
         : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
-    (void)columns()[0]->accept(&visitor);
-    return visitor.result();
+    if (num_segments() == 1) {
+        auto first = columns()[0];
+        auto result = first->clone_empty();
+        result->append_selective(*first, indexes, from, size);
+        return result;
+    } else {
+        SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
+        (void)columns()[0]->accept(&visitor);
+        return visitor.result();
+    }
 }
 
 ColumnPtr SegmentedColumn::materialize() const {
@@ -808,6 +815,10 @@ ColumnPtr SegmentedColumn::materialize() const {
 
 size_t SegmentedColumn::segment_size() const {
     return _segment_size;
+}
+
+size_t SegmentedColumn::num_segments() const {
+    return _chunk.lock()->num_segments();
 }
 
 size_t SegmentedChunk::segment_size() const {
