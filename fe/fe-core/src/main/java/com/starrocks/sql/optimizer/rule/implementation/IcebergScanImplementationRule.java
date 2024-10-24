@@ -36,6 +36,8 @@ public class IcebergScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
         PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan);
+        physicalIcebergScan.setTableFullMORParams(scan.getTableFullMORParams());
+        physicalIcebergScan.setMORParams(scan.getMORParam());
         OptExpression result = new OptExpression(physicalIcebergScan);
         return Lists.newArrayList(result);
     }
