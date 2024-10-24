@@ -200,7 +200,7 @@ void AgentServer::Impl::init_or_die() {
         REGISTER_THREAD_POOL_METRICS(publish_version, _thread_pool_publish_version);
 #endif
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, config::drop_tablet_worker_count, std::numeric_limits<int>::max(),
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, (int) (calc_real_num_threads(config::drop_tablet_worker_count) / 2), std::numeric_limits<int>::max(),
                                        _thread_pool_drop);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", 1, config::create_tablet_worker_count,
