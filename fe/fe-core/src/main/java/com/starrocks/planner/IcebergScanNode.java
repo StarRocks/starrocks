@@ -351,7 +351,11 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(icebergTable.getName()).append("\n");
+        output.append(prefix).append("TABLE: ")
+                .append(icebergTable.getRemoteDbName())
+                .append(".")
+                .append(icebergTable.getName())
+                .append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");

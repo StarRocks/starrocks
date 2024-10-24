@@ -134,7 +134,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=1/1");
             PlanTestBase.assertContains(plan, "IcebergScanNode\n" +
-                        "     TABLE: part_tbl1\n" +
+                        "     TABLE: partitioned_db.part_tbl1\n" +
                         "     PREDICATES: 13: d != '2023-08-01', 13: d >= '2023-08-01'");
         }
         {
@@ -149,7 +149,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=1/1");
             PlanTestBase.assertContains(plan, "IcebergScanNode\n" +
-                        "     TABLE: part_tbl1\n" +
+                        "     TABLE: partitioned_db.part_tbl1\n" +
                         "     PREDICATES: 13: d != '2023-08-01'");
         }
 
@@ -173,7 +173,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=2/2");
             PlanTestBase.assertContains(plan, "IcebergScanNode\n" +
-                        "     TABLE: part_tbl1\n" +
+                        "     TABLE: partitioned_db.part_tbl1\n" +
                         "     PREDICATES: 13: d != '2023-08-01', 13: d != '2023-08-02'");
         }
         {
@@ -188,7 +188,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=2/2");
             PlanTestBase.assertContains(plan, "IcebergScanNode\n" +
-                        "     TABLE: part_tbl1\n" +
+                        "     TABLE: partitioned_db.part_tbl1\n" +
                         "     PREDICATES: 13: d != '2023-08-01', 13: d != '2023-08-02'");
         }
     }
@@ -995,7 +995,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "3:IcebergScanNode\n" +
-                        "     TABLE: part_tbl1\n" +
+                        "     TABLE: partitioned_db.part_tbl1\n" +
                         "     PREDICATES: 19: d >= '2023-08-01'");
         }
 
@@ -1556,7 +1556,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=1/1");
             PlanTestBase.assertContains(plan, "5:IcebergScanNode\n" +
-                        "     TABLE: part_tbl3\n" +
+                        "     TABLE: partitioned_db.part_tbl3\n" +
                         "     PREDICATES: 27: d != '2023-08-01'");
         }
 
