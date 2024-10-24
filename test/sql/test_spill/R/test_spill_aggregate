@@ -5,6 +5,24 @@ set enable_spill=true;
 set spill_mode="auto";
 -- result:
 -- !result
+CREATE TABLE t_struct(
+    k1 INT,
+    k2 STRUCT<k3 INT, k4 INT>)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_struct values (1, named_struct('k3', 1, 'k4', 1));
+-- result:
+-- !result
+select min(k1), k2 from t_struct group by k2;
+-- result:
+1	{"k3":1,"k4":1}
+-- !result
+select k1, k2 from t_struct group by k1, k2;
+-- result:
+1	{"k3":1,"k4":1}
+-- !result
 CREATE TABLE t1 (
     k1 INT,
     k2 VARCHAR(20))
