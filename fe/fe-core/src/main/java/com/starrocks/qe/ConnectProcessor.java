@@ -683,7 +683,26 @@ public class ConnectProcessor {
             }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
+<<<<<<< HEAD
             executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);
+=======
+
+            List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            StatementBase statement = stmts.get(idx);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(statement);
+            statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
+
+            executor = new StmtExecutor(ctx, statement);
+            ctx.setExecutor(executor);
+            executor.setProxy();
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
             executor.execute();
         } catch (IOException e) {
             // Client failed.
@@ -693,7 +712,13 @@ public class ConnectProcessor {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
+<<<<<<< HEAD
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
+=======
+            ctx.getState().setError(e.getMessage());
+        } finally {
+            ctx.setExecutor(null);
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
         }
 
         // If stmt is also forwarded during execution, just return the forward result.

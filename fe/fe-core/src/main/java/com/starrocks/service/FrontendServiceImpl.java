@@ -104,6 +104,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
@@ -265,9 +266,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+<<<<<<< HEAD
+=======
+    private final ProxyContextManager proxyContextManager;
+    public AtomicLong partitionRequestNum = new AtomicLong(0);
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
+        proxyContextManager = ProxyContextManager.getInstance();
         this.exeEnv = exeEnv;
     }
 
@@ -1102,11 +1109,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.info("receive forwarded stmt {} from FE: {}",
                 params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
         ConnectContext context = new ConnectContext(null);
-        ConnectProcessor processor = new ConnectProcessor(context);
-        TMasterOpResult result = processor.proxyExecute(params);
-        ConnectContext.remove();
-        return result;
+        String hostname = "";
+        if (clientAddr != null) {
+            hostname = clientAddr.getHostname();
+        }
+        context.setProxyHostName(hostname);
+        boolean addToProxyManager = params.isSetConnectionId();
+        final int connectionId = params.getConnectionId();
+
+        try (var guard = proxyContextManager.guard(hostname, connectionId, context, addToProxyManager)) {
+            ConnectProcessor processor = new ConnectProcessor(context);
+            return processor.proxyExecute(params);
+        } catch (Exception e) {
+            LOG.warn("unreachable path:", e);
+            final TMasterOpResult result = new TMasterOpResult();
+            result.setErrorMsg(e.getMessage());
+            return result;
+        }
     }
+
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
@@ -1578,7 +1599,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
-    private TNetworkAddress getClientAddr() {
+    public TNetworkAddress getClientAddr() {
         ThriftServerContext connectionContext = ThriftServerEventProcessor.getConnectionContext();
         // For NonBlockingServer, we can not get client ip.
         if (connectionContext != null) {

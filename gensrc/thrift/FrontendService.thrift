@@ -627,6 +627,13 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+<<<<<<< HEAD
+=======
+    35: optional string session_id
+    36: optional i32 connectionId
+
+    101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
 }
 
 struct TColumnDefinition {

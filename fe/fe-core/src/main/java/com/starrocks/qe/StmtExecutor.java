@@ -708,9 +708,23 @@ public class StmtExecutor {
     }
 
     private void forwardToLeader() throws Exception {
+<<<<<<< HEAD
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
+=======
+        if (parsedStmt instanceof ExecuteStmt) {
+            throw new AnalysisException("ExecuteStmt Statement don't support statement need to be forward to leader");
+        }
+        try {
+            context.incPendingForwardRequest();
+            leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+            LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
+            leaderOpExecutor.execute();
+        } finally {
+            context.decPendingForwardRequest();
+        }
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {
@@ -785,11 +799,44 @@ public class StmtExecutor {
     // Handle kill statement.
     private void handleKill() throws DdlException {
         KillStmt killStmt = (KillStmt) parsedStmt;
+<<<<<<< HEAD
         long id = killStmt.getConnectionId();
         ConnectContext killCtx = context.getConnectScheduler().getContext(id);
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
+=======
+        if (killStmt.getQueryId() != null) {
+            handleKillQuery(killStmt.getQueryId());
+        } else {
+            long id = killStmt.getConnectionId();
+            ConnectContext killCtx = null;
+            if (isProxy) {
+                final String hostName = context.getProxyHostName();
+                killCtx = ProxyContextManager.getInstance().getContext(hostName, (int) id);
+            } else {
+                killCtx = context.getConnectScheduler().getContext(id);
+            }
+            if (killCtx == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
+            }
+            handleKill(killCtx, killStmt.isConnectionKill() && !isProxy);
+        }
+    }
+
+    // Handle kill statement.
+    private void handleKill(ConnectContext killCtx, boolean killConnection) {
+        try {
+            if (killCtx.hasPendingForwardRequest()) {
+                forwardToLeader();
+                return;
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to kill connection", e);
+        }
+
+        Preconditions.checkNotNull(killCtx);
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -803,6 +850,57 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
+<<<<<<< HEAD
+=======
+    // Handle kill running query statement.
+    private void handleKillQuery(String queryId) throws DdlException {
+        if (StringUtils.isEmpty(queryId)) {
+            context.getState().setOk();
+            return;
+        }
+        // > 0 means it is forwarded from other fe
+        if (context.getForwardTimes() == 0) {
+            String errorMsg = null;
+            // forward to all fe
+            for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+                LeaderOpExecutor leaderOpExecutor =
+                        new LeaderOpExecutor(Pair.create(fe.getHost(), fe.getRpcPort()), parsedStmt, originStmt,
+                                context, redirectStatus);
+                try {
+                    leaderOpExecutor.execute();
+                    // if query is successfully killed by this fe, it can return now
+                    if (context.getState().getStateType() == MysqlStateType.OK) {
+                        context.getState().setOk();
+                        return;
+                    }
+                    errorMsg = context.getState().getErrorMessage();
+                } catch (TTransportException e) {
+                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
+                    LOG.warn(errorMsg, e);
+                } catch (Exception e) {
+                    errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort() + " due to " +
+                            e.getMessage();
+                    LOG.warn(e.getMessage(), e);
+                }
+            }
+            // if the queryId is not found in any fe, print the error message
+            context.getState().setError(errorMsg == null ? ErrorCode.ERR_UNKNOWN_ERROR.formatErrorMsg() : errorMsg);
+            return;
+        }
+        ConnectContext killCtx = ExecuteEnv.getInstance().getScheduler().findContextByCustomQueryId(queryId);
+        if (killCtx == null) {
+            killCtx = ExecuteEnv.getInstance().getScheduler().findContextByQueryId(queryId);
+        }
+        if (killCtx == null) {
+            killCtx = ProxyContextManager.getInstance().getContextByQueryId(queryId);
+        }
+        if (killCtx == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_QUERY, queryId);
+        }
+        handleKill(killCtx, false);
+    }
+
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
     // Process set statement.
     private void handleSetStmt() {
         try {
