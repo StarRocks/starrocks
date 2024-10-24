@@ -292,6 +292,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
+    public synchronized List<PhysicalPartition> getPhysicalPartitions(long tableId) {
+        return idToPartition.values().stream()
+                .filter(v -> (v.getTableId() == tableId))
+                .map(RecyclePartitionInfo::getPartition)
+                .flatMap(p -> p.getSubPartitions().stream())
+                .collect(Collectors.toList());
+    }
+
     /**
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.

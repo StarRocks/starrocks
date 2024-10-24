@@ -630,8 +630,8 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         this.minRetainVersion = minRetainVersion;
     }
 
-    public String generatePhysicalPartitionName(long physicalParitionId) {
-        return this.name + '_' + physicalParitionId;
+    public String generatePhysicalPartitionName(long physicalPartitionId) {
+        return this.name + '_' + physicalPartitionId;
     }
         
     @Override
