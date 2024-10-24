@@ -54,7 +54,6 @@ import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.CloseSafeDatabase;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -90,7 +89,7 @@ public class BDBHA implements HAProtocol {
 
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
-                long myEpoch = getLatestEpoch(epochDb.getDb()) + 1;
+                long myEpoch = getLatestEpoch() + 1;
                 LOG.info("start fencing, epoch number is {}", myEpoch);
                 Long key = myEpoch;
                 DatabaseEntry theKey = new DatabaseEntry();
@@ -99,7 +98,6 @@ public class BDBHA implements HAProtocol {
                 DatabaseEntry theData = new DatabaseEntry(new byte[1]);
                 OperationStatus status = epochDb.putNoOverwrite(null, theKey, theData);
                 if (status == OperationStatus.SUCCESS) {
-                    GlobalStateMgr.getCurrentState().setEpoch(myEpoch);
                     return true;
                 } else if (status == OperationStatus.KEYEXIST) {
                     return false;
@@ -118,7 +116,8 @@ public class BDBHA implements HAProtocol {
         return false;
     }
 
-    private long getLatestEpoch(Database epochDB) {
+    public long getLatestEpoch() {
+        Database epochDB = environment.getEpochDB().getDb();
         DatabaseEntry key = new DatabaseEntry();
         DatabaseEntry data = new DatabaseEntry();
         OperationResult result = epochDB.get(null, key, data, Get.LAST,

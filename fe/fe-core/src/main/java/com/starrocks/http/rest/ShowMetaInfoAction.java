@@ -142,7 +142,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
             try {
                 master = haProtocol.getLeader();
             } catch (Exception e) {
-                // this may happen when majority of FOLLOWERS are down and no MASTER right now.
+                // this may happen when the majority of FOLLOWERS are down and no MASTER right now.
                 LOG.warn("failed to get leader: {}", e.getMessage());
             }
             if (master != null) {
