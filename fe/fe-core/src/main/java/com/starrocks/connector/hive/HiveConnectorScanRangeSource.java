@@ -59,6 +59,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
+
 public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(HiveConnectorScanRangeSource.class);
 
@@ -127,7 +129,9 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
 
         GetRemoteFilesParams params =
                 GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
-                        .setPartitionAttachments(partitionAttachments).build();
+                        .setPartitionAttachments(partitionAttachments)
+                        .setUseCache(useMetadataCache())
+                        .build();
         remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(table, params);
     }
 

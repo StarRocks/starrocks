@@ -212,7 +212,7 @@ public class RemoteFileOperations {
             final Object attachment = (attachments != null) ? attachments.get(i) : null;
             pathKey.setScanContext(scanContext);
             tasks.add(() -> {
-                Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey);
+                Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey, params.isUseCache());
                 List<RemoteFileDesc> files = res.get(pathKey);
                 RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
                 remoteFileInfo.setAttachment(attachment);
