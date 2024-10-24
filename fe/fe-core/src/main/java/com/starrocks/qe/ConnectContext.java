@@ -94,6 +94,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -240,6 +241,10 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
 
+    // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
+    // `insert into table select external table`. Currently, this feature only supports hive table.
+    private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -339,6 +344,14 @@ public class ConnectContext {
 
     public void setThreadLocalInfo() {
         threadLocalInfo.set(this);
+    }
+
+    public Optional<Boolean> getUseConnectorMetadataCache() {
+        return useConnectorMetadataCache;
+    }
+
+    public void setUseConnectorMetadataCache(Optional<Boolean> useConnectorMetadataCache) {
+        this.useConnectorMetadataCache = useConnectorMetadataCache;
     }
 
     /**
