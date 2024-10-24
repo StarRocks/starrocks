@@ -243,6 +243,7 @@ public class LeaderOpExecutor {
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);
