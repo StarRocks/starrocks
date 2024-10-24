@@ -1,0 +1,9 @@
+How good is the translation regarding the instructions you were given? Provide a detailed analysis.
+Return a json object with the following keys:
+- analysis: a detailed analysis of the translation
+- completeness: a boolean indicating if the translation is complete, not missing a piece at the end.
+- translation_rating: a rating from 1 to 10 indicating the quality of the translation
+- product_words: A boolean indicating if the translation respects the given dictionary, check carefully the dictionary with the corresponding translation. Make sure not translating Weights & Biases product terms.
+- code_comments: A boolean indicating if the code comments are translated correctly
+- links: A boolean indicating if the links are translated correctly
+
