@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -129,6 +130,10 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         boolean isRollup = shuttleContext.isRollup();
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() ||
                 aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
+            SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
+            if (!sessionVariable.isEnableCountDistinctRewriteByHllBitmap()) {
+                return null;
+            }
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
