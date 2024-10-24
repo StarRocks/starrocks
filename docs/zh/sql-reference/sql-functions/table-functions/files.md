@@ -217,7 +217,7 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   | ----------------- | -------- | -------------------------------------------------------- |
   | fs.s3a.access.key | 是       | 用于指定访问 GCS 存储空间的 Access Key。              |
   | fs.s3a.secret.key | 是       | 用于指定访问 GCS 存储空间的 Secret Key。              |
-  | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。 |
+  | fs.s3a.endpoint   | 是       | 用于指定需访问的 GCS 存储空间的 Endpoint，如 `storage.googleapis.com`。请勿在 Endpoint 地址中指定 `https`。 |
 
 - 如果您使用 Shared Key 访问 Azure Blob Storage：
 
