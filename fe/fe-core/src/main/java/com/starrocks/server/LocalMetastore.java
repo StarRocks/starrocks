@@ -4356,13 +4356,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // refresh mv
             Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
             for (MvId mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) getTable(db.getId(), mvId.getId());
+                MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
                 if (materializedView == null) {
-                    LOG.warn("Table related materialized view {} can not be found", mvId.getId());
+                    LOG.warn("Table related materialized view {}.{} can not be found", mvId.getDbId(), mvId.getId());
                     continue;
                 }
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), getTable(db.getId(), mvId.getId()).getName(), false, null,
+                    Database mvDb = getDb(mvId.getDbId());
+                    refreshMaterializedView(mvDb.getFullName(), getTable(mvDb.getId(), mvId.getId()).getName(), false, null,
                             Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
             }
