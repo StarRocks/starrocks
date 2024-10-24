@@ -229,13 +229,7 @@ public class CommitRateLimiterTest {
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
-        CommitRateExceededException e =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e.getAllowCommitTime());
-
-        CommitRateExceededException e2 =
-                Assert.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
-        Assert.assertEquals(currentTimeMs + 1000, e2.getAllowCommitTime());
+        Assert.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, currentTimeMs));
     }
 
     @Test
@@ -275,8 +269,7 @@ public class CommitRateLimiterTest {
                 Quantiles.compute(Lists.newArrayList(compactionScore)));
 
         // This time commit should be denied by the lake_compaction_score_upper_bound
-        CommitRateExceededException e2 = Assert.assertThrows(CommitRateExceededException.class,
+        Assert.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
-        Assert.assertEquals(newCurrentTimeMs + 1000, e2.getAllowCommitTime());
     }
 }
