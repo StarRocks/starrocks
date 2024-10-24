@@ -203,6 +203,9 @@ public class RestoreJob extends AbstractJob {
     private AgentBatchTask batchTask;
 
     boolean enableColocateRestore = Config.enable_colocate_restore;
+
+    @SerializedName(value = "restoredViews")
+    private List<View> restoredViews = Lists.newArrayList();
     
     public RestoreJob() {
         super(JobType.RESTORE);
@@ -789,9 +792,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         // add all restored olap view into globalStateMgr
-        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
-                                       .map(x -> (View) x).collect(Collectors.toList());
-        addRestoreOlapView(restoredOlapViews);
+        addRestoreOlapView(restoredViews);
         if (!status.ok()) {
             return;
         }
@@ -1173,10 +1174,6 @@ public class RestoreJob extends AbstractJob {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
-
-        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
-                                       .map(x -> (View) x).collect(Collectors.toList());
-        addRestoreOlapView(restoredOlapViews);
 
         LOG.info("replay check and prepare meta. {}", this);
     }
@@ -1622,6 +1619,10 @@ public class RestoreJob extends AbstractJob {
         allTabletCommitted(true /* is replay */);
     }
 
+    public void setRestoredViews(List<View> restoredViews) {
+        this.restoredViews = restoredViews;
+    }
+
     public List<String> getInfo() {
         List<String> info = Lists.newArrayList();
         info.add(String.valueOf(jobId));
@@ -1739,6 +1740,11 @@ public class RestoreJob extends AbstractJob {
                             restoreTbl.getName(), entry.second.getName());
 
                     restoreTbl.dropPartition(dbId, entry.second.getName(), true /* is restore */);
+                }
+
+                // remove restored View
+                for (View restoredView : restoredViews) {
+                    db.dropTable(restoredView.getName());
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);

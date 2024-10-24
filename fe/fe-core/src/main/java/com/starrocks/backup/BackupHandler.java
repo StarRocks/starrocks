@@ -51,6 +51,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -98,6 +99,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
@@ -437,13 +439,18 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Also remove all unrelated objs
         Preconditions.checkState(infos.size() == 1);
         BackupJobInfo jobInfo = infos.get(0);
-        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
-        // So, we should restore all table in current database.
-        if (stmt.getTableRefs().size() != 0) {
-            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
-        }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+
+        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
+        // So, we should restore all table in current database.
+        List<View> restoredViews = Lists.newArrayList();
+        if (stmt.getTableRefs().size() != 0) {
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs(), backupMeta, restoredViews);
+        } else {
+            restoredViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
+                            .map(x -> (View) x).collect(Collectors.toList());
+        }
 
         // Create a restore job
         RestoreJob restoreJob = null;
@@ -461,6 +468,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
+        restoreJob.setRestoredViews(restoredViews);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
@@ -488,11 +496,22 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return backupMetas.get(0);
     }
 
-    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)
+    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs, BackupMeta backupMeta,
+                                                          List<View> restoredViews)
             throws DdlException {
         Set<String> allTbls = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {
             String tblName = tblRef.getName().getTbl();
+            Table tbl = backupMeta.getTable(tblName);
+            if (tbl != null && tbl.isOlapView()) {
+                if (tblRef.hasExplicitAlias()) {
+                    // simple reset alias for view in backupMeta to be restored.
+                    tbl.setName(tblRef.getExplicitAlias());   
+                }
+                restoredViews.add((View) tbl);
+                continue;
+            }
+
             if (!jobInfo.containsTbl(tblName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Table " + tblName + " does not exist in snapshot " + jobInfo.name);
