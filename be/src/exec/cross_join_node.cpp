@@ -78,6 +78,10 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             RETURN_IF_ERROR(
                     Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
         }
+
+        if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
+            _interpolate_passthrough = tnode.nestloop_join_node.interpolate_passthrough;
+        }
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
         }
@@ -695,6 +699,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_interpolate_passthrough) {
+        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                         context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
