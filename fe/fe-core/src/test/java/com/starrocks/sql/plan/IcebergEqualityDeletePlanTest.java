@@ -129,7 +129,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
+                "     TABLE: db.tbl\n" +
                 "     cardinality=200000\n" +
                 "     avgRowSize=3.0");
 
@@ -147,7 +147,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         scanNode = pair.second.getFragments().get(2).collectScanNodes().get(new PlanNodeId(1));
         Assert.assertTrue(scanNode instanceof IcebergEqualityDeleteScanNode);
         IcebergEqualityDeleteScanNode eqScanNode = (IcebergEqualityDeleteScanNode) scanNode;
-        Assert.assertTrue(eqScanNode.getExplainString().contains("TABLE: tbl_eq_delete_id\n" +
+        Assert.assertTrue(eqScanNode.getExplainString().contains("TABLE: db.tbl_eq_delete_id\n" +
                 "   cardinality=1\n" +
                 "   avgRowSize=2.0\n" +
                 "   dataCacheOptions={populate: false}\n" +
@@ -227,7 +227,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "    HASH_PARTITIONED: 4: k1, 5: k2\n" +
                 "\n" +
                 "  2:IcebergEqualityDeleteScanNode\n" +
-                "     TABLE: tbl_eq_delete_k1_k2\n" +
+                "     TABLE: db.tbl_eq_delete_k1_k2\n" +
                 "     PREDICATES: 4: k1 = 1\n" +
                 "     cardinality=100000\n" +
                 "     avgRowSize=3.0\n" +
@@ -243,7 +243,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "    HASH_PARTITIONED: 1: k1, 2: k2\n" +
                 "\n" +
                 "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
+                "     TABLE: db.tbl\n" +
                 "     PREDICATES: 1: k1 = 1\n" +
                 "     MIN/MAX PREDICATES: 1: k1 <= 1, 1: k1 >= 1\n" +
                 "     cardinality=100000\n" +
@@ -255,7 +255,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         List<ScanNode> scanNodes = pair.second.getScanNodes();
         IcebergScanNode left = (IcebergScanNode) scanNodes.get(0);
         IcebergEqualityDeleteScanNode right = (IcebergEqualityDeleteScanNode) scanNodes.get(1);
-        Assert.assertTrue(right.getExplainString().contains("TABLE: tbl_eq_delete_k1_k2\n" +
+        Assert.assertTrue(right.getExplainString().contains("TABLE: db.tbl_eq_delete_k1_k2\n" +
                 "   PREDICATES: 4: k1 = 1\n" +
                 "   cardinality=100000\n" +
                 "   avgRowSize=3.0\n" +
@@ -384,7 +384,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
+                "     TABLE: db.tbl\n" +
                 "     PREDICATES: 1: k1 = 1\n" +
                 "     MIN/MAX PREDICATES: 1: k1 <= 1, 1: k1 >= 1\n" +
                 "     cardinality=105000\n" +
@@ -502,7 +502,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:IcebergScanNode\n" +
-                "     TABLE: tbl\n" +
+                "     TABLE: db.tbl\n" +
                 "     cardinality=400000\n" +
                 "     avgRowSize=4.0");
 
