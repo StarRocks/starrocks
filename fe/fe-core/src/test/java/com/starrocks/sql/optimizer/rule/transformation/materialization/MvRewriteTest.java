@@ -2236,7 +2236,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testMvRewriteWithSortKey() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
         {
             starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
                     "DISTRIBUTED BY RANDOM buckets 1 " +
