@@ -82,6 +82,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -218,6 +223,14 @@ public class ConnectContext {
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+    private UUID sessionId;
+
+    private String proxyHostName;
+    private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
+
+>>>>>>> cc3a33cd92 ([BugFix] Fix client couldn't cancel forward query (#52185))
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
@@ -487,6 +500,24 @@ public class ConnectContext {
 
     public void setConnectionId(int connectionId) {
         this.connectionId = connectionId;
+    }
+
+    public String getProxyHostName() {
+        return proxyHostName;
+    }
+
+    public void setProxyHostName(String address) {
+        this.proxyHostName = address;
+    }
+
+    public boolean hasPendingForwardRequest() {
+        return pendingForwardRequests.intValue() > 0;
+    }
+    public void incPendingForwardRequest() {
+        pendingForwardRequests.incrementAndGet();
+    }
+    public void decPendingForwardRequest() {
+        pendingForwardRequests.decrementAndGet();
     }
 
     public void resetConnectionStartTime() {
