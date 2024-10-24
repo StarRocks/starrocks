@@ -70,6 +70,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     private static final String CORRECT_LOADS_HISTORY_REPLICATION_NUM =
             "ALTER TABLE %s SET ('default.replication_num'='%d')";
 
+    private static final String REPLICATION_NUM_KEY = "default.replication_num";
+
     private static final String LOADS_HISTORY_SYNC =
             "INSERT INTO %s " +
             "SELECT * FROM information_schema.loads " +
@@ -96,7 +98,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public static boolean correctTable() {
-        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(LOADS_HISTORY_TABLE_NAME);
+        return StatisticUtils.alterSystemTableReplicationNumIfNecessary(LOADS_HISTORY_TABLE_NAME, REPLICATION_NUM_KEY);
     }
 
     public void checkMeta() throws UserException {
