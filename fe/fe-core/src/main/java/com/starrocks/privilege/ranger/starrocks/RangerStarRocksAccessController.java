@@ -23,6 +23,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.RangerAccessController;
 import com.starrocks.qe.ConnectContext;
@@ -162,6 +163,11 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
+        if (!GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                .isAvailablePrivType(ObjectType.VIEW, privilegeType)) {
+            return;
+        }
+
         hasPermission(
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
@@ -209,6 +215,11 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
+        if (!GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                .isAvailablePrivType(ObjectType.MATERIALIZED_VIEW, privilegeType)) {
+            return;
+        }
+
         hasPermission(
                 RangerStarRocksResource.builder()
                         .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
