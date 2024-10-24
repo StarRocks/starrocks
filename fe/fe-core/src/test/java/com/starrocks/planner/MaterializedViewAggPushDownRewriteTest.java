@@ -1083,7 +1083,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt,\n" +
                 " sum(lo_custkey) as sum_lo_custkey, count(lo_custkey) as count_lo_custkey\n" +
                 "from lineorder l group by LO_ORDERDATE");
-        setTracLogModule("MV");
         starRocksAssert.withMaterializedView(mv, () -> {
             String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), avg(LO_REVENUE) as avg1, " +
                     "avg(LO_REVENUE) as avg2, avg(lo_custkey) as avg3 from lineorder l \n" +
