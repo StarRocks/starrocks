@@ -282,7 +282,7 @@ public:
             datasketches::frequent_items_sketch<T, uint64_t, std::hash<T>, std::equal_to<T>, alloc_type>;
 
     explicit DataSketchesFrequent(uint8_t lg_max_map_size, uint8_t lg_start_map_size, int64_t* memory_usage)
-            : _memory_usage(memory_usage), _lg_max_map_size(lg_max_map_size) , _lg_start_map_size(lg_start_map_size){
+            : _memory_usage(memory_usage), _lg_max_map_size(lg_max_map_size), _lg_start_map_size(lg_start_map_size) {
         _sketch = std::make_unique<frequent_sketch_type>(_lg_max_map_size, _lg_start_map_size, std::equal_to<T>(),
                                                          alloc_type(_memory_usage));
     }
@@ -464,7 +464,7 @@ public:
 
     void merge(const DataSketchesTheta& other) {
         if (_sketch_union == nullptr) {
-            _sketch_union = 
+            _sketch_union =
                     std::make_unique<theta_union_type>(theta_union_type::builder(alloc_type(_memory_usage)).build());
         }
         _sketch_union->update(other._sketch->compact());
@@ -489,7 +489,7 @@ public:
 
     void serialize_if_needed() const {
         if (UNLIKELY(_sketch == nullptr)) {
-            _sketch = 
+            _sketch =
                     std::make_unique<theta_sketch_type>(theta_sketch_type::builder(alloc_type(_memory_usage)).build());
         }
         if (_is_changed) {
@@ -499,8 +499,8 @@ public:
                 resultTheta_union.update(_sketch_union->get_result());
             }
             auto sketch_ser = resultTheta_union.get_result().serialize();
-            _sketch_data = std::make_unique<sketch_data_type>(sketch_data_type(
-                    sketch_ser.begin(),sketch_ser.end(), sketch_ser.get_allocator()));
+            _sketch_data = std::make_unique<sketch_data_type>(
+                    sketch_data_type(sketch_ser.begin(), sketch_ser.end(), sketch_ser.get_allocator()));
             _is_changed = false;
         }
     }
@@ -510,8 +510,7 @@ public:
             return false;
         }
         DCHECK(_sketch == nullptr);
-        _sketch = 
-                std::make_unique<theta_sketch_type>(theta_sketch_type::builder(alloc_type(_memory_usage)).build());
+        _sketch = std::make_unique<theta_sketch_type>(theta_sketch_type::builder(alloc_type(_memory_usage)).build());
         try {
             auto sketch_warp = theta_wrapped_type::wrap((uint8_t*)slice.data, slice.size);
             if (_sketch_union == nullptr) {

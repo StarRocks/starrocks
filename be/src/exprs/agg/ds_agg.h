@@ -204,7 +204,7 @@ struct DSSketchState<LT, QUANTILE> {
                 *ranks_prt = other_state.ranks.get()[i];
                 ranks_prt++;
             }
-            ds_sketch_wrapper = 
+            ds_sketch_wrapper =
                     std::make_unique<SketchWarapperType>(other_state.ds_sketch_wrapper->get_k(), &memory_usage);
         }
         ds_sketch_wrapper->merge(*other_state.ds_sketch_wrapper);
