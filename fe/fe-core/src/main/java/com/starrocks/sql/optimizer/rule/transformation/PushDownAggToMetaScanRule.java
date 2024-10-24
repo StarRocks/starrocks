@@ -166,8 +166,11 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             newAggCalls.put(kv.getKey(), newAggCall);
         }
 
-        LogicalMetaScanOperator newMetaScan =
-                new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
+        LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
+                .withOperator(metaScan)
+                .setColRefToColumnMetaMap(newScanColumnRefs)
+                .setAggColumnIdToNames(aggColumnIdToNames)
+                .build();
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 agg.getType(), agg.getGroupingKeys(), newAggCalls);
