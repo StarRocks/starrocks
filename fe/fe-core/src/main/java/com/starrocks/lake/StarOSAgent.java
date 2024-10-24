@@ -457,7 +457,7 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
                                    @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
-                                   long workerGroupId)
+                                   long workerGroupId, int replicationNum)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -468,7 +468,7 @@ public class StarOSAgent {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
-            builder.setReplicaCount(1)
+            builder.setReplicaCount(replicationNum)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)

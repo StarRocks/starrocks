@@ -587,9 +587,12 @@ public class PropertyAnalyzer {
         List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
             backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
-            if (RunMode.defaultReplicationNum() > backendIds.size()) {
-                throw new SemanticException("Number of available CN nodes is " + backendIds.size()
-                        + ", less than " + RunMode.defaultReplicationNum());
+            if (backendIds.isEmpty()) {
+                throw new SemanticException("No alive Backend or Compute Node.");
+            }
+            if (replicationNum > Config.lake_table_max_replication_num) {
+                throw new SemanticException(String.format("Property replication_num should not be bigger than " +
+                        "%d[lake_table_max_replication_num]", Config.lake_table_max_replication_num));
             }
         } else {
             if (replicationNum > backendIds.size()) {

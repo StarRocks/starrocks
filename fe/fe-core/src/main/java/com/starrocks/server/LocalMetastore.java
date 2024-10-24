@@ -1600,7 +1600,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo,
+                createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo, replicationNum,
                         tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
@@ -1766,7 +1766,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMedium, table.isCloudNativeTableOrMaterializedView());
 
             if (table.isCloudNativeTableOrMaterializedView()) {
-                createLakeTablets(table, partitionId, shardGroupId, index, distributionInfo,
+                createLakeTablets(table, partitionId, shardGroupId, index, distributionInfo, replicationNum,
                         tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(table, index, Replica.ReplicaState.NORMAL, distributionInfo,
@@ -2006,7 +2006,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     private void createLakeTablets(OlapTable table, long partitionId, long shardGroupId, MaterializedIndex index,
-                                   DistributionInfo distributionInfo, TabletMeta tabletMeta,
+                                   DistributionInfo distributionInfo, short replicationNum, TabletMeta tabletMeta,
                                    Set<Long> tabletIdSet, long warehouseId)
             throws DdlException {
         Preconditions.checkArgument(table.isCloudNativeTableOrMaterializedView());
@@ -2030,7 +2030,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                null, properties, workerGroupId.get());
+                null, properties, workerGroupId.get(), replicationNum);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

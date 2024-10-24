@@ -75,6 +75,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
                 long shardGroupId = partition.getShardGroupId();
+                short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
@@ -86,7 +87,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
                                 table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                                originTabletIds, properties, warehouseId);
+                                originTabletIds, properties, warehouseId, replicationNum);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -112,12 +113,12 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties,
-                                          long warehouseId)
+                                          long warehouseId, short replicationNum)
             throws DdlException {
         WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
         return GlobalStateMgr.getCurrentState().getStarOSAgent()
                 .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
                         warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
-                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID), replicationNum);
     }
 }
