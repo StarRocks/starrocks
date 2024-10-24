@@ -267,6 +267,18 @@ class ParserTest {
     }
 
     @Test
+    void testAnsiQuotes() {
+        String sql = "select \"t\".\"a\" from \"t\" ";
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setSqlMode(SqlModeHelper.MODE_ANSI_QUOTES);
+        try {
+            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @Test
     void testSettingSqlMode() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
         Object lock = new Object();
