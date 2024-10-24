@@ -435,6 +435,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
     // For compatibility, choose to skip checking batch_size for non-pipeline query here.
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+<<<<<<< HEAD
     if (is_pipeline) {
         auto batch_size = t_request.query_options.batch_size;
         if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
@@ -446,6 +447,11 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
               << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
+=======
+    VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+            << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
+            << ", chunk_size=" << t_request.query_options.batch_size;
+>>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
@@ -532,8 +538,8 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         query_id.__set_lo(request->query_id().lo());
         auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
-            LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+            VLOG(1) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                           print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }

@@ -1314,4 +1314,6 @@ CONF_mBool(skip_schema_in_rowset_meta, "true");
 
 CONF_mInt32(max_committed_without_schema_rowset, "1000");
 
+CONF_mInt32(apply_version_slow_log_sec, "30");
+
 } // namespace starrocks::config
