@@ -60,7 +60,7 @@ StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 - For Google GCS:
   - "fs.s3a.access.key": The Access Key that you can use to access the Google GCS bucket.
   - "fs.s3a.secret.key": The Secret Key that you can use to access the Google GCS bucket.
-  - "fs.s3a.endpoint": The endpoint that you can use to access the Google GCS bucket.
+  - "fs.s3a.endpoint": The endpoint that you can use to access the Google GCS bucket. Do not specify `https` in the endpoint address.
 
 > **NOTE**
 >

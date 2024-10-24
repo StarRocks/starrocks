@@ -217,7 +217,7 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | ----------------- | ------------ | ------------------------------------------------------------ |
   | fs.s3a.access.key | Yes          | The Access Key ID that you can use to access the GCS bucket. |
   | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
-  | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. |
+  | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. Do not specify `https` in the endpoint address. |
 
 - Use Shared Key to access Azure Blob Storage:
 
