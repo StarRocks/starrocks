@@ -441,7 +441,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     _partial_update_states[idx].inited = true;
     _partial_update_states[idx].schema_version = tablet_schema->schema_version();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(1) << strings::Substitute(
             "prepare PartialUpdateState tablet:$0 segment:$1 #row:$2(#non-default:$3) #column:$4 "
             "time:$5ms(index:$6/value:$7)",
             _tablet_id, idx, total_rows, total_rows - num_default, read_columns.size(), t_end - t_start,
@@ -685,8 +685,8 @@ static Status append_full_row_column(const Schema& tschema,
                                      const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
     RETURN_ERROR_IF_FALSE(state.write_columns.size() == read_column_ids.size());
     size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
-    LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
-              << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
+    VLOG(1) << "partial_update_value_column_ids:" << partial_update_value_column_ids
+            << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
     RETURN_ERROR_IF_FALSE(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
     Columns columns(input_column_size); // all values columns
     for (size_t i = 0; i < partial_update_value_column_ids.size(); ++i) {
@@ -712,7 +712,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
-
+    int64_t t_start = MonotonicMillis();
     // The apply is performed segment by segment, so the tablet schema may change during the apply process
     // So, we use the tablet schema from the first segment when applying the entire process. Because apply
     // is executed sequentially, if we were to change the tablet schema midway, it ensures that the schema \
@@ -796,9 +796,6 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                                                 segment_id, partial_rowset_footer));
     }
     int64_t t_rewrite_end = MonotonicMillis();
-    LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
-                                     tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(),
-                                     t_rewrite_end - t_rewrite_start);
 
     // we should reload segment after rewrite segment file because we may read data from the segment during
     // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
@@ -822,6 +819,17 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
             delete_pks.swap(_auto_increment_partial_update_states[segment_id].delete_pks);
         }
         _auto_increment_partial_update_states[segment_id].release();
+    }
+    int64_t t_end = MonotonicMillis();
+    bool is_slow = (t_end - t_start) > config::apply_version_slow_log_sec * 1000;
+    std::string msg =
+            strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #duration$4ms($5/$6/$7)",
+                                tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(), t_end - t_start,
+                                t_rewrite_start - t_start, t_rewrite_end - t_rewrite_start, t_end - t_rewrite_end);
+    if (is_slow) {
+        LOG(INFO) << msg;
+    } else {
+        VLOG(1) << msg;
     }
     return Status::OK();
 }

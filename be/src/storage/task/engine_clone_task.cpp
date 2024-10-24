@@ -167,7 +167,7 @@ Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
         if (st.ok()) {
             st = _finish_clone_primary(tablet, download_path);
         } else if (st.is_not_found()) {
-            LOG(INFO) << fmt::format(
+            VLOG(1) << fmt::format(
                     "No missing version found from src replica. tablet: {}, src BE:{}:{}, type: {}, "
                     "missing_version_ranges: {}, committed_version: {}",
                     tablet->tablet_id(), _clone_req.src_backends[0].host, _clone_req.src_backends[0].be_port,
