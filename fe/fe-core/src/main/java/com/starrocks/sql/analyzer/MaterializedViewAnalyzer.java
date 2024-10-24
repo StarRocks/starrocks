@@ -24,11 +24,13 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
@@ -695,6 +697,9 @@ public class MaterializedViewAnalyzer {
                         statement.getPartitionByExpr().getPos());
             }
 
+            // convert the input expression if needed
+            partitionColumnExpr = replaceCastDate(partitionColumnExpr);
+
             // set partition-ref into statement
             if (partitionByExpr instanceof FunctionCallExpr) {
                 // e.g. partition by date_trunc('month', dt)
@@ -729,6 +734,25 @@ public class MaterializedViewAnalyzer {
                             partitionByExpr.getPos());
                 }
             }
+        }
+
+        /**
+         * Replace the CAST(dt AS DATE) as str2date(dt, '%Y-%m-%d').
+         * The replacement only affects PARTITION-EXPR but not the real execution plan, the real execution still
+         * uses the CAST(dt AS DATE) expression, so we can use '%Y-%m-%d' as a placeholder.
+         */
+        private Expr replaceCastDate(Expr expr) {
+            if (!(expr instanceof CastExpr)) {
+                return expr;
+            }
+            CastExpr castExpr = expr.cast();
+            if (!castExpr.getType().isDate()) {
+                return castExpr;
+            }
+
+            Expr param0 = expr.getChild(0);
+            Expr param1 = new StringLiteral("%Y-%m-%d");
+            return new FunctionCallExpr(FunctionSet.STR2DATE, Lists.newArrayList(param0, param1));
         }
 
         /**
