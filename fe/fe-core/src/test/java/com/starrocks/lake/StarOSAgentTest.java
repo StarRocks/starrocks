@@ -363,7 +363,7 @@ public class StarOSAgentTest {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         Assert.assertEquals(Lists.newArrayList(10L, 11L),
                 starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
-                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID, 1));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
