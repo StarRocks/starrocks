@@ -688,13 +688,13 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
         st = _rowset_commit_unlocked(version, rowset);
         if (st.ok()) {
             if (rowset->num_segments() > 0 || rowset->num_delete_files() > 0 || rowset->num_update_files() > 0) {
-                LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
-                          << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
-                          << " #seg:" << rowset->num_segments() << " #delfile:" << rowset->num_delete_files()
-                          << " #uptfile:" << rowset->num_update_files() << " #row:" << rowset->num_rows()
-                          << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-                          << " #pending:" << _pending_commits.size();
+                VLOG(1) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                        << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
+                        << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                        << " #seg:" << rowset->num_segments() << " #delfile:" << rowset->num_delete_files()
+                        << " #uptfile:" << rowset->num_update_files() << " #row:" << rowset->num_rows()
+                        << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+                        << " #pending:" << _pending_commits.size();
             }
             _try_commit_pendings_unlocked();
             _check_for_apply();
@@ -1757,13 +1757,21 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     int64_t t_write = MonotonicMillis();
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
-    LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " txn_id: " << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows
-              << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
-              << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
-              << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
-                                     t_write - t_delvec);
+    std::string msg_part1 = strings::Substitute(
+            "apply_rowset_commit finish. tablet:$0 version:$1 txn_id: $2 total del/row:$3/$4 $5% rowset:$6 #seg:$7 ",
+            tablet_id, version_info.version.to_string(), rowset->txn_id(), _cur_total_dels, _cur_total_rows,
+            del_percent, rowset_id, rowset->num_segments());
+    std::string msg_part2 = strings::Substitute("#op(upsert:$0 del:$1) #del:$2+$3=$4 #dv:$5", rowset->num_rows(),
+                                                delete_op, old_total_del, new_del, total_del, ndelvec);
+    std::string msg_part3 = strings::Substitute("duration:$0ms($1/$2/$3/$4)", t_write - t_start, t_apply - t_start,
+                                                t_index - t_apply, t_delvec - t_index, t_write - t_delvec);
+
+    bool is_slow = t_apply - t_start > config::apply_version_slow_log_sec * 1000;
+    if (is_slow) {
+        LOG(INFO) << msg_part1 << msg_part2 << msg_part3;
+    } else {
+        VLOG(1) << msg_part1 << msg_part2 << msg_part3;
+    }
     VLOG(2) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
     return apply_st;
 }
@@ -1780,7 +1788,7 @@ RowsetSharedPtr TabletUpdates::get_rowset(uint32_t rowset_id) {
 }
 
 Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms,
-                                        std::unique_lock<std::mutex>& ul) {
+                                        std::unique_lock<std::mutex>& ul, bool is_compaction) {
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute(
                 "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. "
@@ -1807,8 +1815,9 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         int64_t now = MonotonicMillis();
         if (!(_edit_version_infos[_apply_version_idx]->version < version)) {
             if (now - wait_start > 3000) {
-                LOG(WARNING) << strings::Substitute("wait_for_version slow($0ms) version:$1 $2", now - wait_start,
-                                                    version.to_string(), _debug_string(false, true));
+                std::string msg = strings::Substitute("wait_for_version slow($0ms) version:$1 $2", now - wait_start,
+                                                      version.to_string(), _debug_string(false, true));
+                LOG_IF(WARNING, !is_compaction) << msg;
             }
             break;
         }
@@ -1822,7 +1831,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         if (now - wait_start > timeout_ms) {
             string msg = strings::Substitute("wait_for_version timeout($0ms) version:$1 $2", now - wait_start,
                                              version.to_string(), _debug_string(false, true));
-            LOG(WARNING) << msg;
+            LOG_IF(WARNING, !is_compaction) << msg;
             return Status::TimedOut(msg);
         }
     }
@@ -1996,7 +2005,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     {
         // already committed, so we can ignore timeout error here
         std::unique_lock<std::mutex> ul(_lock);
-        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul, true));
     }
     // Release metadata memory after rowsets have been compacted.
     Rowset::close_rowsets(input_rowsets);
@@ -2150,12 +2159,12 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
-              << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
-              << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-              << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-              << " #pending:" << _pending_commits.size()
-              << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
+    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
+            << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
+            << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+            << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
+            << " #pending:" << _pending_commits.size()
+            << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(2) << "update compaction commit " << _debug_string(false, true);
     _check_for_apply();
     *commit_version = edit_version_info_ptr->version;
@@ -2213,8 +2222,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     auto& version = version_info.version;
-    LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " rowset:" << rowset_id;
     // 1. load index
     std::lock_guard lg(_index_lock);
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
@@ -2468,12 +2475,20 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     _update_total_stats(version_info.rowsets, &row_before, &row_after);
     int64_t t_write = MonotonicMillis();
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
-    LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
-              << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
-              << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
-              << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
+
+    std::string msg_part1 = strings::Substitute(
+            "apply_compaction_commit finish tablet:$0 version:$1 total del/row:$2/$3 $4% rowset:$5 #row:$6 ", tablet_id,
+            version_info.version.to_string(), _cur_total_dels, _cur_total_rows, del_percent, rowset_id, total_rows);
+
+    std::string msg_part2 =
+            strings::Substitute("#del:$0 #delvec:$1 duration:$2ms($3/$4/$5)", total_deletes, delvecs.size(),
+                                t_write - t_start, t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
+    bool is_slow = t_write - t_start > (config::apply_version_slow_log_sec * 2) * 1000;
+    if (is_slow) {
+        LOG(INFO) << msg_part1 << msg_part2;
+    } else {
+        VLOG(1) << msg_part1 << msg_part2;
+    }
     VLOG(2) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
         auto st = output_rowset->verify();
@@ -2691,7 +2706,7 @@ int64_t TabletUpdates::get_compaction_score() {
             // has too many pending tasks, skip compaction
             size_t version_count = _edit_version_infos.back()->rowsets.size() + _pending_commits.size();
             if (version_count > config::tablet_max_versions) {
-                LOG(INFO) << strings::Substitute(
+                VLOG(1) << strings::Substitute(
                         "Try to do compaction because of too many versions. tablet_id:$0 "
                         "version_count:$1 limit:$2 applied_version_idx:$3 edit_version_infos:$4 pending:$5",
                         _tablet.tablet_id(), version_count, config::tablet_max_versions, _apply_version_idx,
@@ -2801,7 +2816,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
@@ -2895,13 +2910,13 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
-    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
-              << " version:" << info->start_version.to_string() << " score:" << total_score
-              << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
-              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
-              << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
-              << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
+            << " version:" << info->start_version.to_string() << " score:" << total_score
+            << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
+            << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
+            << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
+            << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+            << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -2923,7 +2938,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     vector<uint32_t> rowsets;
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
@@ -3062,14 +3077,14 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
 
     std::sort(info->inputs.begin(), info->inputs.end());
     std::vector<int32_t> levels(compaction_level_candidate.begin(), compaction_level_candidate.end());
-    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
-              << " version:" << info->start_version.to_string() << " score:" << max_score
-              << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
-              << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #pick_segments:" << total_merged_segments
-              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->" << stat.num_rows
-              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
-              << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
+    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
+            << " version:" << info->start_version.to_string() << " score:" << max_score
+            << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
+            << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " " << int_list_to_string(info->inputs)
+            << " #pick_segments:" << total_merged_segments << " #valid_segments:" << total_valid_segments
+            << " #rows:" << total_rows << "->" << stat.num_rows
+            << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+            << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -3136,7 +3151,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     std::unordered_set<uint32_t> all_rowsets;
@@ -5451,7 +5466,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
                     "get_rowsets_for_snapshot: too many rowsets for incremental clone "
                     "#rowset:$0 #rowset_for_full_clone:$1 switch to full clone $2",
                     versions.size(), num_rowset_full_clone, _debug_version_info(false));
-            LOG(INFO) << msg;
+            VLOG(1) << msg;
             return Status::OK();
         }
         rowsetids.reserve(versions.size());
