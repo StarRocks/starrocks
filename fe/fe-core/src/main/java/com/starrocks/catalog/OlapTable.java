@@ -840,6 +840,8 @@ public class OlapTable extends Table {
         Map<Long, Long> partitionOldIdToNewId = Maps.newHashMap();
         for (Long id : idToPartition.keySet()) {
             partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
+            // reset replication number for partition info
+            partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
         }
 
         // reset partiton info
