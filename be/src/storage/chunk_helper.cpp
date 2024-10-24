@@ -637,6 +637,7 @@ public:
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+        const size_t segment_size = _segment_column->segment_size();
 
         std::vector<ContainerT*> buffers;
         auto columns = _segment_column->columns();
@@ -648,7 +649,7 @@ public:
         output_items.resize(_size);
         for (uint32_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
@@ -670,6 +671,7 @@ public:
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         auto& output_offsets = output->get_offset();
         auto& output_bytes = output->get_bytes();
+        const size_t segment_size = _segment_column->segment_size();
 
         // input
         auto columns = _segment_column->columns();
@@ -691,7 +693,7 @@ public:
         size_t num_bytes = 0;
         for (size_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
@@ -707,7 +709,7 @@ public:
         Byte* dest_bytes = output_bytes.data();
         for (size_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             Bytes& src_bytes = *input_bytes[segment_id];
             Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
@@ -728,12 +730,13 @@ public:
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+        const size_t segment_size = _segment_column->segment_size();
         output->reserve(_size);
 
         auto columns = _segment_column->columns();
         for (uint32_t i = 0; i < _size; i++) {
             uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             output->append(*columns[segment_id], segment_offset, 1);
         }
         return {};
@@ -763,8 +766,7 @@ public:
     ColumnPtr result() { return _result; }
 
 private:
-    std::pair<int, int> _segment_address(uint32 idx) {
-        size_t segment_size = _segment_column->segment_size();
+    inline std::pair<int, int> _segment_address(uint32 idx, size_t segment_size) {
         int segment_id = idx / segment_size;
         int segment_offset = idx % segment_size;
         return {segment_id, segment_offset};
