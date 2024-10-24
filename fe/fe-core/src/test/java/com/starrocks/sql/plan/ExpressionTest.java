@@ -395,14 +395,14 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateDateTimeFunctionMatch() throws Exception {
         String sql = "select if(3, date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
         starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), '2021-01-12 00:00:00', " +
-                "str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+                "'2020-11-02 00:00:00'");
 
         sql = "select nullif(date('2021-01-12'), date('2021-01-11'));";
         starRocksAssert.query(sql).explainContains("nullif('2021-01-12', '2021-01-11')");
 
         sql = "select nullif(date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
         starRocksAssert.query(sql)
-                .explainContains("nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+                .explainContains("nullif('2021-01-12 00:00:00', '2020-11-02 00:00:00'");
 
         sql = "select if(3, 4, 5);";
         starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), 4, 5)");
@@ -1230,7 +1230,7 @@ public class ExpressionTest extends PlanTestBase {
         starRocksAssert.query(castSql).explainContains("8: k11 < '2020-03-26 00:00:00'");
 
         String castSql2 = "select str_to_date('11/09/2011', '%m/%d/%Y');";
-        starRocksAssert.query(castSql2).explainContains("constant exprs:", "'2011-11-09'");
+        starRocksAssert.query(castSql2).explainContains("constant exprs:", "2011-11-09");
 
         String castSql3 = "select str_to_date('11/09/2011', k6) from test.baseall";
         starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
