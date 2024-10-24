@@ -823,6 +823,7 @@ public class ConnectProcessor {
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = new StmtExecutor(ctx, statement);
+            ctx.setExecutor(executor);
             executor.setProxy();
             executor.execute();
         } catch (IOException e) {
@@ -834,6 +835,8 @@ public class ConnectProcessor {
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
+        } finally {
+            ctx.setExecutor(null);
         }
 
         // If stmt is also forwarded during execution, just return the forward result.
