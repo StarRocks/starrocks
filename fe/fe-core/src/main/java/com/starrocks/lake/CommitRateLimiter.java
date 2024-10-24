@@ -28,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import javax.validation.constraints.NotNull;
 
@@ -118,10 +119,11 @@ public class CommitRateLimiter {
         }
         long upperBound = compactionScoreUpperBound();
         if (upperBound > 0) {
-            Pair<Long, Double> partitionAndScore = anyCompactionScoreExceedsUpperBound(partitionIds, upperBound);
-            if (partitionAndScore.first >= 0) {
-                throw new CommitFailedException("Failed to load data into partition " + partitionAndScore.first
-                        + ", because of too large compaction score, current/limit: " + partitionAndScore.second
+            Optional<Pair<Long, Double>> partitionAndScore = anyCompactionScoreExceedsUpperBound(partitionIds, upperBound);
+            if (partitionAndScore.isPresent()) {
+                Pair<Long, Double> pair = partitionAndScore.get();
+                throw new CommitFailedException("Failed to load data into partition " + pair.first
+                        + ", because of too large compaction score, current/limit: " + pair.second
                         + "/" + upperBound + ". You can reduce the loading job concurrency, " 
                         + "or increase compaction concurrency", txnId);
             }
@@ -155,13 +157,13 @@ public class CommitRateLimiter {
     }
 
     // Returns the first partition id and its compaction score that exceeds the upper bound
-    private Pair<Long, Double> anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
+    private Optional<Pair<Long, Double>> anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
         for (Long partitionId : partitionIds) {
             double compactionScore = getPartitionCompactionScore(partitionId);
             if (compactionScore > upperBound) {
-                return new Pair<>(partitionId, compactionScore);
+                return Optional.of(new Pair<>(partitionId, compactionScore));
             }
         }
-        return new Pair<Long, Double>((long) -1, (double) -1);
+        return Optional.empty();
     }
 }
