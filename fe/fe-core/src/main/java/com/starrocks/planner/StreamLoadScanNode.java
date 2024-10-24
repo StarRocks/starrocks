@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
@@ -80,9 +81,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
@@ -116,6 +119,11 @@ public class StreamLoadScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private boolean needAssignBE;
+
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
 
     private List<Backend> backends;
     private int nextBe = 0;
@@ -173,6 +181,14 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     public void setNeedAssignBE(boolean needAssignBE) {
         this.needAssignBE = needAssignBE;
+    }
+
+    public void setBatchWrite(int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        setNeedAssignBE(true);
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
     }
 
     public boolean nullExprInAutoIncrement() {
@@ -252,15 +268,28 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private void assignBackends() throws UserException {
         backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-            if (be.isAvailable()) {
-                backends.add(be);
+        if (enableBatchWrite) {
+            for (long backendId : batchWriteBackendIds) {
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+                if (backend == null) {
+                    throw new UserException(String.format("Can't find batch write backend [%s]", backendId));
+                }
+                if (!backend.isAvailable()) {
+                    throw new UserException(String.format("Batch write backend [%s] is not available", backendId));
+                }
+                backends.add(backend);
             }
+        } else {
+            for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+                if (be.isAvailable()) {
+                    backends.add(be);
+                }
+            }
+            Collections.shuffle(backends, random);
         }
         if (backends.isEmpty()) {
             throw new UserException("No available backends");
         }
-        Collections.shuffle(backends, random);
     }
 
     private void finalizeParams() throws UserException {
@@ -398,6 +427,9 @@ public class StreamLoadScanNode extends LoadScanNode {
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {
                 brokerScanRange.setChannel_id(curChannelId++);
+                brokerScanRange.setEnable_batch_write(enableBatchWrite);
+                brokerScanRange.setBatch_write_interval_ms(batchWriteIntervalMs);
+                brokerScanRange.setBatch_write_parameters(batchWriteParameters);
             }
             TScanRangeLocations locations = new TScanRangeLocations();
             TScanRange scanRange = new TScanRange();
