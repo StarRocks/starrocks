@@ -36,6 +36,7 @@ public class AuditStatisticsUtil {
         pb.cpuCostNs = tb.getCpu_cost_ns();
         pb.memCostBytes = tb.getMem_cost_bytes();
         pb.spillBytes = tb.getSpill_bytes();
+        pb.scanPartitions = tb.getScan_partitions();
         if (tb.isSetStats_items()) {
             pb.statsItems = Lists.newArrayList();
             for (TAuditStatisticsItem tItem : tb.getStats_items()) {
@@ -134,6 +135,9 @@ public class AuditStatisticsUtil {
         }
         if (pb.returnedRows != null) {
             tb.setReturned_rows(pb.returnedRows);
+        }
+        if (pb.scanPartitions != null) {
+            tb.setScan_partitions(pb.scanPartitions);
         }
         if (pb.cpuCostNs != null) {
             tb.setCpu_cost_ns(pb.cpuCostNs);

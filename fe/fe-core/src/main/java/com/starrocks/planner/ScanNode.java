@@ -96,6 +96,10 @@ public abstract class ScanNode extends PlanNode {
         return desc.getTable().getName();
     }
 
+    public long getTableId() {
+        return desc.getTable().getId();
+    }
+
     public boolean isLocalNativeTable() {
         return false;
     }
