@@ -119,7 +119,17 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
-                        "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+                        "`hive0`.`partitioned_db`.`t1_par` using (par_col)")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv2`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY str2date(`par_date`, '%Y-%m-%d')\n" +
+                        "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT c1, c2, par_date FROM `hive0`.`partitioned_db`.`t2_par_null`;");
     }
 
     @AfterClass
@@ -1239,5 +1249,22 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                         Lists.newArrayList("l_shipdate=1998-01-03")
                 ),
                 calls);
+    }
+
+    @Test
+    public void testStr2DateMVRefreshRewriteSingleTableRewrite() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv2"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(plan.contains("t2_par_null"));
     }
 }

@@ -487,7 +487,9 @@ public class PartitionUtil {
             if (lowerBound.getKeys().get(0).isNullable()) {
                 // If partition key is NULL literal, rewrite it to min value.
                 lowerBound = PartitionKey.createInfinityPartitionKeyWithType(
-                        ImmutableList.of(partitionColumn.getPrimitiveType()), false);
+                        ImmutableList.of(isConvertToDate ? partitionExpr.getType().getPrimitiveType()
+                                : partitionColumn.getPrimitiveType()), false);
+                lowerBound = convertPartitionKeyIfNeeded(lowerBound, isConvertToDate);
             }
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionKeyName));
             PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType,
@@ -495,6 +497,13 @@ public class PartitionUtil {
             mvPartitionRangeMap.put(partitionKeyName, Range.closedOpen(lowerBound, upperBound));
         }
         return mvPartitionRangeMap;
+    }
+
+    public static PartitionKey convertPartitionKeyIfNeeded(PartitionKey partitionKey, boolean isConvertToDate) {
+        if (isConvertToDate) {
+            return convertToString(partitionKey);
+        }
+        return partitionKey;
     }
 
     public static PartitionKey nextPartitionKey(PartitionKey lastPartitionKey,
@@ -670,6 +679,27 @@ public class PartitionUtil {
         } catch (SemanticException e) {
             SemanticException semanticException =
                     new SemanticException("convert string %s to date partition key failed:",
+                            partitionKey.getKeys().get(0).getStringValue(), e);
+            semanticException.addSuppressed(e);
+            throw semanticException;
+        }
+    }
+
+    /**
+     * Convert a date type partition key to string type partition key.
+     * @param partitionKey : input date partition key to convert.
+     * @return             : partition key with string type if input can be converted.
+     */
+    private static PartitionKey convertToString(PartitionKey partitionKey) throws SemanticException {
+        PartitionKey newPartitionKey = new PartitionKey();
+        try {
+            DateLiteral dateLiteral = (DateLiteral) (partitionKey.getKeys().get(0));
+            StringLiteral literalExpr = new StringLiteral(dateLiteral.getStringValue());
+            newPartitionKey.pushColumn(literalExpr, PrimitiveType.VARCHAR);
+            return newPartitionKey;
+        } catch (SemanticException e) {
+            SemanticException semanticException =
+                    new SemanticException("convert date %s to string partition key failed:",
                             partitionKey.getKeys().get(0).getStringValue(), e);
             semanticException.addSuppressed(e);
             throw semanticException;
