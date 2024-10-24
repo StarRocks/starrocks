@@ -202,6 +202,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("alter_tablet_worker_count", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
         });
+        _config_callback.emplace("max_update_tablet_meta_threads", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->update_tablet_meta_thread_pool();
+            (void)thread_pool->update_max_threads(std::max(1, config::max_update_tablet_meta_threads));
+        });
         _config_callback.emplace("lake_metadata_cache_limit", [&]() {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);

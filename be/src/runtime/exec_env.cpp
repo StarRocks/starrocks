@@ -456,6 +456,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> load_rowset_pool;
     std::unique_ptr<ThreadPool> load_segment_pool;
+    std::unique_ptr<ThreadPool> update_tablet_meta_pool;
+
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_rowset_pool")
                     .set_min_threads(0)
@@ -473,6 +475,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("update_tablet_meta_pool")
+                            .set_min_threads(0)
+                            .set_max_threads(config::max_update_tablet_meta_threads)
+                            .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&update_tablet_meta_pool));
+    _update_tablet_meta_pool = update_tablet_meta_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
@@ -687,6 +697,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
     SAFE_DELETE(_load_segment_thread_pool);
+    SAFE_DELETE(_update_tablet_meta_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
