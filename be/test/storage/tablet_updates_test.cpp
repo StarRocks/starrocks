@@ -3768,7 +3768,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_TRUE(rs_meta.tablet_schema() == nullptr);
     }
 
-    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(100, _tablet, 100, 2, rs1, 0, false).ok());
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(100, _tablet, 100, 2, rs1, 0).ok());
     ASSERT_EQ(0, _tablet->committed_rowset_size());
 
     {
@@ -3795,7 +3795,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(true, rs2->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs2->tablet_schema() != nullptr);
-    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(101, _tablet, 100, 4, rs2, 0, false).ok());
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(101, _tablet, 100, 4, rs2, 0).ok());
     ASSERT_EQ(0, _tablet->committed_rowset_size());
 
     {
@@ -3854,7 +3854,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_EQ(true, parse_ok);
         ASSERT_TRUE(rs_meta.tablet_schema() != nullptr);
     }
-    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(102, _tablet, 102, 3, rs3, 0, false).ok());
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(102, _tablet, 102, 3, rs3, 0).ok());
 
     _tablet->set_update_schema_running(false);
     auto rs4 = create_rowset(_tablet, keys);
