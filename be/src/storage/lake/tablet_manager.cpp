@@ -91,6 +91,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->combined_txn_log_location(tablet_id, txn_id);
+}
+
 std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->txn_slog_location(tablet_id, txn_id);
 }
@@ -355,6 +359,21 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     return ptr;
 }
 
+StatusOr<CombinedTxnLogPtr> TabletManager::get_combined_txn_log(const std::string& path, bool fill_cache) {
+    if (auto ptr = _metacache->lookup_combined_txn_log(path); ptr != nullptr) {
+        TRACE("got cached combined txn log");
+        return ptr;
+    }
+    TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    ProtobufFile file(path);
+    RETURN_IF_ERROR(file.load(log.get(), fill_cache));
+    if (fill_cache) {
+        _metacache->cache_combined_txn_log(path, log);
+    }
+    return log;
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
@@ -402,8 +421,26 @@ Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path
     return put_txn_log(log, path);
 }
 
-Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
-    return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
+Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
+    if (UNLIKELY(logs.txn_logs_size() == 0)) {
+        return Status::InvalidArgument("empty CombinedTxnLogPB");
+    }
+    auto tablet_id = logs.txn_logs(0).tablet_id();
+    auto txn_id = logs.txn_logs(0).txn_id();
+#ifndef NDEBUG
+    // Ensure that all tablets belongs to the same partition.
+    auto partition_id = logs.txn_logs(0).partition_id();
+    for (const auto& log : logs.txn_logs()) {
+        DCHECK(log.has_tablet_id());
+        DCHECK(log.has_partition_id());
+        DCHECK(log.has_txn_id());
+        DCHECK_EQ(partition_id, log.partition_id());
+        DCHECK_EQ(txn_id, log.txn_id());
+    }
+#endif
+    auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
+    ProtobufFile file(path);
+    return file.save(logs);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
