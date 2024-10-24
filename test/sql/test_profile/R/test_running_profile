@@ -1,0 +1,231 @@
+-- name: test_running_profile @sequential
+set enable_async_profile=false;
+-- result:
+-- !result
+set runtime_profile_report_interval=1;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='true');
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL,
+
+   INDEX idx_v2(v2) 
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t0` (v1, v2, v3) 
+SELECT id,id,id FROM (
+    select generate_series AS id from table(generate_series(1, 100))
+) r;
+-- result:
+-- !result
+CREATE VIEW last_query_profile AS
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        select * from profile where 
+            line like '%- PullRowNum:%'
+    )
+select regexp_replace(line, '^\\s*', '') as line from result order by line;
+-- result:
+-- !result
+SELECT count(v3) FROM t0 WHERE v1 < 3;
+-- result:
+2
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+-- !result
+SELECT count(v3) FROM t0 WHERE v1 BETWEEN 1 AND 20;
+-- result:
+20
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 8
+- PullRowNum: 8
+- PullRowNum: 8
+-- !result
+SELECT count(v3) FROM t0 WHERE v2 BETWEEN 1 AND 20;
+-- result:
+20
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 8
+- PullRowNum: 8
+- PullRowNum: 8
+-- !result
+SELECT sleep(2), count(v3) FROM t0 WHERE v1 < 3;
+-- result:
+1	2
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+-- !result
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='false');
+-- result:
+-- !result
+SELECT count(v3) FROM t0 WHERE v1 < 3;
+-- result:
+2
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+-- !result
+SELECT count(v3) FROM t0 WHERE v1 BETWEEN 1 AND 20;
+-- result:
+20
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 8
+- PullRowNum: 8
+- PullRowNum: 8
+-- !result
+SELECT count(v3) FROM t0 WHERE v2 BETWEEN 1 AND 20;
+-- result:
+20
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 20
+- PullRowNum: 8
+- PullRowNum: 8
+- PullRowNum: 8
+-- !result
+SELECT sleep(2), count(v3) FROM t0 WHERE v1 < 3;
+-- result:
+1	2
+-- !result
+SELECT * FROM last_query_profile ORDER BY line;
+-- result:
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 0
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 1
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+- PullRowNum: 2
+-- !result
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='true');
+-- result:
+-- !result
+set enable_async_profile=true;
+-- result:
+-- !result
+set runtime_profile_report_interval=10;
+-- result:
+-- !result

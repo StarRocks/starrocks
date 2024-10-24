@@ -1,0 +1,66 @@
+-- name: test_running_profile @sequential
+
+set enable_async_profile=false;
+set runtime_profile_report_interval=1;
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='true');
+
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL,
+
+   INDEX idx_v2(v2) 
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+INSERT INTO `t0` (v1, v2, v3) 
+SELECT id,id,id FROM (
+    select generate_series AS id from table(generate_series(1, 100))
+) r;
+
+CREATE VIEW last_query_profile AS
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        select * from profile where 
+            line like '%- PullRowNum:%'
+    )
+select regexp_replace(line, '^\\s*', '') as line from result order by line;
+
+    
+SELECT count(v3) FROM t0 WHERE v1 < 3;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT count(v3) FROM t0 WHERE v1 BETWEEN 1 AND 20;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT count(v3) FROM t0 WHERE v2 BETWEEN 1 AND 20;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT sleep(2), count(v3) FROM t0 WHERE v1 < 3;
+SELECT * FROM last_query_profile ORDER BY line;
+
+-- disable the merge
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='false');
+
+SELECT count(v3) FROM t0 WHERE v1 < 3;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT count(v3) FROM t0 WHERE v1 BETWEEN 1 AND 20;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT count(v3) FROM t0 WHERE v2 BETWEEN 1 AND 20;
+SELECT * FROM last_query_profile ORDER BY line;
+
+SELECT sleep(2), count(v3) FROM t0 WHERE v1 < 3;
+SELECT * FROM last_query_profile ORDER BY line;
+
+ADMIN SET FRONTEND CONFIG('enable_profile_jit_merge'='true');
+
+set enable_async_profile=true;
+set runtime_profile_report_interval=10;
