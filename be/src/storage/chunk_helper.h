@@ -156,7 +156,7 @@ private:
 
 class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
 public:
-    SegmentedColumn(SegmentedChunkPtr chunk, size_t column_index);
+    SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index);
     SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size);
     ~SegmentedColumn() = default;
 
@@ -171,8 +171,8 @@ public:
     std::vector<ColumnPtr> columns() const;
 
 private:
-    SegmentedChunkPtr _chunk; // The chunk it belongs to
-    size_t _column_index;     // The index in original chunk
+    SegmentedChunkWeakPtr _chunk; // The chunk it belongs to
+    size_t _column_index;         // The index in original chunk
     const size_t _segment_size;
 
     std::vector<ColumnPtr> _cached_columns; // Only used for SelectiveCopy

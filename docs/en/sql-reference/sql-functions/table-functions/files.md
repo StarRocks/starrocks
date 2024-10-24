@@ -6,11 +6,10 @@ displayed_sidebar: docs
 
 
 
-Defines data files in remote storage.
+Defines data files in remote storage. It can be used to:
 
-From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md).
-
-From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
+- [Load or query data from a remote storage system](#files-for-loading)
+- [Unload data into a remote storage system](#files-for-unloading)
 
 Currently, the FILES() function supports the following data sources and file formats:
 
@@ -25,25 +24,23 @@ Currently, the FILES() function supports the following data sources and file for
   - ORC
   - CSV
 
-## Syntax
+From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
 
-- **Data loading**:
+## FILES() for loading
 
-  ```SQL
-  FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
-  ```
+From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). From v3.3.4, you can also view the schema of a data file using FILES() with [DESC](../../sql-statements/table_bucket_part_index/DESCRIBE.md).
 
-- **Data unloading**:
+### Syntax
 
-  ```SQL
-  FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
-  ```
+```SQL
+FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
+```
 
-## Parameters
+### Parameters
 
 All parameters are in the `"key" = "value"` pairs.
 
-### data_location
+#### data_location
 
 The URI used to access the files. You can specify a path or a file.
 
@@ -93,13 +90,13 @@ The URI used to access the files. You can specify a path or a file.
     -- Example: "path" = "wasbs://testcontainer@testaccount.blob.core.windows.net/path/file.parquet"
     ```
 
-### data_format
+#### data_format
 
 The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 You must set detailed options for specific data file formats.
 
-#### CSV
+##### CSV
 
 Example for the CSV format:
 
@@ -111,7 +108,7 @@ Example for the CSV format:
 "csv.escape"="\\"
 ```
 
-##### csv.column_separator
+###### csv.column_separator
 
 Specifies the column separator used when the data file is in CSV format. If you do not specify this parameter, this parameter defaults to `\\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality.
 
@@ -122,7 +119,7 @@ Tasks that use Files() are submitted according to the MySQL protocol. StarRocks 
 > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
 > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
-##### csv.enclose
+###### csv.enclose
 
 Specifies the character that is used to wrap the field values in the data file according to RFC4180 when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).
 
@@ -130,14 +127,14 @@ All special characters (including row separators and column separators) wrapped 
 
 If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file.
 
-##### csv.skip_header
+###### csv.skip_header
 
 Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
 
 In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
 The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
 
-##### csv.escape
+###### csv.escape
 
 Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.
 
@@ -148,7 +145,7 @@ Specifies the character that is used to escape various special characters, such 
 > - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
 > - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
-### schema_detect
+#### schema_detect
 
 From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
 
@@ -166,7 +163,7 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
   - String types are used for unionizing other types.
 - Generally, the STRING type can be used to unionize all data types.
 
-You can refer to [Example 6](#example-6).
+You can refer to Example 5.
 
 If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
 
@@ -174,7 +171,7 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 >
 > All data files in a single batch must be of the same file format.
 
-### StorageCredentialParams
+#### StorageCredentialParams
 
 The authentication information used by StarRocks to access your storage system.
 
@@ -234,7 +231,7 @@ StarRocks currently supports accessing HDFS with the simple authentication, acce
   | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
   | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
 
-### columns_from_path
+#### columns_from_path
 
 From v3.2 onwards, StarRocks can extract the value of a key/value pair from the file path as the value of a column.
 
@@ -244,27 +241,9 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
 
-### unload_data_param
+### Return
 
-From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.
-
-```sql
--- Supported from v3.2 onwards.
-unload_data_param::=
-    "compression" = "<compression_method>",
-    "partition_by" = "<column_name> [, ...]",
-    "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
-```
-
-| **Key**          | **Required** | **Description**                                              |
-| ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
-| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
-| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
-| target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
-
-## Return
+#### SELECT FROM FILES()
 
 When used with SELECT, FILES() returns the data in the file as a table.
 
@@ -365,13 +344,89 @@ When used with SELECT, FILES() returns the data in the file as a table.
   10 rows in set (0.55 sec)
   ```
 
-## Usage notes
+#### DESC FILES()
 
-From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
+When used with DESC, FILES() returns the schema of the file.
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
+```
+
+## FILES() for unloading
+
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
+
+### Syntax
+
+```SQL
+FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
+```
+
+### Parameters
+
+All parameters are in the `"key" = "value"` pairs.
+
+#### data_location
+
+See [FILES() for loading - Parameters - data_location](#data_location).
+
+#### data_format
+
+See [FILES() for loading - Parameters - data_format](#data_format).
+
+#### StorageCredentialParams
+
+See [FILES() for loading - Parameters - StorageCredentialParams](#storagecredentialparams).
+
+#### unload_data_param
+
+```sql
+unload_data_param ::=
+    "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
+    "partition_by" = "<column_name> [, ...]",
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
+```
+
+| **Key**          | **Required** | **Description**                                              |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
+| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
+| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
+| target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
 
 ## Examples
 
-#### Example 1
+#### Example 1: Query the data from a file
 
 Query the data from the Parquet file **parquet/par-dup.parquet** within the AWS S3 bucket `inserttest`:
 
@@ -392,7 +447,7 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
-#### Example 2
+#### Example 2: Insert the data rows from a file
 
 Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
 
@@ -409,7 +464,7 @@ Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
-#### Example 3
+#### Example 3: CTAS with data rows from a file
 
 Create a table named `ctas_wiki_edit` and insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table:
 
@@ -426,7 +481,7 @@ Query OK, 2 rows affected (22.09 sec)
 {'label':'insert_1a217d70-2f52-11ee-9e4a-7a563fb695da', 'status':'VISIBLE', 'txnId':'3248'}
 ```
 
-#### Example 4
+#### Example 4: Query the data from a file and extract the key/value information in its path
 
 Query the data from the Parquet file **/geo/country=US/city=LA/file1.parquet** (which only contains two columns -`id` and `user`), and extract the key/value information in its path as columns returned.
 
@@ -448,27 +503,7 @@ SELECT * FROM FILES(
 2 rows in set (3.84 sec)
 ```
 
-#### Example 5
-
-Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
-
-```SQL
-INSERT INTO 
-FILES(
-    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
-    "format" = "parquet",
-    "hadoop.security.authentication" = "simple",
-    "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
-)
-SELECT * FROM sales_records;
-```
-
-#### Example 6
-
-Automatic schema detection and Unionization.
+#### Example 5: Automatic schema detection and Unionization
 
 The following example is based on two Parquet files in the S3 bucket:
 
@@ -579,9 +614,9 @@ PROPERTIES (
 1 row in set (0.27 sec)
 ```
 
-#### Example 7
+#### Example 6: View the schema of a file
 
-View the schema of parquet file `lineorder` stored in AWS S3 using DESC.
+View the schema of the Parquet file `lineorder` stored in AWS S3 using DESC.
 
 ```Plain
 DESC FILES(
@@ -614,4 +649,22 @@ DESC FILES(
 | lo_shipmode      | varchar(1048576) | YES  |
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
+```
+
+#### Example 7: Unload data
+
+Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
+    "format" = "parquet",
+    "hadoop.security.authentication" = "simple",
+    "username" = "xxxxx",
+    "password" = "xxxxx",
+    "compression" = "lz4",
+    "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
 ```
