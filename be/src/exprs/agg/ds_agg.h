@@ -320,7 +320,7 @@ struct SpecialCppType<TYPE_VARCHAR> {
 template <LogicalType LT>
 struct DSSketchState<LT, FREQUENT> {
     using OriginalCppType = RunTimeCppType<LT>;
-    using CppType = SpecialCppType<LT>::CppType;
+    using CppType = typename SpecialCppType<LT>::CppType;
     using ColumnType = RunTimeColumnType<LT>;
     using SketchWarapperType = DataSketchesFrequent<CppType>;
     uint64_t counter_num;
@@ -475,7 +475,7 @@ private:
 
 template <LogicalType LT>
 struct DSSketchState<LT, THETA> {
-    using CppType = SpecialCppType<LT>::CppType;
+    using CppType = typename SpecialCppType<LT>::CppType;
     using ColumnType = RunTimeColumnType<LT>;
     using SketchWarapperType = DataSketchesTheta;
 
