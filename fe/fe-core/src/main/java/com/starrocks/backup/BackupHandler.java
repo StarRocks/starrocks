@@ -437,13 +437,14 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Also remove all unrelated objs
         Preconditions.checkState(infos.size() == 1);
         BackupJobInfo jobInfo = infos.get(0);
+
+        BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+
         // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
         // So, we should restore all table in current database.
         if (stmt.getTableRefs().size() != 0) {
-            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs(), backupMeta);
         }
-
-        BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
 
         // Create a restore job
         RestoreJob restoreJob = null;
@@ -488,11 +489,20 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return backupMetas.get(0);
     }
 
-    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)
+    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs, BackupMeta backupMeta)
             throws DdlException {
         Set<String> allTbls = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {
             String tblName = tblRef.getName().getTbl();
+            Table tbl = backupMeta.getTable(tblName);
+            if (tbl != null && tbl.isOlapView()) {
+                if (tblRef.hasExplicitAlias()) {
+                    // simple reset alias for view in backupMeta to be restored.
+                    tbl.setName(tblRef.getExplicitAlias());   
+                }
+                continue;
+            }
+
             if (!jobInfo.containsTbl(tblName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Table " + tblName + " does not exist in snapshot " + jobInfo.name);
