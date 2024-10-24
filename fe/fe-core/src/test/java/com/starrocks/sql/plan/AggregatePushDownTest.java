@@ -45,19 +45,42 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
-    public void testPushDown() {
-        runFileUnitTest("optimized-plan/agg-pushdown");
+    public void testPushDownDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        try {
+            runFileUnitTest("optimized-plan/agg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
     }
 
     @Test
-    public void testPushDownPreAgg() {
+    public void testPushDownEnableOnBroadcastJoin() {
+        runFileUnitTest("optimized-plan/agg-pushdown-enable_on_broadcast_join");
+    }
+
+    @Test
+    public void testPushDownPreAggDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {
-            runFileUnitTest("optimized-plan/preagg-pushdown");
+            runFileUnitTest("optimized-plan/preagg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
+    }
+
+    @Test
+    public void testPushDownPreAggEnableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown-enable_on_broadcast_join");
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregate("global");
         }
     }
+
 
     @Test
     public void testPushDownDistinctAggBelowWindow()
