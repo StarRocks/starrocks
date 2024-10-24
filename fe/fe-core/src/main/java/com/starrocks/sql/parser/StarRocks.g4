@@ -1324,7 +1324,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement
@@ -1353,7 +1353,7 @@ alterResourceStatement
     ;
 
 dropResourceStatement
-    : DROP RESOURCE resourceName=identifierOrString
+    : DROP RESOURCE (IF EXISTS)? resourceName=identifierOrString
     ;
 
 showResourceStatement
