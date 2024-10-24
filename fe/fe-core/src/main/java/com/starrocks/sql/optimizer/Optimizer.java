@@ -643,6 +643,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
+        // intersect rewrite depend on statistics
+        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 

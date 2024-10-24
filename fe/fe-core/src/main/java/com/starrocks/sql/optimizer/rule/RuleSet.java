@@ -256,6 +256,7 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
+                MergeLimitDirectRule.CTE_CONSUMER,
                 MergeLimitDirectRule.TABLE_FUNCTION,
                 MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
