@@ -2691,7 +2691,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
-    public static boolean lake_enable_ingest_slowdown = false;
+    public static boolean lake_enable_ingest_slowdown = true;
 
     @ConfField(mutable = true, comment =
             "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
@@ -2713,7 +2713,7 @@ public class Config extends ConfigBase {
                     "The effective value will be set to the higher of the configured value here and " +
                     "lake_compaction_score_selector_min_score.\n" +
                     "A value of 0 represents no limit.")
-    public static long lake_compaction_score_upper_bound = 0;
+    public static long lake_compaction_score_upper_bound = 1000;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
