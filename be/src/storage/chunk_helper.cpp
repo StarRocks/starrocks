@@ -647,8 +647,9 @@ public:
 
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
-        for (uint32_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
@@ -691,8 +692,9 @@ public:
         // assign offsets
         output_offsets.resize(_size + 1);
         size_t num_bytes = 0;
+        size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
+            size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
@@ -708,7 +710,7 @@ public:
         // copy bytes
         Byte* dest_bytes = output_bytes.data();
         for (size_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
+            size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             Bytes& src_bytes = *input_bytes[segment_id];
             Offsets& src_offsets = *input_offsets[segment_id];
@@ -734,8 +736,9 @@ public:
         output->reserve(_size);
 
         auto columns = _segment_column->columns();
-        for (uint32_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             output->append(*columns[segment_id], segment_offset, 1);
         }
@@ -766,9 +769,9 @@ public:
     ColumnPtr result() { return _result; }
 
 private:
-    inline std::pair<int, int> _segment_address(uint32 idx, size_t segment_size) {
-        int segment_id = idx / segment_size;
-        int segment_offset = idx % segment_size;
+    __attribute__((always_inline)) std::pair<size_t, size_t> _segment_address(size_t idx, size_t segment_size) {
+        size_t segment_id = idx / segment_size;
+        size_t segment_offset = idx % segment_size;
         return {segment_id, segment_offset};
     }
 
