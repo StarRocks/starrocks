@@ -37,6 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.Connector;
@@ -50,6 +51,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -86,6 +88,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -116,6 +119,9 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     private final List<Integer> deleteColumnSlotIds = new ArrayList<>();
     private final TupleDescriptor equalityDeleteTupleDesc;
+    private final Map<String, Pair<Integer, Long>> eqDeleteFileToNumToRows = new HashMap<>();
+    private final Map<String, Pair<Integer, Long>> posDeleteFileToNumToRows = new HashMap<>();
+    private final List<List<Pair<Integer, Long>>> dataFilesMetrics = new ArrayList<>();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TupleDescriptor equalityDeleteTupleDesc) {
         super(id, desc, planNodeName);
@@ -344,9 +350,15 @@ public class IcebergScanNode extends ScanNode {
             hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
             List<TIcebergDeleteFile> deleteFiles = new ArrayList<>();
+            int eqFileNum = 0;
+            int posFileNum = 0;
+            long eqRows = 0;
+            long posRows = 0;
             for (DeleteFile deleteFile : task.deletes()) {
                 FileContent content = deleteFile.content();
                 if (content == FileContent.EQUALITY_DELETES) {
+                    eqFileNum++;
+                    eqRows = eqRows + deleteFile.recordCount();
                     List<Integer> taskEqualityFieldIds = deleteFile.equalityFieldIds();
                     if (taskEqualityFieldIds.isEmpty()) {
                         continue;
@@ -359,6 +371,25 @@ public class IcebergScanNode extends ScanNode {
                         currentEqualityIds = taskEqualityFieldIds;
                         prepareRequiredColumnsForDeletes(currentEqualityIds);
                     }
+                    String filePath = deleteFile.path().toString();
+                    if (!eqDeleteFileToNumToRows.containsKey(filePath)) {
+                        Pair<Integer, Long> numToRows = Pair.create(1, deleteFile.recordCount());
+                        eqDeleteFileToNumToRows.put(filePath, numToRows);
+                    } else {
+                        Pair<Integer, Long> numToRows = eqDeleteFileToNumToRows.get(filePath);
+                        eqDeleteFileToNumToRows.put(filePath, Pair.create(numToRows.first + 1, numToRows.second));
+                    }
+                } else {
+                    posFileNum++;
+                    posRows = posRows + deleteFile.recordCount();
+                    String filePath = deleteFile.path().toString();
+                    if (!posDeleteFileToNumToRows.containsKey(filePath)) {
+                        Pair<Integer, Long> numToRows = Pair.create(1, deleteFile.recordCount());
+                        posDeleteFileToNumToRows.put(filePath, numToRows);
+                    } else {
+                        Pair<Integer, Long> numToRows = posDeleteFileToNumToRows.get(filePath);
+                        posDeleteFileToNumToRows.put(filePath, Pair.create(numToRows.first + 1, numToRows.second));
+                    }
                 }
 
                 TIcebergDeleteFile target = new TIcebergDeleteFile();
@@ -368,6 +399,13 @@ public class IcebergScanNode extends ScanNode {
                 target.setLength(deleteFile.fileSizeInBytes());
                 deleteFiles.add(target);
             }
+
+            Pair<Integer, Long> eqDeleteFiles = Pair.create(eqFileNum, eqRows);
+            Pair<Integer, Long> posDeleteFiles = Pair.create(posFileNum, posRows);
+            List<Pair<Integer, Long>> metric = new ArrayList<>();
+            metric.add(eqDeleteFiles);
+            metric.add(posDeleteFiles);
+            dataFilesMetrics.add(metric);
 
             if (!deleteFiles.isEmpty()) {
                 hdfsScanRange.setDelete_files(deleteFiles);
@@ -390,6 +428,22 @@ public class IcebergScanNode extends ScanNode {
         if (!currentEqualityIds.isEmpty()) {
             icebergTable.setIdentifierFieldIds(ImmutableSet.copyOf(currentEqualityIds));
         }
+
+        if (!currentEqualityIds.isEmpty()) {
+            List<String> values = eqDeleteFileToNumToRows.values().stream().map(Object::toString).collect(Collectors.toList());
+            String name = "ICEBERG.V2_EQ_FILES." + icebergTable.getRemoteDbName() + "[" +
+                    icebergTable.getRemoteTableName() + "]";
+            PlannerProfile.addCustomProperties(name, values.toString());
+
+            values = posDeleteFileToNumToRows.values().stream().map(Object::toString).collect(Collectors.toList());
+            name = "ICEBERG.V2_POS_FILES." + icebergTable.getRemoteDbName() + "[" +
+                    icebergTable.getRemoteTableName() + "]";
+            PlannerProfile.addCustomProperties(name, values.toString());
+        }
+
+        String name = "ICEBERG.V2_DATA_FILES." + icebergTable.getRemoteDbName() + "[" +
+                icebergTable.getRemoteTableName() + "]";
+        PlannerProfile.addCustomProperties(name, dataFilesMetrics.toString());
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
     }
