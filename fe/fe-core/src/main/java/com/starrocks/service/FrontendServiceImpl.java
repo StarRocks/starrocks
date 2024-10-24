@@ -1274,7 +1274,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -1407,7 +1407,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("get txn status request: {}", request);
 
@@ -1444,7 +1444,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnPrepare(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn prepare request: {}", request);
 
@@ -1502,7 +1502,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
+        LOG.debug("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -1592,7 +1592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}, warehouse: {}",
+        LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}, warehouse: {}",
                 request.getDb(), request.getTbl(),
                 request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr, request.getWarehouse());
@@ -1901,7 +1901,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TImmutablePartitionResult updateImmutablePartition(TImmutablePartitionRequest request) throws TException {
-        LOG.info("Receive update immutable partition: {}", request);
+        LOG.debug("Receive update immutable partition: {}", request);
 
         TImmutablePartitionResult result;
         try {
