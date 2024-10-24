@@ -850,6 +850,12 @@ public class Config extends ConfigBase {
     public static int mysql_service_io_threads_num = 4;
 
     /**
+     * Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+     */
+    @ConfField
+    public static boolean mysql_service_nio_enable_keep_alive = true;
+
+    /**
      * max num of thread to handle task in mysql.
      */
     @ConfField
