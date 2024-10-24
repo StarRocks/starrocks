@@ -51,6 +51,7 @@ import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 import org.apache.thrift.protocol.TType;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -162,7 +163,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
         // From timestamp to DATETIME
         if (value.getType().isBigint() && schemaType.isDatetime()) {
-            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
+            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000, ZoneId.systemDefault()));
         }
         return value.castTo(schemaType)
                 .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",

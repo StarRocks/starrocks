@@ -34,6 +34,7 @@ import org.apache.logging.log4j.util.Strings;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -96,7 +97,7 @@ public class PipeFileRecord {
         } else {
             record.fileVersion = String.valueOf(file.getModificationTime());
         }
-        record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime());
+        record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime(), ZoneOffset.UTC);
         record.stagedTime = LocalDateTime.now();
         record.loadState = FileListRepo.PipeFileState.UNLOADED;
         return record;
