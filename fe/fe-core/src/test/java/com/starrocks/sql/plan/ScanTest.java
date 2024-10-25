@@ -529,4 +529,24 @@ public class ScanTest extends PlanTestBase {
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
+
+    @Test
+    public void testMetaScanPartition() throws Exception {
+        String sql = "select max(L_LINESTATUS) from lineitem_partition partitions(p1993)[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testMetaAggregate() throws Exception {
+        String sql = "select max(v1), min(v2), count(v3), count(*) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 8> : max_v1\n" +
+                "     <id 9> : min_v2\n" +
+                "     <id 10> : count_v3\n" +
+                "     <id 11> : rows_v1");
+    }
 }
