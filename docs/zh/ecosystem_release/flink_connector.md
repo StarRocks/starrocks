@@ -48,7 +48,7 @@ displayed_sidebar: docs
 
 - 支持读取 JSON 列。[#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
 - 支持读取 ARRAY、STRUCT 和 MAP 列。[#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
-- 支持在写入 JSON 数据时使用 LZ4 压缩。[#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- 支持在使用 JSON 格式导入数据时进行 LZ4 压缩。[#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
 - 支持 Flink 1.19。[#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
 
 **功能优化**

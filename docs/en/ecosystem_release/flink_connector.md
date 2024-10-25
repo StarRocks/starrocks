@@ -46,7 +46,7 @@ displayed_sidebar: docs
 
 - Supports reading JSON columns. [#334](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/334)
 - Supports reading ARRAY, STRUCT, and MAP columns. [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
-- Supports LZ4 compression when sinking JSON data. [#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
+- Supports LZ4 compression when sinking data with the JSON format. [#354](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/354)
 - Supports Flink 1.19. [#379](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/379)
 
 **Improvements**
