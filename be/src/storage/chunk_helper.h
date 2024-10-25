@@ -168,6 +168,7 @@ public:
     size_t size() const;
     void upgrade_to_nullable();
     size_t segment_size() const;
+    size_t num_segments() const;
     std::vector<ColumnPtr> columns() const;
 
 private:

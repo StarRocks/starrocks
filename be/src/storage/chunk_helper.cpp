@@ -637,6 +637,7 @@ public:
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+        const size_t segment_size = _segment_column->segment_size();
 
         std::vector<ContainerT*> buffers;
         auto columns = _segment_column->columns();
@@ -646,9 +647,10 @@ public:
 
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
-        for (uint32_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
@@ -670,6 +672,7 @@ public:
         auto output = ColumnHelper::as_column<ColumnT>(_result);
         auto& output_offsets = output->get_offset();
         auto& output_bytes = output->get_bytes();
+        const size_t segment_size = _segment_column->segment_size();
 
         // input
         auto columns = _segment_column->columns();
@@ -689,9 +692,10 @@ public:
         // assign offsets
         output_offsets.resize(_size + 1);
         size_t num_bytes = 0;
+        size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, columns.size());
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
@@ -706,8 +710,8 @@ public:
         // copy bytes
         Byte* dest_bytes = output_bytes.data();
         for (size_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             Bytes& src_bytes = *input_bytes[segment_id];
             Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
@@ -728,12 +732,14 @@ public:
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
+        const size_t segment_size = _segment_column->segment_size();
         output->reserve(_size);
 
         auto columns = _segment_column->columns();
-        for (uint32_t i = 0; i < _size; i++) {
-            uint32_t idx = _indexes[_from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx);
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             output->append(*columns[segment_id], segment_offset, 1);
         }
         return {};
@@ -763,10 +769,9 @@ public:
     ColumnPtr result() { return _result; }
 
 private:
-    std::pair<int, int> _segment_address(uint32 idx) {
-        size_t segment_size = _segment_column->segment_size();
-        int segment_id = idx / segment_size;
-        int segment_offset = idx % segment_size;
+    __attribute__((always_inline)) std::pair<size_t, size_t> _segment_address(size_t idx, size_t segment_size) {
+        size_t segment_id = idx / segment_size;
+        size_t segment_offset = idx % segment_size;
         return {segment_id, segment_offset};
     }
 
@@ -784,9 +789,16 @@ SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_
         : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
-    (void)columns()[0]->accept(&visitor);
-    return visitor.result();
+    if (num_segments() == 1) {
+        auto first = columns()[0];
+        auto result = first->clone_empty();
+        result->append_selective(*first, indexes, from, size);
+        return result;
+    } else {
+        SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
+        (void)columns()[0]->accept(&visitor);
+        return visitor.result();
+    }
 }
 
 ColumnPtr SegmentedColumn::materialize() const {
@@ -803,6 +815,10 @@ ColumnPtr SegmentedColumn::materialize() const {
 
 size_t SegmentedColumn::segment_size() const {
     return _segment_size;
+}
+
+size_t SegmentedColumn::num_segments() const {
+    return _chunk.lock()->num_segments();
 }
 
 size_t SegmentedChunk::segment_size() const {
