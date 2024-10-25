@@ -1050,4 +1050,44 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             });
         }
     }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_Avg() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as revenue_sum\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs1() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as avg1, avg(LO_REVENUE) as avg2\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs2() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt,\n" +
+                " sum(lo_custkey) as sum_lo_custkey, count(lo_custkey) as count_lo_custkey\n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), avg(LO_REVENUE) as avg1, " +
+                    "avg(LO_REVENUE) as avg2, avg(lo_custkey) as avg3 from lineorder l \n" +
+                    "join dates d on l.LO_ORDERDATE = d.d_datekey group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
 }
