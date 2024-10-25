@@ -129,10 +129,11 @@ If a field value contains an `enclose`-specified character, you can use the same
 
 ###### csv.skip_header
 
-Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
+Specifies the number of header rows to skip in the CSV-formatted data. Type: INTEGER. Default value: `0`.
 
-In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
-The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
+In some CSV-formatted data files, a number of header rows are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip these header rows. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
+
+The header rows in the data file must be separated by using the row separator that you specify in the load statement.
 
 ###### csv.escape
 
