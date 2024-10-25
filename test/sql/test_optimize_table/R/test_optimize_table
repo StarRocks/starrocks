@@ -1,3 +1,11 @@
+-- name: test_disable_random
+create table t(k int);
+-- result:
+-- !result
+alter table t distributed by random buckets 10;
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
+-- !result
 
 
 
