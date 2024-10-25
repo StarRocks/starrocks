@@ -110,7 +110,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
-            long partitionId = tabletMeta.getPartitionId();
+            long partitionId = tabletMeta.getPhysicalPartitionId();
             if (table.getPhysicalPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
