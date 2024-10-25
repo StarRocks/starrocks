@@ -540,6 +540,7 @@ public class RestoreJob extends AbstractJob {
                 }
 
                 if (remoteTbl.isOlapView()) {
+                    remoteTbl.setId(globalStateMgr.getNextId());
                     restoredTbls.add(remoteTbl);
                     continue;
                 }
