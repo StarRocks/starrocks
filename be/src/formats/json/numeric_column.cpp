@@ -99,6 +99,9 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
         }
         return Status::OK();
     }
+
+    default:
+        return Status::OK();
     }
     return Status::OK();
 }
