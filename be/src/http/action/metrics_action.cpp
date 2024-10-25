@@ -321,6 +321,7 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
 }
 
 void MetricsAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_metrics"));
     const std::string& type = req->param("type");
     std::string str;

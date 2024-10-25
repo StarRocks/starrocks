@@ -39,6 +39,7 @@ const static std::string ACTION_ENABLE_TRACE = "enable_trace";
 const static std::string ACTION_DISABLE_TRACE = "disable_trace";
 
 void RuntimeFilterCacheAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << req->debug_string();
     const auto& action = req->param(ACTION_KEY);
     if (req->method() == HttpMethod::GET) {

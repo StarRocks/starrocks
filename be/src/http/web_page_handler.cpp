@@ -96,6 +96,8 @@ void WebPageHandler::register_page(const std::string& path, const string& alias,
 }
 
 void WebPageHandler::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
+
     PathHandler* handler = nullptr;
     {
         std::unique_lock lock(_map_lock);

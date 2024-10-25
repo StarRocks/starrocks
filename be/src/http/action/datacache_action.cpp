@@ -66,6 +66,7 @@ bool DataCacheAction::_check_request(HttpRequest* req) {
 }
 
 void DataCacheAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     VLOG_ROW << req->debug_string();
     if (!_check_request(req)) {
         return;

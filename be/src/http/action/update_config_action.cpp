@@ -293,6 +293,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 }
 
 void UpdateConfigAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << req->debug_string();
 
     Status s;

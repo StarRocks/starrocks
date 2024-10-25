@@ -61,6 +61,7 @@ static const int kPprofDefaultSampleSecs = 30;
 static std::mutex kPprofActionMutex;
 
 void HeapAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
 
@@ -82,6 +83,7 @@ void HeapAction::handle(HttpRequest* req) {
 }
 
 void GrowthAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     std::string str = "Growth profiling is not available with address sanitizer builds.";
     HttpChannel::send_reply(req, str);
@@ -94,6 +96,7 @@ void GrowthAction::handle(HttpRequest* req) {
 }
 
 void ProfileAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     std::string str = "CPU profiling is not available with address sanitizer builds.";
     HttpChannel::send_reply(req, str);
@@ -132,6 +135,7 @@ void ProfileAction::handle(HttpRequest* req) {
 static std::mutex kIOPprofActionMutex;
 
 void IOProfileAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     std::lock_guard<std::mutex> lock(kIOPprofActionMutex);
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_io_profile"));
 
@@ -152,6 +156,7 @@ void IOProfileAction::handle(HttpRequest* req) {
 }
 
 void CmdlineAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     FILE* fp = fopen("/proc/self/cmdline", "r");
     if (fp == nullptr) {
         std::string str = "Unable to open file: /proc/self/cmdline";
@@ -170,6 +175,7 @@ void CmdlineAction::handle(HttpRequest* req) {
 }
 
 void SymbolAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     // TODO: Implement symbol resolution. Without this, the binary needs to be passed
     // to pprof to resolve all symbols.
     if (req->method() == HttpMethod::GET) {

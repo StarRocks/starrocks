@@ -34,6 +34,8 @@ void MonitorAction::register_module(const std::string& name, RestMonitorIface* m
 }
 
 void MonitorAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
+
     LOG(INFO) << req->debug_string();
     const std::string& module = req->param(MODULE_KEY);
     if (module.empty()) {

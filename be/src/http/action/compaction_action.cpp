@@ -333,6 +333,7 @@ Status CompactionAction::_handle_running_task(HttpRequest* req, std::string* jso
 }
 
 void CompactionAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << req->debug_string();
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     std::string json_result;

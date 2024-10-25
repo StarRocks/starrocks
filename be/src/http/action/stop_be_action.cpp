@@ -36,6 +36,7 @@ std::string StopBeAction::construct_response_message(const std::string& msg) {
 }
 
 void StopBeAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
 
     DeferOp defer([&]() {

@@ -50,6 +50,7 @@ const static std::string HEADER_JSON = "application/json";
 HealthAction::HealthAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 void HealthAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_health"));
     std::stringstream ss;
     ss << "{";

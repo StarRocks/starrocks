@@ -17,10 +17,25 @@
 
 #pragma once
 
+#include <glog/logging.h>
+
+#include <atomic>
+
+#include "util/defer_op.h"
+
 namespace starrocks {
 
 class HttpRequest;
 class HttpChannel;
+
+#define CHECK_RUNNING_COUNT()                                              \
+    if (_running_count >= 10) {                                            \
+        LOG(WARNING) << "DEBUG: so many running task: " << _running_count; \
+    }                                                                      \
+    _running_count++;                                                      \
+    DeferOp op([&] {                                                       \
+        _running_count--;                                                  \
+    });
 
 // Handler for on http request
 class HttpHandler {
@@ -38,6 +53,11 @@ public:
 
     virtual void on_chunk_data(HttpRequest* req) {}
     virtual void free_handler_ctx(void* handler_ctx) {}
+
+    virtual std::string type() const = 0;
+
+protected:
+    std::atomic<int64_t> _running_count = 0;
 };
 
 } // namespace starrocks

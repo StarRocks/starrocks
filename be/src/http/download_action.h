@@ -41,6 +41,10 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    std::string type() const override {
+        return "download";
+    }
+
 private:
     enum DOWNLOAD_TYPE {
         NORMAL = 1,

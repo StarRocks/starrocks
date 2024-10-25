@@ -79,6 +79,7 @@ Status MetaAction::_handle_header(HttpRequest* req, std::string* json_meta) {
 }
 
 void MetaAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     if (_meta_type == META_TYPE::HEADER) {
         std::string json_meta;
         Status status = _handle_header(req, &json_meta);

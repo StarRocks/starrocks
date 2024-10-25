@@ -38,6 +38,7 @@ const std::string SCHEMA_HASH = "schema_hash";
 SnapshotAction::SnapshotAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 void SnapshotAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "accept one request " << req->debug_string();
 
     // Get tablet id

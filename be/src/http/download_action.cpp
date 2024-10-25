@@ -43,6 +43,7 @@
 #include "http/http_request.h"
 #include "http/utils.h"
 #include "runtime/exec_env.h"
+#include "util/defer_op.h"
 #include "util/filesystem_util.h"
 #include "util/path_util.h"
 #include "util/time.h"
@@ -130,6 +131,8 @@ void DownloadAction::handle_error_log(HttpRequest* req, const std::string& file_
 }
 
 void DownloadAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
+
     int64_t start = MonotonicMillis();
 
     // Get 'file' parameter, then assembly file absolute path

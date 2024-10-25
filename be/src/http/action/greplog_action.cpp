@@ -37,6 +37,7 @@ Status get_int64_param(HttpRequest* req, const std::string& name, int64_t* value
 }
 
 void GrepLogAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     if (req->method() != HttpMethod::GET) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return;

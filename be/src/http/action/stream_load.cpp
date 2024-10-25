@@ -144,6 +144,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
 }
 
 void StreamLoadAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
         return;

@@ -55,6 +55,7 @@ const std::string TABLET_VERSION = "version";
 const std::string SCHEMA_HASH = "schema_hash";
 
 void ChecksumAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "accept one request " << req->debug_string();
 
     // Get tablet id

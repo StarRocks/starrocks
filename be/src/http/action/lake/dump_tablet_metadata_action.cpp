@@ -36,6 +36,7 @@ namespace starrocks::lake {
 static const char* const kParamPretty = "pretty";
 
 void DumpTabletMetadataAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     std::string tablet_id_str = req->param("TabletId");
     StringParser::ParseResult result;
     auto tablet_id = StringParser::string_to_int<int64_t>(tablet_id_str.data(), tablet_id_str.size(), &result);

@@ -25,6 +25,7 @@
 namespace starrocks {
 
 void CompactRocksDbMetaAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "accept one request " << req->debug_string();
     _compact(req);
     LOG(INFO) << "compact rocksdb meta finished!";

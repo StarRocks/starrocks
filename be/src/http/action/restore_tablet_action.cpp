@@ -65,6 +65,7 @@ const std::string SCHEMA_HASH = "schema_hash";
 RestoreTabletAction::RestoreTabletAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 void RestoreTabletAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "accept one request " << req->debug_string();
     Status status = _handle(req);
     std::string result = to_json(status);

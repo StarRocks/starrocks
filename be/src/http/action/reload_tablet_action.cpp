@@ -54,6 +54,7 @@ const std::string SCHEMA_HASH = "schema_hash";
 ReloadTabletAction::ReloadTabletAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 void ReloadTabletAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     LOG(INFO) << "accept one request " << req->debug_string();
 
     // Get path

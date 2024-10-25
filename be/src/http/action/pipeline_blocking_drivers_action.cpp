@@ -51,6 +51,7 @@ struct DriverInfo {
 };
 
 void PipelineBlockingDriversAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     VLOG_ROW << req->debug_string();
     const auto& action = req->param(ACTION_KEY);
     if (req->method() == HttpMethod::GET) {

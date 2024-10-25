@@ -104,6 +104,7 @@ void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status&
 }
 
 void TransactionManagerAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     Status st = Status::OK();
     std::string resp;
 
@@ -144,6 +145,7 @@ void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Stat
 }
 
 void TransactionStreamLoadAction::handle(HttpRequest* req) {
+    CHECK_RUNNING_COUNT();
     StreamLoadContext* ctx = nullptr;
     const auto& label = req->header(HTTP_LABEL_KEY);
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
