@@ -130,7 +130,7 @@ public class BrokerFileGroup implements Writable {
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
-    public BrokerFileGroup(TableFunctionTable table) throws AnalysisException {
+    public BrokerFileGroup(TableFunctionTable table, Set<String> scanColumns) throws AnalysisException {
         this.tableId = table.getId();
         this.isNegative = false;
 
@@ -143,7 +143,7 @@ public class BrokerFileGroup implements Writable {
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         this.fileFieldNames = new ArrayList<>();
 
-        this.columnExprList = table.getColumnExprList();
+        this.columnExprList = table.getColumnExprList(scanColumns);
         this.columnsFromPath = table.getColumnsFromPath();
     }
 

@@ -57,6 +57,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -364,11 +365,12 @@ public class TableFunctionTable extends Table {
         return columns;
     }
 
-    public List<ImportColumnDesc> getColumnExprList() {
+    public List<ImportColumnDesc> getColumnExprList(Set<String> scanColumns) {
         List<ImportColumnDesc> exprs = new ArrayList<>();
         List<Column> columns = super.getFullSchema();
         for (Column column : columns) {
-            exprs.add(new ImportColumnDesc(column.getName()));
+            String colName = column.getName();
+            exprs.add(new ImportColumnDesc(colName, scanColumns.contains(colName)));
         }
         return exprs;
     }
