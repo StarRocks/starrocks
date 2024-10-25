@@ -88,11 +88,11 @@ public class OptimizerTraceUtil {
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    mvContext.getMv().getName(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
@@ -102,11 +102,11 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     mvRewriteContext.getRule().type().name(),
-                    mvContext.getMv().getName(),
                     mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] [InMemo:{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
