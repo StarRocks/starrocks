@@ -1973,6 +1973,86 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountDistinctImplementation1() throws Exception {
+        // normal case
+        String sql = "select " +
+                "count(distinct t1a)," + // varchar
+                "count(distinct t1b)," + // smallint
+                "count(distinct t1c)," + // int
+                "count(distinct t1d)," + // bigint
+                "count(distinct t1e)," + // float
+                "count(distinct t1f)," + //double
+                "count(distinct t1g)," + // bigint
+                "count(distinct id_datetime)," + // datetime
+                "count(distinct id_date)," + // date
+                "count(distinct id_decimal)" + //decimal
+                "from test_all_type_not_null";
+        connectContext.getSessionVariable().setCountDistinctImplementation("ndv");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  output: ndv(7: t1g), ndv(8: id_datetime), " +
+                "ndv(9: id_date), ndv(10: id_decimal), ndv(1: t1a), ndv(2: t1b), " +
+                "ndv(3: t1c), ndv(4: t1d), ndv(5: t1e), ndv(6: t1f)\n" +
+                "  |  group by: ");
+        sql = "select count(distinct if(v1 = 1, v2, -999)) as c1, \n" +
+                "count(distinct if(v1 = 1, v3, -999)) as c2,\n" +
+                "count(distinct if(v1 = 1, v2, -999)) - " +
+                "count(distinct if(v1 = 1, v3, -999))\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " |  output: ndv(if(9: expr, 2: v2, -999)), " +
+                "ndv(if(9: expr, 3: v3, -999))\n" +
+                "  |  group by: ");
+
+        sql = "select count(distinct v1, v2) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  group by: 1: v1, 2: v2");
+        connectContext.getSessionVariable().setCountDistinctImplementation("default");
+    }
+
+    @Test
+    public void testCountDistinctImplementation2() throws Exception {
+        // normal case
+        String sql = "select " +
+                "count(distinct t1a)," + // varchar
+                "count(distinct t1b)," + // smallint
+                "count(distinct t1c)," + // int
+                "count(distinct t1d)," + // bigint
+                "count(distinct t1e)," + // float
+                "count(distinct t1f)," + //double
+                "count(distinct t1g)," + // bigint
+                "count(distinct id_datetime)," + // datetime
+                "count(distinct id_date)," + // date
+                "count(distinct id_decimal)" + //decimal
+                "from test_all_type_not_null";
+        connectContext.getSessionVariable().setCountDistinctImplementation("multi_count_distinct");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  output: multi_distinct_count(7: t1g), multi_distinct_count(8: id_datetime), " +
+                "multi_distinct_count(9: id_date), multi_distinct_count(10: id_decimal), " +
+                "multi_distinct_count(1: t1a), multi_distinct_count(2: t1b), " +
+                "multi_distinct_count(3: t1c), multi_distinct_count(4: t1d), " +
+                "multi_distinct_count(5: t1e), multi_distinct_count(6: t1f)\n" +
+                "  |  group by: ");
+        sql = "select count(distinct if(v1 = 1, v2, -999)) as c1, \n" +
+                "count(distinct if(v1 = 1, v3, -999)) as c2,\n" +
+                "count(distinct if(v1 = 1, v2, -999)) - " +
+                "count(distinct if(v1 = 1, v3, -999))\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(if(9: expr, 2: v2, -999)), " +
+                "multi_distinct_count(if(9: expr, 3: v3, -999))\n" +
+                "  |  group by: ");
+        sql = "select count(distinct v1, v2) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1, 2: v2");
+        connectContext.getSessionVariable().setCountDistinctImplementation("default");
+    }
+
+    @Test
     public void testGroupByLiteral() throws Exception {
         String sql = "select -9223372036854775808 group by TRUE;";
         String plan = getFragmentPlan(sql);

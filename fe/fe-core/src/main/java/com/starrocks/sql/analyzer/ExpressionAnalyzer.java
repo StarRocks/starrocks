@@ -89,6 +89,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -1024,7 +1025,7 @@ public class ExpressionAnalyzer {
                 node.setNondeterministicId(exprId);
             }
 
-            Function fn;
+            Function fn = null;
             String fnName = node.getFnName().getFunction();
 
             // throw exception direct
@@ -1192,6 +1193,25 @@ public class ExpressionAnalyzer {
                             fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
                                     Function.CompareMode.IS_IDENTICAL);
                         }
+                    }
+                }
+            } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
+                SessionVariableConstants.CountDistinctImplMode countDistinctImplementation =
+                        session.getSessionVariable().getCountDistinctImplementation();
+                if (countDistinctImplementation != null) {
+                    switch (countDistinctImplementation) {
+                        case NDV:
+                            node.resetFnName("", FunctionSet.NDV);
+                            node.getParams().setIsDistinct(false);
+                            fn = Expr.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
+                                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                            break;
+                        case MULTI_COUNT_DISTINCT:
+                            node.resetFnName("", FunctionSet.MULTI_DISTINCT_COUNT);
+                            node.getParams().setIsDistinct(false);
+                            fn = Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
+                                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                            break;
                     }
                 }
             } else {
@@ -2089,10 +2109,10 @@ public class ExpressionAnalyzer {
 
     static class ResolveSlotVisitor extends Visitor {
 
-        private java.util.function.Consumer<SlotRef> resolver;
+        private Consumer<SlotRef> resolver;
 
         public ResolveSlotVisitor(AnalyzeState state, ConnectContext session,
-                                  java.util.function.Consumer<SlotRef> slotResolver) {
+                                  Consumer<SlotRef> slotResolver) {
             super(state, session);
             resolver = slotResolver;
         }
