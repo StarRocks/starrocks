@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,6 +45,7 @@ public class RewriteContext {
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
+    private final OptimizerContext optimizerContext;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
     private ScalarOperator unionRewriteQueryExtraPredicate;
     private AggregatePushDownContext aggregatePushDownContext;
@@ -62,7 +64,8 @@ public class RewriteContext {
                           ColumnRefFactory mvRefFactory,
                           ReplaceColumnRefRewriter mvColumnRefRewriter,
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
-                          Set<ColumnRefOperator> queryColumnSet) {
+                          Set<ColumnRefOperator> queryColumnSet,
+                          OptimizerContext optimizerContext) {
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
         this.queryEquivalenceClasses = queryEquivalenceClasses;
@@ -76,6 +79,7 @@ public class RewriteContext {
         this.mvColumnRefRewriter = mvColumnRefRewriter;
         this.outputMapping = outputMapping;
         this.queryColumnSet = queryColumnSet;
+        this.optimizerContext = optimizerContext;
     }
 
     public BiMap<Integer, Integer> getQueryToMvRelationIdMapping() {
@@ -180,5 +184,9 @@ public class RewriteContext {
 
     public void setRollup(boolean rollup) {
         isRollup = rollup;
+    }
+
+    public OptimizerContext getOptimizerContext() {
+        return optimizerContext;
     }
 }
