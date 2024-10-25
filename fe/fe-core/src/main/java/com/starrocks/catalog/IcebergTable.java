@@ -303,7 +303,6 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
-
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);

@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -57,12 +58,15 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public interface ConnectorMetadata {
     /**
@@ -349,6 +353,11 @@ public interface ConnectorMetadata {
 
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
+    }
+
+    default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
+                                           ScalarOperator predicate, FileContent fileContent) {
+        throw new StarRocksConnectorException("This connector doesn't support getting delete files");
     }
 }
 
