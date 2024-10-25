@@ -52,6 +52,7 @@
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "util/core_local.h"
+#include "util/runtime_profile.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -368,10 +369,22 @@ public:
             unprotected_trigger_hook();
         }
 
-        std::shared_lock lock(_collector_mutex);
-        for (auto& it : _collectors) {
-            it.second->collect(_name, it.first, visitor);
+        int64_t cost = 0;
+        LOG(INFO) << "DEBUG: start collect metrics: " << _collectors.size();
+        {
+            int64_t start = cost;
+            std::shared_lock lock(_collector_mutex);
+            for (auto& it : _collectors) {
+                {
+                    SCOPED_RAW_TIMER(&cost);
+                    it.second->collect(_name, it.first, visitor);
+                }
+                if (cost >= 10000) {
+                    LOG(ERROR) << "DEBUG: long fetch metrics: " << it.first;
+                }
+            }
         }
+        LOG(INFO) << "DEBUG: stop collect metrics: " << cost << "ns";
     }
 
     void trigger_hook() {
