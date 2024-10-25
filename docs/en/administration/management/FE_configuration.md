@@ -657,6 +657,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Specifies whether asynchronous I/O is enabled for the FE node.
 - Introduced in: -
 
+##### mysql_service_nio_enable_keep_alive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+- Introduced in: -
+
 ##### mysql_service_io_threads_num
 
 - Default: 4
