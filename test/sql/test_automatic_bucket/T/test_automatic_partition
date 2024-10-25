@@ -182,4 +182,18 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 select * from t;
 
 alter table t set('mutable_bucket_num'='-1');
+<<<<<<< HEAD
 alter table t set('mutable_bucket_num'='a');
+=======
+alter table t set('mutable_bucket_num'='a');
+
+-- name: test_tablet_check
+create table t(k int)properties('bucket_size'='1');
+insert into t values(1);
+insert into t values(1);
+insert into t values(1);
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
+select sleep(5);
+select * from t;
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
