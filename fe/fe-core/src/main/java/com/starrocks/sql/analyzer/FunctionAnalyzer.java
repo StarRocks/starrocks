@@ -787,7 +787,7 @@ public class FunctionAnalyzer {
                     }
                 }
             }
-        } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct()) {
+        } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
             SessionVariableConstants.CountDistinctImplMode countDistinctImplementation =
                     session.getSessionVariable().getCountDistinctImplementation();
             if (countDistinctImplementation != null) {

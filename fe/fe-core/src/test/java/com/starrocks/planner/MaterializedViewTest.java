@@ -3025,6 +3025,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(true);
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
                 "from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id, user_id) y " +
+                "from user_tags group by user_id;");
     }
 
     @Test

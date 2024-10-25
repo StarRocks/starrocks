@@ -2002,6 +2002,12 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " |  output: ndv(if(9: expr, 2: v2, -999)), " +
                 "ndv(if(9: expr, 3: v3, -999))\n" +
                 "  |  group by: ");
+
+        sql = "select count(distinct v1, v2) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  group by: 1: v1, 2: v2");
         connectContext.getSessionVariable().setCountDistinctImplementation("default");
     }
 
@@ -2038,6 +2044,11 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: multi_distinct_count(if(9: expr, 2: v2, -999)), " +
                 "multi_distinct_count(if(9: expr, 3: v3, -999))\n" +
                 "  |  group by: ");
+        sql = "select count(distinct v1, v2) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1, 2: v2");
         connectContext.getSessionVariable().setCountDistinctImplementation("default");
     }
 

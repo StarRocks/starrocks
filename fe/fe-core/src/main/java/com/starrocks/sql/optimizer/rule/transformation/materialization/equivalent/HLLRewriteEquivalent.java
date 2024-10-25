@@ -146,8 +146,8 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
                 return null;
             }
             return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
-        } else if ((aggFuncName.equalsIgnoreCase(FunctionSet.COUNT) && aggFunc.isDistinct()) ||
-                aggFuncName.equalsIgnoreCase(MULTI_DISTINCT_COUNT)) {
+        } else if ((aggFuncName.equalsIgnoreCase(FunctionSet.COUNT) && aggFunc.isDistinct()
+                && aggFunc.getChildren().size() == 1) || aggFuncName.equalsIgnoreCase(MULTI_DISTINCT_COUNT)) {
             SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
             if (!sessionVariable.isEnableCountDistinctRewriteByHllBitmap()) {
                 return null;

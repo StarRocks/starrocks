@@ -275,7 +275,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
-                    columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+                        columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
