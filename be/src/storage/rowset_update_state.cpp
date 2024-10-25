@@ -17,6 +17,7 @@
 #include "column/binary_column.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -73,7 +74,12 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+    RandomAccessFileOptions opts;
+    auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
+    if (!encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+    }
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
     std::vector<uint8_t> read_buffer;
     TRY_CATCH_BAD_ALLOC(read_buffer.resize(file_size));
