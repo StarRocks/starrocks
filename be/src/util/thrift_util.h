@@ -185,7 +185,7 @@ Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, const std::stri
     }
 }
 
-// Redirects all Thrift logging to VLOG(1)
+// Redirects all Thrift logging to VLOG(2)
 void init_thrift_logging();
 
 // Wait for a server that is running locally to start accepting
