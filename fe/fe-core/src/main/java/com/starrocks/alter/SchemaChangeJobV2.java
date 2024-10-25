@@ -856,7 +856,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
