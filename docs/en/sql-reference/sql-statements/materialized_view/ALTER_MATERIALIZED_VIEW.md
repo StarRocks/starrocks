@@ -25,6 +25,7 @@ This SQL statement can:
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
+  - `excluded_refresh_tables`
   - All session variable-related properties. For information on session variables, see [System variables](../../System_variable.md).
 
 :::tip

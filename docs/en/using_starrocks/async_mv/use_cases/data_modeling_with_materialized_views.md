@@ -179,6 +179,7 @@ Several parameters can be used to control refresh behavior:
 - `partition_ttl_number`: the number of recent partitions to retain.
 - `excluded_trigger_tables`: the table whose data changes can be ignored to avoid triggering the automatic refresh.
 - `auto_refresh_partitions_limit`: the number of partitions to refresh in each automatic refresh operation.
+- `excluded_refresh_tables`: Exclude tables that need to be refreshed, usually used together with `excluded_trigger_tables`.
 
 For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
 
