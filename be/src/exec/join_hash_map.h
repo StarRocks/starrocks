@@ -296,7 +296,7 @@ struct HashTableParam {
     bool mor_reader_mode = false;
 
     // TODO: optimize this according to chunk width
-    size_t build_chunk_segment_size = 1 << 16;
+    size_t build_chunk_segment_size = 1 << 20;
 };
 
 template <class T>
