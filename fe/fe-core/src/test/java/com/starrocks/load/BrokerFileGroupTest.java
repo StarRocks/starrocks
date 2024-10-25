@@ -15,6 +15,7 @@
 
 package com.starrocks.load;
 
+import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
@@ -179,7 +180,7 @@ public class BrokerFileGroupTest {
         properties.put("csv.row_delimiter", "\\x02");
 
         TableFunctionTable table = new TableFunctionTable(properties);
-        BrokerFileGroup fileGroup = new BrokerFileGroup(table);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
         Assert.assertEquals("\1", fileGroup.getColumnSeparator());
         Assert.assertEquals("\2", fileGroup.getRowDelimiter());
     }
