@@ -245,7 +245,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             }
 
             context = new AggregatePushDownContext();
-            context.setAggregator(aggOp);
+            context.setAggregator(queryColumnRefFactory, aggOp);
             return context;
         }
 
@@ -667,6 +667,8 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
 
                 if (uniqueAggregations.containsKey(aggCall)) {
                     ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
+                    // add into remapping even if it has existed.
+                    remapping.put(aggColRef, uniqueAggregations.get(aggCall));
                     continue;
                 }
                 // NOTE: This new aggregate type is final stage's type not the immediate/partial stage type.

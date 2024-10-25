@@ -2813,9 +2813,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+<<<<<<< HEAD
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+=======
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : 7: bitmap_union(to_bitmap(tag_id))");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 7: user_id\n" +
+                        "  |  <slot 6> : bitmap_count(8: bitmap_union(to_bitmap(tag_id)))");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;")
+                .match("  |  <slot 2> : 6: user_id\n" +
+                        "  |  <slot 5> : bitmap_count(7: bitmap_union(to_bitmap(tag_id)))");
+>>>>>>> 2aa542534c ([Enhancement] Support push down avg aggregate function in mv rewrite (#52288))
     }
 
     @Test
