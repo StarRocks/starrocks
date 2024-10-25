@@ -123,9 +123,6 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
             List<TScanRangeLocations> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
-                if (remoteFileInfo == RemoteFileInfo.EMPTY) {
-                    continue;
-                }
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
                 res.addAll(toScanRanges(fileScanTask));
