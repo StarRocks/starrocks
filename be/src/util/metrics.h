@@ -372,15 +372,15 @@ public:
         int64_t cost = 0;
         LOG(INFO) << "DEBUG: start collect metrics: " << _collectors.size();
         {
-            int64_t start = cost;
             std::shared_lock lock(_collector_mutex);
             for (auto& it : _collectors) {
+                int64_t start = cost;
                 {
                     SCOPED_RAW_TIMER(&cost);
                     it.second->collect(_name, it.first, visitor);
                 }
-                if (cost >= 10000) {
-                    LOG(ERROR) << "DEBUG: long fetch metrics: " << it.first;
+                if ((cost - start) >= 10000) {
+                    LOG(ERROR) << "DEBUG: long fetch metrics: " << it.first << ":" << (cost - start);
                 }
             }
         }
