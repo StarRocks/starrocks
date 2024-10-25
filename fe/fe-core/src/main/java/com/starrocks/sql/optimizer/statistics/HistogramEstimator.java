@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import org.apache.commons.collections.CollectionUtils;
 
 /**
  * Use histogram to estimate cardinality
@@ -37,6 +38,10 @@ public class HistogramEstimator {
 
         // If either histogram is empty, estimation is not possible
         if (leftHistogram == null || rightHistogram == null) {
+            return null;
+        }
+        if (CollectionUtils.isEmpty(leftHistogram.getBuckets()) &&
+                CollectionUtils.isEmpty(rightHistogram.getBuckets())) {
             return null;
         }
 
@@ -74,11 +79,6 @@ public class HistogramEstimator {
         double overlapLower = Math.max(leftLower, rightLower);
         double overlapUpper = Math.min(leftUpper, rightUpper);
 
-        // If there's no overlap, return 0
-        if (overlapLower >= overlapUpper) {
-            return 0;
-        }
-
         // Calculate overlap ratio
         double leftRange = leftUpper - leftLower;
         double rightRange = rightUpper - rightLower;
@@ -90,6 +90,12 @@ public class HistogramEstimator {
         } else {
             double leftOverlapRatio = overlapRange / leftRange;
             leftOverlapCount = leftBucket.getCount() * leftOverlapRatio;
+            // left:   [lower,      upper]
+            // right:  [lower, upper]
+            // upper repeats should be excluded
+            if (leftUpper > rightUpper) {
+                leftOverlapCount -= leftBucket.getUpperRepeats() * leftOverlapRatio;
+            }
         }
 
         double rightOverlapCount;
@@ -98,6 +104,9 @@ public class HistogramEstimator {
         } else {
             double rightOverlapRatio = overlapRange / rightRange;
             rightOverlapCount = rightBucket.getCount() * rightOverlapRatio;
+            if (leftUpper < rightUpper) {
+                rightOverlapCount -= rightBucket.getUpperRepeats() * rightOverlapRatio;
+            }
         }
 
         // Estimate the count of overlapping elements

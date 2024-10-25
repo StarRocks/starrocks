@@ -39,7 +39,8 @@ public class HistogramEstimatorTest {
             Assertions.assertNull(actualSelectivity);
         } else {
             Assertions.assertNotNull(actualSelectivity);
-            assertEquals(expectedSelectivity, actualSelectivity, 0.01);
+            assertEquals(expectedSelectivity, actualSelectivity, 0.01, "left histogram: " + left.getHistogram() +
+                    "\nright histogram: " + right.getHistogram());
         }
     }
 
@@ -83,6 +84,20 @@ public class HistogramEstimatorTest {
                         createColumnStatistic(createUniformedHistogram(10, 10240, 1 << 16)),
                         1.0),
 
+                // low-cardinality single element histogram
+                Arguments.of(
+                        createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
+                        createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
+                        1.0),
+                Arguments.of(
+                        createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
+                        0.0),
+                Arguments.of(
+                        createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
+                        createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
+                        0.0),
+
                 // Completely overlapping histograms
                 Arguments.of(
                         createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
@@ -115,6 +130,17 @@ public class HistogramEstimatorTest {
         double lower = 0.0;
         for (int i = 0; i < numBuckets; i++) {
             builder.addBucket(new Bucket(lower, lower + bucketRange, perBucketCount, 1L));
+            lower += bucketRange;
+        }
+        return builder.build();
+    }
+
+    // upper == lower
+    private static Histogram createSingleElementHistogram(int numBuckets, double bucketRange, long perBucketCount) {
+        Histogram.Builder builder = new Histogram.Builder();
+        double lower = 0.0;
+        for (int i = 0; i < numBuckets; i++) {
+            builder.addBucket(new Bucket(lower, lower, perBucketCount, perBucketCount));
             lower += bucketRange;
         }
         return builder.build();

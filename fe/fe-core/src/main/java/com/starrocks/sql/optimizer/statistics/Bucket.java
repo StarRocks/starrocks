@@ -64,4 +64,9 @@ public class Bucket {
     public int hashCode() {
         return Objects.hash(lower, upper, count, upperRepeats);
     }
+
+    @Override
+    public String toString() {
+        return String.format("[%f,%f,%d,%d]", lower, upper, count, upperRepeats);
+    }
 }

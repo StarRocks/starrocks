@@ -151,4 +151,9 @@ public class Histogram {
             return new Histogram(buckets, mcv);
         }
     }
+
+    @Override
+    public String toString() {
+        return "Histogram(buckets=" + buckets + ",mcv=" + mcv + ")";
+    }
 }
