@@ -61,7 +61,7 @@ StarRocks 支持在 HDFS、AWS S3、Google GCS、阿里云 OSS 以及腾讯云 C
 - GCS：
   - "fs.s3a.access.key"：访问 Google GCS 存储空间的 Access Key。
   - "fs.s3a.secret.key"：访问 Google GCS 存储空间的 Secret Key。
-  - "fs.s3a.endpoint"：访问 Google GCS 存储空间的连接地址。
+  - "fs.s3a.endpoint"：访问 Google GCS 存储空间的连接地址。请勿在 Endpoint 地址中指定 `https`。
 
 > **说明**
 >

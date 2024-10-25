@@ -108,7 +108,8 @@ PROPERTIES(
 
 > **说明**
 >
-> StarRocks 仅支持通过 S3A 协议在 Google GCS 中创建仓库。 因此，当您在 Google GCS 中创建仓库时，必须在 `ON LOCATION` 参数下将 GCS URI 的前缀替换为 `s3a://`。
+> - StarRocks 仅支持通过 S3A 协议在 Google GCS 中创建仓库。 因此，当您在 Google GCS 中创建仓库时，必须在 `ON LOCATION` 参数下将 GCS URI 的前缀替换为 `s3a://`。
+> - 请勿在 Endpoint 地址中指定 `https`。
 
 - 在阿里云 OSS 中创建仓库
 
