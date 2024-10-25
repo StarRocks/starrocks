@@ -161,3 +161,39 @@ select * from t;
 
 delete from t where k = 1;
 select * from t;
+<<<<<<< HEAD
+=======
+
+-- name: test_mutable_bucket @sequential
+create database ggg;
+use ggg;
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1",
+"mutable_bucket_num" = "2"
+);
+show create table t;
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+
+alter table t set('mutable_bucket_num'='3');
+show create table t;
+insert into t values('2021-01-01', 1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+select * from t;
+
+alter table t set('mutable_bucket_num'='-1');
+alter table t set('mutable_bucket_num'='a');
+
+-- name: test_tablet_check
+create table t(k int)properties('bucket_size'='1');
+insert into t values(1);
+insert into t values(1);
+insert into t values(1);
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
+select sleep(5);
+select * from t;
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))

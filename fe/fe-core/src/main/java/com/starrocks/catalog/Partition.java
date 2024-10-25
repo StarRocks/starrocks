@@ -648,4 +648,34 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
     }
+<<<<<<< HEAD
+=======
+
+    public String generatePhysicalPartitionName(long physicalPartitionId) {
+        return this.name + '_' + physicalPartitionId;
+    }
+        
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (dataVersion == 0) {
+            dataVersion = visibleVersion;
+        }
+        if (nextDataVersion == 0) {
+            nextDataVersion = nextVersion;
+        }
+        if (versionEpoch == 0) {
+            versionEpoch = nextVersionEpoch();
+        }
+        if (versionTxnType == null) {
+            versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        for (PhysicalPartitionImpl subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
+    }
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 }

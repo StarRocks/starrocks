@@ -37,6 +37,11 @@ PROPERTIES (
 );
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_invalid_bucket_size
 create table t0(k int) properties('bucket_size'='0');
 -- result:
@@ -59,6 +64,11 @@ alter table t set('bucket_size'='2048');
 -- result:
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_automatic_bucket
 create database kkk;
 -- result:
@@ -91,6 +101,11 @@ alter table t set('bucket_size'='1');
 -- result:
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_range_partition @sequential
 create database ttt;
 -- result:
@@ -150,6 +165,11 @@ select * from t;
 2021-01-05	1
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_list_partition @sequential
 create database ddd;
 -- result:
@@ -209,6 +229,11 @@ select * from t;
 2021-01-03	1
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_expr_partition @sequential
 create database eee;
 -- result:
@@ -263,6 +288,11 @@ select * from t;
 2021-01-01	1
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_schema_change @sequential
 create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -367,6 +397,11 @@ select * from t;
 2021-01-05	None	2
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -449,6 +484,11 @@ select k, v1 from t;
 2021-01-03	2
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
 -- name: test_delete
 create table t(k int, v int)
 PROPERTIES (
@@ -493,3 +533,123 @@ delete from t where k = 1;
 select * from t;
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+
+
+
+-- name: test_mutable_bucket @sequential
+create database ggg;
+-- result:
+-- !result
+use ggg;
+-- result:
+-- !result
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1",
+"mutable_bucket_num" = "2"
+);
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('DAY', `k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"mutable_bucket_num" = "2",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+2
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+4
+-- !result
+alter table t set('mutable_bucket_num'='3');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('DAY', `k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"mutable_bucket_num" = "3",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
+-- result:
+7
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-01	1
+-- !result
+alter table t set('mutable_bucket_num'='-1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: -1.')
+-- !result
+alter table t set('mutable_bucket_num'='a');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+-- !result
+-- name: test_tablet_check
+create table t(k int)properties('bucket_size'='1');
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
+-- result:
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select * from t;
+-- result:
+1
+1
+1
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
+-- result:
+-- !result
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))

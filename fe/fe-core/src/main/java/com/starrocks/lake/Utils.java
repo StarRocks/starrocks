@@ -86,8 +86,13 @@ public class Utils {
             throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
+<<<<<<< HEAD
             for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
+=======
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
                     for (Tablet tablet : index.getTablets()) {
                         Long beId = chooseBackend((LakeTablet) tablet);
                         if (beId == null) {

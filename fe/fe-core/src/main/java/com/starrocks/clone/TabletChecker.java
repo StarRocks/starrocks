@@ -299,10 +299,15 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+<<<<<<< HEAD
                     for (Partition partition : GlobalStateMgr.getCurrentState().getAllPartitionsIncludeRecycleBin(olapTbl)) {
+=======
+                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
                         partitionChecked++;
 
-                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
+                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), physicalPartition.getId());
                         totStat.isUrgentPartitionHealthy = true;
                         if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
                             continue;
@@ -322,34 +327,50 @@ public class TabletChecker extends FrontendDaemon {
                             if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
+<<<<<<< HEAD
                             if (GlobalStateMgr.getCurrentState()
                                     .getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+=======
+                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartition.getId()) == null) {
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
                                 continue;
                             }
                         }
 
-                        if (partition.getState() != PartitionState.NORMAL) {
+                        Partition logicalPartition = olapTbl.getPartition(physicalPartition.getParentId());
+                        if (logicalPartition == null) {
+                            continue;
+                        }
+
+                        if (logicalPartition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
                             continue;
                         }
 
                         short replicaNum = GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                                 .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
+=======
+                                .getLocalMetastore()
+                                .getReplicationNumIncludeRecycleBin(
+                                        olapTbl.getPartitionInfo(), physicalPartition.getParentId());
+>>>>>>> 248ee98eb9 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physical_partition_id at the same time to cause confusion (#52258))
                         if (replicaNum == (short) -1) {
                             continue;
                         }
 
-                        TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, partition,
+                        TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, physicalPartition,
                                 replicaNum, aliveBeIdsInCluster, isPartitionUrgent);
                         totStat.accumulateStat(partitionTabletCheckerStat);
                         if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
                             // if all replicas in this partition are healthy, remove this partition from
                             // priorities.
                             LOG.debug("partition is healthy, remove from urgent table: {}-{}-{}",
-                                    db.getId(), olapTbl.getId(), partition.getId());
+                                    db.getId(), olapTbl.getId(), physicalPartition.getId());
                             removeFromUrgentTable(new RepairTabletInfo(db.getId(),
-                                    olapTbl.getId(), Lists.newArrayList(partition.getId())));
+                                    olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
                         }
                     } // partitions
                 } // tables
@@ -394,12 +415,12 @@ public class TabletChecker extends FrontendDaemon {
         }
     }
 
-    private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, Partition partition,
+    private TabletCheckerStat doCheckOnePartition(Database db, OlapTable olapTbl, PhysicalPartition physicalPartition,
                                                   int replicaNum, List<Long> aliveBeIdsInCluster,
                                                   boolean isPartitionUrgent) {
         TabletCheckerStat partitionTabletCheckerStat = new TabletCheckerStat();
         // Tablet in SHADOW index can not be repaired or balanced
-        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+        if (physicalPartition != null) {
             for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
                     IndexExtState.VISIBLE)) {
                 for (Tablet tablet : idx.getTablets()) {
@@ -444,7 +465,7 @@ public class TabletChecker extends FrontendDaemon {
 
                     TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(
                             TabletSchedCtx.Type.REPAIR,
-                            db.getId(), olapTbl.getId(), partition.getId(),
+                            db.getId(), olapTbl.getId(),
                             physicalPartition.getId(), idx.getId(), tablet.getId(),
                             System.currentTimeMillis());
                     // the tablet status will be set again when being scheduled
@@ -516,7 +537,7 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     Set<PrioPart> parts = tblEntry.getValue();
-                    parts = parts.stream().filter(p -> (tbl.getPartition(p.partId) != null && !p.isTimeout())).collect(
+                    parts = parts.stream().filter(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout())).collect(
                             Collectors.toSet());
                     if (parts.isEmpty()) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
@@ -619,14 +640,15 @@ public class TabletChecker extends FrontendDaemon {
             OlapTable olapTable = (OlapTable) tbl;
 
             if (partitions == null || partitions.isEmpty()) {
-                partIds = olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+                partIds = olapTable.getPhysicalPartitions().stream().map(PhysicalPartition::getId).collect(Collectors.toList());
             } else {
                 for (String partName : partitions) {
                     Partition partition = olapTable.getPartition(partName);
                     if (partition == null) {
                         throw new DdlException("Partition does not exist: " + partName);
                     }
-                    partIds.add(partition.getId());
+                    partIds.addAll(partition.getSubPartitions().stream()
+                            .map(PhysicalPartition::getId).collect(Collectors.toList()));
                 }
             }
         } finally {
