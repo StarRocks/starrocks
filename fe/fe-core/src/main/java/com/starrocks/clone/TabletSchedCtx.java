@@ -179,7 +179,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private final long dbId;
     private final long tblId;
-    private final long partitionId;
     private final long physicalPartitionId;
     private final long indexId;
     private final long tabletId;
@@ -231,12 +230,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      */
     private int replicaNum;
 
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId, long physicalPartitionId,
+    public TabletSchedCtx(Type type, long dbId, long tblId, long physicalPartitionId,
                           long idxId, long tabletId, long createTime) {
         this.type = type;
         this.dbId = dbId;
         this.tblId = tblId;
-        this.partitionId = partId;
         this.physicalPartitionId = physicalPartitionId;
         this.indexId = idxId;
         this.tabletId = tabletId;
@@ -246,19 +244,12 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     @VisibleForTesting
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
-                          long idxId, long tabletId, long createTime) {
-        this(type, dbId, tblId, partId, partId, idxId, tabletId, createTime);
-    }
-
-    @VisibleForTesting
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
+    public TabletSchedCtx(Type type, long dbId, long tblId, long physicalPartitionId,
                           long idxId, long tabletId, long createTime, SystemInfoService infoService) {
         this.type = type;
         this.dbId = dbId;
         this.tblId = tblId;
-        this.partitionId = partId;
-        this.physicalPartitionId = partId;
+        this.physicalPartitionId = physicalPartitionId;
         this.indexId = idxId;
         this.tabletId = tabletId;
         this.createTime = createTime;
@@ -333,10 +324,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public long getTblId() {
         return tblId;
-    }
-
-    public long getPartitionId() {
-        return partitionId;
     }
 
     public long getPhysicalPartitionId() {
@@ -936,6 +923,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
             }
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
+            }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
             if (indexMeta == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
@@ -966,7 +957,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageMedium(TStorageMedium.HDD)
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                    .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                    .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
                     .setCompressionType(olapTable.getCompressionType())
                     .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
@@ -1055,7 +1046,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
             short replicationNum =
                     globalStateMgr.getLocalMetastore()
-                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
             if (replicationNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }

@@ -1565,7 +1565,7 @@ public class ShowExecutor {
                 String dbName = null;
                 Long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String tableName = null;
-                Long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                Long partitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String partitionName = null;
                 Long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String indexName = null;
@@ -1604,6 +1604,10 @@ public class ShowExecutor {
                             break;
                         }
                         Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+                        if (partition == null) {
+                            isSync = false;
+                            break;
+                        }
                         partitionName = partition.getName();
 
                         MaterializedIndex index = physicalPartition.getIndex(indexId);

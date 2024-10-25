@@ -82,8 +82,8 @@ public class Utils {
 
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
-            for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalParition.getMaterializedIndices(indexState)) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
                                 warehouseId, (LakeTablet) tablet);
