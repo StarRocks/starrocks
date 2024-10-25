@@ -352,6 +352,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
         }
 
+        if (olapTable.getAutomaticBucketSize() > 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Random distribution table already supports automatic scaling and does not require optimization");
+        }
+
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
