@@ -15,7 +15,6 @@
 
 package com.starrocks.load;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
