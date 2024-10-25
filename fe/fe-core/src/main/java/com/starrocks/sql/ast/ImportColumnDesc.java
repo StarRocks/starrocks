@@ -23,15 +23,12 @@ public class ImportColumnDesc implements ParseNode {
     private String columnName;
     private Expr expr;
 
-    private final NodePosition pos;
+    // for table function table
+    // if the column is in select list, isMaterialized is true, else false
+    // isMaterialized always is true in broker load
+    private final boolean isMaterialized;
 
-    public ImportColumnDesc(ImportColumnDesc other) {
-        this.pos = other.pos;
-        this.columnName = other.columnName;
-        if (other.expr != null) {
-            this.expr = other.expr.clone();
-        }
-    }
+    private final NodePosition pos;
 
     public ImportColumnDesc(String column) {
         this(column, null, NodePosition.ZERO);
@@ -42,9 +39,19 @@ public class ImportColumnDesc implements ParseNode {
     }
 
     public ImportColumnDesc(String column, Expr expr, NodePosition pos) {
+        this(column, expr, true, pos);
+    }
+
+    // for table function table
+    public ImportColumnDesc(String column, boolean isMaterialized) {
+        this(column, null, isMaterialized, NodePosition.ZERO);
+    }
+
+    public ImportColumnDesc(String column, Expr expr, boolean isMaterialized, NodePosition pos) {
         this.pos = pos;
         this.columnName = column;
         this.expr = expr;
+        this.isMaterialized = isMaterialized;
     }
 
     public void reset(String column, Expr expr) {
@@ -62,6 +69,10 @@ public class ImportColumnDesc implements ParseNode {
 
     public boolean isColumn() {
         return expr == null;
+    }
+
+    public boolean isMaterialized() {
+        return isMaterialized;
     }
 
     @Override
