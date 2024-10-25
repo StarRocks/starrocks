@@ -82,9 +82,15 @@ public class NMysqlServer extends MysqlServer {
     @Override
     public boolean start() {
         try {
+            OptionMap optionMap = OptionMap.builder()
+                    .set(Options.TCP_NODELAY, true)
+                    .set(Options.BACKLOG, Config.mysql_nio_backlog_num)
+                    .set(Options.KEEP_ALIVE, Config.mysql_service_nio_enable_keep_alive)
+                    .getMap();
+
             server = xnioWorker.createStreamConnectionServer(NetUtils.getSockAddrBasedOnCurrIpVersion(port),
                     acceptListener,
-                    OptionMap.create(Options.TCP_NODELAY, true, Options.BACKLOG, Config.mysql_nio_backlog_num));
+                    optionMap);
             server.resumeAccepts();
             running = true;
             LOG.info("Open mysql server success on {}", port);
