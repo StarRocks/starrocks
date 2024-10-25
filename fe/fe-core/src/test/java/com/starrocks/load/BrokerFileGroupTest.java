@@ -157,22 +157,4 @@ public class BrokerFileGroupTest {
         Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
         Assert.assertEquals(10, fileGroup.getSrcTableId());
     }
-<<<<<<< HEAD
 }
-=======
-
-    @Test
-    public void testTableFunctionTableCSVDelimiter() throws UserException {
-        Map<String, String> properties = new HashMap<>();
-        properties.put("path", "fake://some_bucket/some_path/*");
-        properties.put("format", "CSV");
-        properties.put("csv.column_separator", "\\x01");
-        properties.put("csv.row_delimiter", "\\x02");
-
-        TableFunctionTable table = new TableFunctionTable(properties);
-        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
-        Assert.assertEquals("\1", fileGroup.getColumnSeparator());
-        Assert.assertEquals("\2", fileGroup.getRowDelimiter());
-    }
-}
->>>>>>> b6c6d36888 ([BugFix] Fix materialized columns in files() query plan (#52210))

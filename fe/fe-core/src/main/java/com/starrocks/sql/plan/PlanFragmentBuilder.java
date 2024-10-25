@@ -3359,18 +3359,9 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
-<<<<<<< HEAD
             files.add(table.fileList());
-
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.fileList().size());
-            List<BrokerFileGroup> fileGroups = new ArrayList<>();
-=======
-            files.add(table.loadFileList());
-            long warehouseId = context.getConnectContext().getCurrentWarehouseId();
-            FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
-                    "FileScanNode", files, table.loadFileList().size(), warehouseId);
->>>>>>> b6c6d36888 ([BugFix] Fix materialized columns in files() query plan (#52210))
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
                     Collectors.toCollection(TreeSet::new));
