@@ -17,6 +17,7 @@ package org.apache.iceberg;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.AsyncIterable;
@@ -46,6 +47,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,7 +80,6 @@ public class StarRocksIcebergTableScan
     private final boolean onlyReadCache;
     private final int localParallelism;
     private final long localPlanningMaxSlotSize;
-    private boolean isRemotePlanFiles;
     private ConnectContext connectContext;
 
     public static TableScanContext newTableScanContext(Table table) {
@@ -138,7 +139,9 @@ public class StarRocksIcebergTableScan
     private CloseableIterable<FileScanTask> planFileTasksRemotely(
             List<ManifestFile> dataManifests, List<ManifestFile> deleteManifests) {
         LOG.info("Planning file tasks remotely for table {}.{}", dbName, tableName);
-        this.isRemotePlanFiles = true;
+
+        String name = "ICEBERG.REMOTE_PLAN." + dbName + "." + tableName + "[" + filter() + "]";
+        Tracers.record(Tracers.Module.EXTERNAL, name, "true");
 
         long liveFilesCount = liveFilesCount(dataManifests);
         scanMetrics().scannedDataManifests().increment(dataManifests.size());
@@ -196,11 +199,10 @@ public class StarRocksIcebergTableScan
 
     private List<ManifestFile> findMatchingDeleteManifests(Snapshot snapshot) {
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
-        scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
-
         List<ManifestFile> matchingDeleteManifests = IcebergApiConverter.filterManifests(deleteManifests, table(), filter());
-        int skippedDeleteManifestsCount = deleteManifests.size() - matchingDeleteManifests.size();
-        scanMetrics().skippedDeleteManifests().increment(skippedDeleteManifestsCount);
+
+        scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
+        scanMetrics().skippedDeleteManifests().increment(deleteManifests.size() - matchingDeleteManifests.size());
 
         return matchingDeleteManifests;
     }
@@ -362,6 +364,64 @@ public class StarRocksIcebergTableScan
         }
     }
 
+    public Set<DeleteFile> getDeleteFiles(FileContent fileContent) {
+        List<ManifestFile> deleteManifests = findMatchingDeleteManifests(snapshot());
+        List<ManifestFile> deleteManifestWithoutCache = new ArrayList<>();
+        Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
+        if (deleteFileCache != null) {
+            for (ManifestFile manifestFile : deleteManifests) {
+                Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(manifestFile.path());
+                if (deleteFiles != null && !deleteFiles.isEmpty()) {
+                    deleteFiles = deleteFiles.stream()
+                            .filter(f -> f.content() == fileContent)
+                            .collect(Collectors.toSet());
+                    if (deleteFiles.isEmpty()) {
+                        continue;
+                    }
+
+                    if (filter() != null && filter() != Expressions.alwaysTrue()) {
+                        deleteFiles = deleteFiles.stream()
+                                .filter(f -> partitionEvaluatorCache.get(f.specId()).eval(f.partition()))
+                                .filter(f -> inclusiveMetricsEvaluatorCache.get(f.specId()).eval(f))
+                                .collect(Collectors.toSet());
+                    }
+
+                    if (deleteFiles.isEmpty()) {
+                        continue;
+                    }
+
+                    matchingCachedDeleteFiles.addAll(deleteFiles);
+                } else {
+                    deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                    deleteManifestWithoutCache.add(manifestFile);
+                }
+            }
+        } else {
+            deleteManifestWithoutCache = deleteManifests;
+        }
+
+        Set<DeleteFile> fetchedDeleteFiles = new HashSet<>();
+        if (!deleteManifestWithoutCache.isEmpty()) {
+            DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifestWithoutCache);
+            if (shouldPlanWithExecutor() && deleteManifests.size() > 1) {
+                builder.planWith(planExecutor());
+            }
+            builder.specsById(table().specs())
+                    .filterData(filter())
+                    .caseSensitive(isCaseSensitive())
+                    .scanMetrics(scanMetrics())
+                    .deleteFileCache(deleteFileCache);
+
+            fetchedDeleteFiles = builder.loadDeleteFiles().stream()
+                    .filter(f -> f.content() == fileContent)
+                    .collect(Collectors.toSet());
+        }
+
+        fetchedDeleteFiles.addAll(matchingCachedDeleteFiles);
+
+        return fetchedDeleteFiles;
+    }
+
     private FileScanTask toFileScanTask(DataFile dataFile) {
         String specString = specStringCache.get(dataFile.specId());
         ResidualEvaluator residuals = residualCache.get(dataFile.specId());
@@ -448,9 +508,5 @@ public class StarRocksIcebergTableScan
 
     private int liveFilesCount(ManifestFile manifest) {
         return manifest.existingFilesCount() + manifest.addedFilesCount();
-    }
-
-    public boolean isRemotePlanFiles() {
-        return isRemotePlanFiles;
     }
 }
