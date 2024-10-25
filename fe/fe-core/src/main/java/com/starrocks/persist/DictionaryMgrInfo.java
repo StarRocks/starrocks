@@ -14,7 +14,9 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -22,16 +24,27 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public class DictionaryMgrInfo implements Writable {
     @SerializedName(value = "nextTxnId")
     private long nextTxnId = 1L;
     @SerializedName(value = "nextDictionaryId")
     private long nextDictionaryId = 1L;
+    @SerializedName(value = "dictionaries")
+    private List<Dictionary> dictionaries = Lists.newArrayList();
 
     public DictionaryMgrInfo(long nextTxnId, long nextDictionaryId) {
         this.nextTxnId = nextTxnId;
         this.nextDictionaryId = nextDictionaryId;
+    }
+
+    public DictionaryMgrInfo(long nextTxnId, long nextDictionaryId, List<Dictionary> dictionaries) {
+        this.nextTxnId = nextTxnId;
+        this.nextDictionaryId = nextDictionaryId;
+        if (dictionaries != null) {
+            this.dictionaries = dictionaries;
+        }
     }
 
     public DictionaryMgrInfo() {}
@@ -42,6 +55,10 @@ public class DictionaryMgrInfo implements Writable {
 
     public long getNextDictionaryId() {
         return nextDictionaryId;
+    }
+
+    public List<Dictionary> getDictionaries() {
+        return this.dictionaries;
     }
 
     public static DictionaryMgrInfo read(DataInput in) throws IOException {

@@ -43,8 +43,8 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "block_cache/block_cache.h"
 #include "common/configbase.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
@@ -97,6 +97,30 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
+        _config_callback.emplace("datacache_mem_size", [&]() {
+            int64_t mem_limit = MemInfo::physical_mem();
+            if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
+                mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+            }
+            size_t mem_size = 0;
+            Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit, &mem_size);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to update datacache mem size";
+                return;
+            }
+            (void)BlockCache::instance()->update_mem_quota(mem_size, true);
+        });
+        _config_callback.emplace("datacache_disk_size", [&]() {
+            std::vector<DirSpace> spaces;
+            Status st = DataCacheUtils::parse_conf_datacache_disk_spaces(
+                    config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk, &spaces);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to update datacache disk spaces";
+                return;
+            }
+            (void)BlockCache::instance()->adjust_disk_spaces(spaces);
+        });
+        _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
         _config_callback.emplace("max_compaction_concurrency", [&]() {
             (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
@@ -109,6 +133,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::flush_thread_num_per_store * dir_cnt);
             (void)StorageEngine::instance()->segment_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
+        });
+        _config_callback.emplace("lake_flush_thread_num_per_store", [&]() {
+            (void)StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
+                    MemTableFlushExecutor::calc_max_threads_for_lake_table(StorageEngine::instance()->get_stores()));
         });
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
@@ -141,11 +169,33 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
+        _config_callback.emplace("transaction_publish_version_thread_pool_num_min", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            (void)thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                           config::transaction_publish_version_thread_pool_num_min));
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
         });
+        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MAKE_SNAPSHOT,
+                                                                 config::make_snapshot_worker_count);
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::RELEASE_SNAPSHOT,
+                                                                 config::release_snapshot_worker_count);
+        });
+        _config_callback.emplace("upload_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPLOAD, config::upload_worker_count);
+        });
+        _config_callback.emplace("download_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::DOWNLOAD, config::download_worker_count);
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MOVE, config::download_worker_count);
+        });
         _config_callback.emplace("replication_threads", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT,
+                                                                 config::replication_threads);
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
                                                                  config::replication_threads);
         });
@@ -167,6 +217,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
             (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("transaction_apply_thread_pool_num_min", [&]() {
+            int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
         });
         _config_callback.emplace("get_pindex_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
@@ -191,8 +245,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
             LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
                       << config::pipeline_connector_scan_thread_num_per_cpu;
-            ExecEnv::GetInstance()->connector_scan_executor()->change_num_threads(
-                    config::pipeline_connector_scan_thread_num_per_cpu);
+            if (config::pipeline_connector_scan_thread_num_per_cpu > 0) {
+                ExecEnv::GetInstance()->workgroup_manager()->change_num_connector_scan_threads(
+                        config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+            }
+        });
+        _config_callback.emplace("enable_resource_group_cpu_borrowing", [&]() {
+            LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
+            ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
+                    config::enable_resource_group_cpu_borrowing);
         });
         _config_callback.emplace("create_tablet_worker_count", [&]() {
             LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
@@ -211,77 +272,31 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
         });
+
 #ifdef USE_STAROS
-        _config_callback.emplace("starlet_cache_thread_num", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_threadpool_size";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_low_water", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_low_water";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_percent", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_percent", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_percent";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_throughput_mb", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_throughput_mb", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_throughput_mb";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_high_water", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_high_water";
-            }
-        });
-        _config_callback.emplace("starlet_fs_stream_buffer_size_bytes", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes", value).empty()) {
-                LOG(WARNING) << "Failed to update fs_stream_buffer_size_bytes";
-            }
-        });
-        _config_callback.emplace("starlet_fs_read_prefetch_enable", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", value).empty()) {
-                LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
-            }
-        });
-        _config_callback.emplace("starlet_fs_read_prefetch_threadpool_size", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_buffer_prefetch_threadpool_size", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fs_buffer_prefetch_threadpool_size";
-            }
-        });
-        _config_callback.emplace("starlet_cache_evict_interval", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
-                LOG(WARNING) << "Failed to update cachemgr_evict_interval";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
-                                                                      value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
-            }
-        });
-        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
-                        .empty()) {
-                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
-            }
-        });
-        _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() {
-            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
-                LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
-            }
-        });
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
+    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
+        }                                                                                            \
+    });
+
+        UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_low_water, cachemgr_evict_low_water);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_high_water, cachemgr_evict_high_water);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_percent, cachemgr_evict_percent);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_throughput_mb, cachemgr_evict_throughput_mb);
+        UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
+        UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
+        UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
+        UPDATE_STARLET_CONFIG(starlet_cache_evict_interval, cachemgr_evict_interval);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor,
+                              fslib_s3client_nonread_retry_scale_factor);
+        UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
+        UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
+        UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+#undef UPDATE_STARLET_CONFIG
 #endif // USE_STAROS
     });
 

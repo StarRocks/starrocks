@@ -94,15 +94,15 @@ public class TableSchemaAction extends RestBaseAction {
             Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
                     dbName, tableName, PrivilegeType.SELECT);
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
@@ -138,7 +138,7 @@ public class TableSchemaAction extends RestBaseAction {
                             e.getMessage() == null ? "Null Pointer Exception" : e.getMessage());
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

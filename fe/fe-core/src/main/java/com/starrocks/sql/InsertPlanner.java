@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.DescriptorTable;
@@ -29,6 +30,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
@@ -157,8 +159,10 @@ public class InsertPlanner {
         PARTIALLY_DEPEND_ON_TARGET_COLUMNS
     }
 
-    private static GenColumnDependency getDependencyType(Column column, Set<String> targetColumns) {
-        List<SlotRef> slots = column.getGeneratedColumnRef();
+    private static GenColumnDependency getDependencyType(Column column,
+                                                         Set<String> targetColumns,
+                                                         Map<ColumnId, Column> allColumns) {
+        List<SlotRef> slots = column.getGeneratedColumnRef(allColumns);
         if (slots.isEmpty()) {
             return GenColumnDependency.NO_DEPENDENCY;
         }
@@ -195,7 +199,7 @@ public class InsertPlanner {
         OlapTable targetTable = (OlapTable) insertStmt.getTargetTable();
         for (Column column : targetTable.getFullSchema()) {
             String columnName = column.getName().toLowerCase();
-            if (outputColumnNames.contains(columnName)) {
+            if (outputColumnNames.contains(columnName) || column.isKey()) {
                 if (baseSchemaNames.contains(columnName)) {
                     outputBaseSchema.add(column);
                 }
@@ -203,7 +207,7 @@ public class InsertPlanner {
                 legalGeneratedColumnDependencies.add(columnName);
                 continue;
             }
-            if (column.isAutoIncrement()) {
+            if (column.isAutoIncrement() || column.getDefaultExpr() != null) {
                 if (baseSchemaNames.contains(columnName)) {
                     outputBaseSchema.add(column);
                 }
@@ -215,7 +219,7 @@ public class InsertPlanner {
                 // if so, add it to the output schema
                 // if is not related to target columns at all, skip it (TODO in future)
                 // else raise error
-                switch (getDependencyType(column, legalGeneratedColumnDependencies)) {
+                switch (getDependencyType(column, legalGeneratedColumnDependencies, targetTable.getIdToColumn())) {
                     case NO_DEPENDENCY:
                         // should not happen, just skip
                         continue;
@@ -290,12 +294,11 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
-        SessionVariable currentVariable = session.getSessionVariable();
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable().clone();
+        session.setSessionVariable(currentVariable);
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
-        boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
         boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
                 currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
@@ -326,8 +329,8 @@ public class InsertPlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
@@ -402,7 +405,8 @@ public class InsertPlanner {
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
-                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable(),
+                        insertStmt.getTargetBranch());
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
@@ -412,6 +416,15 @@ public class InsertPlanner {
                 dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+
+            // enable spill for connector sink
+            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                session.getSessionVariable().setEnableSpill(true);
+                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
+                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
             }
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
@@ -450,12 +463,6 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
-        } finally {
-            session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
-            if (forceDisablePipeline) {
-                session.getSessionVariable().setEnablePipelineEngine(true);
-            }
-            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
@@ -483,7 +490,9 @@ public class InsertPlanner {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(plannerMetaLocker);
+                try (Timer ignore2 = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
@@ -584,8 +593,31 @@ public class InsertPlanner {
 
     private OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        // targetColumnNames is for check whether schema column is in target column list or not
+        Set<String> targetColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetColumnNames.addAll(
+                insertStatement.getTargetColumnNames() != null ? insertStatement.getTargetColumnNames() :
+                        outputBaseSchema.stream().map(Column::getName).collect(Collectors.toList()));
 
+        // sourceColumnMappedNames is the mapped name of source columns corresponding to the target columns.
+        // 1. if match by position, source mapped column name can be converted from target column name one by one.
+        // 2. if match by name, source mapped column name is same as the source column name.
+        Map<String, Integer> mappedColumnToSourceIdx = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        List<String> sourceColumnMappedNames = null;
+        if (insertStatement.isColumnMatchByPosition()) {
+            sourceColumnMappedNames = insertStatement.getTargetColumnNames() != null ? insertStatement.getTargetColumnNames() :
+                    outputBaseSchema.stream().map(Column::getName).collect(Collectors.toList());
+        } else {
+            Preconditions.checkState(insertStatement.isColumnMatchByName());
+            sourceColumnMappedNames = insertStatement.getQueryStatement().getQueryRelation().getColumnOutputNames();
+        }
+        Preconditions.checkState(sourceColumnMappedNames != null);
+        for (int columnIdx = 0; columnIdx < sourceColumnMappedNames.size(); ++columnIdx) {
+            mappedColumnToSourceIdx.put(sourceColumnMappedNames.get(columnIdx), columnIdx);
+        }
+
+        // generate columnRefMap (fill default value)
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -595,40 +627,35 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
-            if (insertStatement.getTargetColumnNames() == null) {
-                outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
-                columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
-                        logicalPlan.getOutputColumn().get(columnIdx));
-            } else {
-                int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
-                if (idx == -1) {
-                    ScalarOperator scalarOperator;
-                    Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                    if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
-                        scalarOperator = ConstantOperator.createNull(targetColumn.getType());
-                    } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
-                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
-                            scalarOperator = SqlToScalarOperatorTranslator.
-                                    translate(targetColumn.getDefaultExpr().obtainExpr());
-                        } else {
-                            throw new SemanticException(
-                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                            + targetColumn.getDefaultExpr().getExpr());
-                        }
-                    } else {
-                        throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
-                    }
-                    ColumnRefOperator col = columnRefFactory
-                            .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
 
-                    outputColumns.add(col);
-                    columnRefMap.put(col, scalarOperator);
+            String targetColumnName = targetColumn.getName();
+            if (mappedColumnToSourceIdx.containsKey(targetColumnName) && targetColumnNames.contains(targetColumnName)) {
+                ColumnRefOperator col = logicalPlan.getOutputColumn().get(mappedColumnToSourceIdx.get(targetColumnName));
+                outputColumns.add(col);
+                columnRefMap.put(col, col);
+            } else {
+                ScalarOperator scalarOperator;
+                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                        scalarOperator = SqlToScalarOperatorTranslator.
+                                translate(targetColumn.getDefaultExpr().obtainExpr());
+                    } else {
+                        throw new SemanticException("Column:" + targetColumnName + " has unsupported default value:"
+                                + targetColumn.getDefaultExpr().getExpr());
+                    }
                 } else {
-                    outputColumns.add(logicalPlan.getOutputColumn().get(idx));
-                    columnRefMap.put(logicalPlan.getOutputColumn().get(idx), logicalPlan.getOutputColumn().get(idx));
+                    throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                 }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
             }
         }
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
@@ -645,7 +672,7 @@ public class InsertPlanner {
 
             if (targetColumn.isGeneratedColumn()) {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
-                Expr expr = targetColumn.generatedColumnExpr();
+                Expr expr = targetColumn.getGeneratedColumnExpr(insertStatement.getTargetTable().getIdToColumn());
                 ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()
@@ -692,7 +719,6 @@ public class InsertPlanner {
                                              ConnectContext session) {
         Set<Column> baseSchema = Sets.newHashSet(outputBaseSchema);
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
             Column targetColumn = outputFullSchema.get(columnIdx);
 
@@ -743,14 +769,6 @@ public class InsertPlanner {
                                     "please check the associated materialized view " + targetIndexMetaName
                                     + " of target table:" + insertStatement.getTargetTable().getName());
                 }
-
-                ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
-                        new Scope(RelationId.anonymous(),
-                                new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(), col.getType(),
-                                                insertStatement.getTableName(), null))
-                                        .collect(Collectors.toList()))), session);
-
                 ExpressionMapping expressionMapping =
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());

@@ -15,16 +15,21 @@
 
 package com.starrocks.connector.iceberg.rest;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,9 +38,13 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,8 +55,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
@@ -61,6 +72,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     // not the "https://api.tabular.io/ws"
     public static final String KEY_DISABLE_TABULAR_SUPPORT = "disable_tabular_support";
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
+    public static final String KEY_DISABLE_VENDED_CREDENTIAL = "disable_vended_credential";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
@@ -84,7 +96,20 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             copiedProperties.put("header.x-tabular-s3-access", "vended_credentials");
         }
 
+        boolean disableVendedCredential = copiedProperties
+                .getOrDefault(KEY_DISABLE_VENDED_CREDENTIAL, "false")
+                .equalsIgnoreCase("true");
+        if (disableVendedCredential) {
+            copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
+        }
+
         delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
+    }
+
+    // for ut
+    public IcebergRESTCatalog(RESTCatalog restCatalog, Configuration conf) {
+        this.delegate = restCatalog;
+        this.conf = conf;
     }
 
     @Override
@@ -157,13 +182,22 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Database getDB(String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
-        Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
     }
 
     @Override
     public List<String> listTables(String dbName) {
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
+        List<TableIdentifier> viewIdentifiers = new ArrayList<>();
+        try {
+            viewIdentifiers = delegate.listViews(Namespace.of(dbName));
+        } catch (BadRequestException e) {
+            LOG.warn("Failed to list views from {} database. Perhaps the server side does not implement the interface. " +
+                    "Ask the user to check it", dbName, e);
+        }
+        if (!viewIdentifiers.isEmpty()) {
+            tableIdentifiers.addAll(viewIdentifiers);
+        }
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -195,6 +229,35 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean createView(ConnectorViewDefinition definition, boolean replace) {
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
+        ViewBuilder viewBuilder = delegate.buildView(TableIdentifier.of(definition.getDatabaseName(), definition.getViewName()));
+        viewBuilder = viewBuilder.withSchema(schema)
+                .withQuery("starrocks", definition.getInlineViewDef())
+                .withDefaultNamespace(Namespace.of(definition.getDatabaseName()))
+                .withDefaultCatalog(definition.getCatalogName())
+                .withProperties(buildProperties(definition))
+                .withLocation(defaultTableLocation(definition.getDatabaseName(), definition.getViewName()));
+
+        if (replace) {
+            viewBuilder.createOrReplace();
+        } else {
+            viewBuilder.create();
+        }
+
+        return true;
+    }
+
+    public boolean dropView(String dbName, String viewName) {
+        return delegate.dropView(TableIdentifier.of(dbName, viewName));
+    }
+
+    @Override
+    public View getView(String dbName, String viewName) {
+        return delegate.loadView(TableIdentifier.of(dbName, viewName));
+    }
+
+    @Override
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
         if (fileLocations.isEmpty()) {
             return;
@@ -214,5 +277,43 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     public String toString() {
         return delegate.toString();
+    }
+
+    @Override
+    public String defaultTableLocation(String dbName, String tableName) {
+        Map<String, String> properties = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+        String databaseLocation = properties.get(LOCATION_PROPERTY);
+        checkArgument(databaseLocation != null, "location must be set for %s.%s", dbName, tableName);
+
+        if (databaseLocation.endsWith("/")) {
+            return databaseLocation + tableName;
+        } else {
+            return databaseLocation + "/" + tableName;
+        }
+    }
+
+    @Override
+    public Map<String, Object> loadNamespaceMetadata(String dbName) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(Namespace.of(dbName)));
+    }
+
+    private Map<String, String> buildProperties(ConnectorViewDefinition definition) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            throw new StarRocksConnectorException("not found connect context when building iceberg view properties");
+        }
+
+        String queryId = connectContext.getQueryId().toString();
+
+        Map<String, String> properties = ImmutableMap.of(
+                "queryId", queryId,
+                "starrocksCatalog", delegate.name(),
+                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+
+        if (!Strings.isNullOrEmpty(definition.getComment())) {
+            properties.put(COMMENT, definition.getComment());
+        }
+
+        return properties;
     }
 }

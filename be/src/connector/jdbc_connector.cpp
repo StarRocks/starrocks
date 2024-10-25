@@ -51,6 +51,10 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
                                 const std::vector<std::string>& filters, int64_t limit) {
     std::ostringstream oss;
     oss << "SELECT";
+    if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
+        oss << fmt::format(" TOP({}) ", limit);
+        limit = -1;
+    }
     for (size_t i = 0; i < columns.size(); i++) {
         oss << (i == 0 ? "" : ",") << " " << columns[i];
     }
@@ -96,7 +100,7 @@ void JDBCDataSource::close(RuntimeState* state) {
 
 Status JDBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     bool eos = false;
-    _init_chunk(chunk, 0);
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
     } while (!eos && (*chunk)->num_rows() == 0);

@@ -73,8 +73,8 @@ public interface AccessController {
         throw new AccessDeniedException();
     }
 
-    default void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                    Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
+    default void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
@@ -188,5 +188,15 @@ public interface AccessController {
 
     default Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         return null;
+    }
+
+    default void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 }

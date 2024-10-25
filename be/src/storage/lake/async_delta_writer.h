@@ -20,7 +20,9 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
 
 namespace starrocks {
 class MemTracker;
@@ -29,7 +31,8 @@ class SlotDescriptor;
 
 namespace starrocks {
 class Chunk;
-}
+class TxnLogPB;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -43,8 +46,10 @@ class AsyncDeltaWriter {
     friend class AsyncDeltaWriterBuilder;
 
 public:
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
     using Callback = std::function<void(Status st)>;
+    using FinishCallback = std::function<void(StatusOr<TxnLogPtr> res)>;
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
@@ -57,7 +62,7 @@ public:
     // same Status as the first call.
     //
     // [thread-safe]
-    [[nodiscard]] Status open();
+    Status open();
 
     // REQUIRE:
     //  - |chunk| and |indexes| must be kept alive until |cb| been invoked
@@ -78,7 +83,9 @@ public:
     // [thread-safe]
     //
     // TODO: Change signature to `Future<Status> finish()`
-    void finish(Callback cb);
+    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, cb); }
+
+    void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 
     // This method will wait for all running tasks completed.
     //
@@ -101,7 +108,7 @@ public:
 
     [[nodiscard]] bool is_immutable() const;
 
-    [[nodiscard]] Status check_immutable();
+    Status check_immutable();
 
     [[nodiscard]] int64_t last_write_ts() const;
 
@@ -174,6 +181,16 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -188,6 +205,8 @@ private:
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 
 } // namespace starrocks::lake

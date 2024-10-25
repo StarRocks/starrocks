@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Querybook
@@ -37,9 +37,13 @@ Querybook 支持对 StarRocks 的内部数据和外部数据进行查询和可�
 
 ## 集成
 
-进入 [https:///admin/query_engine/](https://localhost:10001/admin/query_engine/) 页面添加查询引擎。
+进入以下页面添加查询引擎。
 
-![Querybook](../../assets/BI_querybook_1.png)
+```Plain
+https://localhost:10001/admin/query_engine/
+```
+
+![Querybook](../../_assets/BI_querybook_1.png)
 
 - 在 **Language** 里选择 **Starrocks**。
 - 在 **Executor** 里选择 **sqlalchemy**。

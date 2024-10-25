@@ -17,15 +17,10 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
@@ -38,8 +33,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -53,24 +48,21 @@ import java.util.Map;
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
-    // If all replicas are lost more than 3 times in a row, rebuild the statistics table
-    private int lossTableCount = 0;
-
     public StatisticsMetaManager() {
         super("statistics meta manager", 60L * 1000L);
     }
 
     private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
     }
 
     private boolean createDatabase() {
         LOG.info("create statistics db start");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (UserException e) {
-            LOG.warn("Failed to create database " + e.getMessage());
+            LOG.warn("Failed to create database ", e);
             return false;
         }
         LOG.info("create statistics db down");
@@ -78,45 +70,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkTableExist(String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
-        return db.getTable(tableName) != null;
-    }
-
-    private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
-        int total = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
-        // maybe cluster just shutdown, ignore
-        if (aliveSize <= total / 2) {
-            lossTableCount = 0;
-            return true;
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
-        Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        Preconditions.checkState(table != null);
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            return true;
-        }
-
-        boolean check = true;
-        for (Partition partition : table.getPartitions()) {
-            // check replicate miss
-            if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                check = false;
-                break;
-            }
-        }
-
-        if (!check) {
-            lossTableCount++;
-        } else {
-            lossTableCount = 0;
-        }
-
-        return lossTableCount < 3;
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName) != null;
     }
 
     private static final List<String> KEY_COLUMN_NAMES = ImmutableList.of(
@@ -162,7 +118,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create sample statistics, " + e.getMessage());
+            LOG.warn("Failed to create sample statistics, ", e);
             return false;
         }
         LOG.info("create sample statistics table done");
@@ -194,7 +150,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create full statistics table, " + e.getMessage());
+            LOG.warn("Failed to create full statistics table", e);
             return false;
         }
         LOG.info("create full statistics table done");
@@ -225,7 +181,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create histogram statistics table, " + e.getMessage());
+            LOG.warn("Failed to create histogram statistics table", e);
             return false;
         }
         LOG.info("create histogram statistics table done");
@@ -263,7 +219,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create full statistics table, " + e.getMessage());
+            LOG.warn("Failed to create full statistics table", e);
             return false;
         }
         LOG.info("create external full statistics table done");
@@ -293,7 +249,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
-            LOG.warn("Failed to create external histogram statistics table, " + e.getMessage());
+            LOG.warn("Failed to create external histogram statistics table", e);
             return false;
         }
         LOG.info("create external histogram statistics table done");
@@ -311,11 +267,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
-            BasicStatsMeta basicStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
-                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties(),
-                    basicStatsMeta.getUpdateRows()));
+            BasicStatsMeta basicStatsMeta = entry.getValue().clone();
+            basicStatsMeta.setUpdateTime(LocalDateTime.MIN);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
         }
 
         for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList()) {
@@ -324,64 +278,43 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private boolean dropTable(String tableName) {
-        LOG.info("drop statistics table start");
-        DropTableStmt stmt = new DropTableStmt(true,
-                new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
-
-        try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to drop table" + e.getMessage());
-            return false;
-        }
-        LOG.info("drop statistics table done");
-        return !checkTableExist(tableName);
-    }
-
     private void trySleep(long millis) {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
         }
     }
 
     private boolean createTable(String tableName) {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setThreadLocalInfo();
-
-        if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
-            return createSampleStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
-            return createFullStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createHistogramStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
-            return createExternalFullStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createExternalHistogramStatisticsTable(context);
-        } else {
-            throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
+                return createSampleStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
+                return createFullStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                return createHistogramStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
+                return createExternalFullStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                return createExternalHistogramStatisticsTable(context);
+            } else {
+                throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+            }
         }
     }
 
     private void refreshStatisticsTable(String tableName) {
-        while (checkTableExist(tableName) && !checkReplicateNormal(tableName)) {
-            LOG.info("statistics table " + tableName + " replicate is not normal, will drop table and rebuild");
-            if (dropTable(tableName)) {
-                break;
-            }
-            LOG.warn("drop statistics table " + tableName + " failed");
-            trySleep(10000);
-        }
-
         while (!checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
+        }
+        if (checkTableExist(tableName)) {
+            StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
     }
 

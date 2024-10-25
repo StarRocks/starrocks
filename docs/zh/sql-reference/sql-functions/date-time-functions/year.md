@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # year
 
-## 功能
+
 
 返回指定日期中的年份。
 

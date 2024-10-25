@@ -25,13 +25,14 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
-#include "exec/data_sink.h"
+#include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -41,11 +42,13 @@ namespace starrocks {
 
 class MemTracker;
 class TupleDescriptor;
-
-namespace stream_load {
+class TxnLogPB;
 
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
+
+template <typename T>
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -157,6 +160,7 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+    std::vector<TxnLogPB>& txn_logs() { return _txn_logs; }
 
     bool is_incremental() const { return _is_incremental; }
 
@@ -181,6 +185,9 @@ private:
     void _cancel(int64_t index_id, const Status& err_st);
     Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
                                            std::vector<uint32_t>& filtered_indexes);
+
+    void _reset_cur_chunk(Chunk* input);
+    void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
@@ -212,7 +219,7 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    PInternalService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
@@ -220,6 +227,7 @@ private:
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+    std::vector<TxnLogPB> _txn_logs;
     struct {
         std::unordered_set<std::string> invalid_dict_cache_column_set;
         std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;
@@ -231,6 +239,7 @@ private:
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
     std::unique_ptr<Chunk> _cur_chunk;
+    int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
     using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
@@ -319,5 +328,4 @@ private:
     bool _has_intolerable_failure = false;
 };
 
-} // namespace stream_load
 } // namespace starrocks

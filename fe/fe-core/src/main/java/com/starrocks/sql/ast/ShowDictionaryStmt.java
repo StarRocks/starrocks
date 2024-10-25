@@ -22,9 +22,10 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDictionaryStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("DictionaryId").add("DictionaryName").add("DbName").add("dictionaryObject").add("dictionaryKeys")
-            .add("dictionaryValues").add("status").add("lastSuccessRefreshTime").add("lastSuccessFinishedTime")
-            .add("nextSchedulableTime").add("ErrorMessage").add("approximated dictionaryMemoryUsage (Bytes)").build();
+            .add("DictionaryId").add("DictionaryName").add("CatalogName").add("DbName").add("dictionaryObject")
+            .add("dictionaryKeys").add("dictionaryValues").add("status").add("lastSuccessRefreshTime")
+            .add("lastSuccessFinishedTime").add("nextSchedulableTime").add("ErrorMessage")
+            .add("approximated dictionaryMemoryUsage (Bytes)").build();
 
     private final String dictionaryName;
     public ShowDictionaryStmt(String dictionaryName, NodePosition pos) {

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_or
 
-## 功能
+
 
 计算两个输入的 bitmap 的并集，并返回新的 bitmap。并集指将两个集合中的所有元素合并在一起后组成的集合。重复元素只计入一次。
 

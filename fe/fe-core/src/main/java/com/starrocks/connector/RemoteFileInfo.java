@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -22,8 +21,10 @@ import java.util.List;
 
 public class RemoteFileInfo {
     private RemoteFileInputFormat format;
-    private List<RemoteFileDesc> files = new ArrayList<>();
+    private List<RemoteFileDesc> files;
     private String fullPath;
+
+    private Object attachment;
 
     public RemoteFileInfo(RemoteFileInputFormat format, List<RemoteFileDesc> files, String fullPath) {
         this.format = format;
@@ -32,6 +33,7 @@ public class RemoteFileInfo {
     }
 
     public RemoteFileInfo() {
+        this.files = new ArrayList<>();
     }
 
     public RemoteFileInputFormat getFormat() {
@@ -52,6 +54,19 @@ public class RemoteFileInfo {
 
     public String getFullPath() {
         return fullPath;
+    }
+
+    public Object getAttachment() {
+        return attachment;
+    }
+
+    public void setAttachment(Object attachment) {
+        this.attachment = attachment;
+    }
+
+    @SuppressWarnings("unchecked")
+    public  <T extends RemoteFileInfo> T cast() {
+        return (T) this;
     }
 
     @Override

@@ -21,7 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.common.ClientPool;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsService;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
@@ -83,13 +83,13 @@ public class HdfsUtil {
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
-    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws UserException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
             FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
             return Lists.newArrayList(fakeFile);
         }
-        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), true);
+        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), skipDir);
     }
 
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
@@ -250,7 +250,7 @@ public class HdfsUtil {
     }
 
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc) throws UserException {
-        rename(origFilePath, destFilePath, brokerDesc, ClientPool.brokerTimeoutMs);
+        rename(origFilePath, destFilePath, brokerDesc, Config.broker_client_timeout_ms);
     }
 
     public static void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc, int timeoutMs)

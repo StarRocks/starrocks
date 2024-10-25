@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # generate_series
 
-## Description
+
 
 Generates a series of values within the interval specified by `start` and `end`, and with an optional `step`.
 

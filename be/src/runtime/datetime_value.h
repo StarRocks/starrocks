@@ -508,12 +508,15 @@ std::ostream& operator<<(std::ostream& os, const DateTimeValue& value);
 
 std::size_t hash_value(DateTimeValue const& value);
 
-class TeradataFormat final : public DateTimeValue {
+struct TeradataRuntimeState final : public DateTimeValue {
+    const char** valptr;
+
+protected:
+    friend class TeradataFormat;
+};
+class TeradataFormat {
 public:
-    TeradataFormat() {
-        _month = 1;
-        _day = 1;
-    }
+    TeradataFormat() {}
     ~TeradataFormat() = default;
 
     bool prepare(std::string_view format);
@@ -521,17 +524,36 @@ public:
 
 private:
     // Token parsers
-    std::vector<std::function<bool()>> _token_parsers;
-    // Cursor
-    const char* val = nullptr;
-    const char* val_end = nullptr;
+    std::vector<std::function<bool(TeradataRuntimeState*, const char*)>> _token_parsers;
 };
 
 } // namespace starrocks
 
 namespace starrocks::joda {
 
-class JodaFormat : public starrocks::DateTimeValue {
+/**
+ * @brief Joda Runtime state for each input row.
+ */
+struct JodaRuntimeState final : public DateTimeValue {
+    const char** valptr;
+
+    bool date_part_used;
+    bool time_part_used;
+    bool frac_part_used;
+
+    int halfday;
+    int weekday;
+    int yearday;
+    int week_num;
+
+    cctz::time_zone ctz; // default UTC
+    bool has_timezone;
+
+protected:
+    friend class JodaFormat;
+};
+
+class JodaFormat {
 public:
     JodaFormat() = default;
     ~JodaFormat() = default;
@@ -541,24 +563,7 @@ public:
 
 private:
     // Token parsers
-    std::vector<std::function<bool()>> _token_parsers;
-
-    // Cursor
-    const char* val = nullptr;
-    const char* val_end = nullptr;
-
-    bool date_part_used = false;
-    bool time_part_used = false;
-    bool frac_part_used = false;
-
-    int halfday = 0;
-    int weekday = -1;
-    int yearday = -1;
-    int week_num = -1;
-
-    cctz::time_zone ctz; // default UTC
-    bool has_timezone = false;
-
+    std::vector<std::function<bool(JodaRuntimeState*, const char*)>> _token_parsers;
     const bool strict_week_number = false;
     const bool sunday_first = false;
     const bool strict_week_number_year_type = false;

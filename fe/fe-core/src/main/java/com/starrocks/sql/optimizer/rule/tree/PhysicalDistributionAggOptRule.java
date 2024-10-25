@@ -42,6 +42,13 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             root.getOp().accept(new UseSortAGGRule(), root, null);
             return root;
         }
+
+        if (sv.isEnableSpill() && sv.getSpillMode().equals("force")) {
+            return root;
+        }
+
+        // per bucket optimize will be replaced with group execution.
+        // remove me in 4.0
         if (sv.isEnablePerBucketComputeOptimize()) {
             root.getOp().accept(new UsePerBucketOptimizeRule(sv.isEnablePartitionBucketOptimize()), root, null);
             return root;
@@ -90,8 +97,9 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             scan.setNeedOutputChunkByBucket(true);
 
             if (!hasColocateRequirement && enablePartitionBucketOptimize) {
-                Set<Column> partitionColumns =
-                        Sets.newHashSet(((OlapTable) scan.getTable()).getPartitionInfo().getPartitionColumns());
+                OlapTable olapTable = ((OlapTable) scan.getTable());
+                Set<Column> partitionColumns = Sets.newHashSet(olapTable.getPartitionInfo()
+                        .getPartitionColumns(olapTable.getIdToColumn()));
                 List<ColumnRefOperator> groupBys = agg.getGroupBys();
                 for (ColumnRefOperator groupBy : groupBys) {
                     Column column = scan.getColRefToColumnMetaMap().get(groupBy);

@@ -1,0 +1,11 @@
+-- name: test_cast_string_to_int
+select cast('-' as tinyint);
+select cast('+' as tinyint);
+select cast('-' as smallint);
+select cast('+' as smallint);
+select cast('-' as int);
+select cast('+' as int);
+select cast('-' as bigint);
+select cast('+' as bigint);
+select cast('-' as largeint);
+select cast('+' as largeint);

@@ -225,12 +225,14 @@ public:
         std::string pk2_str = std::to_string(get_pk2(key));
         std::unique_ptr<ColumnPredicate> pk2_eq(
                 new_column_eq_predicate(get_type_info(LogicalType::TYPE_BIGINT), 1, pk2_str));
+        PredicateAndNode pred_root;
         if (multi_column_pk) {
-            params.predicates.emplace_back(pk2_eq.get());
-            params.predicates.emplace_back(pk1_eq.get());
+            pred_root.add_child(PredicateColumnNode(pk2_eq.get()));
+            pred_root.add_child(PredicateColumnNode(pk1_eq.get()));
         } else {
-            params.predicates.emplace_back(pk_eq.get());
+            pred_root.add_child(PredicateColumnNode(pk_eq.get()));
         }
+        params.pred_tree = PredicateTree::create(std::move(pred_root));
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
         auto chunk = ChunkHelper::new_chunk(reader.schema(), 1);

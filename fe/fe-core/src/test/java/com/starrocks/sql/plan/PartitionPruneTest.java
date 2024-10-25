@@ -16,6 +16,15 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -45,6 +54,40 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "\"replication_num\" = \"1\",\n"
                 + "\"in_memory\" = \"false\"\n"
                 + ");");
+
+        // date_trunc('month', c1)
+        starRocksAssert.withTable("CREATE TABLE t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202401 VALUES IN (('1', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202402 VALUES IN (('1', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p1_202403 VALUES IN (('1', '2024-03-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202401 VALUES IN (('2', '2024-01-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202402 VALUES IN (('2', '2024-02-01'))");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col ADD PARTITION p2_202403 VALUES IN (('2', '2024-03-01'))");
+
+        starRocksAssert.withTable("CREATE TABLE t_bool_partition (" +
+                " c1 datetime NOT NULL, " +
+                " c2 boolean" +
+                " ) " +
+                " PARTITION BY (c1, c2) " +
+                " PROPERTIES('replication_num'='1')");
+
+        // year(c1)
+        starRocksAssert.withTable("CREATE TABLE t_gen_col_1 (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 tinyint NULL AS month(c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col_1 ADD PARTITION p1_01 VALUES IN (('1', '1'))");
     }
 
     @Test
@@ -172,5 +215,263 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = pair.second;
+        LogicalScanOperator scanOperator =
+                (LogicalScanOperator) execPlan.getLogicalPlan().getRoot().inputAt(0).inputAt(0).inputAt(0).getOp();
+        ScalarOperator predicate = execPlan.getPhysicalPlan().getOp().getPredicate();
+        return Pair.create(predicate, scanOperator);
+    }
+
+    private void testRemovePredicate(String sql, String expected) throws Exception {
+        Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
+        Assert.assertEquals(expected, newPredicate.toString());
+    }
+
+    @Test
+    public void testGeneratedColumnPrune_RemovePredicate() throws Exception {
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' ", "true");
+        testRemovePredicate("select * from t_gen_col where c1 = '2024-01-01' and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c1 >= '2024-01-01'  and c1 <= '2024-01-03' " +
+                "and c2 > 100", "true");
+        testRemovePredicate("select * from t_gen_col where c2 in (1, 2,3)", "true");
+        testRemovePredicate("select * from t_gen_col where c2 = cast('123' as int)", "true");
+
+        // bool partition column
+        testRemovePredicate("select * from t_bool_partition where c2=true", "2: c2");
+        testRemovePredicate("select * from t_bool_partition where c2=false", "true");
+
+        // can not be removed
+        testRemovePredicate("select * from t_gen_col where c1 = random() and c2 > 100",
+                "cast(1: c1 as double) = random(1)");
+        testRemovePredicate("select * from t_gen_col where c2 + 100 > c1 + 1",
+                "cast(add(2: c2, 100) as double) > add(cast(1: c1 as double), 1)");
+    }
+
+    @Test
+    public void testGeneratedColumnPrune() throws Exception {
+        // c2
+        starRocksAssert.query("select count(*) from t_gen_col where c2 = 1 ")
+                .explainContains("partitions=3/6");
+
+        // c1
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-01-01' ")
+                .explainContains("partitions=2/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' ")
+                .explainContains("partitions=2/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 < '2024-02-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 <= '2024-02-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 > '2024-02-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01') ")
+                .explainContains("partitions=2/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2024-02-01', '2024-01-01') ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 in ('2027-01-01') ")
+                .explainContains("partitions=0/6");
+
+        // c1 not supported
+        starRocksAssert.query("select count(*) from t_gen_col where c1 != '2024-02-01' ")
+                .explainContains("partitions=6/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = c2 ")
+                .explainContains("partitions=6/6");
+        starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
+                .explainContains("partitions=6/6");
+        starRocksAssert.query("select count(*) from t_gen_col where date_trunc('year', c1) = '2024-02-01' ")
+                .explainContains("partitions=6/6");
+
+        // compound
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 <= '2024-03-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 >= '2024-02-01' and c1 = '2027-03-01' ")
+                .explainContains("partitions=0/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2024-03-01' ")
+                .explainContains("partitions=4/6");
+        starRocksAssert.query("select count(*) from t_gen_col where c1 = '2024-02-01' or c1 = '2027-03-01' ")
+                .explainContains("partitions=2/6");
+
+        // c1 && c2
+        starRocksAssert.query("select * from t_gen_col where c1 = '2024-01-01' and c2 = 1 ")
+                .explainContains("partitions=1/6");
+
+        // non-monotonic function
+        starRocksAssert.query("select count(*) from t_gen_col_1 where c1 = '2024-01-01' ")
+                .explainContains("partitions=1/1");
+    }
+
+    @Test
+    public void testMinMaxPrune_Check() throws Exception {
+        starRocksAssert.withTable("create table t5_dup " +
+                "(c1 datetime NOT NULL, c2 int) " +
+                "duplicate key (c1) " +
+                "partition by range(c1) ()" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t5_dup add partition p20240101 values less than('2024-01-01') ");
+        starRocksAssert.ddl("alter table t5_dup add partition p20240102 values less than('2024-01-02') ");
+        starRocksAssert.ddl("alter table t5_dup add partition p20240103 values less than('2024-01-03') ");
+        starRocksAssert.ddl("alter table t5_dup add partition p20240104 values less than('2024-01-04') ");
+        starRocksAssert.ddl("alter table t5_dup add partition p20240105 values less than('2024-01-05') ");
+
+        // GROUP-BY
+        starRocksAssert.query("select min(c1) from t5_dup group by c1 ")
+                .explainContains("partitions=5/5");
+        // HAVING
+        starRocksAssert.query("select c1, min(c1) as m_c1 from t5_dup group by c1 having m_c1 > 1")
+                .explainContains("partitions=5/5");
+        // COUNT
+        starRocksAssert.query("select count(c1) as m_c1 from t5_dup")
+                .explainContains("partitions=5/5");
+        // WHERE
+        starRocksAssert.query("select min(c1) as m_c1 from t5_dup where c2 > 1")
+                .explainContains("partitions=5/5");
+        // SIMPLE AGG
+        starRocksAssert.query("select min(c1-1)+1 from t5_dup")
+                .explainContains("partitions=5/5");
+        starRocksAssert.query("select min(c1 + c1) from t5_dup")
+                .explainContains("partitions=5/5");
+        starRocksAssert.query("select min(c1 + c2) from t5_dup")
+                .explainContains("partitions=5/5");
+        starRocksAssert.query("select min(c2) from t5_dup")
+                .explainContains("partitions=5/5");
+        starRocksAssert.query("select min(c1), min(c2) from t5_dup")
+                .explainContains("partitions=5/5");
+    }
+
+    @Test
+    public void testMinMaxPrune_ListValues() throws Exception {
+        UtFrameUtils.mockDML();
+        // single-item list partition
+        starRocksAssert.withTable("create table t1_list " +
+                "(c1 int, c2 int) " +
+                "partition by (c1)" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t1_list add partition p4 values in ('4')");
+        starRocksAssert.ddl("alter table t1_list add partition p3 values in ('3')");
+        starRocksAssert.ddl("alter table t1_list add partition p2 values in ('2')");
+        starRocksAssert.ddl("alter table t1_list add partition p1 values in ('1')");
+        starRocksAssert.getCtx().executeSql("insert into t1_list values(1, 1), (2, 2), (3, 3), (4, 4)");
+
+        // LIST-PARTITION: MIN(partition_column)
+        starRocksAssert.query("select max(c1) from t1_list")
+                .explainContains("     constant exprs: \n         4\n");
+        starRocksAssert.query("select min(c1) from t1_list")
+                .explainContains("     constant exprs: \n         1\n");
+        starRocksAssert.query("select min(c1), max(c1) from t1_list")
+                .explainContains("     constant exprs: \n         1 | 4\n");
+        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t1_list")
+                .explainContains("     constant exprs: \n         1 | 4\n");
+        starRocksAssert.query("select min(c1-1)+1, max(c1-1)-1 from t1_list")
+                .explainContains("OlapScanNode");
+
+        // multi-values in a list
+        starRocksAssert.withTable("create table t1_list_multi_values " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p1 values in ('1', '10'), " +
+                " partition p2 values in ('2', '9'), " +
+                " partition p3 values in ('3', '8'), " +
+                " partition p4 values in ('4', '5')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.query("select min(c1) from t1_list_multi_values")
+                .explainContains("     constant exprs: \n         1\n");
+        starRocksAssert.query("select max(c1) from t1_list_multi_values")
+                .explainContains("     constant exprs: \n         10\n");
+        starRocksAssert.query("select min(c1), max(c1) from t1_list_multi_values")
+                .explainContains("     constant exprs: \n         1 | 10\n");
+        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t1_list_multi_values")
+                .explainContains("     constant exprs: \n         1 | 10\n");
+        starRocksAssert.query("select min(c1-1)+1, max(c1-1)-1 from t1_list_multi_values")
+                .explainContains("OlapScanNode");
+
+
+        // TODO: not supported
+        // multi-item list partition
+        starRocksAssert.withTable("create table t2_list " +
+                "(c1 int, c2 int) " +
+                "partition by (c1, c2)" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t2_list add partition p4 values in (('4', '4'))");
+        starRocksAssert.ddl("alter table t2_list add partition p3 values in (('3', '3'))");
+        starRocksAssert.ddl("alter table t2_list add partition p2 values in (('2', '2'))");
+        starRocksAssert.ddl("alter table t2_list add partition p1 values in (('1', '2'))");
+        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t2_list")
+                .explainContains("OlapScanNode");
+    }
+
+    @Test
+    public void testMinMaxPrune_PartitionPrune() throws Exception {
+        UtFrameUtils.mockDML();
+        // single-item list partition
+        starRocksAssert.withTable("create table t2_dup " +
+                "(c1 datetime NOT NULL, c2 int) " +
+                "duplicate key (c1) " +
+                "partition by range(c1) ()" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t2_dup add partition p20240101 values less than('2024-01-01') ");
+        starRocksAssert.ddl("alter table t2_dup add partition p20240102 values less than('2024-01-02') ");
+        starRocksAssert.ddl("alter table t2_dup add partition p20240103 values less than('2024-01-03') ");
+        starRocksAssert.ddl("alter table t2_dup add partition p20240104 values less than('2024-01-04') ");
+        starRocksAssert.ddl("alter table t2_dup add partition p20240105 values less than('2024-01-05') ");
+
+        starRocksAssert.query("select min(c1) from t2_dup").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t2_dup").explainContains("partitions=1/5");
+        starRocksAssert.query("select min(c1), max(c1) from t2_dup").explainContains("partitions=2/5");
+        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t2_dup").explainContains("partitions=2/5");
+        starRocksAssert.query("select min(c1) from t2_dup limit 10").explainContains("partitions=1/5");
+
+        // manually specify partition
+        starRocksAssert.query("select min(c1) from t2_dup partition p20240101").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t2_dup partition p20240101").explainContains("partitions=1/5");
+        starRocksAssert.query("select min(c1) from t2_dup partition p20240105").explainContains("partitions=1/5");
+        starRocksAssert.query("select max(c1) from t2_dup partition p20240105").explainContains("partitions=1/5");
+
+        // NOT SUPPORTED for complicated MIN/MAX
+        starRocksAssert.query("select min(c1-1)+1, max(c1+1)-1 from t2_dup").explainContains("partitions=5/5");
+
+        // NOT SUPPORTED for filter
+        starRocksAssert.query("select min(c1) from t2_dup where c2 > 1").explainContains("partitions=5/5");
+
+        // NOT SUPPORTED for deletion
+        starRocksAssert.getCtx().executeSql("delete from t2_dup where c1 = '2024-01-02' ");
+        starRocksAssert.query("select min(c1) from t2_dup").explainContains("partitions=5/5");
+    }
+
+    @Test
+    public void testMinMaxPrune_PrimaryKey() throws Exception {
+        UtFrameUtils.mockDML();
+
+        // single-item list partition
+        starRocksAssert.withTable("create table t3_pri " +
+                "(c1 datetime NOT NULL, c2 int) " +
+                "primary key (c1) " +
+                "partition by range(c1) ()" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t3_pri add partition p20240101 values less than('2024-01-01') ");
+        starRocksAssert.ddl("alter table t3_pri add partition p20240102 values less than('2024-01-02') ");
+        starRocksAssert.ddl("alter table t3_pri add partition p20240103 values less than('2024-01-03') ");
+        starRocksAssert.ddl("alter table t3_pri add partition p20240104 values less than('2024-01-04') ");
+        starRocksAssert.ddl("alter table t3_pri add partition p20240105 values less than('2024-01-05') ");
+
+        starRocksAssert.query("select min(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1");
+        starRocksAssert.query("select max(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+        starRocksAssert.query("select min(c1)+1 from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1");
+        starRocksAssert.query("select max(c1)+1 from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+
+        // NOT SUPPORTED
+        starRocksAssert.query("select max(c1-1)+1 from t3_pri").explainContains("OlapScanNode");
+        starRocksAssert.query("select max(c1), min(c1) from t3_pri").explainContains("OlapScanNode");
     }
 }

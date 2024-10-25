@@ -96,7 +96,7 @@ int64_t calculate_retry_delay(int64_t attempted_retries) {
     return min_delay * (1 << attempted_retries);
 }
 
-Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
+Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
@@ -115,29 +115,40 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
         return Status::OK();
     }
 
-    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
-    if (wait_duration > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
-    }
-
-    if (config::lake_print_delete_log) {
-        for (size_t i = 0, n = paths.size(); i < n; i++) {
-            LOG(INFO) << "Deleting " << paths[i] << "(" << (i + 1) << '/' << n << ')';
+    auto delete_single_batch = [fs](std::span<const std::string> batch) -> Status {
+        auto wait_duration = config::experimental_lake_wait_per_delete_ms;
+        if (wait_duration > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
         }
-    }
 
-    auto t0 = butil::gettimeofday_us();
-    auto st = delete_files_with_retry(fs, paths);
-    if (st.ok()) {
-        auto t1 = butil::gettimeofday_us();
-        g_del_file_latency << (t1 - t0);
-        g_deleted_files << paths.size();
-        VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
-    } else {
-        g_del_fails << 1;
-        LOG(WARNING) << "Fail to delete: " << st;
+        if (config::lake_print_delete_log) {
+            for (size_t i = 0, n = batch.size(); i < n; i++) {
+                LOG(INFO) << "Deleting " << batch[i] << "(" << (i + 1) << '/' << n << ')';
+            }
+        }
+
+        auto t0 = butil::gettimeofday_us();
+        auto st = delete_files_with_retry(fs, batch);
+        if (st.ok()) {
+            auto t1 = butil::gettimeofday_us();
+            g_del_file_latency << (t1 - t0);
+            g_deleted_files << batch.size();
+            VLOG(5) << "Deleted " << batch.size() << " files cost " << (t1 - t0) << "us";
+        } else {
+            g_del_fails << 1;
+            LOG(WARNING) << "Fail to delete: " << st;
+        }
+        return st;
+    };
+
+    auto batch_size = int64_t{config::lake_vacuum_min_batch_delete_size};
+    auto batch_count = static_cast<int64_t>((paths.size() + batch_size - 1) / batch_size);
+    for (auto i = int64_t{0}; i < batch_count; i++) {
+        auto begin = paths.begin() + (i * batch_size);
+        auto end = std::min(begin + batch_size, paths.end());
+        RETURN_IF_ERROR(delete_single_batch(std::span<const std::string>(begin, end)));
     }
-    return st;
+    return Status::OK();
 }
 
 // AsyncFileDeleter
@@ -173,7 +184,11 @@ private:
     // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
         if (_prev_task_status.valid()) {
-            return _prev_task_status.get();
+            try {
+                return _prev_task_status.get();
+            } catch (const std::exception& e) {
+                return Status::InternalError(e.what());
+            }
         } else {
             return Status::OK();
         }
@@ -247,6 +262,9 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
         for (const auto& segment : rowset.segments()) {
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
+        for (const auto& del_file : rowset.del_files()) {
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
+        }
         *garbage_data_size += rowset.data_size();
     }
     for (const auto& file : metadata.orphan_files()) {
@@ -271,8 +289,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version > 0) {
-        auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
-        auto res = tablet_mgr->get_tablet_metadata(path, false);
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
             break;
@@ -288,7 +305,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
                     compare_time = metadata->commit_time();
                 } else {
-                    ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
+                    /*
+                    * The path is not available since we get tablet metadata by tablet_id and version.
+                    * We remove the code which is to get file modified time by path.
+                    * This change will break some compatibility when upgraded from a old version which have no commit time.
+                    * In that case, the compare_time is 0, making a result that the vacuum will keep the latest version.
+                    * The incompatibility will be vanished after a few versions ingestion/compaction/GC.
+                    */
+
+                    // ASSIGN_OR_RETURN(compare_time, fs->get_file_modified_time(path));
                     TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_file_modified_time", &compare_time);
                 }
 
@@ -388,6 +413,11 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
             }
         } else if (is_txn_slog(entry.name)) {
             auto [tablet_id, txn_id] = parse_txn_slog_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else if (is_combined_txn_log(entry.name)) {
+            auto txn_id = parse_combined_txn_log_filename(entry.name);
             if (txn_id >= min_active_txn_id) {
                 return true;
             }
@@ -563,12 +593,12 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
         // Find metadata files that has garbage data files and delete all those files
         for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
-            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
-            auto res = tablet_mgr->get_tablet_metadata(path, false);
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {
-                LOG(ERROR) << "Fail to read " << path << ": " << res.status();
+                LOG(ERROR) << "Fail to read tablet_id=" << tablet_id << ", version=" << garbage_version << ": "
+                           << res.status();
                 return res.status();
             } else {
                 auto metadata = std::move(res).value();
@@ -594,6 +624,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             if (latest_metadata->has_delvec_meta()) {
                 for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
+                }
+            }
+            if (latest_metadata->sstable_meta().sstables_size() > 0) {
+                for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
                 }
             }
         }
@@ -624,14 +659,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
     DCHECK(response != nullptr);
 
     std::vector<std::string> files_to_delete;
-    files_to_delete.reserve(request.tablet_ids_size() * request.txn_ids_size());
+    files_to_delete.reserve(request.tablet_ids_size() * (request.txn_ids_size() + request.txn_infos_size()));
 
     for (auto tablet_id : request.tablet_ids()) {
+        // For each DeleteTxnLogRequest, FE will only set one of txn_ids and txn_infos, here we don't want
+        // to bother with determining which one is set, just iterate through both.
         for (auto txn_id : request.txn_ids()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             files_to_delete.emplace_back(log_path);
-
             tablet_mgr->metacache()->erase(log_path);
+        }
+        for (auto&& info : request.txn_infos()) {
+            auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
+                                                    : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
+            files_to_delete.emplace_back(log_path);
         }
     }
 
@@ -680,26 +721,27 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     int64_t total_files = 0;
     int64_t total_bytes = 0;
     const auto now = std::time(nullptr);
-    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(segment_root_location,
-                                                                [&](DirEntry entry) {
-                                                                    total_files++;
-                                                                    total_bytes += entry.size.value_or(0);
+    RETURN_IF_ERROR_WITH_WARN(
+            ignore_not_found(fs->iterate_dir2(segment_root_location,
+                                              [&](DirEntry entry) {
+                                                  total_files++;
+                                                  total_bytes += entry.size.value_or(0);
 
-                                                                    if (!is_segment(entry.name)) { // Only segment files
-                                                                        return true;
-                                                                    }
-                                                                    if (!entry.mtime.has_value()) {
-                                                                        LOG(WARNING) << "Fail to get modified time of "
-                                                                                     << entry.name;
-                                                                        return true;
-                                                                    }
+                                                  if (!is_segment(entry.name) &&
+                                                      !is_sst(entry.name)) { // Only segment files and sst
+                                                      return true;
+                                                  }
+                                                  if (!entry.mtime.has_value()) {
+                                                      LOG(WARNING) << "Fail to get modified time of " << entry.name;
+                                                      return true;
+                                                  }
 
-                                                                    if (now >= entry.mtime.value() + expired_seconds) {
-                                                                        data_files.emplace(entry.name, entry);
-                                                                    }
-                                                                    return true;
-                                                                })),
-                              "Failed to list " + segment_root_location);
+                                                  if (now >= entry.mtime.value() + expired_seconds) {
+                                                      data_files.emplace(entry.name, entry);
+                                                  }
+                                                  return true;
+                                              })),
+            "Failed to list " + segment_root_location);
     LOG(INFO) << "Listed all data files, total files: " << total_files << ", total bytes: " << total_bytes
               << ", candidate files: " << data_files.size();
     return data_files;
@@ -726,6 +768,12 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
             data_files_in_metadatas.emplace(segment);
         }
     };
+    auto check_sst_meta = [&](const PersistentIndexSstableMetaPB& sst_meta) {
+        for (const auto& sst : sst_meta.sstables()) {
+            data_files.erase(sst.filename());
+            data_files_in_metadatas.emplace(sst.filename());
+        }
+    };
 
     if (audit_ostream) {
         audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
@@ -747,6 +795,7 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
+        check_sst_meta(metadata->sstable_meta());
         ++progress;
         if (audit_ostream) {
             audit_ostream << '(' << progress << '/' << meta_files.size() << ") " << name << '\n'

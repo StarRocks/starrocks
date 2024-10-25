@@ -869,7 +869,7 @@ std::string BitmapValue::to_string() const {
 }
 
 // Append values to array
-void BitmapValue::to_array(std::vector<int64_t>* array) const {
+void BitmapValue::to_array(Buffer<int64_t>* array) const {
     switch (_type) {
     case EMPTY:
         break;
@@ -897,10 +897,10 @@ size_t BitmapValue::serialize(uint8_t* dst) const {
 
 // When you persist bitmap value to disk, you could call this method.
 // This method should be called before `serialize_size`.
-void BitmapValue::compress() const {
+void BitmapValue::compress() {
     if (_type == BITMAP) {
         _mem_usage = 0;
-        // no need to copy on write
+        _copy_on_write();
         _bitmap->runOptimize();
         _bitmap->shrinkToFit();
     }
@@ -961,10 +961,10 @@ std::vector<BitmapValue> BitmapValue::split_bitmap(size_t batch_size) const {
 
     switch (_type) {
     case EMPTY:
-        results.emplace_back(BitmapValue());
+        results.emplace_back();
         break;
     case SINGLE:
-        results.emplace_back(BitmapValue(*this));
+        results.emplace_back(*this);
         break;
     case SET: {
         std::vector values(_set->begin(), _set->end());

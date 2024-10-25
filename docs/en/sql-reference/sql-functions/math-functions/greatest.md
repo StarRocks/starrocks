@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # greatest
 
-## Description
+
 
 Returns the largest value from a list of one or more parameters.
 

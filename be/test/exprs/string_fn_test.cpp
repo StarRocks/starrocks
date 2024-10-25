@@ -3577,4 +3577,327 @@ PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
     ASSERT_EQ(static_cast<uint32_t>(3440849609), v->get_data()[1]);
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
+    // const pattern, const max_split - default_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("[ABC]", 1);
+
+        std::string strs[] = {"oneAtwoBthreeC", "1A2B3C", "AABBCC"};
+        std::string res[] = {"['one','two','three','']", "['1','2','3','']", "['','','','','','','']"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+        }
+
+        columns.push_back(str);
+        columns.push_back(pattern);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // const pattern, const max_split - customized_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto null = NullColumn::create();
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("[ABC]", 1);
+        auto max_split = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+
+        std::string strs[] = {"oneAtwoBthreeC", "1A2B3C", "AABBCC", "AABBCC"};
+        std::string res[] = {"['one','twoBthreeC']", "['1','2B3C']", "['','ABBCC']", "NULL"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            null->append(i == 3 ? 1 : 0);
+        }
+
+        columns.push_back(NullableColumn::create(str, null));
+        columns.push_back(pattern);
+        columns.push_back(max_split);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // const pattern - default_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("[ABC]", 1);
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC",
+                              "oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+
+        std::string res[] = {"['one','two','three','']", "['one','two','three','']", "['one','two','three','']",
+                             "['one','two','three','']", "['one','two','three','']", "['one','two','three','']"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+        }
+
+        columns.push_back(str);
+        columns.push_back(pattern);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // const pattern - customized_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto null = NullColumn::create();
+        auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("[ABC]", 1);
+        auto max_split = Int32Column::create();
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC",
+                              "oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+        int max_splits[] = {-1, 0, 1, 2, 3, 4, 5};
+
+        std::string res[] = {"['one','two','three','']",
+                             "['one','two','three','']",
+                             "['oneAtwoBthreeC']",
+                             "['one','twoBthreeC']",
+                             "['one','two','threeC']",
+                             "['one','two','three','']",
+                             "NULL"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            null->append(i == 6 ? 1 : 0);
+            max_split->append(max_splits[i]);
+        }
+
+        columns.push_back(NullableColumn::create(str, null));
+        columns.push_back(pattern);
+        columns.push_back(max_split);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // const max_split - default_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = BinaryColumn::create();
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+        std::string patterns[] = {"[nwe]", "[ne]", "[123]"};
+        std::string res[] = {"['o','','At','oBthr','','C']", "['o','','AtwoBthr','','C']", "['oneAtwoBthreeC']"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            pattern->append(patterns[i]);
+        }
+
+        columns.push_back(str);
+        columns.push_back(pattern);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // const max_split - customized_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = BinaryColumn::create();
+        auto null = NullColumn::create();
+        auto max_split = ColumnHelper::create_const_column<TYPE_INT>(4, 1);
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+        std::string patterns[] = {"[nwe]", "[ne]", "[123]", "[123]"};
+        std::string res[] = {"['o','','At','oBthreeC']", "['o','','AtwoBthr','eC']", "['oneAtwoBthreeC']", "NULL"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            pattern->append(patterns[i]);
+            null->append(i == 3 ? 1 : 0);
+        }
+
+        columns.push_back(str);
+        columns.push_back(NullableColumn::create(pattern, null));
+        columns.push_back(max_split);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // none const - default_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = BinaryColumn::create();
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+        std::string patterns[] = {"[nwe]", "[ne]", "[123]"};
+
+        std::string res[] = {"['o','','At','oBthr','','C']", "['o','','AtwoBthr','','C']", "['oneAtwoBthreeC']"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            pattern->append(patterns[i]);
+        }
+
+        columns.push_back(str);
+        columns.push_back(pattern);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+
+    // none const - customized_max_split
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto context = ctx.get();
+
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto pattern = BinaryColumn::create();
+        auto null = NullColumn::create();
+        auto max_split = Int32Column::create();
+
+        std::string strs[] = {"oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC", "oneAtwoBthreeC"};
+        std::string patterns[] = {"[nwe]", "[ne]", "[123]", "[123]"};
+        int max_splits[] = {1, 2, 3, 4};
+
+        std::string res[] = {"['oneAtwoBthreeC']", "['o','eAtwoBthreeC']", "['oneAtwoBthreeC']", "NULL"};
+
+        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+            str->append(strs[i]);
+            pattern->append(patterns[i]);
+            null->append(i == 3 ? 1 : 0);
+            max_split->append(max_splits[i]);
+        }
+
+        columns.push_back(str);
+        columns.push_back(NullableColumn::create(pattern, null));
+        columns.push_back(max_split);
+
+        context->set_constant_columns(columns);
+
+        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+        auto result = StringFunctions::regexp_split(context, columns).value();
+
+        ASSERT_TRUE(StringFunctions::regexp_close(context,
+                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                            .ok());
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], result->debug_item(i));
+        }
+    }
+}
+
 } // namespace starrocks

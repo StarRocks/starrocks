@@ -49,6 +49,7 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -85,9 +86,6 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
-
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
@@ -297,7 +295,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -329,6 +327,12 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (process_exit_in_progress()) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
@@ -381,6 +385,24 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::Rpc
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                                                   const PHttpRequest* request,
+                                                                   PTabletWriterAddBatchResult* response,
+                                                                   google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                                                    const PHttpRequest* request,
+                                                                    PTabletWriterAddBatchResult* response,
+                                                                    google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                                             const PTabletWriterAddSegmentRequest* request,
                                                             PTabletWriterAddSegmentResult* response,
@@ -405,6 +427,11 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    // incremental scan ranges deployment.
+    if (!t_request.__isset.fragment) {
+        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+    }
+
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
@@ -416,9 +443,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     }
 
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
-    LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
-              << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
-              << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
+    VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+            << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
+            << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
@@ -461,6 +488,8 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+    case QUERY_FINISHED:
+        return "QueryFinished";
     default:
         return "UnknownReason";
     }
@@ -491,7 +520,13 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
-    LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
+    if (cancel_query_ctx) {
+        DCHECK(request->has_query_id());
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+    } else {
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -503,19 +538,27 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
-        auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+
+        auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
-            LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+            VLOG(1) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                           print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }
-        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
-        if (!fragment_ctx) {
-            LOG(INFO) << strings::Substitute("FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+        if (cancel_query_ctx) {
+            // cancel query_id
+            query_ctx->cancel(Status::Cancelled(reason_string));
         } else {
-            fragment_ctx->cancel(Status::Cancelled(reason_string));
+            // cancel fragment
+            auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+            if (!fragment_ctx) {
+                LOG(INFO) << strings::Substitute(
+                        "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
+                        print_id(tid));
+            } else {
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
+            }
         }
     } else {
         if (request->has_cancel_reason()) {
@@ -583,7 +626,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
             return;
         }
-        pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+        pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
         driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
     }
 }
@@ -1196,7 +1239,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }

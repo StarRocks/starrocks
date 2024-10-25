@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # to_iso8601
 
-## 功能
+
 
 将某一个日期转换为 ISO 8601 标准格式的字符串。
 

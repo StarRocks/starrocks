@@ -51,7 +51,6 @@ public enum ErrorCode {
     ERR_NON_UNIQ_ERROR(1052, new byte[] {'2', '3', '0', '0', '0'}, "Column '%s' in is ambiguous"),
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
-    ERR_BAD_FIELD_ERROR(1054, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
@@ -64,6 +63,9 @@ public enum ErrorCode {
     ERR_FIELD_SPECIFIED_TWICE(1110, new byte[] {'4', '2', '0', '0', '0'}, "Column '%s' specified twice"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
+    ERR_TOO_MANY_COLUMNS(1117, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of columns in a table must be less than or equal to %d," +
+                    " Please decrease the number of columns or increase frontend config 'max_column_number_per_table'."),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
             "Host %s is not allowed to connect to this MySQL server"),
     ERR_NONEXISTING_GRANT(1141, new byte[] {'4', '2', '0', '0', '0'},
@@ -94,6 +96,7 @@ public enum ErrorCode {
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
+    ERR_NO_SUCH_QUERY(1365, new byte[] {'4', '2', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -138,7 +141,7 @@ public enum ErrorCode {
     ERR_BAD_PARTITION_STATE(5015, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition state is not NORMAL: '%s':'%s'"),
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
-    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
+    ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -221,6 +224,8 @@ public enum ErrorCode {
             "Export job [%s] not found when checking privilege"),
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
+    ERR_CATALOG_EXISTED_ERROR(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Catalog '%s' already exists"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
@@ -286,6 +291,22 @@ public enum ErrorCode {
             "The default storage volume does not exist. " +
                     "A default storage volume can be created by following these steps: " +
                     "1. Create a storage volume. 2. Set the storage volume as default"),
+    ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
+            "Can not enable replicated storage when the table has GIN"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
+    ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
+                    "or increase frontend config max_bucket_number_per_partition."),
+    ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE(5511, new byte[] {'4', '2', '0', '0', '0'},
+            "Column renaming is only supported for olap table"),
+    ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB(5512, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column in internal database: %s"),
+    ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE(5513, new byte[] {'4', '2', '0', '0', '0'},
+            "Can not rename column of table in %s state"),
 
     /**
      * 5600 - 5699: DML operation failure
@@ -295,21 +316,49 @@ public enum ErrorCode {
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
+            "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
+                    "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
+                    "to ensure such load jobs can succeed"),
+    ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+            "Inserted target column count: %d doesn't match select/value column count: %d"),
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
+    ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information. If you are sure that the data has many errors, " +
+                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
+            "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'2', '2', '0', '0', '0'}, "%s column: %s has no matching %s column"),
+
+    /**
+     * 5700 - 5799: Partition
+     */
+    ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Cannot add a Range partition to a table that partition type is not of Range"),
+
+    ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
+
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702,  new byte[] {'4', '2', '0', '0', '0'},
+            "Can't add multi range partition to multi partition column table"),
+
+    ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
+            "The interval of the Multi-Range Partition must be greater than 0"),
 
     /**
      * 10000 - 10099: warehouse
      */
-    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
-    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
-    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' has been suspended."),
-    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' is not available."),
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
     ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
-            "No alive backend or compute node in warehouse '%s'."),
+            "No alive backend or compute node in warehouse %s."),
     ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode")
-    ;
+            "unsupported statement in shared_nothing mode");
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

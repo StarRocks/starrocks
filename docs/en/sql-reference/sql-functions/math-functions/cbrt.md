@@ -1,12 +1,14 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # cbrt
 
-## Description
+
 
 Computes the cube root of the argument.
+
+This function is supported from v3.3 onwards.
 
 ## Syntax
 

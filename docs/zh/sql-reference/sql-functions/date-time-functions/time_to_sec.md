@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # time_to_sec
 
-## 功能
+
 
 将 `time` 时间值转换为秒数，转换公式为:
 

@@ -33,7 +33,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const Filter& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
@@ -53,7 +53,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** column,
-                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                  AggDataPtr* states, const Filter& filter) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
@@ -511,7 +511,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
     std::string get_name() const override { return "nullable_last_value"; }
 };
 
-template <LogicalType LT, typename = guard::Guard>
+template <LogicalType LT, bool ignoreNulls>
 struct LeadLagState {
     using T = AggDataValueType<LT>;
     T value;
@@ -521,8 +521,20 @@ struct LeadLagState {
     bool default_is_null = false;
 };
 
+template <LogicalType LT>
+struct LeadLagState<LT, true> {
+    using T = AggDataValueType<LT>;
+    T value;
+    int64_t offset = 0;
+    T default_value;
+    bool is_null = false;
+    bool default_is_null = false;
+    int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
+    size_t non_null_count;             // only used for lag
+};
+
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
-class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<LT>, T> {
+class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<LT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
@@ -549,27 +561,21 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             auto value = ColumnHelper::get_const_value<LT>(arg2);
             AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
         }
+
+        if constexpr (ignoreNulls) {
+            this->data(state).target_not_null_index = INT64_MIN;
+            this->data(state).non_null_count = 0;
+        }
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        // frame_start < peer_group_start is for lag function
-        // frame_end > peer_group_end is for lead function
-        if ((frame_start < peer_group_start) | (frame_end > peer_group_end)) {
-            if (this->data(state).default_is_null) {
-                this->data(state).is_null = true;
-            } else {
-                this->data(state).is_null = false;
-                this->data(state).value = this->data(state).default_value;
-            }
-            return;
-        }
-
         // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
         // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
-        if (ignoreNulls) {
+        if constexpr (ignoreNulls) {
             const int64_t offset = this->data(state).offset;
+            DCHECK(offset > 0);
             // lead(v1 ignore nulls, <offset>) has window `ROWS BETWEEN UNBOUNDED PRECEDING AND <offset> FOLLOWING`
             //      frame_start = partition_start
             //      frame_end = current_row + <offset> + 1
@@ -587,33 +593,75 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             }
 
             int64_t cnt = offset;
-            size_t value_index = current_row;
-            if (isLag) {
-                // Look backward, find <offset>-th non-null value
-                while (value_index > peer_group_start && cnt > 0) {
-                    int64_t next_index = ColumnHelper::last_nonnull(columns[0], peer_group_start, value_index);
-                    if (next_index == value_index) {
-                        break;
+            int64_t value_index = current_row;
+            bool found_target = false;
+            // for lag: at the begining of current round of 'update_batch_single_state_with_frame'
+            // non_null_count means: before current row, there are  at least 'non_null_count' non null elements. non_null_count <= offset
+            // target_not_null_index means: the leftmost element's index in 'non_null_count' non null element, if non_null_count == 0, target_not_null_index is undefined
+            if constexpr (isLag) {
+                DCHECK(this->data(state).non_null_count <= offset);
+                if (this->data(state).non_null_count == offset) {
+                    DCHECK(this->data(state).target_not_null_index >= 0);
+                    // before current_row we have 'offset' non null elements
+                    value_index = this->data(state).target_not_null_index;
+                    found_target = true;
+                    if (columns[0]->is_null(current_row)) {
+                        // no need to change target_not_null_index and non_null_count
+                    } else {
+                        // move target_not_null_index to the next right non-null element
+                        this->data(state).target_not_null_index = ColumnHelper::find_nonnull(
+                                columns[0], this->data(state).target_not_null_index + 1, current_row + 1);
+                        DCHECK(value_index < this->data(state).target_not_null_index);
                     }
-                    value_index = next_index;
-                    DCHECK_GE(value_index, peer_group_start);
-                    cnt--;
+                } else {
+                    // this means we don't find target non-null value
+                    found_target = false;
+                    // before current_row we don't have 'offset' non null elements
+                    if (columns[0]->is_null(current_row)) {
+                        // no need to change target_not_null_index and non_null_count
+                    } else {
+                        if (this->data(state).non_null_count == 0) {
+                            this->data(state).target_not_null_index = current_row;
+                        }
+                        this->data(state).non_null_count++;
+                    }
                 }
             } else {
-                // Look forward, find <offset>-th non-null value
-                while (value_index < peer_group_end && cnt > 0) {
-                    int64_t next_index = ColumnHelper::find_nonnull(columns[0], value_index + 1, peer_group_end);
-                    if (next_index == peer_group_end) {
-                        break;
+                // first time after reset
+                if (frame_start == peer_group_start) return;
+                // first time after reset, Look forward, find <offset>-th non-null value
+                if (this->data(state).target_not_null_index == INT64_MIN) {
+                    while (value_index < peer_group_end && cnt > 0) {
+                        int64_t next_index = ColumnHelper::find_nonnull(columns[0], value_index + 1, peer_group_end);
+                        if (next_index == peer_group_end) {
+                            value_index = next_index;
+                            break;
+                        }
+                        value_index = next_index;
+                        DCHECK_LE(value_index, peer_group_end);
+                        cnt--;
                     }
-                    value_index = next_index;
-                    DCHECK_LE(value_index, peer_group_end);
-                    cnt--;
+                    found_target = (cnt == 0);
+                } else if (this->data(state).target_not_null_index == peer_group_end) {
+                    // we don't have 'offset' not null values
+                    value_index = peer_group_end;
+                    found_target = false;
+                } else {
+                    if (columns[0]->is_null(current_row)) {
+                        value_index = this->data(state).target_not_null_index;
+                    } else {
+                        value_index = this->data(state).target_not_null_index;
+                        int64_t next_index = ColumnHelper::find_nonnull(columns[0], value_index + 1, peer_group_end);
+                        value_index = next_index;
+                    }
+                    found_target = (value_index < peer_group_end);
                 }
+                this->data(state).target_not_null_index = value_index;
             }
-            DCHECK_GE(value_index, peer_group_start);
+
+            DCHECK_GE(value_index, peer_group_start - 1);
             DCHECK_LE(value_index, peer_group_end);
-            if (cnt > 0 || value_index == peer_group_end || columns[0]->is_null(value_index)) {
+            if (!found_target || columns[0]->is_null(value_index)) {
                 if (this->data(state).default_is_null) {
                     this->data(state).is_null = true;
                 } else {
@@ -627,6 +675,18 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                                                     AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
             }
         } else {
+            // frame_start < peer_group_start is for lag function
+            // frame_end > peer_group_end is for lead function
+            if ((frame_start < peer_group_start) | (frame_end > peer_group_end)) {
+                if (this->data(state).default_is_null) {
+                    this->data(state).is_null = true;
+                } else {
+                    this->data(state).is_null = false;
+                    this->data(state).value = this->data(state).default_value;
+                }
+                return;
+            }
+
             if (!columns[0]->is_null(frame_end - 1)) {
                 this->data(state).is_null = false;
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);

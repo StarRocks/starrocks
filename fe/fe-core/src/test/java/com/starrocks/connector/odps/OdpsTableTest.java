@@ -16,6 +16,7 @@ package com.starrocks.connector.odps;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.Type;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -63,7 +64,7 @@ public class OdpsTableTest {
     public void testDataColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> dataColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         dataColumns.add(column);
         when(odpsTable.getDataColumnNames()).thenReturn(
@@ -75,7 +76,7 @@ public class OdpsTableTest {
     public void testPartitionColumns() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumns()).thenReturn(partitionColumns);
@@ -86,7 +87,7 @@ public class OdpsTableTest {
     public void testPartitionColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumnNames()).thenReturn(

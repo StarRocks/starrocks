@@ -168,7 +168,7 @@ TEST(FixedLengthColumnTest, test_append_strings) {
     auto c1 = Int32Column::create();
     auto nullable_c1 = NullableColumn::create(c1, NullColumn::create());
     ASSERT_FALSE(c1->append_strings(values));
-    ASSERT_FALSE(nullable_c1->append_strings(values));
+    ASSERT_FALSE(nullable_c1->append_strings(values.data(), values.size()));
 }
 
 // NOLINTNEXTLINE
@@ -633,7 +633,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     ASSERT_EQ(values.size(), c1->size());
 
     std::vector<int64_t> ids{0, 0, 0};
-    std::vector<uint8_t> filter{1, 0, 1, 0, 1};
+    Filter filter{1, 0, 1, 0, 1};
     ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
     auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());

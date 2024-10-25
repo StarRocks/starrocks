@@ -25,7 +25,7 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
-#include <arrow/visitor_inline.h>
+#include <arrow/visitor_generate.h>
 
 #include <memory>
 
@@ -38,6 +38,10 @@ namespace starrocks {
 Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _output_expr_ctxs,
                                     const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                     std::shared_ptr<arrow::RecordBatch>* result);
+
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result);
 
 // only used for UT test
 Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& _slot_types,

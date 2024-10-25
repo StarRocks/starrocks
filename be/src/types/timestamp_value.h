@@ -120,6 +120,7 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+    int64_t to_unixtime() const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
@@ -153,8 +154,8 @@ public:
     static TimestampValue MIN_TIMESTAMP_VALUE;
 
     /**
-     * Milliseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
-     * milliseconds before January 1, 2000, 00:00:00.
+     * Microseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
+     * microseconds before January 1, 2000, 00:00:00.
      */
     Timestamp _timestamp;
 };

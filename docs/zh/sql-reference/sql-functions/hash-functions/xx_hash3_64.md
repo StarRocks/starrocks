@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # xx_hash3_64
 
-## 功能
+
 
 返回输入字符串的 64 位 xxhash3 hash 值。xx_hash3_64 使用 AVX2 指令集，提供比 [murmur_hash3_32](./murmur_hash3_32.md) 更快的速度和更优的性能。
 

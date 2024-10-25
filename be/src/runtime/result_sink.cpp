@@ -113,6 +113,8 @@ Status ResultSink::prepare(RuntimeState* state) {
     case TResultSinkType::VARIABLE:
         _writer.reset(new (std::nothrow) VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
+    case TResultSinkType::CUSTOMIZED:
+        return Status::InternalError("Non-pipeline not support CUSTOMIZED format");
     default:
         return Status::InternalError("Unknown result sink type");
     }

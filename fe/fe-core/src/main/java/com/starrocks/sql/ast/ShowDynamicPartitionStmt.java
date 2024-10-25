@@ -40,6 +40,7 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
                     .addColumn(new Column("LastCreatePartitionMsg", ScalarType.createVarchar(20)))
                     .addColumn(new Column("LastDropPartitionMsg", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("InScheduler", ScalarType.createVarchar(20)))
                     .build();
 
     public ShowDynamicPartitionStmt(String db) {

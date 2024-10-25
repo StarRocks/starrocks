@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # percentile_empty
 
-## Description
+
 
 Constructs a PERCENTILE value, which is used to fill in null values for data loading using [Stream Load](../../../loading/StreamLoad.md) or [INSERT INTO](../../../loading/InsertInto.md).
 

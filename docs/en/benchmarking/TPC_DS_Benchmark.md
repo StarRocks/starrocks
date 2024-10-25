@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # TPC-DS Benchmarking
@@ -13,7 +13,7 @@ This benchmark tests a total of 99 complex SQL queries against 24 tables whose d
 ## 1. Test Conclusion
 
 We perform a test on 99 queries against a TPC-DS 100 GB dataset. The following figure shows the test result.
-![tpc-ds](../assets/tpc-ds.png)
+![tpc-ds](../_assets/tpc-ds.png)
 
 In the test, StarRocks queries data from both its native storage and Hive external tables. StarRocks and Trino query the same copy of data from Hive external tables. Data is LZ4-compressed and stored in the Parquet format.
 
@@ -76,6 +76,7 @@ StarRocks and Trino are deployed on machines with the same configuration. StarRo
 > **NOTE**
 >
 > - The unit of query latency in the following table is ms.
+> - All queries are warmed up 1 time and then executed 3 times to take the average value as the result.
 > - `StarRocks-3.0.5-native` indicates StarRocks native storage, `StarRocks-3.0-Hive external` indicates StarRocks queries Hive external tables through Hive Catalog, `StarRocks-3.0-Hive external-Cache` indicates StarRocks queries Hive external tables through Hive Catalog with Data Cache enabled.
 > - Aggregate pushdown is enabled for StarRocks (`SET global cbo_push_down_aggregate_mode = 0`).
 

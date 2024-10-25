@@ -17,12 +17,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -50,15 +50,24 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
-    private ExpressionPartitionDesc expressionPartitionDesc;
+
+    // partition by clause which may be list or range partition expr.
+    private final Expr partitionByExpr;
+    // partition type of the mv which is deduced by its referred base table.
+    private PartitionType partitionType;
+
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+    private final int queryStartIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
+    // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
-
+    // simple view definition of the mv which has been rewritten by AstToSQLBuilder#buildSimple
     private String simpleViewDef;
+    // original view definition of the mv query without any rewrite which can be used in text based rewrite.
+    private String originalViewDefineSql;
     private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
@@ -85,10 +94,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
-                                           ExpressionPartitionDesc expressionPartitionDesc,
+                                           Expr partitionByExpr,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
-                                           QueryStatement queryStatement, NodePosition pos) {
+                                           QueryStatement queryStatement,
+                                           int queryStartIndex,
+                                           NodePosition pos) {
         super(pos);
         this.tableName = tableName;
         this.colWithComments = colWithComments;
@@ -96,10 +107,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.expressionPartitionDesc = expressionPartitionDesc;
+        this.partitionByExpr = partitionByExpr;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
+        this.queryStartIndex = queryStartIndex;
         this.queryStatement = queryStatement;
     }
 
@@ -143,12 +155,23 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public ExpressionPartitionDesc getPartitionExpDesc() {
-        return expressionPartitionDesc;
+    /**
+     * Get partition by expr of the mv
+     */
+    public Expr getPartitionByExpr() {
+        return partitionByExpr;
     }
 
-    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
-        this.expressionPartitionDesc = expressionPartitionDesc;
+    /**
+     * Get partition type of the mv
+     * @return
+     */
+    public PartitionType getPartitionType() {
+        return partitionType;
+    }
+
+    public void setPartitionType(PartitionType partitionType) {
+        this.partitionType = partitionType;
     }
 
     public void setKeysType(KeysType keysType) {
@@ -193,6 +216,18 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setSimpleViewDef(String simpleViewDef) {
         this.simpleViewDef = simpleViewDef;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
     }
 
     public QueryStatement getQueryStatement() {

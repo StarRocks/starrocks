@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # str2date
 
-## Description
+
 
 Converts a string into a DATE value according to the specified format. If the conversion fails, NULL is returned.
 

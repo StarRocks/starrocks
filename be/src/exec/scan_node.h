@@ -86,8 +86,8 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel,
-            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
+            int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,

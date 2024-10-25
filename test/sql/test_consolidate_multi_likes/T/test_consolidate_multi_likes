@@ -1,0 +1,29 @@
+-- name: test_consolidate_multi_likes
+ DROP TABLE if exists t0;
+
+ CREATE TABLE if not exists t0
+ (
+ c0 INT NOT NULL,
+ c1 VARCHAR(2048) NOT NULL 
+ ) ENGINE=OLAP
+ DUPLICATE KEY(`c0` )
+ COMMENT "OLAP"
+ DISTRIBUTED BY HASH(`c0` ) BUCKETS 1
+ PROPERTIES(
+ "replication_num" = "1",
+ "in_memory" = "false",
+ "storage_format" = "default" 
+ );
+INSERT INTO t0
+(c0, c1)
+VALUES
+('1', 'ABC\t\n \r{}[]()^$.?+*|%_\\'),
+('2', '\t\n \rABC{}[]()^$.?+*|%_\\'),
+('3', '\t\n \r{}[]()^$.?+*|%_\\ABC'),
+('4', 'DEFG\t\n \r{}[]()^$.?+*|%_\\'),
+('5', '\t\n \rDEFG{}[]()^$.?+*|%_\\'),
+('6', '\t\n \r{}[]()^$.?+*|%_\\DEFG');
+set like_predicate_consolidate_min='3';
+select count(*) from t0 where c1 like 'AB%\t\n \r{}[]()^$.?+*|\\%\\_\\\\'  or c1 like '\t\n \rAB%{}[]()^$.?+*|\\%\\_\\\\'  or c1 like '\t\n \r{}[]()^$.?+*|\\%\\_\\\\AB%';
+set like_predicate_consolidate_min='3';
+select count(*) from t0 where c1 not like 'DEF%\t\n \r{}[]()^$.?+*|\\%\\_\\\\'  and c1 not like '\t\n \rDEF%{}[]()^$.?+*|\\%\\_\\\\'  and c1 not like '\t\n \r{}[]()^$.?+*|\\%\\_\\\\DEF%';

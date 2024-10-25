@@ -14,9 +14,14 @@
 
 #include "formats/parquet/page_reader.h"
 
-#include "common/config.h"
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <ostream>
+#include <vector>
+
+#include "common/compiler_util.h"
 #include "exec/hdfs_scanner.h"
-#include "formats/parquet/column_reader.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 

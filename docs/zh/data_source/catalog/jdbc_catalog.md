@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+toc_max_heading_level: 4
 ---
 
 # JDBC catalog
@@ -8,9 +9,9 @@ StarRocks 从 3.0 版本开始支持 JDBC Catalog。
 
 JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询 JDBC 数据源里的数据。
 
-此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
+此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
+JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。
 
 ## 前提条件
 
@@ -84,17 +85,40 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
+ 
+CREATE EXTERNAL CATALOG jdbc2
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver"
+);
+       
+CREATE EXTERNAL CATALOG jdbc3
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:sqlserver://127.0.0.1:1433;databaseName=MyDatabase;",
+    "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
+    "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+);
+
 ```
 
 ## 查看 JDBC Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -102,7 +126,7 @@ SHOW CREATE CATALOG jdbc0;
 
 ## 删除 JDBC Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除一个 JDBC Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除一个 JDBC Catalog。
 
 例如，通过如下命令删除 JDBC Catalog `jdbc0`：
 
@@ -112,31 +136,31 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 切换当前会话生效的 Catalog：
 
     ```SQL
     SET CATALOG <catalog_name>;
     ```
 
-    再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+    再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定当前会话生效的数据库：
 
     ```SQL
     USE <db_name>;
     ```
 
-    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+    或者，也可以通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
     ```SQL
     USE <catalog_name>.<db_name>;
     ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT * FROM <table_name>;

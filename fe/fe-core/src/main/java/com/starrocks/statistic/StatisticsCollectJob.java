@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -35,6 +36,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,9 +91,6 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
-                "org.apache.velocity.runtime.log.Log4JLogChute");
-        DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
     public abstract void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception;
@@ -128,6 +127,10 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
+    public boolean isAnalyzeTable() {
+        return CollectionUtils.isEmpty(columnNames);
+    }
+
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();
         // Statistics collecting is not user-specific, which means response latency is not that important.
@@ -135,13 +138,20 @@ public abstract class StatisticsCollectJob {
         // acceleration, then page cache is better filled with the user's data.
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
+        // set the max task num of connector io tasks per scan operator to 4, default is 16,
+        // to avoid generate too many chunk source for collect stats in BE
+        sessionVariable.setConnectorIoTasksPerScanOperator(4);
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {
+            context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
+            if (Config.enable_print_sql) {
+                LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
 
@@ -149,7 +159,6 @@ public abstract class StatisticsCollectJob {
             setDefaultSessionVariable(context);
 
             context.setExecutor(executor);
-            context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
             executor.execute();
 
@@ -163,6 +172,8 @@ public abstract class StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
+                AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                        DebugUtil.printId(context.getQueryId()), sql);
                 return;
             }
         } while (count < maxRetryTimes);
@@ -213,9 +224,22 @@ public abstract class StatisticsCollectJob {
 
     public static String fullAnalyzeGetDataSize(String columnName, Type columnType) {
         if (columnType.getPrimitiveType().isCharFamily()) {
-            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(columnName) + ")), 0)";
+            return "IFNULL(SUM(CHAR_LENGTH(" + columnName + ")), 0)";
         }
         long typeSize = columnType.getTypeSize();
         return "COUNT(1) * " + typeSize;
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("StatisticsCollectJob{");
+        sb.append("type=").append(type);
+        sb.append(", scheduleType=").append(scheduleType);
+        sb.append(", db=").append(db);
+        sb.append(", table=").append(table);
+        sb.append(", columnNames=").append(columnNames);
+        sb.append(", properties=").append(properties);
+        sb.append('}');
+        return sb.toString();
     }
 }

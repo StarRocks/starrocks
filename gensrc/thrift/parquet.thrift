@@ -41,9 +41,10 @@ enum Type {
 }
 
 /**
- * Common types used by frameworks(e.g. hive, pig) using parquet.  This helps map
- * between types in those frameworks to the base types in parquet.  This is only
- * metadata and not needed to read or write the data.
+ * DEPRECATED: Common types used by frameworks(e.g. hive, pig) using parquet.
+ * ConvertedType is superseded by LogicalType.  This enum should not be extended.
+ *
+ * See LogicalTypes.md for conversion between ConvertedType and LogicalType.
  */
 enum ConvertedType {
   /** a BYTE_ARRAY actually contains UTF8 encoded chars */
@@ -316,15 +317,15 @@ struct BsonType {
  * LogicalType annotations to replace ConvertedType.
  *
  * To maintain compatibility, implementations using LogicalType for a
- * SchemaElement must also set the corresponding ConvertedType from the
- * following table.
+ * SchemaElement must also set the corresponding ConvertedType (if any)
+ * from the following table.
  */
 union LogicalType {
   1:  StringType STRING       // use ConvertedType UTF8
   2:  MapType MAP             // use ConvertedType MAP
   3:  ListType LIST           // use ConvertedType LIST
   4:  EnumType ENUM           // use ConvertedType ENUM
-  5:  DecimalType DECIMAL     // use ConvertedType DECIMAL
+  5:  DecimalType DECIMAL     // use ConvertedType DECIMAL + SchemaElement.{scale, precision}
   6:  DateType DATE           // use ConvertedType DATE
 
   // use ConvertedType TIME_MICROS for TIME(isAdjustedToUTC = *, unit = MICROS)
@@ -340,7 +341,7 @@ union LogicalType {
   11: NullType UNKNOWN        // no compatible ConvertedType
   12: JsonType JSON           // use ConvertedType JSON
   13: BsonType BSON           // use ConvertedType BSON
-  14: UUIDType UUID
+  14: UUIDType UUID           // no compatible ConvertedType
 }
 
 /**
@@ -374,13 +375,19 @@ struct SchemaElement {
    */
   5: optional i32 num_children;
 
-  /** When the schema is the result of a conversion from another model
+  /**
+   * DEPRECATED: When the schema is the result of a conversion from another model.
    * Used to record the original type to help with cross conversion.
+   *
+   * This is superseded by logicalType.
    */
   6: optional ConvertedType converted_type;
 
-  /** Used when this column contains decimal data.
+  /**
+   * DEPRECATED: Used when this column contains decimal data.
    * See the DECIMAL converted type for more details.
+   *
+   * This is superseded by using the DecimalType annotation in logicalType.
    */
   7: optional i32 scale
   8: optional i32 precision
@@ -471,19 +478,21 @@ enum Encoding {
 /**
  * Supported compression algorithms.
  *
- * Codecs added in 2.4 can be read by readers based on 2.4 and later.
+ * Codecs added in format version X.Y can be read by readers based on X.Y and later.
  * Codec support may vary between readers based on the format version and
- * libraries available at runtime. Gzip, Snappy, and LZ4 codecs are
- * widely available, while Zstd and Brotli require additional libraries.
+ * libraries available at runtime.
+ *
+ * See Compression.md for a detailed specification of these algorithms.
  */
 enum CompressionCodec {
   UNCOMPRESSED = 0;
   SNAPPY = 1;
   GZIP = 2;
   LZO = 3;
-  BROTLI = 4; // Added in 2.4
-  LZ4 = 5;    // Added in 2.4
-  ZSTD = 6;   // Added in 2.4
+  BROTLI = 4;  // Added in 2.4
+  LZ4 = 5;     // DEPRECATED (Added in 2.4)
+  ZSTD = 6;    // Added in 2.4
+  LZ4_RAW = 7; // Added in 2.9
 }
 
 enum PageType {

@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 60
 ---
 
 # 【公测中】行列混存表
@@ -12,7 +13,7 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 - 存储方式：数据同时按照列和行存储。简单来说，行列混存表会额外加一个隐藏的二进制类型的列 `__row`，写入数据至表的同时还会将一行数据所有 value 列编码后的值写入列 `__row`（如下所示）。由于数据同时按照列和行存储，因此会带来额外的存储成本。
 
-   ![img](../assets/table_design/hybrid_table.png)
+   ![img](../_assets/table_design/hybrid_table.png)
 
 - 适用场景：能够兼顾行存和列存的场景，但是会带来额外的存储成本。<ul><li>按行存储的适用场景。</li><ul><li>基于主键的高并发点查。</li><li>表的字段个数比较少，并且通常会查询大部分字段。</li><li>部分列更新（更新多列和少量数据行）</li></ul><li>列存的场景：复杂数据分析。</li></ul>
 
@@ -20,7 +21,7 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 - 存储方式：按列存储数据。
 
-   ![img](../assets/table_design/columnar_table.png)
+   ![img](../_assets/table_design/columnar_table.png)
 
 - 适用场景：复杂数据分析。 <ul><li>针对海量数据进行复杂查询分析，比如聚合分析、多表关联查询。 </li><li>表的字段比较多（比如大宽表），但查询的字段不多。</li></ul>
 
@@ -112,7 +113,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit323-及以后) 为 `true`。
+   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../sql-reference/System_variable.md#enable_short_circuit) 为 `true`。
 
 2. 查询数据。如果查询满足本条件：WHERE 子句的条件列必须包含所有主键列，并且运算符为  `=` 或者 `IN`，该查询才会走短路径。
 
@@ -174,7 +175,8 @@ EXECUTE select_by_id_stmt USING @id2;
 
 ## 注意事项
 
-- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
+- StarRocks 存算分离集群暂不支持行列混存表。
+- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)。
 - 短路径查询目前仅适合定期批量导入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
 - 行列混存表可能会大幅增加存储空间的占用。因为数据会按行和列格式存储两份，并且按行存储压缩比可能不如按列存储高。
 - 行列混存表会增加数据导入耗时和资源占用。

@@ -25,6 +25,7 @@
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -44,17 +45,17 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class SegmentReadOptions {
 public:
-    using PredicateList = std::vector<const ColumnPredicate*>;
-
     std::shared_ptr<FileSystem> fs;
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    PredicateTree pred_tree;
+    PredicateTree pred_tree_for_zone_map;
 
     DisjunctivePredicates delete_predicates;
 
@@ -74,6 +75,8 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
+    // temporary data does not allow caching
+    bool temporary_data = false;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     ReaderType reader_type = READER_QUERY;
@@ -81,8 +84,6 @@ public:
 
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
-
-    bool has_delete_pred = false;
 
     /// Mark whether this is the first split of a segment.
     /// A segment may be divided into multiple split to scan concurrently.
@@ -101,6 +102,14 @@ public:
     TabletSchemaCSPtr tablet_schema = nullptr;
 
     bool asc_hint = true;
+
+    bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
+    bool has_preaggregation = true;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

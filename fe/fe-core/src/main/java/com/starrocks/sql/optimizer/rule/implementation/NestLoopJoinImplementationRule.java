@@ -56,6 +56,13 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
             if (!supportJoinType(joinType)) {
                 throw new SemanticException(UNSUPPORTED_JOIN_CLAUSE, joinType, joinOperator.getOnPredicate());
             }
+            if (!context.getSessionVariable().isEnableCrossJoin() && joinType.isCrossJoin()) {
+                throw new SemanticException("Cross join is not allowed, please check the join logic in the query");
+            }
+            if (!context.getSessionVariable().isEnableNestedLoopJoin()) {
+                throw new SemanticException("NestLoopJoin is not allowed. " +
+                        "Please check whether there are non-equal join conditions in the query.");
+            }
             return true;
         }
     }

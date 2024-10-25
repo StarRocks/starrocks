@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # timestampdiff
 
-## 功能
+
 
 返回 `datetime_expr2` 和 `datetime_expr1` 的差值，其中 `datetime_expr1` 和`datetime_expr2` 是日期或日期时间表达式。
 

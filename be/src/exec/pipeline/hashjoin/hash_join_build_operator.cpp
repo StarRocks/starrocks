@@ -14,11 +14,17 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <numeric>
 #include <utility>
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
+#include "util/race_detect.h"
+
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -52,7 +58,7 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
     COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
-                _join_builder->hash_join_builder()->hash_table_mem_usage());
+                _join_builder->hash_join_builder()->ht_mem_usage());
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -75,6 +81,7 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 }
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     DeferOp op([this]() { _is_finished = true; });
 
     if (state->is_cancelled()) {
@@ -103,15 +110,17 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ((HashJoinBuildOperatorFactory*)_factory)
             ->retain_string_key_columns(_driver_sequence, _join_builder->string_key_columns());
 
+    if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
+        // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
+        DCHECK(_join_builder->is_done());
+    }
+
     // push colocate partial runtime filter
     bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
-        if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
-            // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
-            DCHECK(_join_builder->is_done());
-        } else {
+        if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {
                     partial_bloom_filters[i]->set_or_concat(partial_bloom_filter_build_params[i]->runtime_filter.get(),
@@ -140,6 +149,16 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             auto&& in_filters = _partial_rf_merger->get_total_in_filters();
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
+            {
+                size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
+                                                            auto rf = desc->runtime_filter();
+                                                            total += (rf == nullptr ? 0 : rf->bf_alloc_size());
+                                                            return total;
+                                                        });
+                COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
+            }
+
             // publish runtime bloom-filters
             state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             // move runtime filters into RuntimeFilterHub.
@@ -151,6 +170,10 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     _join_builder->enter_probe_phase();
 
     return Status::OK();
+}
+
+bool HashJoinBuildOperator::is_finished() const {
+    return _is_finished || _join_builder->is_finished();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(

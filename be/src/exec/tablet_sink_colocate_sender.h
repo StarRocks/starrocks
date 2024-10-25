@@ -16,7 +16,7 @@
 
 #include "exec/tablet_sink_sender.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 // TabletSinkColocateSender will control one index/table's send chunks.
 class TabletSinkColocateSender final : public TabletSinkSender {
@@ -27,7 +27,7 @@ public:
                              std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                              TWriteQuorumType::type write_quorum_type, int num_repicas);
 
-    ~TabletSinkColocateSender() = default;
+    ~TabletSinkColocateSender() override = default;
 
 public:
     Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
@@ -40,7 +40,8 @@ public:
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
     Status try_close(RuntimeState* state) override;
-    Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile) override;
+    Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                      bool write_txn_log) override;
 
     bool is_open_done() override;
     bool is_full() override;
@@ -57,4 +58,4 @@ private:
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

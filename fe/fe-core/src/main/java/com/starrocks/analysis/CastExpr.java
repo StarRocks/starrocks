@@ -78,7 +78,7 @@ public class CastExpr extends Expr {
         try {
             analyze();
         } catch (AnalysisException ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             Preconditions.checkState(false,
                     "Implicit casts should never throw analysis exception.");
         }

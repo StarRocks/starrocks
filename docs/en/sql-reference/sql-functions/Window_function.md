@@ -1,6 +1,7 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 keywords: ['analytic']
+sidebar_position: 0.9
 ---
 
 # Window functions

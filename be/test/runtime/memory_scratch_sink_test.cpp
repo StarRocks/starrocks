@@ -44,7 +44,7 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
-#include <arrow/visitor_inline.h>
+#include <arrow/visitor_generate.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -185,7 +185,6 @@ public:
 private:
     ObjectPool _obj_pool;
     ExecEnv* _exec_env = nullptr;
-    // std::vector<TExpr> _exprs;
     TDescriptorTable _t_desc_table;
     RuntimeState* _state = nullptr;
     TPlanNode _tnode;
@@ -266,9 +265,7 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);
 
-    std::vector<bool> nullable_tuples;
-    nullable_tuples.push_back(false);
-    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids, nullable_tuples));
+    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids));
 
     // node
     _tnode.node_id = 0;
@@ -276,7 +273,6 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     _tnode.num_children = 0;
     _tnode.limit = -1;
     _tnode.row_tuples.push_back(0);
-    _tnode.nullable_tuples.push_back(false);
 }
 
 TEST_F(MemoryScratchSinkTest, work_flow_normal) {

@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PartitionExprAnalyzer {
 
@@ -75,18 +76,42 @@ public class PartitionExprAnalyzer {
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||
                     functionName.equalsIgnoreCase(FunctionSet.SUBSTRING)) {
-                int paramSize = functionCallExpr.getParams().exprs().size();
-                if (paramSize == 2) {
-                    Type[] subStrType = {Type.VARCHAR, Type.INT};
-                    builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
-                            subStrType, Function.CompareMode.IS_IDENTICAL);
-                    targetColType = Type.VARCHAR;
-                } else if (paramSize == 3) {
-                    Type[] subStrType = {Type.VARCHAR, Type.INT, Type.INT};
-                    builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
-                            subStrType, Function.CompareMode.IS_IDENTICAL);
-                    targetColType = Type.VARCHAR;
+                List<Expr> paramsExprList = functionCallExpr.getParams().exprs();
+                int paramSize = paramsExprList.size();
+
+                Type firstParamType = paramsExprList.get(0).getType();
+                boolean isFirstParamTypeRight = firstParamType != null && firstParamType.toSql() != null &&
+                        firstParamType.toSql().toUpperCase().startsWith("VARCHAR");
+                if (!isFirstParamTypeRight) {
+                    String msg = String.format("Unsupported partition expression %s for column %s type %s, " +
+                                    "Cause: The first parameter of %s must be a VARCHAR", functionName.toLowerCase(),
+                            partitionSlotRef.getColumnName(), partitionSlotRef.getType(), functionName.toLowerCase());
+                    throw new SemanticException(msg, expr.getPos());
                 }
+                if (!paramsExprList.get(1).getType().equals(Type.INT)) {
+                    String msg = String.format("Unsupported partition expression %s for column %s type %s, " +
+                                    "Cause: The second parameter of %s must be a INT", functionName.toLowerCase(),
+                            partitionSlotRef.getColumnName(), partitionSlotRef.getType(), functionName.toLowerCase());
+                    throw new SemanticException(msg, expr.getPos());
+                }
+
+                Type[] subStrType = null;
+                if (paramSize == 2) {
+                    subStrType = new Type[] {Type.VARCHAR, Type.INT};
+                } else if (paramSize == 3) {
+                    subStrType = new Type[] {Type.VARCHAR, Type.INT, Type.INT};
+
+                    if (!paramsExprList.get(2).getType().equals(Type.INT)) {
+                        String msg = String.format("Unsupported partition expression %s for column %s type %s, " +
+                                        "Cause: The third parameter of %s must be a INT", functionName.toLowerCase(),
+                                partitionSlotRef.getColumnName(), partitionSlotRef.getType(), functionName.toLowerCase());
+                        throw new SemanticException(msg, expr.getPos());
+                    }
+
+                }
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        subStrType, Function.CompareMode.IS_IDENTICAL);
+                targetColType = Type.VARCHAR;
             } else if (functionName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 Type[] str2DateType = {partitionSlotRef.getType(), Type.VARCHAR};
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),

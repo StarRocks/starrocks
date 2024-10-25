@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # find_in_set
 
-## 功能
+
 
 返回 strlist 中第一次出现 str 的位置 (从 1 开始计数)。如果没有找到返回 0，任意参数为 NULL 就返回 NULL。
 

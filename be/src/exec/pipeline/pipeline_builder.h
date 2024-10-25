@@ -24,6 +24,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
 
 namespace starrocks {
@@ -53,7 +54,7 @@ public:
     void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group) {
         // TODO: refactor Pipelines to PipelineRawPtrs
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators, execution_group));
-        execution_group->add_pipeline(_pipelines.back());
+        execution_group->add_pipeline(_pipelines.back().get());
         _subscribe_pipeline_event(_pipelines.back().get());
     }
 
@@ -167,8 +168,14 @@ public:
     void pop_dependent_pipeline();
 
     ExecutionGroups execution_groups() { return std::move(_execution_groups); }
+    Pipelines pipelines() { return std::move(_pipelines); }
 
 private:
+    // op1->limit->op2 (except accumulate) => return -1
+    // op1->limit->op2 (accumulate) => return limit
+    int64_t _prev_limit_size(const OpFactories& pred_operators);
+    void _try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators, int64_t limit_size);
+
     void _subscribe_pipeline_event(Pipeline* pipeline);
 
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
@@ -209,7 +216,7 @@ public:
     // Build pipeline from exec node tree
     OpFactories decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node);
 
-    ExecutionGroups build();
+    std::pair<ExecutionGroups, Pipelines> build();
 
 private:
     PipelineBuilderContext& _context;

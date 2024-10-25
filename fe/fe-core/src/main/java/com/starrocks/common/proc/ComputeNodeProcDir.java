@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
@@ -20,11 +19,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -34,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public class ComputeNodeProcDir implements ProcDirInterface {
@@ -49,7 +50,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
-                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
+                .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
@@ -92,7 +94,6 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     /**
      * get compute nodes of cluster
      * copy from getClusterBackendInfos, It is necessary to refactor the two methods later
-     * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -140,18 +141,37 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(computeNode.getHeartbeatErrMsg());
             computeNodeInfo.add(computeNode.getVersion());
 
-            computeNodeInfo.add(BackendCoreStat.getCoresOfBe(computeNodeId));
+            computeNodeInfo.add(computeNode.getCpuCores());
+            computeNodeInfo.add(DebugUtil.getPrettyStringBytes(computeNode.getMemLimitBytes()));
 
             computeNodeInfo.add(computeNode.getNumRunningQueries());
             double memUsedPct = computeNode.getMemUsedPct();
             computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
 
+            Optional<DataCacheMetrics> dataCacheMetrics = computeNode.getDataCacheMetrics();
+            if (dataCacheMetrics.isPresent()) {
+                DataCacheMetrics.Status status = dataCacheMetrics.get().getStatus();
+                if (status != DataCacheMetrics.Status.DISABLED) {
+                    computeNodeInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
+                            dataCacheMetrics.get().getStatus(),
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
+                } else {
+                    // DataCache is disabled
+                    computeNodeInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
+                }
+            } else {
+                // Didn't receive any datacache report from be
+                computeNodeInfo.add("N/A");
+            }
+
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+            computeNodeInfo.add(computeNode.getStatus().name());
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
                 Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
                 computeNodeInfo.add(wh.getName());

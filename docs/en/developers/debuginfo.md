@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Use the debuginfo file for debugging
@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 From v2.5 onwards, the debuginfo file of BE is stripped from the StarRocks installation package to reduce the size and space usage of the installation package. You can see two packages at [StarRocks website](https://www.starrocks.io/download/community).
 
-![debuginfo](../assets/debug_info.png)
+![debuginfo](../_assets/debug_info.png)
 
 In this figure, you can click `Get Debug Symbol files` to download the debuginfo package. `StarRocks-2.5.10.tar.gz` is the installation package and you can click **Download** to download this package.
 

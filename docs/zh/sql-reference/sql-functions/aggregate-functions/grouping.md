@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # grouping
 
-## 功能
+
 
 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。
 

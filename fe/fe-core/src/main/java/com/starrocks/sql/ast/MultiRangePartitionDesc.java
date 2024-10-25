@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -26,6 +27,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.text.ParseException;
@@ -48,7 +51,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private Long step;
     private final String timeUnit;
     private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
-    private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
+    public static final ImmutableSet<TimestampArithmeticExpr.TimeUnit> SUPPORTED_TIME_UNIT_TYPE = ImmutableSet.of(
             TimestampArithmeticExpr.TimeUnit.HOUR,
             TimestampArithmeticExpr.TimeUnit.DAY,
             TimestampArithmeticExpr.TimeUnit.WEEK,
@@ -65,6 +68,14 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         this.timeUnit = timeUnit;
     }
 
+    public String getPartitionBegin() {
+        return partitionBegin;
+    }
+
+    public String getPartitionEnd() {
+        return partitionEnd;
+    }
+
     public Long getStep() {
         return step;
     }
@@ -78,17 +89,13 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     }
 
     public List<SingleRangePartitionDesc> convertToSingle(PartitionConvertContext context) throws AnalysisException {
-
-        if (this.getStep() <= 0) {
-            throw new AnalysisException("Batch partition every clause mush be larger than zero.");
-        }
         Type firstPartitionColumnType = context.getFirstPartitionColumnType();
         if (firstPartitionColumnType.isDateType()) {
             return buildDateTypePartition(context);
         } else if (firstPartitionColumnType.isIntegerType()) {
             return buildNumberTypePartition(context);
         } else {
-            throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
+            throw new SemanticException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
         }
     }
 
@@ -126,13 +133,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     "only supports an interval of 1");
         }
 
-        String partitionName;
-        TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
-        if (timeUnitType == null) {
-            throw new AnalysisException("Batch build partition does not support time interval type.");
-        } else if (!supportedTimeUnitType.contains(timeUnitType)) {
-            throw new AnalysisException("Batch build partition does not support time interval type: " + timeUnit);
-        }
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
@@ -184,65 +184,18 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
         }
 
-        if (context.isAutoPartitionTable() || !Config.enable_create_partial_partition_in_batch) {
-            LocalDateTime standardBeginTime;
-            LocalDateTime standardEndTime;
-            String extraMsg = "";
-            switch (timeUnitType) {
-                case HOUR:
-                    standardBeginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                    standardEndTime = endTime.withMinute(0).withSecond(0).withNano(0);
-                    if (standardBeginTime.equals(standardEndTime)) {
-                        standardEndTime = standardEndTime.plusHours(timeInterval);
-                    }
-                    break;
-                case DAY:
-                    standardBeginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    standardEndTime = endTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    if (standardBeginTime.equals(standardEndTime)) {
-                        standardEndTime = standardEndTime.plusDays(timeInterval);
-                    }
-                    break;
-                case WEEK:
-                    standardBeginTime = beginTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                    standardEndTime = endTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                    if (standardBeginTime.equals(standardEndTime)) {
-                        standardEndTime = standardEndTime.plusWeeks(timeInterval);
-                    }
-                    extraMsg = "with start day of week " + dayOfWeek;
-                    break;
-                case MONTH:
-                    standardBeginTime = beginTime.withDayOfMonth(dayOfMonth);
-                    standardEndTime = endTime.withDayOfMonth(dayOfMonth);
-                    if (standardBeginTime.equals(standardEndTime)) {
-                        standardEndTime = standardEndTime.plusMonths(timeInterval);
-                    }
-                    extraMsg = "with start day of month " + dayOfMonth;
-                    break;
-                case YEAR:
-                    standardBeginTime = beginTime.withDayOfYear(1);
-                    standardEndTime = endTime.withDayOfYear(1);
-                    if (standardBeginTime.equals(standardEndTime)) {
-                        standardEndTime = standardEndTime.plusYears(timeInterval);
-                    }
-                    break;
-                default:
-                    throw new AnalysisException("Batch build partition does not support time interval type: " +
-                            timeUnit);
-            }
-            if (!(standardBeginTime.equals(beginTime) && standardEndTime.equals(endTime))) {
-                String msg = "Batch build partition range [" + partitionBegin + "," + partitionEnd + ")" +
-                        " should be a standard unit of time (" + timeUnitType + ") " + extraMsg + ". suggest range ["
-                        + standardBeginTime.format(outputDateFormat) + "," + standardEndTime.format(outputDateFormat)
-                        + ")";
-                if (!context.isAutoPartitionTable()) {
-                    msg += "If you want to create partial partitions in batch, you can turn off this check by " +
-                            "setting the FE config enable_create_partial_partition_in_batch=true";
-                }
-                throw new AnalysisException(msg);
-            }
+        TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
+        Preconditions.checkNotNull(timeUnitType);
+
+        if (context.isAutoPartitionTable()) {
+            PartitionDescAnalyzer.checkManualAddPartitionDateAligned(
+                    beginTime, endTime,
+                    timeUnit, timeInterval,
+                    dayOfWeek, dayOfMonth,
+                    context.getFirstPartitionColumnType());
         }
 
+        String partitionName;
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
 

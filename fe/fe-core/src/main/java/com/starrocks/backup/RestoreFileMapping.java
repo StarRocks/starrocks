@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 
 public class RestoreFileMapping implements Writable {
@@ -109,11 +110,7 @@ public class RestoreFileMapping implements Writable {
 
         @Override
         public int hashCode() {
-            int code = chain[0].hashCode();
-            for (int i = 1; i < 5; i++) {
-                code ^= chain[i].hashCode();
-            }
-            return code;
+            return Arrays.hashCode(chain);
         }
 
         @Override

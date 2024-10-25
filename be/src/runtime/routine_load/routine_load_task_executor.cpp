@@ -116,6 +116,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     }
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
+    // if get partition meta failed, should not return consumer because the KafkaConsumer may be closed.
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }
@@ -324,7 +325,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         return Status::InternalError("unknown load source type");
     }
 
-    VLOG(1) << "receive a new routine load task: " << ctx->brief();
+    VLOG(2) << "receive a new routine load task: " << ctx->brief();
     // register the task
     ctx->ref();
     _task_map[ctx->id] = ctx;
@@ -441,13 +442,8 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             break;
         }
 
-        std::vector<RdKafka::TopicPartition*> topic_partitions;
-        for (auto& kv : ctx->kafka_info->cmt_offset) {
-            RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(ctx->kafka_info->topic, kv.first, kv.second);
-            topic_partitions.push_back(tp1);
-        }
-
-        st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->commit(topic_partitions);
+        st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->commit(ctx->kafka_info->topic,
+                                                                           ctx->kafka_info->cmt_offset);
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
@@ -455,12 +451,6 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         }
         _data_consumer_pool.return_consumer(consumer);
 
-        // delete TopicPartition finally
-        auto tp_deleter = [&topic_partitions]() {
-            std::for_each(topic_partitions.begin(), topic_partitions.end(),
-                          [](RdKafka::TopicPartition* tp1) { delete tp1; });
-        };
-        DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
     } break;
     case TLoadSourceType::PULSAR: {
         for (auto& kv : ctx->pulsar_info->ack_offset) {

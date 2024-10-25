@@ -47,7 +47,7 @@ public class TriggerActionTest extends StarRocksHttpTestCase {
         MetricRepo.init();
         ExecuteEnv.setup();
         FeConstants.runningUnitTest = true;
-        Config.dynamic_partition_enable = true;
+        Config.dynamic_partition_enable = false;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         try {

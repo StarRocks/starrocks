@@ -78,7 +78,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             // functions with various data types do not need to implicit cast, such as following functions.
             if (fn.functionName().equals(FunctionSet.ARRAY_MAP) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                    fn.functionName().equals(FunctionSet.EXCHANGE_SPEED)) {
+                    fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
+                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
@@ -173,7 +174,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         Type compatibleType =
-                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType().isRange(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
@@ -209,6 +210,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 (typeVariable.isNumericType() && typeConstant.isBoolean()) ||
                 (typeVariable.isDateType() && typeConstant.isNumericType()) ||
                 (typeVariable.isDateType() && typeConstant.isStringType()) ||
+                (typeVariable.isFixedPointType() && typeConstant.isStringType() &&
+                        predicate.getBinaryType() == BinaryType.EQ) ||
                 (typeVariable.isBoolean() && typeConstant.isStringType()) ||
                 checkStringCastToNumber) {
 

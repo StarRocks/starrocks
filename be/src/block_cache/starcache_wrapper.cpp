@@ -50,6 +50,7 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     }
 
     starcache::WriteOptions opts;
+    opts.priority = options->priority;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
     opts.async = options->async;
@@ -57,6 +58,7 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     opts.callback = options->callback;
     opts.mode = _enable_tiered_cache ? starcache::WriteOptions::WriteMode::WRITE_BACK
                                      : starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    opts.evict_probability = options->evict_probability;
     Status st;
     {
         // The memory when writing starcache is no longer recorded to the query memory.
@@ -74,13 +76,15 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
 }
 
 Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+                                      std::function<void()> deleter, DataCacheHandle* handle,
+                                      WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
     }
     starcache::WriteOptions opts;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
+    opts.evict_probability = options->evict_probability;
     Status st;
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
@@ -109,7 +113,7 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     return st;
 }
 
-Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->get_object(key, handle, nullptr));
     }
@@ -121,9 +125,26 @@ Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle
     return st;
 }
 
+bool StarCacheWrapper::exist(const std::string& key) const {
+    return _cache->exist(key);
+}
+
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
+}
+
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+    return to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
+}
+
+Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
+    std::vector<starcache::DirSpace> disk_spaces;
+    disk_spaces.reserve(spaces.size());
+    for (auto& dir : spaces) {
+        disk_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
+    }
+    return to_status(_cache->update_disk_spaces(disk_spaces));
 }
 
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
@@ -152,6 +173,7 @@ void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
 }
 
 Status StarCacheWrapper::shutdown() {
+    // TODO: starcache implement shutdown to release memory
     return Status::OK();
 }
 

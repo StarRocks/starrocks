@@ -33,6 +33,8 @@ class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
+    using ValueType = void;
+
     inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
         if (column->is_nullable()) {
             return column;
@@ -82,6 +84,7 @@ public:
 
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
+    bool is_array() const override { return _data_column->is_array(); }
 
     bool is_null(size_t index) const override {
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -148,11 +151,11 @@ public:
 
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
-    bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
 
-    bool append_continuous_strings(const Buffer<Slice>& strs) override;
+    bool append_continuous_strings(const Slice* data, size_t size) override;
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -212,7 +215,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
 
@@ -248,7 +251,7 @@ public:
         _has_null = true;
         return true;
     }
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -311,8 +314,9 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
-        return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data_column->capacity_limit_reached());
+        return _null_column->capacity_limit_reached();
     }
 
     void check_or_die() const override;

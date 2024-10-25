@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # host_name
 
-## Description
+
 
 Obtains the hostname of the node on which the computation is performed.
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # retention
 
-## 功能
+
 
 retention (留存函数）用于计算一段时间内的用户留存情况。该函数接收 1 到 31 个条件，从第一个条件开始判断事件是否满足条件，如果条件满足则输出 1，不满足则输出 0，最终返回 0 和 1 的数组。通过统计结果为 1 的数据，计算用户留存率。
 

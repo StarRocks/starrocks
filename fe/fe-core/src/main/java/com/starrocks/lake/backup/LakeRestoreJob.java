@@ -14,9 +14,9 @@
 
 package com.starrocks.lake.backup;
 
-import autovalue.shaded.com.google.common.common.collect.Maps;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;
@@ -124,7 +124,8 @@ public class LakeRestoreJob extends RestoreJob {
         for (IdChain idChain : fileMapping.getMapping().keySet()) {
             LakeTablet tablet = null;
             try {
-                OlapTable tbl = (OlapTable) db.getTable(idChain.getTblId());
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
@@ -136,7 +137,7 @@ public class LakeRestoreJob extends RestoreJob {
                         computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
                 snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
             } catch (Exception e) {
-                LOG.error(e.getMessage());
+                LOG.error(e.getMessage(), e);
                 status = new Status(Status.ErrCode.COMMON_ERROR,
                         "failed to choose replica to make snapshot for tablet " + tablet.getId());
             }
@@ -154,7 +155,8 @@ public class LakeRestoreJob extends RestoreJob {
         }
         request.restoreInfos = Lists.newArrayList();
         for (SnapshotInfo info : beSnapshotInfos) {
-            OlapTable tbl = (OlapTable) db.getTable(info.getTblId());
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), info.getTblId());
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "restored table "
                         + info.getTblId() + " does not exist");
@@ -289,7 +291,8 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
-            OlapTable localTbl = (OlapTable) db.getTable(entry.first);
+            OlapTable localTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), entry.first);
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
             RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();

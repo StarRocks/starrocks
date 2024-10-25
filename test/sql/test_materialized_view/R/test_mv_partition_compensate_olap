@@ -1,11 +1,11 @@
--- name: test_mv_partition_compensate_olap
+-- name: test_mv_partition_compensate_olap @slow
 create database db_${uuid0};
 -- result:
 -- !result
 use db_${uuid0};
 -- result:
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 CREATE TABLE t1 (

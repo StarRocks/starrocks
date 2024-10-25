@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # days_sub
 
-## Description
+
 
 Subtracts specified days from a date or datetime to get a new datetime.
 

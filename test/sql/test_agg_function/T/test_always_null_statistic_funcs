@@ -1,0 +1,647 @@
+
+-- name: test_always_null_statistic_funcs
+CREATE TABLE t1 (
+    idx BIGINT, 
+    k BIGINT NULL, 
+    val1 BIGINT NULL,
+    val2 BIGINT NULL
+) PRIMARY KEY(idx) 
+DISTRIBUTED BY HASH (idx) BUCKETS 32
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE t1_nonnull (
+    idx BIGINT, 
+    k BIGINT NOT NULL, 
+    val1 BIGINT NOT NULL,
+    val2 BIGINT NOT NULL
+) PRIMARY KEY(idx) 
+DISTRIBUTED BY HASH (idx) BUCKETS 32
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t1 (val2, val1, k, idx) values
+    (10, 1,1,2),
+    (20, 2,2,4),
+    (30, 3,3,6),
+    (NULL, 4,4,8),
+    (50, NULL,5,10),
+    (NULL, NULL,6,12),
+    (70, NULL,7,14),
+    (80, 8,8,16),
+    (90, 9,9,18),
+    (100, 10,10,20);
+
+INSERT INTO t1_nonnull (val2, val1, k, idx) values
+    (10, 1,1,2),
+    (20, 2,2,4),
+    (30, 3,3,6),
+    (40, 4,4,8),
+    (50, 5,5,10),
+    (60, 6,6,12),
+    (70, 7,7,14),
+    (80, 8,8,16),
+    (90, 9,9,18),
+    (100, 10,10,20);
+
+-- var_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1 where c1 > 10;
+-- One non-null row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(var_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(var_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(var_samp(val1), 3) from t1 where k > 100;
+select round(var_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(var_samp(val1), 3) from t1 where k = 2;
+select round(var_samp(val1), 3) from t1_nonnull where k = 2;
+select round(var_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(var_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(var_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(var_samp(val1), 3) from t1;
+
+
+-- variance_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(variance_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(variance_samp(val1), 3) from t1 where k > 100;
+select round(variance_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(variance_samp(val1), 3) from t1 where k = 2;
+select round(variance_samp(val1), 3) from t1_nonnull where k = 2;
+select round(variance_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(variance_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(variance_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(variance_samp(val1), 3) from t1;
+
+
+-- stddev_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(stddev_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(stddev_samp(val1), 3) from t1 where k > 100;
+select round(stddev_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(stddev_samp(val1), 3) from t1 where k = 2;
+select round(stddev_samp(val1), 3) from t1_nonnull where k = 2;
+select round(stddev_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(stddev_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(stddev_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(stddev_samp(val1), 3) from t1;
+
+
+-- covar_samp
+-- Empty
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1_nonnull
+order by k;
+
+
+-- Two phase agg.
+-- Empty
+select round(covar_samp(val1, val2), 3) from t1 where k > 100;
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(covar_samp(val1, val2), 3) from t1 where k = 2;
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k = 2;
+select round(covar_samp(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(covar_samp(val1, val2), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(covar_samp(val1, val2), 3) from t1_nonnull;
+--   Input is nullable.
+select round(covar_samp(val1, val2), 3) from t1;
+
+
+-- corr
+-- Empty
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(corr(c1, c2), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1_nonnull
+order by k;
+
+-- Two phase agg.
+-- Empty
+select round(corr(val1, val2), 3) from t1 where k > 100;
+select round(corr(val1, val2), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(corr(val1, val2), 3) from t1 where k = 2;
+select round(corr(val1, val2), 3) from t1_nonnull where k = 2;
+select round(corr(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(corr(val1, val2), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(corr(val1, val2), 3) from t1_nonnull;
+--   Input is nullable.
+select round(corr(val1, val2), 3) from t1;
+
+
+
+-- set force spill and repeat the above cases.
+set enable_spill=true;
+set spill_mode="force";
+
+
+
+-- var_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1 where c1 > 10;
+-- One non-null row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(var_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(var_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(var_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(var_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(VAR_SAMP(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS var_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(var_samp(val1), 3) from t1 where k > 100;
+select round(var_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(var_samp(val1), 3) from t1 where k = 2;
+select round(var_samp(val1), 3) from t1_nonnull where k = 2;
+select round(var_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(var_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(var_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(var_samp(val1), 3) from t1;
+
+
+-- variance_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(variance_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(variance_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(variance_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(variance_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS variance_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(variance_samp(val1), 3) from t1 where k > 100;
+select round(variance_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(variance_samp(val1), 3) from t1 where k = 2;
+select round(variance_samp(val1), 3) from t1_nonnull where k = 2;
+select round(variance_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(variance_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(variance_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(variance_samp(val1), 3) from t1;
+
+
+-- stddev_samp
+-- Empty
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1 from ( values (1) )t)
+select round(stddev_samp(c1), 3) from w1;
+with w1 as (select column_0 as c1 from ( values (1), (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1 from ( values (null), (null) )t)
+select round(stddev_samp(c1), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1 from ( values (1), (2), (null), (3) )t)
+select round(stddev_samp(c1), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    round(stddev_samp(val1) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS stddev_samp_val1
+FROM t1_nonnull
+order by k;
+-- Two phase agg.
+-- Empty
+select round(stddev_samp(val1), 3) from t1 where k > 100;
+select round(stddev_samp(val1), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(stddev_samp(val1), 3) from t1 where k = 2;
+select round(stddev_samp(val1), 3) from t1_nonnull where k = 2;
+select round(stddev_samp(val1), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(stddev_samp(val1), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(stddev_samp(val1), 3) from t1_nonnull;
+--   Input is nullable.
+select round(stddev_samp(val1), 3) from t1;
+
+
+-- covar_samp
+-- Empty
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(covar_samp(c1, c2), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(covar_samp(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS covar_samp_val1
+FROM t1_nonnull
+order by k;
+
+
+-- Two phase agg.
+-- Empty
+select round(covar_samp(val1, val2), 3) from t1 where k > 100;
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(covar_samp(val1, val2), 3) from t1 where k = 2;
+select round(covar_samp(val1, val2), 3) from t1_nonnull where k = 2;
+select round(covar_samp(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(covar_samp(val1, val2), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(covar_samp(val1, val2), 3) from t1_nonnull;
+--   Input is nullable.
+select round(covar_samp(val1, val2), 3) from t1;
+
+
+-- corr
+-- Empty
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1 where c1 > 10;
+-- One row.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (null, 20), (3, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- Only NULL rows.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (null, null), (null, null) )t)
+select round(corr(c1, c2), 3) from w1;
+-- Normal
+--   Input is non-nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+--   Input is nullable.
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (null, null), (3, 30) )t)
+select round(corr(c1, c2), 3) from w1;
+with w1 as (select column_0 as c1, column_1 as c2 from ( values (1, 10), (2, 20), (4, null), (3, 30), (null, 50) )t)
+select round(corr(c1, c2), 3) from w1;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1
+order by k;
+
+SELECT
+    k,
+    val1,
+    val2,
+    round(corr(val1, val2) over (
+        ORDER BY k ASC 
+        ROWS BETWEEN 2 PRECEDING and CURRENT ROW
+    ), 3) AS corr_val1
+FROM t1_nonnull
+order by k;
+
+-- Two phase agg.
+-- Empty
+select round(corr(val1, val2), 3) from t1 where k > 100;
+select round(corr(val1, val2), 3) from t1_nonnull where k > 100;
+-- One non-null row.
+select round(corr(val1, val2), 3) from t1 where k = 2;
+select round(corr(val1, val2), 3) from t1_nonnull where k = 2;
+select round(corr(val1, val2), 3) from t1 where k in (2, 5, 6);
+-- Only NULL rows.
+select round(corr(val1, val2), 3) from t1 where k in (5, 6);
+-- Normal
+--   Input is non-nullable.
+select round(corr(val1, val2), 3) from t1_nonnull;
+--   Input is nullable.
+select round(corr(val1, val2), 3) from t1;

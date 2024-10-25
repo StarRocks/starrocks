@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # negative
 
-## 功能
+
 
 对参数 `x` 取其负数作为结果输出。
 

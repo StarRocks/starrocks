@@ -42,8 +42,11 @@ public class CreateAnalyzeJobTest {
     @Test
     public void createExternalAnalyzeJobTest() throws Exception {
         String sql = "create analyze table hive0.partitioned_db.t1";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("External table hive0.partitioned_db.t1 don't support SAMPLE analyze."));
+        }
 
         connectContext.setCurrentCatalog("hive0");
         String sql1 = "create analyze all";
@@ -56,7 +59,7 @@ public class CreateAnalyzeJobTest {
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
 
         String sql4 = "create analyze full table hive0.partitioned_db.t1";
-        statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
         Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
     }
 

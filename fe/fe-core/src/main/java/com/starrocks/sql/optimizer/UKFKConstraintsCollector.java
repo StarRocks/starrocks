@@ -17,9 +17,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -135,10 +135,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             List<UniqueConstraint> ukConstraints = table.getUniqueConstraints();
             for (UniqueConstraint ukConstraint : ukConstraints) {
                 // For now, we only handle one column primary key or foreign key
-                if (ukConstraint.getUniqueColumns().size() == 1) {
-                    String ukColumn = ukConstraint.getUniqueColumns().get(0);
-
-                    // Get non-uk original column ids
+                if (ukConstraint.getUniqueColumnNames(table).size() == 1) {
+                    String ukColumn = ukConstraint.getUniqueColumnNames(table).get(0);
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
                             .filter(columnNameToColRefMap::containsKey)
@@ -151,6 +149,34 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                         constraint.addUniqueKey(columnRefOperator.getId(),
                                 new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
                                         nonUkColumnRefs, usedColumns.isEmpty()));
+                        constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                        nonUkColumnRefs, usedColumns.isEmpty()));
+                    }
+                } else {
+                    List<String> ukColNames = ukConstraint.getUniqueColumnNames(table);
+                    boolean containsAllUk = true;
+                    for (String colName : ukColNames) {
+                        ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                        if (columnRefOperator == null || !outputColumns.contains(columnRefOperator)) {
+                            containsAllUk = false;
+                            break;
+                        }
+                    }
+
+                    if (containsAllUk) {
+                        ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
+                                .map(Column::getName)
+                                .filter(columnNameToColRefMap::containsKey)
+                                .filter(name -> !ukColNames.contains(name))
+                                .map(columnNameToColRefMap::get)
+                                .collect(Collectors.toList()));
+                        for (String colName : ukColNames) {
+                            ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                            constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                    new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                            nonUkColumnRefs, usedColumns.isEmpty()));
+                        }
                     }
                 }
             }
@@ -160,8 +186,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             ColumnRefOperator firstKeyColumnRef = columnNameToColRefMap.get(firstKeyColumn.getName());
             List<ForeignKeyConstraint> fkConstraints = table.getForeignKeyConstraints();
             for (ForeignKeyConstraint fkConstraint : fkConstraints) {
-                if (fkConstraint.getColumnRefPairs().size() == 1) {
-                    Pair<String, String> pair = fkConstraint.getColumnRefPairs().get(0);
+                if (fkConstraint.getColumnNameRefPairs(table).size() == 1) {
+                    Pair<String, String> pair = fkConstraint.getColumnNameRefPairs(table).get(0);
                     ColumnRefOperator fkColumnRef = columnNameToColRefMap.get(pair.first);
                     if (fkColumnRef != null && outputColumns.contains(fkColumnRef)) {
                         constraint.addForeignKey(fkColumnRef.getId(),

@@ -21,6 +21,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -57,16 +58,8 @@ import java.util.stream.Collectors;
  */
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
-    private static final MaterializedViewMgr INSTANCE = new MaterializedViewMgr();
 
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
-
-    private MaterializedViewMgr() {
-    }
-
-    public static MaterializedViewMgr getInstance() {
-        return INSTANCE;
-    }
 
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
                                             long mvId, long dbId)
@@ -111,7 +104,7 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV maintenance jobs: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn(e);
+            LOG.warn("Failed to replay MV maintenance job", e);
         }
     }
 
@@ -128,7 +121,7 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV epoch: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV epoch failed: {}", epoch);
-            LOG.warn(e);
+            LOG.warn("Failed to replay MV epoch", e);
         }
     }
 
@@ -295,10 +288,10 @@ public class MaterializedViewMgr {
         List<MVMaintenanceJob> jobList;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + jobMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
-        writer.writeJson(jobMap.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
+        writer.writeInt(jobMap.size());
         for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
             writer.writeJson(mvMaintenanceJob);
         }
@@ -307,13 +300,11 @@ public class MaterializedViewMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+        reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
             // NOTE: job's view is not serialized, cannot use it directly!
             MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
             mvMaintenanceJob.restore();
             jobMap.put(mvId, mvMaintenanceJob);
-        }
+        });
     }
 }

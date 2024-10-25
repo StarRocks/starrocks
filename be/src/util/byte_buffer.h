@@ -40,15 +40,55 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+#include "storage/utils.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
 struct ByteBuffer;
 using ByteBufferPtr = std::shared_ptr<ByteBuffer>;
 
+struct MemTrackerDeleter {
+    MemTrackerDeleter(MemTracker* tracker_) : tracker(tracker_) { DCHECK(tracker_ != nullptr); }
+    MemTracker* tracker;
+    template <typename T>
+    void operator()(T* ptr) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
+        if (ptr) {
+            delete ptr;
+        }
+    }
+};
+
 struct ByteBuffer {
-    static ByteBufferPtr allocate(size_t size) {
-        ByteBufferPtr ptr(new ByteBuffer(size));
+    static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size) {
+        auto tracker = CurrentThread::mem_tracker();
+        if (tracker == nullptr) {
+            return Status::InternalError("current thread memory tracker Not Found when allocate ByteBuffer");
+        }
+#ifndef BE_TEST
+        // check limit before allocation
+        TRY_CATCH_BAD_ALLOC(ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker)); return ptr;);
+#else
+        ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker));
+        Status ret = Status::OK();
+        TEST_SYNC_POINT_CALLBACK("ByteBuffer::allocate_with_tracker", &ret);
+        if (ret.ok()) {
+            return ptr;
+        } else {
+            return ret;
+        }
+#endif
+    }
+
+    static StatusOr<ByteBufferPtr> reallocate_with_tracker(const ByteBufferPtr& old_ptr, size_t new_size) {
+        if (new_size <= old_ptr->capacity) return old_ptr;
+
+        ASSIGN_OR_RETURN(ByteBufferPtr ptr, allocate_with_tracker(new_size));
+        ptr->put_bytes(old_ptr->ptr, old_ptr->pos);
         return ptr;
     }
 

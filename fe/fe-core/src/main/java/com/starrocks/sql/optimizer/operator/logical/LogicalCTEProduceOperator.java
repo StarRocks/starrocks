@@ -107,8 +107,9 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
             return new LogicalCTEProduceOperator(-1);
         }
 
-        public void setCteId(int cteId) {
+        public LogicalCTEProduceOperator.Builder setCteId(int cteId) {
             builder.cteId = cteId;
+            return this;
         }
 
         @Override

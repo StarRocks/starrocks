@@ -23,36 +23,6 @@
 
 namespace starrocks::pipeline {
 
-struct PartitionKey {
-    PartitionKey() = default;
-
-    PartitionKey(std::shared_ptr<Columns> columns_, uint32_t index_) : columns(std::move(columns_)), index(index_) {}
-
-    std::shared_ptr<Columns> columns;
-    uint32_t index = 0;
-};
-
-using PartitionKeyPtr = std::shared_ptr<PartitionKey>;
-
-struct PartitionKeyComparator {
-    bool operator()(const std::shared_ptr<PartitionKey>& lhs, const std::shared_ptr<PartitionKey>& rhs) const {
-        if (lhs->columns == nullptr) {
-            return false;
-        } else if (rhs->columns == nullptr) {
-            return true;
-        }
-        DCHECK_EQ(lhs->columns->size(), rhs->columns->size());
-        for (size_t i = 0; i < lhs->columns->size(); ++i) {
-            int cmp = (*lhs->columns)[i]->compare_at(lhs->index, rhs->index, *(*rhs->columns)[i], -1);
-            if (cmp != 0) {
-                return cmp < 0;
-            }
-        }
-        // equal, return false
-        return false;
-    }
-};
-
 class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
@@ -75,15 +45,10 @@ class LocalExchangeSourceOperator final : public SourceOperator {
         const size_t memory_usage;
     };
 
-    struct PendingPartitionChunks {
-        PendingPartitionChunks(std::queue<PartitionChunk> partition_chunk_queue_, uint32_t index_, size_t memory_usage_)
-                : partition_chunk_queue(std::move(partition_chunk_queue_)),
-                  partition_row_nums(index_),
-                  memory_usage(memory_usage_) {}
-
-        std::queue<PartitionChunk> partition_chunk_queue;
-        int64_t partition_row_nums;
-        size_t memory_usage;
+    struct PartialChunks {
+        std::queue<std::unique_ptr<Chunk>> queue;
+        int64_t num_rows{0};
+        size_t memory_usage{0};
     };
 
 public:
@@ -99,16 +64,14 @@ public:
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
 
-    Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
-                     uint32_t size, Columns& partition_columns, const std::vector<ExprContext*>& _partition_expr_ctxs,
-                     size_t memory_bytes);
+    Status add_chunk(const std::vector<std::string>& partition_key, std::unique_ptr<Chunk> chunk);
 
     bool has_output() const override;
 
     bool is_finished() const override;
 
     Status set_finished(RuntimeState* state) override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -118,7 +81,7 @@ public:
         std::lock_guard<std::mutex> l(_chunk_lock);
         return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
     }
-    [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override {
+    Status set_epoch_finishing(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_epoch_finished = true;
         return Status::OK();
@@ -134,6 +97,7 @@ public:
 
     void enter_release_memory_mode() override;
     void set_execute_mode(int performance_level) override;
+    void update_exec_stats(RuntimeState* state) override {}
 
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
@@ -144,13 +108,13 @@ private:
 
     int64_t _key_partition_max_rows() const;
 
-    PendingPartitionChunks& _max_row_partition_chunks();
+    PartialChunks& _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
 
     bool _key_partition_pending_chunk_empty() const {
-        for (const auto& pending_chunks : _partitions) {
-            if (!pending_chunks.second.partition_chunk_queue.empty()) {
+        for (const auto& pending_chunks : _partition_key2partial_chunks) {
+            if (!pending_chunks.second.queue.empty()) {
                 return false;
             }
         }
@@ -167,7 +131,7 @@ private:
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
-    std::map<PartitionKeyPtr, PendingPartitionChunks, PartitionKeyComparator> _partitions;
+    std::unordered_map<std::vector<std::string>, PartialChunks> _partition_key2partial_chunks;
 
     // STREAM MV
     bool _is_epoch_finished = false;

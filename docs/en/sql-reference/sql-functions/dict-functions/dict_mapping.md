@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # dict_mapping
 
-## Description
+
 
 Returns the value mapped to the specified key in a dictionary table.
 

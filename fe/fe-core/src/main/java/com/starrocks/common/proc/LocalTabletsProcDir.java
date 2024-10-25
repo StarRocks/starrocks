@@ -72,6 +72,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             .add("DataSize").add("RowCount").add("State")
             .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
             .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
+            .add("DiskRootPath")
             .build();
 
     private final Database db;
@@ -103,7 +104,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // get infos
             for (Tablet tablet : index.getTablets()) {
@@ -144,25 +145,29 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         Backend backend = backendMap.get(replica.getBackendId());
                         String metaUrl;
                         String compactionUrl;
+                        String diskRootPath;
                         if (backend != null) {
                             String hostPort = hideIpPort ? "*:0" :
                                     NetUtils.getHostPortInAccessibleFormat(backend.getHost(), backend.getHttpPort());
                             metaUrl = String.format("http://" + hostPort + "/api/meta/header/%d", tabletId);
                             compactionUrl = String.format(
                                     "http://" + hostPort + "/api/compaction/show?tablet_id=%d", tabletId);
+                            diskRootPath = backend.getDiskRootPath(replica.getPathHash());
                         } else {
                             metaUrl = "N/A";
                             compactionUrl = "N/A";
+                            diskRootPath = "N/A";
                         }
                         tabletInfo.add(metaUrl);
                         tabletInfo.add(compactionUrl);
+                        tabletInfo.add(diskRootPath);
 
                         tabletInfos.add(tabletInfo);
                     }
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return tabletInfos;
     }

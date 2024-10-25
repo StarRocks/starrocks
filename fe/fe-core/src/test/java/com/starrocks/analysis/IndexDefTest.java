@@ -18,7 +18,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.IndexDef.IndexType;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Before;

@@ -32,6 +32,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HostBlacklist;
 import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -131,7 +132,8 @@ public class DefaultSharedDataWorkerProviderTest {
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
@@ -596,7 +598,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // normal case
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider, 1);
             // the computation will not fail even though there are non-available locations
@@ -614,7 +616,7 @@ public class DefaultSharedDataWorkerProviderTest {
                     ImmutableMap.of(availNode.getId(), availNode));
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider1, 1);
             // the computation will not fail even though there are non-available locations
@@ -631,7 +633,7 @@ public class DefaultSharedDataWorkerProviderTest {
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
                     ImmutableMap.of());
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assert.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);

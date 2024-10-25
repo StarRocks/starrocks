@@ -914,9 +914,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -947,9 +947,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -1091,7 +1091,7 @@ public class PseudoBackend {
         }
     }
 
-    private class PseudoLakeService implements LakeService {
+    public static class PseudoLakeService implements LakeService {
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);

@@ -422,6 +422,15 @@ TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
     test_final_merge(true);
 }
 
+TEST_F(RowsetTest, UnSupportFuncTest) {
+    Chunk chunk;
+    std::vector<uint64_t> rssid_rowids;
+    std::vector<uint32_t> column_indexes;
+    RowsetWriter writer;
+    ASSERT_TRUE(writer.add_chunk(chunk, rssid_rowids).is_not_supported());
+    ASSERT_TRUE(writer.add_columns(chunk, column_indexes, true, rssid_rowids).is_not_supported());
+}
+
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto tablet = create_tablet(12345, 1111);
     RowsetSharedPtr rowset;
@@ -775,6 +784,52 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     EXPECT_EQ(count, num_rows);
 }
 
+TEST_F(RowsetTest, LoadFailedTest) {
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
+
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema, &writer_context);
+    writer_context.writer_type = kHorizontal;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    int32_t chunk_size = 3000;
+    size_t num_rows = 10000;
+
+    std::vector<std::unique_ptr<SegmentPB>> seg_infos;
+    {
+        // k1 k2 v
+        std::vector<uint32_t> column_indexes{0, 1, 2};
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            }
+            seg_infos.emplace_back(std::make_unique<SegmentPB>());
+            ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));
+        }
+    }
+
+    // check rowset
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
+    ASSERT_EQ(4, rowset->rowset_meta()->num_segments());
+
+    // delete segment file
+    string path = seg_infos[0]->path();
+    auto delete_st = FileSystem::Default()->delete_file(path);
+    LOG(INFO) << "delete file: " << path << " " << delete_st;
+    auto st = rowset->load();
+    LOG(INFO) << st;
+    ASSERT_FALSE(st.ok());
+}
+
 TEST_F(RowsetTest, SegmentWriteTest) {
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
@@ -961,8 +1016,8 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     auto dst_file_name = Rowset::segment_temp_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 
     std::vector<uint32_t> column_ids{3};
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, auto_increment_partial_update_state,
-                                       column_ids, &write_columns));
+    ASSERT_OK(SegmentRewriter::rewrite_auto_increment(file_name, dst_file_name, tablet_schema,
+                                                      auto_increment_partial_update_state, column_ids, &write_columns));
 
     auto segment = *Segment::open(fs, FileInfo{dst_file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);

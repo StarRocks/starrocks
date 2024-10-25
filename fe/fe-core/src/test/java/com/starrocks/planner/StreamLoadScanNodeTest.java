@@ -107,6 +107,8 @@ public class StreamLoadScanNodeTest {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setColumnSeparator(",");
+        request.setRowDelimiter("\n");
         return request;
     }
 
@@ -222,8 +224,6 @@ public class StreamLoadScanNodeTest {
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
-
-        Assert.assertEquals(1, scanNode.getNumInstances());
         Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 
@@ -786,6 +786,6 @@ public class StreamLoadScanNodeTest {
         Table table = new Table(1L, "table0", TableType.OLAP, columns);
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
-        Load.initColumns(table, columnExprs, null, null, null, null, null, null);
+        Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
     }
 }

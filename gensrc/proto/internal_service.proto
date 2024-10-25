@@ -43,6 +43,7 @@ import "status.proto";
 import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
+import "lake_types.proto";
 
 option cc_generic_services = true;
 
@@ -159,6 +160,10 @@ message PLoadChannelProfileConfig {
 
 // Open a tablet writer.
 message PTabletWriterOpenRequest {
+    message LakeTabletParams {
+        optional bool write_txn_log = 1;
+    };
+
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int64 txn_id = 3;
@@ -188,6 +193,11 @@ message PTabletWriterOpenRequest {
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
     optional PLoadChannelProfileConfig load_channel_profile_config = 34;
+    optional LakeTabletParams lake_tablet_params = 35;
+
+    // for multi olap table sink
+    optional int64 sink_id = 36 [default = 0];
+    optional bytes encryption_meta = 37;
 };
 
 message PTabletWriterOpenResult {
@@ -235,6 +245,8 @@ message PTabletWriterAddChunkRequest {
     // wait all sender close before rpc returning
     // this is used for automatic partition creation
     optional bool wait_all_sender_close = 11 [default = false];
+    // for multi olap table sink
+    optional int64 sink_id = 12 [default = 0];
 };
 
 message PTabletWriterAddChunksRequest {
@@ -246,6 +258,10 @@ message PTabletWriterAddChunksRequest {
 }
 
 message PTabletWriterAddBatchResult {
+    message LakeTabletData {
+        repeated TxnLogPB txn_logs = 1;
+    };
+
     required StatusPB status = 1;
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
@@ -256,6 +272,7 @@ message PTabletWriterAddBatchResult {
     repeated int64 immutable_tablet_ids = 7;
     repeated int64 immutable_partition_ids = 8;
     optional bytes load_channel_profile = 9;
+    optional LakeTabletData lake_tablet_data = 10;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -266,6 +283,7 @@ message PTabletWriterAddSegmentRequest {
     optional bool eos = 5;
     optional int64 num_segments = 6;
     optional SegmentPB segment = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterAddSegmentResult {
@@ -284,6 +302,7 @@ message PTabletWriterCancelRequest {
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
     optional string reason = 7;
+    optional int64 sink_id = 8 [default = 0];
 };
 
 message PTabletWriterCancelResult {
@@ -368,6 +387,7 @@ enum PPlanFragmentCancelReason {
     USER_CANCEL = 2;
     INTERNAL_ERROR = 3;
     TIMEOUT = 4;
+    QUERY_FINISHED = 5;
 };
 
 message PCancelPlanFragmentRequest {
@@ -428,7 +448,7 @@ message PKafkaLoadInfo {
     required string brokers = 1;
     required string topic = 2;
     repeated PStringPair properties = 3;
-    required int64 warehouseId = 11;
+    optional int64 warehouseId = 11;
 };
 
 message PKafkaMetaProxyRequest {
@@ -641,6 +661,8 @@ service PInternalService {
     rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 

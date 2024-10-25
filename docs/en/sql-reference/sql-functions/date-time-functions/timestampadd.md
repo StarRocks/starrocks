@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # timestampadd
 
-## Description
+
 
 Adds an integer expression interval to the date or datetime expression `datetime_expr`.
 

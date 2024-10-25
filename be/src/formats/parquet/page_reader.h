@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
+#include <string_view>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 

@@ -129,6 +129,11 @@ public class LambdaFunctionOperator extends ScalarOperator {
     }
 
     @Override
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        lambdaExpr.getColumnRefs(columns);
+    }
+
+    @Override
     public ScalarOperator clone() {
         LambdaFunctionOperator clone = (LambdaFunctionOperator) super.clone();
         List<ColumnRefOperator> refs = Lists.newArrayList();

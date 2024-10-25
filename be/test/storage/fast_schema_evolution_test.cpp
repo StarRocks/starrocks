@@ -125,8 +125,7 @@ TEST_F(FastSchemaEvolutionTest, update_schema_id_test) {
     EXPECT_EQ(tablet->tablet_schema().get(), rowset->tablet_schema().get());
     EXPECT_EQ(ori_tablet_schema.get(), tablet->tablet_schema().get());
 
-    TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
-    new_schema->copy_from(ori_tablet_schema);
+    TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>(*ori_tablet_schema);
     new_schema->set_schema_version(ori_tablet_schema->schema_version() + 1);
     new_schema->set_id(100);
     tablet->update_max_version_schema(new_schema);

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # months_sub
 
-## 功能
+
 
 从日期中减去指定的月数。
 

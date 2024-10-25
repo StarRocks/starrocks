@@ -49,7 +49,7 @@ OutPut Exchange Id: 25
 
 24:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([52: expr, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([52: expr, DECIMAL128(32,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [48: n_name, VARCHAR, true], [51: year, SMALLINT, true]
 |  cardinality: 98
 |  column statistics:
@@ -61,7 +61,7 @@ OutPut Exchange Id: 25
 |  output columns:
 |  48 <-> [48: n_name, VARCHAR, true]
 |  51 <-> year[([42: o_orderdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  52 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [23: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2)) - cast([36: ps_supplycost, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([21: l_quantity, DECIMAL64(15,2), true] as DECIMAL128(15,2))
+|  52 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [23: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2)) - cast([36: ps_supplycost, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([21: l_quantity, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  cardinality: 540034112
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -148,6 +148,7 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 34: ps_suppkey IS NOT NULL, 33: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
+dataCacheOptions={populate: false}
 cardinality: 80000000
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
@@ -190,6 +191,7 @@ OutPut Exchange Id: 17
 TABLE: supplier
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (13: s_nationkey)
@@ -208,6 +210,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 47: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -271,6 +274,7 @@ TABLE: orders
 NON-PARTITION PREDICATES: 38: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+dataCacheOptions={populate: false}
 cardinality: 150000000
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
@@ -324,6 +328,7 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 19: l_suppkey IS NOT NULL, 18: l_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=44.0
+dataCacheOptions={populate: false}
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 0, probe_expr = (18: l_partkey)
@@ -354,9 +359,9 @@ TABLE: part
 NON-PARTITION PREDICATES: 2: p_name LIKE '%peru%'
 partitions=1/1
 avgRowSize=63.0
+dataCacheOptions={populate: false}
 cardinality: 5000000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 * p_name-->[-Infinity, Infinity, 0.0, 55.0, 5000000.0] ESTIMATE
 [end]
-

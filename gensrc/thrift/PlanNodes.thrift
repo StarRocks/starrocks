@@ -61,7 +61,7 @@ enum TPlanNodeType {
   META_SCAN_NODE,
   ANALYTIC_EVAL_NODE,
   OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE, // Deprecated
+  KUDU_SCAN_NODE,
   FILE_SCAN_NODE,
   EMPTY_SET_NODE,
   UNION_NODE,
@@ -84,6 +84,7 @@ enum TPlanNodeType {
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
+  CAPTURE_VERSION_NODE,
 }
 
 // phases of an execution node
@@ -132,6 +133,7 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
+  14: optional i64 gtid
 }
 
 enum TFileFormatType {
@@ -170,9 +172,10 @@ struct TBrokerRangeDesc {
     // columns parsed from file path should be after the columns read from file
     10: optional list<string> columns_from_path
     //  it's usefull when format_type == FORMAT_JSON
-    11: optional bool strip_outer_array;
-    12: optional string jsonpaths;
-    13: optional string json_root;
+    11: optional bool strip_outer_array
+    12: optional string jsonpaths
+    13: optional string json_root
+    14: optional Types.TCompressionType compression_type
 }
 
 enum TObjectStoreType {
@@ -267,7 +270,7 @@ struct TBrokerScanRangeParams {
     29: optional i64 json_file_size_limit;
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
-    32: optional bool flexible_column_mapping 
+    32: optional bool flexible_column_mapping
 }
 
 // Broker scan range
@@ -300,6 +303,12 @@ struct TIcebergDeleteFile {
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional TIcebergFileContent file_content
     4: optional i64 length
+}
+
+struct TPaimonDeletionFile {
+    1: optional string path
+    2: optional i64 offset
+    3: optional i64 length
 }
 
 // Hdfs scan range
@@ -363,6 +372,31 @@ struct THdfsScanRange {
 
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
+
+    22: optional bool use_iceberg_jni_metadata_reader
+
+    // for metadata table split (eg: iceberg manifest file bean)
+    23: optional string serialized_split
+
+    // whether to use JNI scanner to read data of kudu table
+    24: optional bool use_kudu_jni_reader
+
+    // kudu master addresses
+    25: optional string kudu_master
+
+    // kudu scan token
+    26: optional string kudu_scan_token
+
+    // Paimon Deletion Vector File
+    27: optional TPaimonDeletionFile paimon_deletion_file
+
+    // for extended column like iceberg data_seq_num or spec_id
+    28: optional map<Types.TSlotId, Exprs.TExpr> extended_columns;
+    
+    // attached partition value.
+    29: optional Descriptors.THdfsPartition partition_value;
+
+    30: optional Types.TTableId table_id;
 }
 
 struct TBinlogScanRange {
@@ -498,6 +532,19 @@ struct TColumnAccessPath {
     5: optional Types.TTypeDesc type_desc
 }
 
+struct TVectorSearchOptions {
+  1: optional bool enable_use_ann;
+  2: optional i64 vector_limit_k;
+  3: optional string vector_distance_column_name;
+  4: optional list<string> query_vector;
+  5: optional map<string, string> query_params;
+  6: optional double vector_range;
+  7: optional i32 result_order;
+  8: optional bool use_ivfpq;
+  9: optional double pq_refine_factor;
+  10: optional double k_factor;
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -525,6 +572,11 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+  35: optional bool enable_prune_column_after_index_filter
+  36: optional bool enable_gin_filter
+  37: optional i64 schema_id
+
+  40: optional TVectorSearchOptions vector_search_options
 }
 
 struct TJDBCScanNode {
@@ -552,6 +604,12 @@ struct TLakeScanNode {
   11: optional list<string> sort_key_column_names
   12: optional list<Exprs.TExpr> bucket_exprs
   13: optional list<TColumnAccessPath> column_access_paths
+
+  // physical optimize
+  25: optional bool sorted_by_keys_per_tablet = false
+  32: optional bool output_chunk_by_bucket
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TEqJoinCondition {
@@ -633,6 +691,8 @@ struct THashJoinNode {
 
   // used in pipeline engine
   55: optional bool interpolate_passthrough = false
+  56: optional bool late_materialization = false
+  57: optional bool enable_partition_hash_join = false
 }
 
 struct TMergeJoinNode {
@@ -671,6 +731,7 @@ struct TNestLoopJoinNode {
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
+    5: optional bool interpolate_passthrough = false
 }
 
 enum TAggregationOp {
@@ -978,7 +1039,7 @@ struct TExchangeNode {
   3: optional i64 offset
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
-  5: optional bool enable_parallel_merge;
+  5: optional bool enable_parallel_merge
 }
 
 // This contains all of the information computed by the plan as part of the resource
@@ -1060,6 +1121,23 @@ struct THdfsScanNode {
     16: optional bool use_partition_column_value_only;
 
     17: optional Types.TTupleId mor_tuple_id;
+
+    // serialized static metadata table
+    18: optional string serialized_table;
+
+    // serialized lake format predicate for data skipping
+    19: optional string serialized_predicate;
+
+    // if load column statistics for metadata table scan
+    20: optional bool load_column_stats;
+
+    // for jni scan factory selection scanner
+    21: optional string metadata_table_type
+
+    22: optional DataCache.TDataCacheOptions datacache_options;
+
+    // for extended column like iceberg data_seq_num or spec_id
+    23: optional list<Types.TSlotId> extended_slot_ids;
 }
 
 struct TProjectNode {

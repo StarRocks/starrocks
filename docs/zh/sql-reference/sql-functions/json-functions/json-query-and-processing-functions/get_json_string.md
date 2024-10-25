@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # get_json_string,get_json_object
 
-## 功能
+
 
 解析并获取 `json_str` 内 `json_path` 指定的字符串。如果 `json_str` 或 `json_path` 格式不正确，或者无法找到匹配项，则返回 NULL。
 

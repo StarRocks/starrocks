@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitxor
 
-## 功能
+
 
 返回两个数值在按位 XOR 运算后的结果。
 

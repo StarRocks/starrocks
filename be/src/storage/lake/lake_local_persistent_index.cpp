@@ -34,7 +34,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr
     }
 
     std::unique_ptr<TabletLoader> loader =
-            std::make_unique<LakeLocalPersistentIndexTabletLoader>(tablet_mgr, metadata, base_version, builder);
+            std::make_unique<LakeLocalPersistentIndexTabletLoader>(tablet_mgr, metadata, base_version, builder, this);
     return _load_by_loader(loader.get());
 }
 

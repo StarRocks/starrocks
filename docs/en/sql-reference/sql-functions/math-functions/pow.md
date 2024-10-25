@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # pow, power, dpow, fpow
 
-## Description
+
 
 Returns the result of `x` raised to the power of `y`.
 

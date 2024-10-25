@@ -24,25 +24,27 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"PAUSE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"END_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"DB_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_SOURCE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CURRENT_TASK_NUM", TYPE_BIGINT, sizeof(int64_t), false},
-        {"JOB_PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_SOURCE_PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CUSTOM_PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATISTICS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REASONS_OF_STATE_CHANGED", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"ERROR_LOG_URLS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"OTHER_MSG", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"PAUSE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"END_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CURRENT_TASK_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         true},
+        {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -62,13 +64,9 @@ Status SchemaRoutineLoadJobsScanner::start(RuntimeState* state) {
         load_params.__set_job_id(_param->job_id);
     }
 
-    int32_t timeout = static_cast<int32_t>(std::min(state->query_options().query_timeout * 1000 / 2, INT_MAX));
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_routine_load_jobs(*(_param->ip), _param->port, load_params, &_result, timeout));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_routine_load_jobs(_ss_state, load_params, &_result));
 
     _cur_idx = 0;
     return Status::OK();

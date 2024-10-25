@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # dayofyear
 
-## 功能
+
 
 计算指定日期为对应年中的哪一天。
 

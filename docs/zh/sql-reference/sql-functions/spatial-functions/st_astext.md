@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_AsText, ST_AsWKT
 
-## 功能
+
 
 将一个几何图形转化为 WKT（Well Known Text）的表示形式。
 

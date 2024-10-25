@@ -85,4 +85,7 @@ select count(*) from tstring;
 select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l join tstring r on l.c0 = r.c0; 
 select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l left join tstring r on l.c0 = r.c0; 
 select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l right join tstring r on l.c0 = r.c0;
-
+-- test small files
+set spill_mem_table_size=1000;
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 > 400000;
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 < 400000;

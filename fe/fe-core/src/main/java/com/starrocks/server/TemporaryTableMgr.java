@@ -64,6 +64,12 @@ public class TemporaryTableMgr {
             }
         }
 
+        public void removeTables(Long databaseId) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+                temporaryTables.row(databaseId).clear();
+            }
+        }
+
         public Table<Long, String, Long> getAllTables() {
             try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
                 return HashBasedTable.create(temporaryTables);
@@ -117,6 +123,15 @@ public class TemporaryTableMgr {
                 sessionId.toString(), databaseId, tableName);
     }
 
+    public void dropTemporaryTables(UUID sessionId, long databaseId) {
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        if (tables == null) {
+            return;
+        }
+        tables.removeTables(databaseId);
+        LOG.info("drop all temporary tables on database[{}], session[{}]", databaseId, sessionId.toString());
+    }
+
     public Table<Long, String, Long> getTemporaryTables(UUID sessionId) {
         TemporaryTableTable tables = tablesMap.get(sessionId);
         if (tables == null) {
@@ -138,20 +153,24 @@ public class TemporaryTableMgr {
         return tables.listTables(databaseId);
     }
 
-    // get all temporary tables under specific databases, return a Table<databaseId, sessionId, tableId>
-    public Table<Long, UUID, Long> getAllTemporaryTables(Set<Long> requiredDatabaseIds) {
-        Table<Long, UUID, Long> result = HashBasedTable.create();
+    // get all temporary tables under specific databases, return a Table<databaseId, tableId, sessionId>
+    public Table<Long, Long, UUID> getAllTemporaryTables(Set<Long> requiredDatabaseIds) {
+        Table<Long, Long, UUID> result = HashBasedTable.create();
         tablesMap.forEach((sessionId, tables) -> {
             // db id -> table name -> table id
             Table<Long, String, Long> allTables = tables.getAllTables();
             for (Table.Cell<Long, String, Long> cell : allTables.cellSet()) {
                 if (requiredDatabaseIds.contains(cell.getRowKey())) {
-                    result.put(cell.getRowKey(), sessionId, cell.getValue());
+                    result.put(cell.getRowKey(), cell.getValue(), sessionId);
                 }
             }
 
         });
         return result;
+    }
+
+    public boolean sessionExists(UUID sessionId) {
+        return tablesMap.containsKey(sessionId);
     }
 
     public Set<UUID> listSessions() {

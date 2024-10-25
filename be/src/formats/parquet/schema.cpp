@@ -14,10 +14,14 @@
 
 #include "formats/parquet/schema.h"
 
-#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <memory>
+#include <sstream>
+#include <utility>
 
-#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "types/logical_type.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {
@@ -220,6 +224,13 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     //   }
     // }
     //
+
+    // check map's key must be primitive type
+    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
+    if (is_group(key_schema)) {
+        return Status::InvalidArgument("Map keys must be primitive type.");
+    }
+
     RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, next_pos));
     RETURN_IF_ERROR(node_to_field(t_schemas, pos + 3, cur_level_info, value_field, next_pos));
 

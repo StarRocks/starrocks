@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # hours_sub
 
-## 功能
+
 
 从指定的日期时间中减少指定的小时数。
 

@@ -175,6 +175,7 @@ PLAN FRAGMENT 1
   |  
   19:SORT
   |  order by: <slot 1> 1: p_partkey ASC
+  |  analytic partition by: 1: p_partkey
   |  offset: 0
   |  
   18:EXCHANGE

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # database
 
-## Description
+
 
 Returns the name of the current database. If no database is selected, an empty value is returned.
 
@@ -39,4 +39,4 @@ select database();
 
 ## See also
 
-[USE](../../sql-statements/data-definition/USE.md): Switches to a destination database.
+[USE](../../sql-statements/Database/USE.md): Switches to a destination database.

@@ -1,0 +1,53 @@
+-- name: test_auto_refresh
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    __time datetime,
+    c1 int
+)
+PARTITION BY date_trunc('DAY', __time);
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01', 1),
+    ('2024-04-02', 1),
+    ('2024-04-03', 1),
+    ('2024-04-04', 1),
+    ('2024-04-05', 1);
+
+
+CREATE MATERIALIZED VIEW `mv1`
+PARTITION BY (`__time`)
+REFRESH ASYNC
+PROPERTIES (
+    "auto_refresh_partitions_limit" = "3",
+    "partition_refresh_number" = "-1"
+)
+AS select * from t1;
+
+-- case 0: default refresh
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 1)
+SELECT count(*) FROM mv1;
+
+-- case 1: auto refresh
+INSERT INTO t1 SELECT * FROM t1;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 2)
+SELECT count(*) FROM mv1;
+
+-- case 2: manual complete refresh
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 3)
+SELECT count(*) FROM mv1;
+
+-- case 3: manual partial refresh
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-02') end('2024-04-04') WITH SYNC MODE;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 4)
+SELECT count(*) FROM mv1;
+
+-- case 4: truncate table
+TRUNCATE TABLE t1;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 5)
+SELECT count(*) FROM mv1;
+
+-- cleanup
+drop database db_${uuid0};

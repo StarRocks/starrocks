@@ -1,0 +1,74 @@
+-- name: test_add_partition_to_auto_partition_table
+CREATE TABLE t1 (
+    id BIGINT,
+    dt DATETIME NOT NULL
+)
+DUPLICATE KEY(id, dt)
+PARTITION BY time_slice(dt, INTERVAL 1 day)
+DISTRIBUTED BY HASH(id, dt);
+-- result:
+-- !result
+alter table t1 add partition p20230228 values [("2023-02-28 00:00:00"),("2023-02-29 00:00:00"));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Currently, you cannot manually add a single range partition to a table that is automatically partition.')
+-- !result
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 3 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The step of the auto-partitioned table should be 1.')
+-- !result
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 week);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The granularity of the auto-partitioned table granularity(day) should be consistent with the increased partition granularity(WEEK)..')
+-- !result
+alter table t1 add partitions start ("2020-01-15 01:02:03") end ("2020-01-20") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition range [2020-01-15 01:02:03,2020-01-20 00:00:00) should be a standard unit of time (DAY) . suggest range [2020-01-15 00:00:00,2020-01-20 00:00:00)If you want to create partial partitions in batch, you can turn off this check by setting the FE config enable_create_partial_partition_in_batch=true.')
+-- !result
+alter table t1 add partitions start ("2020-01-15") end ("2020-01-20 01:02:03") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition range [2020-01-15 00:00:00,2020-01-20 01:02:03) should be a standard unit of time (DAY) . suggest range [2020-01-15 00:00:00,2020-01-20 00:00:00)If you want to create partial partitions in batch, you can turn off this check by setting the FE config enable_create_partial_partition_in_batch=true.')
+-- !result
+alter table t1 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
+-- !result
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);
+-- result:
+-- !result
+-- name: test_add_partition_to_auto_partition_table_2
+CREATE TABLE t2 (
+    id BIGINT,
+    dt DATETIME NOT NULL
+)
+DUPLICATE KEY(id, dt)
+PARTITION BY date_trunc("day", dt)
+DISTRIBUTED BY HASH(id, dt);
+-- result:
+-- !result
+alter table t2 add partition p20230228 values [("2023-02-28 00:00:00"),("2023-02-29 00:00:00"));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Currently, you cannot manually add a single range partition to a table that is automatically partition.')
+-- !result
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 3 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The step of the auto-partitioned table should be 1.')
+-- !result
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 week);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The granularity of the auto-partitioned table granularity(day) should be consistent with the increased partition granularity(WEEK)..')
+-- !result
+alter table t2 add partitions start ("2020-01-15 01:02:03") end ("2020-01-20") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition range [2020-01-15 01:02:03,2020-01-20 00:00:00) should be a standard unit of time (DAY) . suggest range [2020-01-15 00:00:00,2020-01-20 00:00:00)If you want to create partial partitions in batch, you can turn off this check by setting the FE config enable_create_partial_partition_in_batch=true.')
+-- !result
+alter table t2 add partitions start ("2020-01-15") end ("2020-01-20 01:02:03") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition range [2020-01-15 00:00:00,2020-01-20 01:02:03) should be a standard unit of time (DAY) . suggest range [2020-01-15 00:00:00,2020-01-20 00:00:00)If you want to create partial partitions in batch, you can turn off this check by setting the FE config enable_create_partial_partition_in_batch=true.')
+-- !result
+alter table t2 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
+-- !result
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);
+-- result:
+-- !result

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_intersect
 
-## 功能
+
 
 对于多个同类型数组，返回交集。
 

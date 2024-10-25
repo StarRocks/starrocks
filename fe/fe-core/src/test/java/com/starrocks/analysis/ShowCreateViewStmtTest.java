@@ -189,14 +189,14 @@ public class ShowCreateViewStmtTest {
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-            List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
-                    null, null, false, false);
+                    null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
-            GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
     }
 
@@ -208,10 +208,10 @@ public class ShowCreateViewStmtTest {
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-        List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
-                null, null, false, false);
+                null, null, false, false, false);
         Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
                 "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
@@ -276,22 +276,22 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlComment() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
-                null, null, false, false);
+                null, null, false, false, false);
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof CreateTableStmt);
     }
 
     @Test
     public void testDdlStorageType() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,
-                null, null, false, false);
+                null, null, false, false, false);
         Assert.assertTrue(storageTest.isOlapTable() &&
                 ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);
     }

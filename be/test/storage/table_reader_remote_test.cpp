@@ -313,7 +313,7 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
         for (int i = 0; i < num_buckets; i++) {
             std::vector<RowsetSharedPtr> dummy_rowsets;
             EditVersion full_version;
-            ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
+            ASSERT_TRUE(_tablets[i]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
             if (full_version.major_number() < 2) {
                 ok = false;
                 break;

@@ -22,9 +22,9 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
@@ -191,14 +191,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
-            auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             for (auto& type : fn.arg_types) {
-                arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
+                arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
 
-            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -214,7 +213,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 real_fn_name += "_in";
                 _need_partition_materializing = true;
             }
-            func = get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable, fn.binary_type,
+            const auto& fname = fn.name.function_name;
+            auto real_arg_type = arg_type.type;
+            if (fname == "max_by" || fname == "min_by" || fname == "max_by_v2" || fname == "min_by_v2") {
+                const TypeDescriptor arg1_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
+                real_arg_type = arg1_type.type;
+            }
+            func = get_window_function(real_fn_name, real_arg_type, return_type.type, is_input_nullable, fn.binary_type,
                                        state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
@@ -293,7 +298,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         vector<TTupleId> tuple_ids;
         tuple_ids.push_back(_child_row_desc.tuple_descriptors()[0]->id());
         tuple_ids.push_back(_buffered_tuple_id);
-        RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
+        RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
         if (!_partition_ctxs.empty()) {
             RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
         }
@@ -333,6 +338,7 @@ Status Analytor::open(RuntimeState* state) {
             }
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
         return Status::OK();
     };
@@ -360,8 +366,11 @@ void Analytor::close(RuntimeState* state) {
 
     auto agg_close = [this, state]() {
         // Note: we must free agg_states before _mem_pool free_all;
-        _managed_fn_states.clear();
-        _managed_fn_states.shrink_to_fit();
+        {
+            SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+            _managed_fn_states.clear();
+            _managed_fn_states.shrink_to_fit();
+        }
 
         if (_mem_pool != nullptr) {
             _mem_pool->free_all();
@@ -547,6 +556,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             _order_columns[i]->remove_first_n_values(remove_rows);
         }
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->reset_state_for_contraction(
                     _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_rows);
@@ -580,13 +590,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
-        auto check_if_overflow = [](Column* column) {
-            std::string msg;
-            if (column->capacity_limit_reached(&msg)) {
-                return Status::InternalError(msg);
-            }
-            return Status::OK();
-        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -595,20 +598,20 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
-                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
+                RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
+            RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
+            RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }
 
@@ -927,6 +930,7 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
                                     int64_t frame_end) {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -952,6 +956,7 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
 }
 
 void Analytor::_update_window_batch_removable_cumulatively() {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
@@ -993,6 +998,7 @@ void Analytor::_reset_state_for_next_partition() {
 }
 
 void Analytor::_reset_window_state() {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -1187,6 +1193,7 @@ void Analytor::_find_candidate_peer_group_ends() {
 }
 
 void Analytor::_get_window_function_result(size_t frame_start, size_t frame_end) {
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     DCHECK_GT(frame_end, frame_start);

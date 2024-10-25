@@ -22,9 +22,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -33,13 +37,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Physical Partition implementation
  */
-public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartition {
+public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartition, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PhysicalPartitionImpl.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
 
     @SerializedName(value = "id")
     private long id;
+
+    @SerializedName(value = "name")
+    private String name;
 
     private long beforeRestoreId;
 
@@ -82,6 +89,16 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     private long visibleVersionTime;
     @SerializedName(value = "nextVersion")
     private long nextVersion;
+
+    @SerializedName(value = "dataVersion")
+    private long dataVersion;
+    @SerializedName(value = "nextDataVersion")
+    private long nextDataVersion;
+
+    @SerializedName(value = "versionEpoch")
+    private long versionEpoch;
+    @SerializedName(value = "versionTxnType")
+    private TransactionType versionTxnType;
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
@@ -92,19 +109,34 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     private volatile long minRetainVersion = 0;
 
-    public PhysicalPartitionImpl(long id, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
+    public PhysicalPartitionImpl(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
+        this.name = name;
         this.parentId = parentId;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
         this.visibleVersionTime = System.currentTimeMillis();
-        this.nextVersion = PARTITION_INIT_VERSION + 1;
+        this.nextVersion = this.visibleVersion + 1;
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        this.versionEpoch = this.nextVersionEpoch();
+        this.versionTxnType = TransactionType.TXN_NORMAL;
         this.shardGroupId = sharedGroupId;
     }
 
     @Override
     public long getId() {
         return this.id;
+    }
+
+    @Override
+    public String getName() {
+        return this.name;
+    }
+
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override
@@ -256,6 +288,54 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     }
 
     @Override
+    public long getDataVersion() {
+        return dataVersion;
+    }
+
+    @Override
+    public void setDataVersion(long dataVersion) {
+        this.dataVersion = dataVersion;
+    }
+
+    @Override
+    public long getNextDataVersion() {
+        return nextDataVersion;
+    }
+
+    @Override
+    public void setNextDataVersion(long nextDataVersion) {
+        this.nextDataVersion = nextDataVersion;
+    }
+
+    @Override
+    public long getCommittedDataVersion() {
+        return this.nextDataVersion - 1;
+    }
+
+    @Override
+    public long getVersionEpoch() {
+        return versionEpoch;
+    }
+
+    @Override
+    public void setVersionEpoch(long versionEpoch) {
+        this.versionEpoch = versionEpoch;
+    }
+
+    @Override
+    public long nextVersionEpoch() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
+    public TransactionType getVersionTxnType() {
+        return versionTxnType;
+    }
+
+    public void setVersionTxnType(TransactionType versionTxnType) {
+        this.versionTxnType = versionTxnType;
+    }
+
+    @Override
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;
@@ -402,6 +482,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
+        buffer.append("partitionName: ").append(name).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");
@@ -421,10 +502,32 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
         buffer.append("visibleVersionTime: ").append(visibleVersionTime).append("; ");
         buffer.append("committedVersion: ").append(getCommittedVersion()).append("; ");
 
+        buffer.append("dataVersion: ").append(dataVersion).append("; ");
+        buffer.append("committedDataVersion: ").append(getCommittedDataVersion()).append("; ");
+
+        buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
+        buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
+
         buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
 
         return buffer.toString();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (dataVersion == 0) {
+            dataVersion = visibleVersion;
+        }
+        if (nextDataVersion == 0) {
+            nextDataVersion = nextVersion;
+        }
+        if (versionEpoch == 0) {
+            versionEpoch = nextVersionEpoch();
+        }
+        if (versionTxnType == null) {
+            versionTxnType = TransactionType.TXN_NORMAL;
+        }
     }
 }

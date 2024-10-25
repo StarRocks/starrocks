@@ -29,6 +29,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -53,6 +54,7 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
+    public static final String PROPERTY_MATCH_COLUMN_BY = "match_column_by";
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -63,6 +65,7 @@ public class InsertStmt extends DmlStmt {
     private boolean usePartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
+    private String targetBranch = null;
 
     // set after parse all columns and expr in query statement
     // this result expr in the order of target table's columns
@@ -93,13 +96,14 @@ public class InsertStmt extends DmlStmt {
     private final boolean blackHoleTableAsTargetTable;
     private final Map<String, String> tableFunctionProperties;
 
-    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
-    }
+    private boolean isVersionOverwrite = false;
+
+    // column match by position or name
+    private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
+                      NodePosition pos) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -107,6 +111,7 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+        this.properties.putAll(insertProperties);
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
@@ -172,6 +177,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean hasOverwriteJob() {
         return overwriteJobId > 0;
+    }
+
+    public void setIsVersionOverwrite(boolean isVersionOverwrite) {
+        this.isVersionOverwrite = isVersionOverwrite;
+    }
+
+    public boolean isVersionOverwrite() {
+        return isVersionOverwrite;
     }
 
     public QueryStatement getQueryStatement() {
@@ -245,6 +258,14 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionIds = targetPartitionIds;
     }
 
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
+    }
+
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
     }
@@ -311,5 +332,35 @@ public class InsertStmt extends DmlStmt {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
+    }
+
+    public enum ColumnMatchPolicy {
+        POSITION,
+        NAME;
+
+        public static ColumnMatchPolicy fromString(String value) {
+            for (ColumnMatchPolicy policy : values()) {
+                if (policy.name().equalsIgnoreCase(value)) {
+                    return policy;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public boolean isColumnMatchByPosition() {
+        return columnMatchPolicy == ColumnMatchPolicy.POSITION;
+    }
+
+    public boolean isColumnMatchByName() {
+        return columnMatchPolicy == ColumnMatchPolicy.NAME;
+    }
+
+    public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
+        this.columnMatchPolicy = columnMatchPolicy;
     }
 }

@@ -217,6 +217,9 @@ public:
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
+    template <TimeUnit UNIT>
+    static Timestamp sub(Timestamp timestamp, int count);
+
     template <bool use_iso8601_format = false>
     static std::string to_string(Timestamp timestamp);
 
@@ -236,7 +239,7 @@ public:
     // MIN_DATE | 0
     static const Timestamp MIN_TIMESTAMP = (1892325482100162560LL);
 
-    // seconds from 1970.01.01
+    // seconds since julian date epoch to 1970.01.01
     static const Timestamp UNIX_EPOCH_SECONDS = (210866803200LL);
 };
 
@@ -396,6 +399,11 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
 
         return (date::to_timestamp(days) | microseconds);
     }
+}
+
+template <TimeUnit UNIT>
+Timestamp timestamp::sub(Timestamp timestamp, int count) {
+    return timestamp::add<UNIT>(timestamp, -count);
 }
 
 double timestamp::time_to_literal(double time) {

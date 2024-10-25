@@ -17,6 +17,7 @@ package com.starrocks.paimon.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
@@ -56,8 +57,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
-        this.requiredFields = params.get("required_fields").split(",");
-        this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
+        this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
         this.encodedTable = params.get("native_table");

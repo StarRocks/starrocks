@@ -198,7 +198,6 @@ protected:
         _tnode.repeat_node.output_tuple_id = 1;
 
         _tnode.row_tuples.push_back(1);
-        _tnode.nullable_tuples.push_back(false);
     }
 
     void TearDown() override {}

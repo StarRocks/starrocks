@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # map_values
 
-## Description
+
 
 Returns an array of all the values in the specified map.
 

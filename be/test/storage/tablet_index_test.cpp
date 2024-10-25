@@ -21,52 +21,114 @@
 
 namespace starrocks {
 TEST(TabletIndexTest, test_init_from_thrift) {
-    TOlapTableIndex olap_table_index;
-    std::vector<std::string> columns;
-    columns.emplace_back("f1");
-    std::map<std::string, std::string> common_map;
-    common_map.emplace("imp_type", "clucene");
+    {
+        TOlapTableIndex olap_table_index;
+        std::vector<std::string> columns;
+        columns.emplace_back("f1");
+        std::map<std::string, std::string> common_map;
+        common_map.emplace("imp_type", "clucene");
 
-    olap_table_index.__set_index_id(0);
-    olap_table_index.__set_index_name("test_index");
-    olap_table_index.__set_columns(columns);
-    olap_table_index.__set_common_properties(common_map);
-    olap_table_index.__set_index_type(TIndexType::GIN);
+        olap_table_index.__set_index_id(0);
+        olap_table_index.__set_index_name("test_index");
+        olap_table_index.__set_columns(columns);
+        olap_table_index.__set_common_properties(common_map);
+        olap_table_index.__set_index_type(TIndexType::GIN);
 
-    // init tablet schema
-    TabletSchemaPB schema_pb;
-    schema_pb.set_keys_type(DUP_KEYS);
-    schema_pb.set_num_short_key_columns(1);
+        // init tablet schema
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_short_key_columns(1);
 
-    auto c1 = schema_pb.add_column();
-    c1->set_unique_id(1);
-    c1->set_name("f1");
-    c1->set_type("VARCHAR");
-    c1->set_is_key(true);
+        auto c1 = schema_pb.add_column();
+        c1->set_unique_id(1);
+        c1->set_name("f1");
+        c1->set_type("VARCHAR");
+        c1->set_is_key(true);
 
-    auto c2 = schema_pb.add_column();
-    c2->set_unique_id(2);
-    c2->set_name("f2");
-    c2->set_type("SMALLINT");
-    c2->set_is_key(false);
+        auto c2 = schema_pb.add_column();
+        c2->set_unique_id(2);
+        c2->set_name("f2");
+        c2->set_type("SMALLINT");
+        c2->set_is_key(false);
 
-    TabletSchema tablet_schema(schema_pb);
+        TabletSchema tablet_schema(schema_pb);
 
-    TabletIndex index;
-    index.init_from_thrift(olap_table_index, tablet_schema);
+        TabletIndex index;
+        index.init_from_thrift(olap_table_index, tablet_schema);
 
-    ASSERT_EQ(index.index_type(), GIN);
-    ASSERT_EQ(index.index_id(), 0);
-    ASSERT_EQ(index.index_name(), "test_index");
-    ASSERT_EQ(index.common_properties(), common_map);
-    std::map<std::string, std::map<std::string, std::string>> result_map;
-    ASSERT_TRUE(from_json(index.properties_to_json(), &result_map).ok());
-    ASSERT_EQ(result_map.at("common_properties"), index.common_properties());
-    ASSERT_TRUE(index.index_properties().empty());
-    ASSERT_TRUE(index.search_properties().empty());
-    ASSERT_TRUE(index.extra_properties().empty());
-    ASSERT_TRUE(index.contains_column(1));
-    ASSERT_FALSE(index.contains_column(0));
+        ASSERT_EQ(index.index_type(), GIN);
+        ASSERT_EQ(index.index_id(), 0);
+        ASSERT_EQ(index.index_name(), "test_index");
+        ASSERT_EQ(index.common_properties(), common_map);
+        std::map<std::string, std::map<std::string, std::string>> result_map;
+        ASSERT_TRUE(from_json(index.properties_to_json(), &result_map).ok());
+        ASSERT_EQ(result_map.at("common_properties"), index.common_properties());
+        ASSERT_TRUE(index.index_properties().empty());
+        ASSERT_TRUE(index.search_properties().empty());
+        ASSERT_TRUE(index.extra_properties().empty());
+        ASSERT_TRUE(index.contains_column(1));
+        ASSERT_FALSE(index.contains_column(0));
+    }
+    {
+        TOlapTableIndex olap_table_index;
+        std::vector<std::string> columns;
+        columns.emplace_back("f1");
+        std::map<std::string, std::string> common_map;
+        std::map<std::string, std::string> index_map;
+        std::map<std::string, std::string> search_map;
+        common_map.emplace("index_type", "hnsw");
+        common_map.emplace("metric_type", "l2_distance");
+        common_map.emplace("dim", "10");
+        common_map.emplace("is_vector_normed", "false");
+
+        index_map.emplace("m", "10");
+        index_map.emplace("efconstruction", "10");
+
+        search_map.emplace("efsearch", "10");
+
+        olap_table_index.__set_index_id(0);
+        olap_table_index.__set_index_name("vector_index");
+        olap_table_index.__set_columns(columns);
+        olap_table_index.__set_common_properties(common_map);
+        olap_table_index.__set_index_properties(index_map);
+        olap_table_index.__set_search_properties(search_map);
+        olap_table_index.__set_index_type(TIndexType::VECTOR);
+
+        // init tablet schema
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+
+        auto c1 = schema_pb.add_column();
+        c1->set_unique_id(1);
+        c1->set_name("f1");
+        c1->set_type("VARCHAR");
+        c1->set_is_key(true);
+
+        auto c2 = schema_pb.add_column();
+        c2->set_unique_id(2);
+        c2->set_name("f2");
+        c2->set_type("ARRAY");
+        c2->set_is_key(false);
+
+        TabletSchema tablet_schema(schema_pb);
+
+        TabletIndex index;
+        index.init_from_thrift(olap_table_index, tablet_schema);
+
+        ASSERT_EQ(index.index_type(), VECTOR);
+        ASSERT_EQ(index.index_id(), 0);
+        ASSERT_EQ(index.index_name(), "vector_index");
+        ASSERT_EQ(index.common_properties(), common_map);
+        std::map<std::string, std::map<std::string, std::string>> result_map;
+        ASSERT_TRUE(from_json(index.properties_to_json(), &result_map).ok());
+        ASSERT_EQ(result_map.at("common_properties"), index.common_properties());
+        ASSERT_EQ(result_map.at("index_properties"), index.index_properties());
+        ASSERT_EQ(result_map.at("search_properties"), index.search_properties());
+        ASSERT_TRUE(index.extra_properties().empty());
+        ASSERT_TRUE(index.contains_column(1));
+        ASSERT_FALSE(index.contains_column(0));
+    }
 }
 
 TEST(TabletIndexTest, test_init_from_pb) {

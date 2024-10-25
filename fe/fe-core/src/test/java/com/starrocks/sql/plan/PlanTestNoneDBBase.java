@@ -79,6 +79,7 @@ public class PlanTestNoneDBBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.show_execution_groups = false;
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
@@ -136,6 +137,22 @@ public class PlanTestNoneDBBase {
                     .collect(Collectors.joining(" AND "));
             sb.append(sorted);
             sb.append("])");
+            return sb.toString();
+        } else if (predicate.contains("PREDICATES: ") && predicate.contains(" IN ")) {
+            // normalize in predicate values' order
+            String[] splitArray = predicate.split(" IN ");
+            if (splitArray.length != 2) {
+                return predicate;
+            }
+            String first = splitArray[0];
+            String second = splitArray[1];
+            String predicates = second.substring(1, second.length() - 1);
+            String sorted = Arrays.stream(predicates.split(", ")).sorted().collect(Collectors.joining(","));
+            StringBuilder sb = new StringBuilder();
+            sb.append(first);
+            sb.append(" IN (");
+            sb.append(sorted);
+            sb.append(")");
             return sb.toString();
         } else {
             return predicate;
@@ -789,7 +806,7 @@ public class PlanTestNoneDBBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        return globalStateMgr.getDb("test").getTable(t);
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
     }
 
     public OlapTable getOlapTable(String t) {

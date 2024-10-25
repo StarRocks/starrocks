@@ -67,8 +67,8 @@ public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
 
     private static final int FINAL_SINK_PSEUDO_PLAN_NODE_ID = -1;
-    private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
-    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\)$");
+    private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\).*$");
+    private static final Pattern PLAN_OP_NAME = Pattern.compile("^(.*?) \\(.*?plan_node_id=[-0-9]+\\).*$");
 
     // ANSI Characters
     private static final String ANSI_RESET = "\u001B[0m";
@@ -92,6 +92,16 @@ public class ExplainAnalyzer {
     }
 
     public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile, List<Integer> planNodeIds) {
+        LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
+        if (plan == null && profile.getChild("Summary") != null) {
+            String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
+            if (loadType != null && (loadType.equals(ProfileManager.LOAD_TYPE_STREAM_LOAD)
+                    || loadType.equals(ProfileManager.LOAD_TYPE_ROUTINE_LOAD))) {
+                StringBuilder builder = new StringBuilder();
+                profile.prettyPrint(builder, "");
+                return builder.toString();
+            }
+        }
         ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds);
         return analyzer.analyze();
     }
@@ -163,7 +173,7 @@ public class ExplainAnalyzer {
     }
 
     public String analyze() {
-        if (plan == null || summaryProfile == null || plannerProfile == null || executionProfile == null) {
+        if (plan == null || summaryProfile == null || executionProfile == null) {
             return null;
         }
 

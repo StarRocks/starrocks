@@ -18,8 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
 import org.junit.Assert;
@@ -32,15 +32,15 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testEmpty() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("t0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
-        Assert.assertThrows(AnalysisException.class,
+        Assert.assertThrows(SemanticException.class,
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
@@ -48,7 +48,7 @@ public class StatisticExecutorTest extends PlanTestBase {
     @Test
     public void testDroppedDB() throws Exception {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
                 StatsConstants.AnalyzeType.FULL,

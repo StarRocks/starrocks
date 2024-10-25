@@ -43,14 +43,14 @@ import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
@@ -59,7 +59,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -76,22 +75,17 @@ public class GlobalStateMgrTest {
     public void setUp() {
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
-        UtFrameUtils.PseudoImage.setUpImageVersion();
-    }
-
-    @After
-    public void tearDown() {
-        MetaContext.remove();
     }
 
     @Test
     public void testSaveLoadHeader() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        globalStateMgr.saveHeader(image2.getDataOutputStream());
-        MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
+        imageWriter.setOutputStream(image2.getDataOutputStream());
+        globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
         globalStateMgr.loadHeader(image2.getDataInputStream());
     }
 

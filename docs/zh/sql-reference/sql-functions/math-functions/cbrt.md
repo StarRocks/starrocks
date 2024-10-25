@@ -1,12 +1,14 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cbrt
 
-## 功能
+
 
 计算参数的立方根。
+
+该函数从 3.3 版本起支持。
 
 ## 语法
 
@@ -16,7 +18,7 @@ DOUBLE cbrt(DOUBLE arg)
 
 ## 参数说明
 
-`arg`:该函数在计算参数的立方根之前，会将数值转换为 DOUBLE 类型。
+`arg`: 该函数在计算参数的立方根之前，会将数值转换为 DOUBLE 类型。
 
 ## 返回值说明
 

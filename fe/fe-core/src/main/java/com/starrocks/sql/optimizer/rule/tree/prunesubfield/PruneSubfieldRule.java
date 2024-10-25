@@ -56,11 +56,19 @@ public class PruneSubfieldRule extends TransformationRule {
             .add(FunctionSet.JSON_LENGTH)
             .build();
 
-    public static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
+    public static final List<String> PRUNE_FUNCTIONS = ImmutableList.<String>builder()
             .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
             .addAll(SUPPORT_JSON_FUNCTIONS)
+            .build();
+
+    public static final List<String> PUSHDOWN_FUNCTIONS = ImmutableList.<String>builder()
+            .addAll(PRUNE_FUNCTIONS)
+            .add(FunctionSet.ARRAY_CONTAINS, FunctionSet.ARRAY_CONTAINS_ALL)
+            .add(FunctionSet.ARRAY_MAX, FunctionSet.ARRAY_MIN, FunctionSet.ARRAY_SUM, FunctionSet.ARRAY_AVG)
+            .add(FunctionSet.ARRAY_POSITION)
+            .add(FunctionSet.ARRAY_JOIN)
             .build();
 
     public PruneSubfieldRule() {
@@ -175,7 +183,7 @@ public class PruneSubfieldRule extends TransformationRule {
             visit(cast.getChild(0), context);
             if (cast.getChild(0).getType().isJsonType() && (cast.getChild(0) instanceof CallOperator)) {
                 CallOperator childCall = cast.getChild(0).cast();
-                if (!FunctionSet.JSON_QUERY.equalsIgnoreCase(childCall.getFnName()) &&
+                if (!FunctionSet.JSON_QUERY.equalsIgnoreCase(childCall.getFnName()) ||
                         childCall.getChildren().size() != 2) {
                     return cast;
                 }

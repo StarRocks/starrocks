@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.cost;
 
+import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionUtil;
 import org.apache.iceberg.metrics.MetricsReport;
@@ -41,12 +42,12 @@ public class IcebergMetricsReporter implements MetricsReporter {
     }
 
     public Optional<ScanReport> getReporter(String catalogName, String dbName, String tableName,
-                                                              long snapshotId, Expression icebergPredicate) {
+                                                              long snapshotId, Expression icebergPredicate, Table table) {
         if (reports.isEmpty()) {
             return Optional.empty();
         }
 
-        ScanMetricsFilter filter = ScanMetricsFilter.from(catalogName, dbName, tableName, snapshotId, icebergPredicate);
+        ScanMetricsFilter filter = ScanMetricsFilter.from(catalogName, dbName, tableName, snapshotId, icebergPredicate, table);
 
         ScanReport report = reports.get(filter);
         return Optional.ofNullable(report);
@@ -62,9 +63,9 @@ public class IcebergMetricsReporter implements MetricsReporter {
         long snapshotId;
 
         static ScanMetricsFilter from(String catalogName, String dbName, String tableName,
-                                      long snapshotId, Expression icebergPredicate) {
+                                      long snapshotId, Expression icebergPredicate, Table table) {
             String icebergTableName = catalogName + '.' + dbName + "." + tableName;
-            Expression sanitizeExpr = ExpressionUtil.sanitize(icebergPredicate);
+            Expression sanitizeExpr = ExpressionUtil.sanitize(table.schema().asStruct(), icebergPredicate, false);
             return new ScanMetricsFilter(icebergTableName, sanitizeExpr, snapshotId);
         }
 

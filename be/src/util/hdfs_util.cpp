@@ -20,12 +20,11 @@
 #include <string>
 
 #include "gutil/strings/substitute.h"
-#include "util/error_util.h"
 
 namespace starrocks {
 
 std::string get_hdfs_err_msg() {
-    std::string error_msg = get_str_err_msg();
+    std::string error_msg = std::strerror(errno);
     std::stringstream ss;
     ss << "error=" << error_msg;
     char* root_cause = hdfsGetLastExceptionRootCause();

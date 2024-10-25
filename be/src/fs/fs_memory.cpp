@@ -17,6 +17,7 @@
 #include <butil/files/file_path.h>
 #include <fmt/format.h>
 
+#include "fs/encrypt_file.h"
 #include "io/array_input_stream.h"
 #include "util/raw_container.h"
 
@@ -100,13 +101,13 @@ public:
         _namespace["/"] = std::make_shared<Inode>(kDir, "");
     }
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const butil::FilePath& path) {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const butil::FilePath& path,
+                                                                  const FileEncryptionInfo& info) {
         auto iter = _namespace.find(path.value());
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            auto stream = std::make_shared<MemoryFileInputStream>(iter->second);
-            return std::make_unique<SequentialFile>(std::move(stream), path.value());
+            return SequentialFile::from(std::make_unique<MemoryFileInputStream>(iter->second), path.value(), info);
         }
     }
 
@@ -116,13 +117,14 @@ public:
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            auto stream = std::make_unique<MemoryFileInputStream>(iter->second);
-            return std::make_unique<RandomAccessFile>(std::move(stream), path.value());
+            return RandomAccessFile::from(std::make_unique<MemoryFileInputStream>(iter->second), path.value(), false,
+                                          opts.encryption_info);
         }
     }
 
     template <typename DerivedType, typename BaseType>
-    StatusOr<std::unique_ptr<BaseType>> new_writable_file(FileSystem::OpenMode mode, const butil::FilePath& path) {
+    StatusOr<std::unique_ptr<BaseType>> new_writable_file(FileSystem::OpenMode mode, const butil::FilePath& path,
+                                                          const FileEncryptionInfo& info) {
         InodePtr inode = get_inode(path);
         if (mode == FileSystem::MUST_EXIST && inode == nullptr) {
             return Status::NotFound(path.value());
@@ -143,7 +145,7 @@ public:
         } else if (inode->type != kNormal) {
             return Status::IOError(path.value() + " is a directory");
         }
-        return std::make_unique<DerivedType>(path.value(), std::move(inode));
+        return wrap_encrypted(std::make_unique<DerivedType>(path.value(), std::move(inode)), info);
     }
 
     Status path_exists(const butil::FilePath& path) {
@@ -416,14 +418,15 @@ MemoryFileSystem::~MemoryFileSystem() {
 
 StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                                 const std::string& path) {
-    (void)opts;
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("MemoryFileSystem do not support encryption");
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_sequential_file(butil::FilePath(new_path));
+    return _impl->new_sequential_file(butil::FilePath(new_path), opts.encryption_info);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(
         const RandomAccessFileOptions& opts, const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("MemoryFileSystem do not support encryption");
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_random_access_file(opts, butil::FilePath(new_path));
@@ -435,9 +438,11 @@ StatusOr<std::unique_ptr<WritableFile>> MemoryFileSystem::new_writable_file(cons
 
 StatusOr<std::unique_ptr<WritableFile>> MemoryFileSystem::new_writable_file(const WritableFileOptions& opts,
                                                                             const std::string& path) {
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("MemoryFileSystem do not support encryption");
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_writable_file<MemoryWritableFile, WritableFile>(opts.mode, butil::FilePath(new_path));
+    return _impl->new_writable_file<MemoryWritableFile, WritableFile>(opts.mode, butil::FilePath(new_path),
+                                                                      opts.encryption_info);
 }
 
 Status MemoryFileSystem::path_exists(const std::string& path) {

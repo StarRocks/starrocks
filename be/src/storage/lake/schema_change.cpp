@@ -166,7 +166,7 @@ Status ConvertedSchemaChange::init() {
 Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     // create reader
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset});
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
@@ -208,6 +208,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
         new_rowset_metadata->add_segment_size(f.size.value());
+        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -237,7 +238,7 @@ Status SortedSchemaChange::init() {
 Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     // create reader
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset});
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
@@ -264,7 +265,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         // it will return fail if memory is exhausted
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(writer->flush(), "failed to flush writer.");
-            VLOG(1) << "SortedSchemaChange memory usage: " << cur_usage << " after writer flush "
+            VLOG(2) << "SortedSchemaChange memory usage: " << cur_usage << " after writer flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif
@@ -287,11 +288,12 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
-    RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
+    RETURN_IF_ERROR(writer->finish());
 
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
         new_rowset_metadata->add_segment_size(f.size.value());
+        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);

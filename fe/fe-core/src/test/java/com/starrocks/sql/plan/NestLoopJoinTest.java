@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -351,5 +352,21 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:EMPTYSET");
+    }
+
+    @Test
+    public void testNotAllowCrossJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(false);
+        String sql = "select * from t0 a cross join t0 b;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(true);
+    }
+
+    @Test
+    public void testNotAllowNestLoopJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(false);
+        String sql = "select count(a.v3) from t0 a join t0 b on a.v3 < b.v3;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(true);
     }
 }

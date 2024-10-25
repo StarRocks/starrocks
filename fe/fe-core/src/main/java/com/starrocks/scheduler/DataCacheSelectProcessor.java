@@ -20,6 +20,7 @@ import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -48,6 +49,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase());
 
             Tracers.register(ctx);
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
             executor = ctx.executeSql(context.getDefinition());
 
             if (ctx.getState().isError()) {
@@ -57,8 +59,11 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
 
             // Cache select's metrics is held by sub StmtExecutor
             DataCacheSelectMetrics metrics = getDataCacheSelectMetrics(executor);
+            // update compute node or backend's metrics
             DataCacheSelectExecutor.updateBackendDataCacheMetrics(metrics);
-            context.getStatus().setExtraMessage(metrics.toString());
+            DataCacheSelectStatement dataCacheSelectStatement = (DataCacheSelectStatement) executor.getParsedStmt();
+            boolean isVerbose = dataCacheSelectStatement.isVerbose();
+            context.getStatus().setExtraMessage(metrics.debugString(isVerbose));
         } finally {
             Tracers.close();
             if (executor != null) {

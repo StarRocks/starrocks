@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # dict_mapping
 
-## 功能
+
 
 通过指定字典表和 key，返回该 key 所映射的 value。
 

@@ -1,7 +1,7 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
 
 # Data Lakehouse
 
@@ -42,10 +42,6 @@ Separation of storage and compute reduces the complexity of scaling. Since the S
 ## Data cache
 
 Cache on the compute nodes is optional. If your compute nodes are spinning up and down quickly based on quickly changing load patterns or your queries are often only on the most recent data it might not make sense to cache data.
-
-## Learn by doing
-
-Try out a Docker based lakehouse. This [data lakehouse tutorial](../quick_start/iceberg.md) creates a data lake built with Iceberg and MinIO and connects StarRocks containers as the query engine. Load the provided dataset, or add your own.
 
 ---
 

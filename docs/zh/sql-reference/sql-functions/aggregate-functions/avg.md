@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # avg
 
-## 功能
+
 
 用于返回选中字段的平均值。
 

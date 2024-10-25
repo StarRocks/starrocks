@@ -33,6 +33,9 @@ class DecodeInfo {
     // operator's output string columns
     ColumnRefSet outputStringColumns = new ColumnRefSet();
 
+    // operator used string column but not output to downstream operator
+    ColumnRefSet usedStringColumns = new ColumnRefSet();
+
     public DecodeInfo createOutputInfo() {
         if (this.outputStringColumns.isEmpty()) {
             return EMPTY;

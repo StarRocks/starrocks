@@ -115,7 +115,7 @@ Status FileResultWriter::_create_file_writer() {
         auto schema = result.ValueOrDie();
         auto parquet_builder = std::make_unique<ParquetBuilder>(
                 std::move(writable_file), std::move(properties), std::move(schema), _output_expr_ctxs,
-                _file_opts->parquet_options.row_group_max_size, _file_opts->max_file_size_bytes);
+                _file_opts->parquet_options.row_group_max_size, _file_opts->max_file_size_bytes, _state);
         RETURN_IF_ERROR(parquet_builder->init());
         _file_builder = std::move(parquet_builder);
         break;

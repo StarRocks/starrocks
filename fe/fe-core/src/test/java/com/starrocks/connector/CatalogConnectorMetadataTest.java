@@ -21,6 +21,8 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
@@ -38,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class CatalogConnectorMetadataTest {
 
     private final InformationSchemaMetadata informationSchemaMetadata = new InformationSchemaMetadata("test_catalog");
+    private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog", "test");
 
     @Test
     void testListDbNames(@Mocked ConnectorMetadata connectorMetadata) {
@@ -51,7 +54,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         List<String> dbNames = catalogConnectorMetadata.listDbNames();
@@ -71,7 +75,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         List<String> tblNames = catalogConnectorMetadata.listTableNames(InfoSchemaDb.DATABASE_NAME);
@@ -99,7 +104,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         Database db = catalogConnectorMetadata.getDb("test_db");
@@ -119,7 +125,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         assertTrue(catalogConnectorMetadata.dbExists("test_db"));
@@ -144,7 +151,8 @@ public class CatalogConnectorMetadataTest {
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         Table table = catalogConnectorMetadata.getTable("test_db", "test_tbl");
@@ -154,6 +162,11 @@ public class CatalogConnectorMetadataTest {
 
     @Test
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
+        ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+        ctx.setThreadLocalInfo();
+        GetRemoteFilesParams getRemoteFilesParams =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
+
         new Expectations() {
             {
                 // the following methods are always routed to normal metadata
@@ -161,11 +174,11 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
-                connectorMetadata.listPartitionNames("test_db", "test_tbl");
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
-                connectorMetadata.addPartitions(null, null, null);
+                connectorMetadata.addPartitions(ctx, null, null, null);
                 connectorMetadata.dropPartition(null, null, null);
                 connectorMetadata.renamePartition(null, null, null);
                 connectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
@@ -173,35 +186,36 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropMaterializedView(null);
                 connectorMetadata.alterMaterializedView(null);
                 connectorMetadata.refreshMaterializedView(null);
-                connectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
+                connectorMetadata.cancelRefreshMaterializedView(null);
                 connectorMetadata.createView(null);
                 connectorMetadata.alterView(null);
-                connectorMetadata.truncateTable(null);
+                connectorMetadata.truncateTable(null, null);
                 connectorMetadata.alterTableComment(null, null, null);
-                connectorMetadata.finishSink("test_db", "test_tbl", null);
+                connectorMetadata.finishSink("test_db", "test_tbl", null, null);
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
                 connectorMetadata.dropDb("test_db", false);
-                connectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
+                connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-                connectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+                connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
             }
         };
 
         CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
                 connectorMetadata,
-                informationSchemaMetadata
+                informationSchemaMetadata,
+                metaMetadata
         );
 
         catalogConnectorMetadata.clear();
-        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl");
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
-        catalogConnectorMetadata.addPartitions(null, null, null);
+        catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateConnectContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);
         catalogConnectorMetadata.renamePartition(null, null, null);
         catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
@@ -209,20 +223,20 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropMaterializedView(null);
         catalogConnectorMetadata.alterMaterializedView(null);
         catalogConnectorMetadata.refreshMaterializedView(null);
-        catalogConnectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
+        catalogConnectorMetadata.cancelRefreshMaterializedView(null);
         catalogConnectorMetadata.createView(null);
         catalogConnectorMetadata.alterView(null);
-        catalogConnectorMetadata.truncateTable(null);
+        catalogConnectorMetadata.truncateTable(null, null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
-        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
+        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null, null);
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
         catalogConnectorMetadata.dropDb("test_db", false);
-        catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
+        connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
-        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
     }
 }

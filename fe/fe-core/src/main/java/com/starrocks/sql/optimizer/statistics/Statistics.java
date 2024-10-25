@@ -71,6 +71,10 @@ public class Statistics {
     }
 
     public double getComputeSize() {
+        return getAvgRowSize() * outputRowCount;
+    }
+
+    public double getAvgRowSize() {
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
         double totalSize = 0;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
@@ -83,7 +87,7 @@ public class Statistics {
                 totalSize += entry.getKey().getType().getTypeSize();
             }
         }
-        return Math.max(totalSize, 1.0) * outputRowCount;
+        return Math.max(totalSize, 1.0);
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
@@ -219,14 +223,15 @@ public class Statistics {
             return this.columnStatistics.get(columnRefOperator);
         }
 
-        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs) {
+        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs, boolean withHist) {
             statistics.getColumnStatistics().forEach((k, v) -> {
                 if (hintRefs.contains(k.getId())) {
-                    this.columnStatistics.put(k, v);
+                    this.columnStatistics.put(k, withHist ? v : ColumnStatistic.buildFrom(v).setHistogram(null).build());
                 }
             });
             return this;
         }
+
 
         public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
             this.shadowColumns = shadowColumns;

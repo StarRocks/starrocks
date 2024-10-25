@@ -42,10 +42,10 @@ public class CTEPlanTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 2000000);
     }
 
@@ -755,6 +755,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "  |  \n" +
                 "  23:SORT\n" +
                 "  |  order by: <slot 14> 14: v3 ASC, <slot 13> 13: v2 ASC\n" +
+                "  |  analytic partition by: 14: v3, 13: v2\n" +
                 "  |  offset: 0");
     }
 

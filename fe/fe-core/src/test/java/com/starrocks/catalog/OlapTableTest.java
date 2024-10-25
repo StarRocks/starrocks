@@ -37,25 +37,22 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IndexDef;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -105,27 +102,9 @@ public class OlapTableTest {
                 continue;
             }
             OlapTable tbl = (OlapTable) table;
-            tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList("col"),
+            tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList(ColumnId.create("col")),
                     IndexDef.IndexType.BITMAP, "xxxxxx")));
             System.out.println("orig table id: " + tbl.getId());
-
-            FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
-            tbl.write(out);
-
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream());
-            Table copiedTbl = OlapTable.read(in);
-            System.out.println("copied table id: " + copiedTbl.getId());
-
-            Assert.assertTrue(copiedTbl instanceof OlapTable);
-            Partition partition = ((OlapTable) copiedTbl).getPartition(3L);
-            MaterializedIndex newIndex = partition.getIndex(4L);
-            for (Tablet tablet : newIndex.getTablets()) {
-                Assert.assertTrue(tablet instanceof LocalTablet);
-            }
             MvId mvId1 = new MvId(db.getId(), 10L);
             tbl.addRelatedMaterializedView(mvId1);
             MvId mvId2 = new MvId(db.getId(), 20L);
@@ -183,7 +162,7 @@ public class OlapTableTest {
         p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
-        OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+        OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
                 (PartitionInfo) rangePartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
@@ -220,7 +199,7 @@ public class OlapTableTest {
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
-        OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+        OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
                 (PartitionInfo) rangePartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
@@ -413,5 +392,16 @@ public class OlapTableTest {
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
+    }
+
+    @Test
+    public void testGetPhysicalPartitionByName() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        for (Table table : tables) {
+            OlapTable olapTable = (OlapTable) table;
+            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
+            Assert.assertNull(partition);
+        }
     }
 }

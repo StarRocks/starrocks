@@ -30,7 +30,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 08
 
 7:AGGREGATE (update serialize)
-|  aggregate: sum[(if[(21: p_type LIKE 'PROMO%', [35: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(if[(21: p_type LIKE 'PROMO%', [35: multiply, DECIMAL128(31,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(31,4); args nullable: true; result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[-Infinity, Infinity, 0.0, 16.0, 1.0] ESTIMATE
@@ -39,13 +39,13 @@ OutPut Exchange Id: 08
 6:Project
 |  output columns:
 |  21 <-> [21: p_type, VARCHAR, true]
-|  27 <-> [35: multiply, DECIMAL128(33,4), true]
-|  35 <-> clone([35: multiply, DECIMAL128(33,4), true])
+|  27 <-> clone([35: multiply, DECIMAL128(31,4), true])
+|  35 <-> [35: multiply, DECIMAL128(31,4), true]
 |  common expressions:
 |  32 <-> [7: l_discount, DECIMAL64(15,2), true]
-|  33 <-> 1 - [32: cast, DECIMAL64(18,2), true]
-|  34 <-> cast([33: subtract, DECIMAL64(18,2), true] as DECIMAL128(18,2))
-|  35 <-> [31: cast, DECIMAL128(15,2), true] * [34: cast, DECIMAL128(18,2), true]
+|  33 <-> 1 - [32: cast, DECIMAL64(16,2), true]
+|  34 <-> cast([33: subtract, DECIMAL64(16,2), true] as DECIMAL128(16,2))
+|  35 <-> [31: cast, DECIMAL128(15,2), true] * [34: cast, DECIMAL128(16,2), true]
 |  31 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  cardinality: 6653886
 |  column statistics:
@@ -101,6 +101,7 @@ NON-PARTITION PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997
 MIN/MAX PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
 partitions=1/1
 avgRowSize=28.0
+dataCacheOptions={populate: false}
 cardinality: 6653886
 column statistics:
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 6653885.645940593] ESTIMATE
@@ -119,6 +120,7 @@ TABLE: part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+dataCacheOptions={populate: false}
 cardinality: 20000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (17: p_partkey)
@@ -126,4 +128,3 @@ column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 [end]
-

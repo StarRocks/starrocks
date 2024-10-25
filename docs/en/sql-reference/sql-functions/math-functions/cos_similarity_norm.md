@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # cos_similarity_norm
 
-## Description
+
 
 Measures the similarity of two normalized vectors by calculating the cosine of the angle between them. The angle is formed by the direction of the vectors while the difference in their magnitude is ignored. This function assumes that the input vectors have been normalized. If you need to normalize vectors before calculating the cosine similarity, use [cosine_similarity](./cos_similarity.md).
 

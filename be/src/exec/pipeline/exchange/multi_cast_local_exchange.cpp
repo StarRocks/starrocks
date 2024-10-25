@@ -14,34 +14,36 @@
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 
+#include <glog/logging.h>
+
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
 #include "util/logging.h"
 
 namespace starrocks::pipeline {
 
+#ifndef BE_TEST
 static const size_t kBufferedRowSizeScaleFactor = 16;
+#else
+static const size_t kBufferedRowSizeScaleFactor = 2;
+#endif
 
-MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
+InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
         : _runtime_state(runtime_state),
           _mutex(),
           _consumer_number(consumer_number),
-
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
+    dummy->used_count = consumer_number;
     _head = dummy;
     _tail = dummy;
     for (size_t i = 0; i < consumer_number; i++) {
         _progress[i] = _tail;
         _opened_source_opcount[i] = 0;
     }
-    _runtime_profile = std::make_unique<RuntimeProfile>("MultiCastLocalExchanger");
-    _peak_memory_usage_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = _runtime_profile->AddHighWaterMarkCounter(
-            "PeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
 }
 
-MultiCastLocalExchanger::~MultiCastLocalExchanger() {
+InMemoryMultiCastLocalExchanger::~InMemoryMultiCastLocalExchanger() {
     while (_head != nullptr) {
         auto* t = _head->next;
         _current_memory_usage -= _head->memory_usage;
@@ -50,19 +52,20 @@ MultiCastLocalExchanger::~MultiCastLocalExchanger() {
     }
 }
 
-bool MultiCastLocalExchanger::can_push_chunk() const {
+bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
+
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;
     }
+
     return true;
 }
 
-Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
-                                           MultiCastLocalExchangeSinkOperator* sink_operator) {
+Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) {
     if (chunk->num_rows() == 0) return Status::OK();
 
     auto* cell = new Cell();
@@ -75,23 +78,35 @@ Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_d
         int32_t closed_source_number = (_consumer_number - _opened_source_number);
 
         cell->used_count = closed_source_number;
-        cell->accumulated_row_size = _current_accumulated_row_size;
         cell->next = nullptr;
 
         _tail->next = cell;
         _tail = cell;
         _current_accumulated_row_size += chunk->num_rows();
+        cell->accumulated_row_size = _current_accumulated_row_size;
         _current_memory_usage += cell->memory_usage;
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
+#ifndef BE_TEST
         _peak_memory_usage_counter->set(_current_memory_usage);
         _peak_buffer_row_size_counter->set(_current_row_size);
-        sink_operator->update_counter(_current_memory_usage, _current_row_size);
+#endif
     }
 
     return Status::OK();
 }
 
-bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
+Status InMemoryMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
+    _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
+            "ExchangerPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+    _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
+            "ExchangerPeakBufferRowSize", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+
+    return Status::OK();
+}
+
+bool InMemoryMultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -104,7 +119,7 @@ bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const
     return false;
 }
 
-StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
+StatusOr<ChunkPtr> InMemoryMultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -117,7 +132,6 @@ StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int3
     cell = cell->next;
     VLOG_FILE << "MultiCastLocalExchanger: return chunk to " << mcast_consumer_index
               << ", row = " << cell->chunk->debug_row(0) << ", size = " << cell->chunk->num_rows();
-
     _progress[mcast_consumer_index] = cell;
     cell->used_count += 1;
 
@@ -125,14 +139,15 @@ StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int3
     return cell->chunk;
 }
 
-void MultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
+void InMemoryMultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
         _opened_source_number += 1;
     }
     _opened_source_opcount[mcast_consumer_index] += 1;
 }
-void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
+
+void InMemoryMultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     _opened_source_opcount[mcast_consumer_index] -= 1;
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
@@ -141,16 +156,16 @@ void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index
     }
 }
 
-void MultiCastLocalExchanger::open_sink_operator() {
+void InMemoryMultiCastLocalExchanger::open_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;
 }
-void MultiCastLocalExchanger::close_sink_operator() {
+void InMemoryMultiCastLocalExchanger::close_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number--;
 }
 
-void MultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
+void InMemoryMultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
     Cell* now = _progress[mcast_consumer_index];
     now = now->next;
     while (now) {
@@ -161,7 +176,7 @@ void MultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
     _update_progress();
 }
 
-void MultiCastLocalExchanger::_update_progress(Cell* fast) {
+void InMemoryMultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (fast != nullptr) {
         _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, fast->accumulated_row_size);
     } else {
@@ -173,10 +188,13 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
             _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, c->accumulated_row_size);
         }
     }
+
     // release chunk if no one needs it.
     while (_head && _head->used_count == _consumer_number) {
         Cell* t = _head->next;
         if (t == nullptr) break;
+        // in this case, _head may still be referenced by _progress and it is not safe to delete it.
+        if (t->used_count < _consumer_number) break;
         _current_memory_usage -= _head->memory_usage;
         delete _head;
         _head = t;
@@ -184,72 +202,6 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (_head != nullptr) {
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
     }
-}
-
-// ===== source op =====
-Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(SourceOperator::prepare(state));
-    _exchanger->open_source_operator(_mcast_consumer_index);
-    // attach exchange profile to this operator.(not work, can not be added multiple times)
-    // _runtime_profile->add_child(_exchanger->runtime_profile(), true, nullptr);
-    return Status::OK();
-}
-
-Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-        _exchanger->close_source_operator(_mcast_consumer_index);
-    }
-    return Status::OK();
-}
-
-StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
-    auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
-    if (ret.status().is_end_of_file()) {
-        (void)set_finishing(state);
-    }
-    return ret;
-}
-
-bool MultiCastLocalExchangeSourceOperator::has_output() const {
-    return _exchanger->can_pull_chunk(_mcast_consumer_index);
-}
-
-// ===== sink op =====
-
-Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare(state));
-    _exchanger->open_sink_operator();
-    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-    return Status::OK();
-}
-
-bool MultiCastLocalExchangeSinkOperator::need_input() const {
-    return _exchanger->can_push_chunk();
-}
-
-Status MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-        _exchanger->close_sink_operator();
-    }
-    return Status::OK();
-}
-
-StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Should not pull_chunk in MultiCastLocalExchangeSinkOperator");
-}
-
-Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    return _exchanger->push_chunk(chunk, _driver_sequence, this);
-}
-
-void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, size_t buffer_row_size) {
-    _peak_memory_usage_counter->set(memory_usage);
-    _peak_buffer_row_size_counter->set(buffer_row_size);
 }
 
 } // namespace starrocks::pipeline

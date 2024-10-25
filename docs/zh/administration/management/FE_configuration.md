@@ -1,13 +1,13 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['Canshu']
 ---
 
-import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.md'
 
-import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md'
 
-import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
 # FE 配置项
 
@@ -21,7 +21,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
  ```
 
-详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
+详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)。
 
 :::note
 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
@@ -31,7 +31,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ### 配置 FE 动态参数
 
-您可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
+您可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -46,6 +46,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ## FE 参数描述
 
 ### 日志
+
+##### log_roll_size_mb
+
+- 默认值：1024
+- 类型：Int
+- 单位：MB
+- 是否动态：否
+- 描述：单个系统日志或审计日志文件的大小上限。
+- 引入版本：-
 
 ##### sys_log_dir
 
@@ -149,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String[]
 - 单位：-
 - 是否动态：否
-- 描述：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 描述：打印审计日志的模块。默认打印 `slow_query` 和 `query` 模块的日志。自 v3.0 起 支持 `connection` 模块，即连接日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
 - 引入版本：-
 
 ##### qe_slow_log_ms
@@ -410,7 +419,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：为那些有多个 IP 地址的服务器声明一个选择策略。 请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
 - 引入版本：-
 
 ##### http_port
@@ -683,11 +701,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### qe_max_connection
 
-- 默认值：1024
+- 默认值：4096
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：FE 支持的最大连接数，包括所有用户发起的连接。
+- 描述：FE 支持的最大连接数，包括所有用户发起的连接。默认值由 v3.1.12、v3.2.7 起由 `1024` 变为 `4096`。
 - 引入版本：-
 
 ##### max_connection_scheduler_threads_num
@@ -1064,6 +1082,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
 - 引入版本：v3.1.5
 
+#### metadata_enable_recovery_mode
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
+- 引入版本：v3.3.0
+
+#### lock_manager_enabled
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
+- 引入版本：v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
+- 引入版本：v3.3.0
+
+##### black_host_history_sec
+
+- 默认值：2 * 60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- 默认值：5
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### enable_legacy_compatibility_for_replication
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
+- 引入版本：v3.1.10, v3.2.6
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -1131,16 +1203,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许创建物化视图。
 - 引入版本：-
 
-<!--
 ##### enable_materialized_view_spill
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否为物化视图的刷新任务开启中间结果落盘功能。
+- 引入版本：v3.1.1
 
 ##### enable_backup_materialized_view
 
@@ -1211,6 +1281,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
 - 引入版本：v3.2.3
 
+##### enable_materialized_view_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认收集异步物化视图的监控指标。
+- 引入版本：v3.1.11，v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
+- 引入版本：v3.2.5
+
 ##### enable_mv_automatic_active_check
 
 - 默认值：true
@@ -1219,6 +1307,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
 - 引入版本：v3.1.6
+
+##### enable_active_materialized_view_schema_strict_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
+- 引入版本：v3.3.4
 
 <!--
 ##### mv_active_checker_interval_seconds
@@ -2046,7 +2143,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：集群内每个 Routine Load 导入任务消费数据的最大时间。自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。
+- 描述：集群内每个 Routine Load 导入任务消费数据的最大时间。自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。
 - 引入版本：-
 
 ##### routine_load_task_timeout_second
@@ -2055,7 +2152,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：集群内每个 Routine Load 导入任务超时时间，自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
+- 描述：集群内每个 Routine Load 导入任务超时时间，自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
 - 引入版本：-
 
 <!--
@@ -2217,7 +2314,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- 默认值：4 * 3600
+- 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
@@ -2293,7 +2390,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) 语句恢复。
+- 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
 - 引入版本：-
 
 ##### enable_auto_tablet_distribution
@@ -2303,7 +2400,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：是否开启自动设置分桶功能。
-  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/Data_distribution.md#设置分桶数量)。
+  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
   - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
   - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
 - 引入版本：v2.5.7
@@ -2315,7 +2412,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
-- 引入版本：-
+- 引入版本：v3.2.3
+
+##### enable_experimental_gin
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启[全文倒排索引](../../table_design/indexes/inverted_index.md)功能。
+- 引入版本：v3.3.0
 
 ##### storage_usage_soft_limit_percent
 
@@ -2377,8 +2483,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **说明**
 >
-> - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
+> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
+> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
 
@@ -2489,16 +2595,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - 默认值：900
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。
+- 引入版本：2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s
@@ -2663,6 +2767,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
 - 引入版本：-
+
+##### auto_partition_max_creation_number_per_load
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个导入任务在表达式分区表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_partition_number_per_table
+
+- 默认值：100000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_bucket_number_per_partition
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个分区中最多可以创建的分桶数量。
+- 引入版本：v3.3.2
+
+##### max_column_number_per_table
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的列数量。
+- 引入版本：v3.3.2
 
 ### 存算分离
 
@@ -2884,7 +3024,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：存算分离集群下，触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
 - 引入版本：v3.1.0
 
-Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
+Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
 
 ##### lake_compaction_max_tasks
 
@@ -2897,20 +3037,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_compaction_history_size
 
-- 默认值：12
+- 默认值：20
 - 类型：Int
 - 单位：-
 - 是否动态：是
 - 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
-- 引入版本：v3.1.0
-
-##### lake_compaction_fail_history_size
-
-- 默认值：12
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -2975,11 +3106,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_autovacuum_grace_period_minutes
 
-- 默认值：5
+- 默认值：30
 - 类型：Long
 - 单位：Minutes
 - 是否动态：是
-- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。自 v3.3.0，v3.2.5 及 v3.1.10 起，默认值由 `5` 变更为 `30`。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold
@@ -3039,6 +3170,33 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
 - 引入版本：v3.2.0
+
+##### lake_compaction_disable_tables
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
+- 引入版本：v3.1.11
+
+##### lake_enable_balance_tablets_between_workers
+
+- 默认值：false
+- 类型：Boolean
+- Unit: -
+- 是否动态：是
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
+- 引入版本：v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- Unit: -
+- 是否动态：是
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
+- 引入版本：v3.3.4
 
 ### 其他
 
@@ -3134,7 +3292,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -3553,9 +3711,9 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### max_automatic_partition_number
+##### max_partition_number_per_table
 
-- 默认值：4096
+- 默认值：100000
 - 类型：Long
 - 单位：-
 - 是否动态：是
@@ -4038,17 +4196,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-#### metadata_enable_recovery_mode
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 含义：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
-- 默认值：FALSE
-- 引入版本：3.3
--->
-
-<!--
 ##### enable_dict_optimize_stream_load
 
 - 默认值：true
@@ -4435,9 +4582,9 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### stream_load_profile_collect_second
+##### stream_load_profile_collect_threshold_second
 
-- 默认值：10
+- 默认值：0
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
@@ -4462,6 +4609,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。
 - 引入版本：v3.1.0
+
+##### enable_colocate_restore
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
+- 引入版本：v3.2.10、v3.3.3
 
 <!--
 ##### enable_persistent_index_by_default
@@ -4682,17 +4838,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### lock_manager_enable_loading_using_fine_granularity_lock
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### lock_manager_dead_lock_detection_delay_time_ms
 
 - 默认值：3000
@@ -4714,38 +4859,50 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 引入版本：-
 -->
 
-<!--
+##### replication_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：调度执行同步任务的最小时间间隔。
+- 引入版本：v3.3.5
+
 ##### replication_max_parallel_table_count
 
 - 默认值：100
 - 类型：Int
-- Unit:
+- 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。
+- 引入版本：v3.3.5
 
-<!--
-##### replication_max_parallel_data_size_mb
+##### replication_max_parallel_replica_count
 
 - 默认值：10240
 - 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：允许并发同步的 Tablet 副本数。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- 默认值：1048576
+- 类型：Int
 - 单位：MB
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：允许并发同步的数据量。
+- 引入版本：v3.3.5
 
-<!--
 ##### replication_transaction_timeout_sec
 
-- 默认值：1 * 60 * 60
+- 默认值：86400
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：同步任务的超时时间。
+- 引入版本：v3.3.5
 
 ##### jdbc_meta_default_cache_enable
 
@@ -4764,28 +4921,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
 - 引入版本：-
-
-<!--
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### jdbc_connection_pool_size
 
@@ -4813,6 +4948,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
+
+##### query_detail_explain_level
+
+- 默认值：COSTS
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：EXPLAIN 语句返回的查询计划的解释级别。有效值：COSTS、NORMAL、VERBOSE。
+- 引入版本：v3.2.12，v3.3.5
 
 <!--
 ##### max_varchar_length

@@ -21,6 +21,7 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public abstract class Warehouse implements Writable {
     @SerializedName(value = "name")
@@ -53,4 +54,12 @@ public abstract class Warehouse implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
+    public abstract Long getAnyWorkerGroupId();
+
+    public abstract List<Long> getWorkerGroupIds();
+
+    public abstract List<String> getWarehouseInfo();
+
+    public abstract List<List<String>> getWarehouseNodesInfo();
 }

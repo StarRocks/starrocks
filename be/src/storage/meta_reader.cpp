@@ -14,6 +14,7 @@
 
 #include "storage/meta_reader.h"
 
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -184,7 +185,11 @@ Status SegmentMetaCollecter::open() {
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
-    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
+    RandomAccessFileOptions ropts;
+    if (_segment->encryption_info()) {
+        ropts.encryption_info = *_segment->encryption_info();
+    }
+    ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(ropts, _segment->file_name()));
 
     auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
@@ -233,16 +238,45 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
 
-Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
-    if (cid >= _segment->num_columns()) {
-        return Status::NotFound("error column id");
+std::string append_read_name(const ColumnReader* col_reader) {
+    std::stringstream stream;
+    if (col_reader->column_type() == LogicalType::TYPE_JSON) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            stream << fmt::format("{}({}), ", sub_reader->name(), type_to_string(sub_reader->column_type()));
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
     }
+    if (col_reader->column_type() == LogicalType::TYPE_ARRAY) {
+        auto child = append_read_name((*col_reader->sub_readers())[0].get());
+        if (!child.empty()) {
+            stream << "[" << child << "]";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_MAP) {
+        auto child = append_read_name((*col_reader->sub_readers())[1].get());
+        if (!child.empty()) {
+            stream << "{" << child << "}";
+        }
+    } else if (col_reader->column_type() == LogicalType::TYPE_STRUCT) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            auto child = append_read_name(sub_reader.get());
+            if (!child.empty()) {
+                stream << sub_reader->name() << "(" << child << "), ";
+            }
+        }
+        auto str = stream.str();
+        return str.substr(0, str.size() - 2);
+    }
+    return stream.str();
+}
 
+Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
     const ColumnReader* col_reader = _segment->column(cid);
     if (col_reader == nullptr) {
         return Status::NotFound("don't found column");
     }
-    if (col_reader->column_type() != TYPE_JSON) {
+
+    if (!is_semi_type(col_reader->column_type())) {
         return Status::InternalError("column type mismatch");
     }
 
@@ -253,11 +287,11 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
 
     ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
     size_t size = array_column->offsets_column()->get_data().back();
-    for (const auto& sub_reader : *col_reader->sub_readers()) {
-        std::string str = fmt::format("{}({})", sub_reader->name(), type_to_string(sub_reader->column_type()));
-        array_column->elements_column()->append_datum(Slice(str));
+    auto res = append_read_name(col_reader);
+    if (!res.empty()) {
+        array_column->elements_column()->append_datum(Slice(res));
+        array_column->offsets_column()->append(size + 1);
     }
-    array_column->offsets_column()->append(size + col_reader->sub_readers()->size());
     return Status::OK();
 }
 
@@ -275,7 +309,8 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
     }
 
     if (words.size() > DICT_DECODE_MAX_SIZE) {
-        return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+        return Status::GlobalDictError(fmt::format("global dict size:{} greater than DICT_DECODE_MAX_SIZE:{}",
+                                                   words.size(), DICT_DECODE_MAX_SIZE));
     }
 
     // array<string> has none dict, return directly

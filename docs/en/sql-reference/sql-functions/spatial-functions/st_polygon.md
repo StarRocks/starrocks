@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText
 
-## Description
+
 
 Converts a WKT (Well Known Text) to a corresponding polygon memory form.
 

@@ -1,16 +1,16 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # substring_index
 
-## 功能
+
 
 从给定字符串中截取第 `count` 个分隔符之前或之后的字符串。
 
 - 如果 `count` 是正数，从字符串左边开始截取第 `count` 个分隔符之前的字符串。比如，`select substring_index('https://www.starrocks.io', '.', 2);` 从左往右数截取第二个 `.` 分隔符前面的字符串，返回 `https://www.starrocks`。
 
-- 如果 `count` 是正数，从字符串右边开始截取第 `count` 个分隔符之后的字符串。比如，`select substring_index('https://www.starrocks.io', '.', -2);` 从右往左数截取第二个 `.` 分隔符之后的字符串，返回 `starrocks.io`。
+- 如果 `count` 是负数，从字符串右边开始截取第 `count` 个分隔符之后的字符串。比如，`select substring_index('https://www.starrocks.io', '.', -2);` 从右往左数截取第二个 `.` 分隔符之后的字符串，返回 `starrocks.io`。
 
 如何任一输入参数为 NULL，返回 NULL。
 

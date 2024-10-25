@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -100,8 +101,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             starRocksAssert.withRefreshedMaterializedView(mv);
 
             AlterTableStmt dropValColStm = (AlterTableStmt) parseAndAnalyzeStmt(alterColumn);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropValColStm);
-
+            DDLStmtExecutor.execute(dropValColStm, connectContext);
             Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
             waitAlterJobDone(alterJobs);
         } finally {
@@ -369,6 +369,28 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     false);
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
             Assert.assertTrue(mv.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
+
+    @Test
+    public void testModifyColumnsWithAMV6() {
+        try {
+            checkModifyColumnsWithMaterializedViews(starRocksAssert,
+                    "create materialized view mv1 distributed by random refresh deferred manual " +
+                            "as select timestamp, count(error_code) from sc_dup3 " +
+                            "where op_id * 2> 10 group by timestamp",
+                    "alter table sc_dup3 drop column error_code, add column col_add bigint",
+                    false);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
+            Assert.assertFalse(mv.isActive());
         } catch (Exception e) {
             Assert.fail();
         } finally {

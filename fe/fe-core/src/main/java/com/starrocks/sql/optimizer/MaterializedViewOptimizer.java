@@ -19,6 +19,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -47,15 +49,28 @@ public class MaterializedViewOptimizer {
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
         optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
+        optimizerConfig.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
         }
-
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
+        // parse mv's defined query
+        StatementBase stmt = MvUtils.parse(mv, mvSql, connectContext);
+        if (stmt == null) {
+            return new MvPlanContext(false, "MV Plan parse failed");
+        }
+        // check whether mv's defined query contains non-deterministic functions
+        Pair<Boolean, String> containsNonDeterministicFunctions = AnalyzerUtils.containsNonDeterministicFunction(stmt);
+        if (containsNonDeterministicFunctions != null && containsNonDeterministicFunctions.first) {
+            String invalidPlanReason = String.format("MV contains non-deterministic functions(%s)",
+                    containsNonDeterministicFunctions.second);
+            return new MvPlanContext(false, invalidPlanReason);
+        }
+        // get optimized plan of mv's defined query
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig, inlineView);
+                MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
         if (plans == null) {
             return new MvPlanContext(false, "No query plan for it");
         }

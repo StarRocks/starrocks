@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_from_binary
 
-## 功能
+
 
 将特定格式的 Varbinary 类型的字符串转换为 Bitmap。可用于导入 Bitmap 数据到 StarRocks。
 

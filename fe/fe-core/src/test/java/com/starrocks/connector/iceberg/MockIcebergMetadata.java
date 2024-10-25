@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -425,7 +426,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public List<String> listPartitionNames(String dbName, String tableName, TableVersionRange version) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
@@ -454,7 +455,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit) {
+                                         ScalarOperator predicate, long limit, TableVersionRange version) {
         MockIcebergTable icebergTable = (MockIcebergTable) table;
         String hiveDb = icebergTable.getRemoteDbName();
         String tblName = icebergTable.getName();
@@ -466,6 +467,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             builder.setOutputRowCount(info.rowCount);
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
                 ColumnStatistic columnStatistic = info.columnStatsMap.get(columnRefOperator.getName());
+                if (columnStatistic == null) {
+                    columnStatistic = ColumnStatistic.unknown();
+                }
                 builder.addColumnStatistic(columnRefOperator, columnStatistic);
             }
             return builder.build();
@@ -475,7 +479,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(com.starrocks.catalog.Table table, ScalarOperator predicate, long limit) {
+    public List<PartitionKey> getPrunedPartitions(com.starrocks.catalog.Table table, ScalarOperator predicate,
+                                                  long limit, TableVersionRange version) {
         return new ArrayList<>();
     }
 

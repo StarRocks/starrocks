@@ -18,6 +18,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.MetaPreparationItem;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -65,12 +66,14 @@ public class PrepareCollectMetaTask extends OptimizerTask {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Tracers tracers = Tracers.get();
+        ConnectContext connectContext = ConnectContext.get();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
             CompletableFuture<Void> allFutures = CompletableFuture.allOf(scanOperators.stream()
                     .map(op -> CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
-                                            new MetaPreparationItem(op.getTable(), op.getPredicate(), op.getLimit()),
-                                            tracers),
+                                            new MetaPreparationItem(op.getTable(), op.getPredicate(),
+                                                    op.getLimit(), op.getTableVersionRange()),
+                                            tracers, connectContext),
                             executorService)).toArray(CompletableFuture[]::new));
             allFutures.join();
         }

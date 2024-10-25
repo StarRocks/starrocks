@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,6 +70,9 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -84,11 +86,13 @@ import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -147,6 +151,14 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 
 public class Analyzer {
     private final AnalyzerVisitor analyzerVisitor;
@@ -202,6 +214,18 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTemporaryTableStatement(CreateTemporaryTableStmt statement, ConnectContext context) {
+            CreateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, ConnectContext context) {
+            CreateTableLikeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             AlterTableStatementAnalyzer.analyze(statement, context);
             return null;
@@ -215,6 +239,12 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
         }
@@ -295,19 +325,35 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTemporaryTableAsSelectStatement(
+                CreateTemporaryTableAsSelectStmt statement, ConnectContext session) {
+            CTASAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            StatementBase taskStmt = null;
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
                 QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
                 Analyzer.analyze(queryStatement, context);
+                taskStmt = queryStatement;
             } else if (statement.getInsertStmt() != null) {
                 InsertStmt insertStmt = statement.getInsertStmt();
                 InsertAnalyzer.analyze(insertStmt, context);
+                taskStmt = insertStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
+                taskStmt = statement.getDataCacheSelectStmt();
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStmt);
+            if (hasTemporaryTable) {
+                throw new SemanticException("Cannot submit task based on temporary table");
+            }
+
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
@@ -388,6 +434,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext session) {
+            DropStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
             new QueryAnalyzer(session).analyze(stmt);
             return null;
@@ -453,11 +505,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            try {
-                statement.analyze(context);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            new CreateFunctionAnalyzer().analyze(statement, context);
             return null;
         }
 
@@ -663,71 +711,72 @@ public class Analyzer {
             return null;
         }
 
-        // ---------------------------------------- Privilege Statement ------------------------------------------------
+        // ---------------------------------------- Authentication Statement ------------------------------------------------
 
         @Override
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            PrivilegeStmtAnalyzer.analyze(statement, context);
+            AuthenticationAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthenticationAnalyzer.analyze(stmt, session);
             return null;
         }
 
+        // ---------------------------------------- Authorization Statement ------------------------------------------------
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            AuthorizationAnalyzer.analyze(stmt, session);
             return null;
         }
 
@@ -973,6 +1022,53 @@ public class Analyzer {
         @Override
         public Void visitShowDictionaryStatement(ShowDictionaryStmt statement, ConnectContext context) {
             DictionaryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Warehouse Statement ---------------------------------------------------
+
+        @Override
+        public Void visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
             return null;
         }
     }

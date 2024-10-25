@@ -20,6 +20,7 @@
 #include "common/status.h"
 #include "formats/column_evaluator.h"
 #include "fs/fs.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -53,8 +54,14 @@ public:
     virtual ~FileWriter() = default;
     virtual Status init() = 0;
     virtual int64_t get_written_bytes() = 0;
-    virtual std::future<Status> write(ChunkPtr chunk) = 0;
-    virtual std::future<CommitResult> commit() = 0;
+    virtual int64_t get_allocated_bytes() = 0;
+    virtual Status write(Chunk* chunk) = 0;
+    virtual CommitResult commit() = 0;
+};
+
+struct WriterAndStream {
+    std::unique_ptr<FileWriter> writer;
+    std::unique_ptr<io::AsyncFlushOutputStream> stream;
 };
 
 class FileWriterFactory {
@@ -63,7 +70,7 @@ public:
 
     virtual Status init() = 0;
 
-    virtual StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const = 0;
+    virtual StatusOr<WriterAndStream> create(const std::string& path) const = 0;
 };
 
 class UnknownFileWriterFactory : public FileWriterFactory {
@@ -72,7 +79,7 @@ public:
 
     Status init() override { return Status::NotSupported(fmt::format("got unsupported file format: {}", _format)); }
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override {
+    StatusOr<WriterAndStream> create(const std::string& path) const override {
         return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
     }
 

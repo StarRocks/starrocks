@@ -58,11 +58,6 @@ public class ErrorReport {
         return errMsg;
     }
 
-    public static void reportAnalysisException(String pattern, Object... objs)
-            throws AnalysisException {
-        throw new AnalysisException(reportCommon(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs));
-    }
-
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         reportAnalysisException(null, errorCode, objs);
@@ -97,6 +92,11 @@ public class ErrorReport {
 
     public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
+    }
+
+    public static void reportUserException(ErrorCode errorCode, Object... objs)
+            throws UserException {
+        throw new UserException(reportCommon(null, errorCode, objs));
     }
 
     public interface DdlExecutor {

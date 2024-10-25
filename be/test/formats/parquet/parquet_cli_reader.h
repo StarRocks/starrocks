@@ -47,7 +47,7 @@ public:
         // create temporary reader to load schema.
         FileMetaData* file_metadata = nullptr;
         std::shared_ptr<FileReader> reader =
-                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         {
             HdfsScannerContext ctx;
             HdfsScanStats stats;
@@ -73,11 +73,12 @@ public:
         }
         slot_descs.emplace_back();
 
-        _scanner_ctx->tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
-        _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
+        _scanner_ctx->slot_descs = tuple_desc->slots();
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
-        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
 
         return Status::OK();
@@ -215,10 +216,9 @@ private:
         tuple_desc_builder.build(&table_desc_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
         return row_desc->tuple_descriptors()[0];
     }
 

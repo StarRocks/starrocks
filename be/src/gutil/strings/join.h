@@ -168,7 +168,7 @@ inline string JoinStrings(const CONTAINER& components, const StringPiece& delim)
 template <class CONTAINER, typename FUNC>
 string JoinMapped(const CONTAINER& components, const FUNC& functor, const StringPiece& delim) {
     string result;
-    for (typename CONTAINER::const_iterator iter = components.begin(); iter != components.end(); iter++) {
+    for (auto iter = components.begin(); iter != components.end(); iter++) {
         if (iter != components.begin()) {
             result.append(delim.data(), delim.size());
         }

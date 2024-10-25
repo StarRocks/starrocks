@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ifnull
 
-## 功能
+
 
 若 `expr1` 不为 NULL，返回 `expr1`。若 `expr1` 为 NULL，返回 `expr2`。
 

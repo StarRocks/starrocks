@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 #include "exec/pipeline/fragment_context.h"
@@ -30,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
+#include "util/hash.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 #include "util/time.h"
@@ -63,6 +65,11 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
+    void rollback_inc_fragments() {
+        _num_fragments.fetch_sub(1);
+        _num_active_fragments.fetch_sub(1);
+    }
+
     void count_down_fragments();
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
@@ -73,14 +80,16 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline;
+        return now > _delivery_deadline || _is_cancelled;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _query_deadline;
     }
 
-    bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
+    bool is_cancelled() const { return _is_cancelled; }
+
+    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -147,18 +156,15 @@ public:
         _desc_tbl = desc_tbl;
     }
 
-    DescriptorTbl* desc_tbl() {
-        DCHECK(_desc_tbl != nullptr);
-        return _desc_tbl;
-    }
+    DescriptorTbl* desc_tbl() { return _desc_tbl; }
 
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
-                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr);
+                          std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
+                          RuntimeState* state = nullptr, int scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
@@ -187,7 +193,54 @@ public:
         _delta_scan_bytes += scan_bytes;
     }
 
+    void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
+    bool need_record_exec_stats(int32_t plan_node_id) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        return it != _node_exec_stats.end();
+    }
+
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+    void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->push_rows += push_rows;
+        }
+    }
+
+    void update_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows += pull_rows;
+        }
+    }
+
+    void update_pred_filter_stats(int32_t plan_node_id, int64_t pred_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pred_filter_rows += pred_filter_rows;
+        }
+    }
+
+    void update_index_filter_stats(int32_t plan_node_id, int64_t index_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->index_filter_rows += index_filter_rows;
+        }
+    }
+
+    void update_rf_filter_stats(int32_t plan_node_id, int64_t rf_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->rf_filter_rows += rf_filter_rows;
+        }
+    }
+
+    void force_set_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows.exchange(pull_rows);
+        }
+    }
 
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
@@ -263,6 +316,7 @@ private:
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
+    std::atomic_bool _is_cancelled = false;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -281,12 +335,24 @@ private:
         std::atomic<int64_t> delta_scan_rows_num = 0;
         std::atomic<int64_t> delta_scan_bytes = 0;
     };
+
+    std::once_flag _node_exec_stats_init_flag;
+    struct NodeExecStats {
+        std::atomic_int64_t push_rows;
+        std::atomic_int64_t pull_rows;
+        std::atomic_int64_t pred_filter_rows;
+        std::atomic_int64_t index_filter_rows;
+        std::atomic_int64_t rf_filter_rows;
+    };
+
     // @TODO(silverbullet233):
     // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
@@ -304,6 +370,7 @@ private:
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 };
 
+// TODO: use brpc::TimerThread refactor QueryContext
 class QueryContextManager {
 public:
     QueryContextManager(size_t log2_num_slots);

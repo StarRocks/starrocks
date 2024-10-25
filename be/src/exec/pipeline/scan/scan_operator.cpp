@@ -177,6 +177,7 @@ bool ScanOperator::has_output() const {
             return true;
         }
     }
+
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -202,7 +203,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
         return false;
     }
 
@@ -224,6 +225,16 @@ bool ScanOperator::is_finished() const {
 void ScanOperator::_detach_chunk_sources() {
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         detach_chunk_source(i);
+    }
+}
+
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+    if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+        int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+        ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
     }
 }
 
@@ -332,7 +343,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     }
 
     // pick up new chunk source.
-    begin_pickup_morsels();
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
         for (int i = 0; i < size; i++) {
@@ -373,6 +383,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -395,7 +406,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup.get();
+    task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
@@ -430,7 +441,19 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
-            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
+            // kick start this chunk source
+            auto start_status = chunk_source->start(state);
+            if (!start_status.ok()) {
+                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
+                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                _set_scan_status(start_status);
+            }
+            Status status;
+
+            if (start_status.ok()) {
+                status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            }
 
             if (!status.ok() && !status.is_end_of_file()) {
                 LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "

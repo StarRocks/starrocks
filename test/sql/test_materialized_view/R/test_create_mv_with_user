@@ -1,0 +1,66 @@
+-- name: test_create_mv_with_user
+drop database if exists test_create_mv_with_user;
+-- result:
+-- !result
+create database test_create_mv_with_user;
+-- result:
+-- !result
+use test_create_mv_with_user;
+-- result:
+-- !result
+[UC]shell: ip=hostname -I | awk '{print $1}';
+-- result:
+0
+172.26.92.227
+-- !result
+DROP USER IF EXISTS mv_creator@'${ip[1]}';
+-- result:
+-- !result
+CREATE USER mv_creator@'${ip[1]}';
+-- result:
+-- !result
+GRANT DELETE, DROP, INSERT, SELECT, ALTER, UPDATE ON ALL TABLES IN DATABASE test_create_mv_with_user
+    TO USER mv_creator@'${ip[1]}';
+-- result:
+-- !result
+GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user
+    TO USER mv_creator@'${ip[1]}';
+-- result:
+-- !result
+GRANT SELECT, DROP, ALTER, REFRESH ON ALL MATERIALIZED VIEWS IN DATABASE test_create_mv_with_user
+    TO USER mv_creator@'${ip[1]}';
+-- result:
+-- !result
+    
+GRANT IMPERSONATE ON USER root TO mv_creator@'${ip[1]}';
+-- result:
+-- !result
+EXECUTE AS mv_creator@'${ip[1]}' with no revert;
+-- result:
+-- !result
+create table t1(c1 int, c2 int);
+-- result:
+-- !result
+insert into t1 values(1,1);
+-- result:
+-- !result
+create materialized view mv1 refresh async as select * from t1;
+-- result:
+-- !result
+refresh materialized view mv1;
+alter materialized view mv1 refresh manual;
+-- result:
+-- !result
+refresh materialized view mv1;
+select * from mv1;
+-- result:
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user mv_creator@'${ip[1]}';
+-- result:
+-- !result

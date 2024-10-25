@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # json_exists
 
-## 功能
+
 
 查询 JSON 对象中指定路径（`json_path`）是否存在满足特定条件的值。如果值存在，则返回 `1`；如果值不存在，则返回 `0`。
 

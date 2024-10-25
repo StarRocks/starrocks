@@ -35,6 +35,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -120,6 +121,8 @@ public class AuditEvent {
     public double planMemCosts = -1;
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = -1;
+    @AuditField(value = "Slots")
+    public int numSlots = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
     public long bigQueryLogCPUSecondThreshold = -1;
     @AuditField(value = "BigQueryLogScanBytesThreshold")
@@ -128,6 +131,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "Warehouse")
+    public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     // Materialized View usage info
     @AuditField(value = "CandidateMVs", ignore_zero = true)
@@ -237,6 +242,11 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder setWarehouse(String warehouse) {
+            auditEvent.warehouse = warehouse;
+            return this;
+        }
+
         public AuditEventBuilder setStmtId(long stmtId) {
             auditEvent.stmtId = stmtId;
             return this;
@@ -279,6 +289,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
             auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setNumSlots(int numSlots) {
+            auditEvent.numSlots = numSlots;
             return this;
         }
 

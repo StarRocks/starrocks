@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # days_diff
 
-## Description
+
 
 Returns the day difference between two date expressions (`expr1` − `expr2`), accurate to the day.
 

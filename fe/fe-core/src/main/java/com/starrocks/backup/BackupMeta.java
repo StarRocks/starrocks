@@ -37,14 +37,10 @@ package com.starrocks.backup;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,14 +89,9 @@ public class BackupMeta implements Writable, GsonPostProcessable {
 
     public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
         File file = new File(filePath);
-        MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(starrocksMetaVersion);
-        metaContext.setThreadLocalInfo();
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
             BackupMeta backupMeta = BackupMeta.read(dis);
             return backupMeta;
-        } finally {
-            MetaContext.remove();
         }
     }
 
@@ -120,34 +111,12 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     }
 
     public static BackupMeta read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
-            return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
-        } else {
-            BackupMeta backupMeta = new BackupMeta();
-            backupMeta.readFields(in);
-            return backupMeta;
-        }
+        return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        } else {
-            out.writeInt(tblNameMap.size());
-            for (Table table : tblNameMap.values()) {
-                table.write(out);
-            }
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            Table tbl = Table.read(in);
-            tblNameMap.put(tbl.getName(), tbl);
-            tblIdMap.put(tbl.getId(), tbl);
-        }
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

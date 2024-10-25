@@ -20,11 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -154,6 +154,16 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
+        if (Strings.isNullOrEmpty(location)) {
+            String dbLocation = getDB(dbName).getLocation();
+            if (Strings.isNullOrEmpty(dbLocation)) {
+                throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                        " when you create table or recreate another database with location." +
+                        " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                        "PROPERTIES('location' = '<location>')", dbName);
+            }
+        }
+
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)

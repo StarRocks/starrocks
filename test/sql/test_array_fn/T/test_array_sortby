@@ -1,0 +1,280 @@
+-- name: test_array_sortby_1
+
+CREATE TABLE t1 (
+    id INT(11) not null,
+    array_col1 ARRAY<INT>,
+    array_col2 ARRAY<DOUBLE>,
+    array_col3 ARRAY<VARCHAR(20)>,
+    array_col4 ARRAY<DATE>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t1 VALUES
+(1, [4, 3, 5], [1.1, 2.2, 2.2], ['a', 'b', 'c'], ['2023-01-01', '2023-01-02', '2023-01-03']),
+(2, [6, 7, 8], [6.6, 5.5, 6.6], ['d', 'e', 'd'], ['2023-01-04', '2023-01-05', '2023-01-06']),
+(3, NULL, [7.7, 8.8, 8.8], ['g', 'h', 'h'], ['2023-01-07', '2023-01-08', '2023-01-09']),
+(4, [9, 10, 11], NULL, ['k', 'k', 'j'], ['2023-01-10', '2023-01-12', '2023-01-11']),
+(5, [12, 13, 14], [10.10, 11.11, 11.11], NULL, ['2023-01-13', '2023-01-14', '2023-01-15']),
+(6, [15, 16, 17], [14.14, 13.13, 14.14], ['m', 'o', 'o'], NULL),
+(7, [18, 19, 20], [16.16, 16.16, 18.18], ['p', 'p', 'r'], ['2023-01-16', NULL, '2023-01-18']),
+(8, [21, 22, 23], [19.19, 20.20, 19.19], ['a', 't', 'a'], ['2023-01-19', '2023-01-20', '2023-01-21']),
+(9, [24, 25, 26], NULL, ['y', 'y', 'z'], ['2023-01-25', '2023-01-24', '2023-01-26']),
+(10, [24, 25, 26], NULL, ['y', 'y', 'z'], ['2023-01-25', NULL, '2023-01-26']);
+
+select id, array_col1, array_col2, array_sortby(array_col1, array_col2) from t1 order by id asc;
+select id, array_col1, array_col2, array_col3, array_sortby(array_col1, array_col2, array_col3) from t1 order by id asc;
+select id, array_col1, array_col2, array_col3, array_col4, array_sortby(array_col1, array_col2, array_col3, array_col4) from t1 order by id asc;
+
+-- name: test_array_sortby_2
+
+
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+
+CREATE TABLE __row_util (
+  idx bigint NULL,
+  array_c1 ARRAY<INT>
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util 
+select 
+    row_number() over() as idx,
+    array_generate(10)
+from __row_util_base;
+
+
+CREATE TABLE t1 (
+    id INT(11) not null,
+    int_1 ARRAY<INT>,
+    int_2 ARRAY<INT>,
+    str_1 ARRAY<VARCHAR(20)>,
+    date_1 ARRAY<DATE>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Some array elements of key columns are null, but all the array rows are non-null.
+insert into t1 
+select
+    idx,
+    array_c1,
+    array_map(array_c1, x -> case when idx % 13 != 0 then x % 3 else null end),
+    array_map(array_c1, x -> case when idx % 13 != 0 then concat('abc-', x % 5) else null end),
+    array_map(array_c1, x -> case when idx % 13 != 0 then date_sub('2023-11-02', interval cast(x % 2 as int) day) else null end)
+from __row_util;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t1
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t1
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t1
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t1
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+
+-- Some array rows and array elements of key columns are null.
+CREATE TABLE t2 (
+    id INT(11) not null,
+    int_1 ARRAY<INT>,
+    int_2 ARRAY<INT>,
+    str_1 ARRAY<VARCHAR(20)>,
+    date_1 ARRAY<DATE>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+
+insert into t2 
+select
+    idx,
+    array_c1,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then x % 3 else null end) else null end,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then concat('abc-', x % 5) else null end) else null end,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then date_sub('2023-11-02', interval cast(x % 2 as int) day) else null end) else null end
+from __row_util;
+
+
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t2
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t2
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t2
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t2
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+
+-- Non-nullable source and key columns.
+CREATE TABLE t3 (
+    id INT(11) not null,
+    int_1 ARRAY<INT> not null,
+    int_2 ARRAY<INT> not null,
+    str_1 ARRAY<VARCHAR(20)> not null,
+    date_1 ARRAY<DATE> not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t3 
+select
+    idx,
+    array_c1,
+    array_map(array_c1, x -> x % 3),
+    array_map(array_c1, x -> concat('abc-', x % 5)),
+    array_map(array_c1, x -> date_sub('2023-11-02', interval cast(x % 2 as int) day))
+from __row_util;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t3
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t3
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t3
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t3
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+-- Empty source column.
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t3 where id < -1
+)
+select count(x)
+from w1;
+
+-- Empty key columns.
+select array_sortby([1,2,3,4,5,6], cast(null as array<int>), cast(null as array<int>), cast(null as array<string>));
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(null as array<int>), cast(null as array<string>), [11, 22, 32, 31, 21, 12], cast(null as array<int>));
+select array_sortby(cast(null as array<int>), cast(null as array<int>), cast(null as array<int>));
+
+
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', null ,null] as array<date>));
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+-- Invalid cases.
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], cast(null as array<int>), [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null, 1]);
+
+
+-- name: test_array_sortby_3
+with w1 as (select column_0 as source, column_1 as key1, column_2 as key2 from (values
+          ([1, 2], null, [1, 1]),
+          ([3, 4], [40, 30], [1, 1]),
+          ([5, 6], null, [1, 1])
+) t)
+select array_sortby(source, key1, key2), source, key1, key2 from w1;

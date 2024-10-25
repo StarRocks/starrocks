@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # divide
 
-## 功能
+
 
 除法函数，返回 `x` 除以 `y` 的结果，如果 `y` 为 0，则返回null。
 

@@ -32,9 +32,25 @@ public class TaskTest {
 
     @Test
     public void testTaskRunState() {
-        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.PENDING));
-        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.RUNNING));
-        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.FAILED));
-        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.SUCCESS));
+        Assert.assertFalse(Constants.TaskRunState.PENDING.isFinishState());
+        Assert.assertFalse(Constants.TaskRunState.RUNNING.isFinishState());
+        Assert.assertTrue(Constants.TaskRunState.FAILED.isFinishState());
+        Assert.assertTrue(Constants.TaskRunState.SUCCESS.isFinishState());
+    }
+
+    @Test
+    public void testConstantTaskState() {
+        // whether it's a finished state
+        Assert.assertEquals(true, Constants.TaskRunState.FAILED.isFinishState());
+        Assert.assertEquals(true, Constants.TaskRunState.MERGED.isFinishState());
+        Assert.assertEquals(true, Constants.TaskRunState.SUCCESS.isFinishState());
+        Assert.assertEquals(false, Constants.TaskRunState.PENDING.isFinishState());
+        Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isFinishState());
+        // whether it's a success state
+        Assert.assertEquals(false, Constants.TaskRunState.FAILED.isSuccessState());
+        Assert.assertEquals(true, Constants.TaskRunState.MERGED.isSuccessState());
+        Assert.assertEquals(true, Constants.TaskRunState.SUCCESS.isSuccessState());
+        Assert.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
+        Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
 }

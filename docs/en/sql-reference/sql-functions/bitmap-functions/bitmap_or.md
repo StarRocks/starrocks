@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitmap_or
 
-## Description
+
 
 Calculates the union of two input bitmaps and return a new bitmap.
 

@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "util/hash.h"
 
 namespace starrocks {
 
@@ -32,7 +33,7 @@ public:
 
     struct KeyHash {
         size_t operator()(const Key& key) const {
-            uint64_t hash = CRC_HASH_SEED1;
+            uint64_t hash = CRC_HASH_SEEDS::CRC_HASH_SEED1;
             hash = crc_hash_uint64(std::get<0>(key).hi, hash);
             hash = crc_hash_uint64(std::get<0>(key).lo, hash);
             hash = crc_hash_uint64(std::get<1>(key), hash);

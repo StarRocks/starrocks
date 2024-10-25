@@ -196,6 +196,19 @@ public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<LT, is_sample, T, ResultLT, TResult>::ResultColumnType;
 
+    struct AggNullPred {
+        bool operator()(const DevFromAveAggregateState<TResult>& state) const {
+            if constexpr (is_sample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
+
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
 
@@ -312,6 +325,19 @@ class StddevAggregateFunction final : public DevFromAveAggregateFunction<LT, is_
 public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<LT, is_sample, T, ResultLT, TResult>::ResultColumnType;
+
+    struct AggNullPred {
+        bool operator()(const DevFromAveAggregateState<TResult>& state) const {
+            if constexpr (is_sample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());

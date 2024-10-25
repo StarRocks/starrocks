@@ -30,10 +30,10 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeMetricsScanner::_s_columns[] = {
-        {"FE_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LABELS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VALUE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaFeMetricsScanner::SchemaFeMetricsScanner()
@@ -42,7 +42,7 @@ SchemaFeMetricsScanner::SchemaFeMetricsScanner()
 SchemaFeMetricsScanner::~SchemaFeMetricsScanner() = default;
 
 Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
-    for (TFrontend frontend : _param->frontends) {
+    for (const TFrontend& frontend : _param->frontends) {
         std::string metrics;
         std::string url = "http://" + frontend.ip + ":" + SimpleItoa(frontend.http_port) + "/metrics?type=json";
         auto timeout = state->query_options().query_timeout * 1000 / 2;
@@ -53,7 +53,7 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             return Status::OK();
         };
         RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, mmetrics_cb));
-        VLOG(1) << "metrics: " << metrics;
+        VLOG(2) << "metrics: " << metrics;
 
         simdjson::ondemand::parser parser;
         simdjson::padded_string json_metrics(metrics);
@@ -66,7 +66,7 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             std::ostringstream oss;
             oss << simdjson::to_json_string(json_metric["tags"]);
             info.labels = oss.str();
-            VLOG(1) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+            VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
                     << ", value: " << info.value;
         }
     }

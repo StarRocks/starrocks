@@ -272,6 +272,8 @@ public class WebBaseAction extends BaseAction {
         String key = UUID.randomUUID().toString();
         DefaultCookie cookie = new DefaultCookie(STARROCKS_SESSION_ID, key);
         cookie.setMaxAge(STARROCKS_SESSION_EXPIRED_TIME);
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
         response.addCookie(cookie);
         HttpAuthManager.getInstance().addSessionValue(key, value);
     }
@@ -354,7 +356,7 @@ public class WebBaseAction extends BaseAction {
                 node = instance.open(path);
             }
         } catch (AnalysisException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             return null;
         }
         return node;

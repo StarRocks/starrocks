@@ -168,11 +168,10 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -599,12 +598,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
         tuple_desc_builder.build(&table_desc_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
                                     config::vector_chunk_size)
                       .ok());
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         min_max_tuple_desc = row_desc->tuple_descriptors()[0];
     }
 
@@ -1495,6 +1493,99 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     scanner->close();
 }
 
+TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/scalar_types.orc";
+
+    SlotDesc c0{"col_tinyint", TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT)};
+    SlotDesc c1{"col_smallint", TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT)};
+
+    SlotDesc slot_descs[] = {c0, c1, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode compound_node;
+        compound_node.__set_opcode(TExprOpcode::COMPOUND_OR);
+        compound_node.__set_node_type(TExprNodeType::COMPOUND_PRED);
+        compound_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+        compound_node.__set_num_children(2);
+        nodes.emplace_back(compound_node);
+
+        {
+            TExprNode left_eq;
+            left_eq.__set_opcode(TExprOpcode::EQ);
+            left_eq.__set_node_type(TExprNodeType::BINARY_PRED);
+            left_eq.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+            left_eq.__set_child_type(TPrimitiveType::TINYINT);
+            left_eq.__set_num_children(2);
+
+            TExprNode left_leaf_node;
+            left_leaf_node.__set_node_type(TExprNodeType::SLOT_REF);
+            left_leaf_node.__set_num_children(0);
+            left_leaf_node.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+            TSlotRef t_slot_ref = TSlotRef();
+            t_slot_ref.slot_id = 0;
+            t_slot_ref.tuple_id = 0;
+            left_leaf_node.__set_slot_ref(t_slot_ref);
+
+            TExprNode left_literal = create_int_literal_node(TPrimitiveType::TINYINT, 1);
+
+            nodes.emplace_back(left_eq);
+            nodes.emplace_back(left_leaf_node);
+            nodes.emplace_back(left_literal);
+        }
+
+        {
+            TExprNode right_eq;
+            right_eq.__set_opcode(TExprOpcode::EQ);
+            right_eq.__set_node_type(TExprNodeType::BINARY_PRED);
+            right_eq.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+            right_eq.__set_child_type(TPrimitiveType::SMALLINT);
+            right_eq.__set_num_children(2);
+
+            TExprNode right_leaf_node;
+            right_leaf_node.__set_node_type(TExprNodeType::SLOT_REF);
+            right_leaf_node.__set_num_children(0);
+            right_leaf_node.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+            TSlotRef t_slot_ref = TSlotRef();
+            t_slot_ref.slot_id = 1;
+            t_slot_ref.tuple_id = 0;
+            right_leaf_node.__set_slot_ref(t_slot_ref);
+
+            TExprNode right_literal = create_int_literal_node(TPrimitiveType::SMALLINT, 1);
+
+            nodes.emplace_back(right_eq);
+            nodes.emplace_back(right_leaf_node);
+            nodes.emplace_back(right_literal);
+        }
+
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << ctx->root()->debug_string() << std::endl;
+        param->scanner_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->scanner_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->scanner_conjunct_ctxs, _runtime_state));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    EXPECT_EQ("leaf-0 = (column(id=2) = 1), leaf-1 = (column(id=3) = 1), expr = (or leaf-0 leaf-1)",
+              scanner->_orc_reader->get_search_argument_string());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.is_end_of_file());
+    scanner->close();
+}
+
 // =============================================================================
 
 /*
@@ -1737,6 +1828,56 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         scanner->close();
     }
     {
+        // compressed file with offset != 0
+        auto* range = _create_scan_range(compressed_file, 1, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        ASSERT_EQ(0, scanner->estimated_mem_usage());
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(50);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 50);
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count > total line count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(200);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 0);
+        scanner->close();
+    }
+    {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         // Forcr to parse csv as uncompressed data.
         range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
@@ -1907,11 +2048,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
 #if defined(WITH_STARCACHE)
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.message();
-        param->use_datacache = true;
-#elif defined(WITH_CACHELIB)
-        status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.message();
-        param->use_datacache = true;
+        param->datacache_options.enable_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
@@ -1986,6 +2123,56 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
 
         EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close();
+    }
+
+    {
+        // bom + skip 2 line
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(2);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(1, chunk->num_rows());
+
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(0));
+        scanner->close();
+    }
+
+    {
+        // offset + bom + skip 1 line, but bom and skip_header_line_count will not take effect because of start offset != 0
+        auto* range = _create_scan_range(bom_file, 20, 0);
+        range->text_file_desc.__set_skip_header_line_count(1);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(0));
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(1));
         scanner->close();
     }
 }
@@ -2275,7 +2462,7 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
     {
         std::vector<TExprNode> nodes;
@@ -2284,7 +2471,7 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
@@ -2441,7 +2628,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
     {
         std::vector<TExprNode> nodes;
@@ -2450,7 +2637,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
@@ -2486,7 +2673,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
     {
         std::vector<TExprNode> nodes;
@@ -2495,7 +2682,7 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
-        param->conjunct_ctxs.push_back(ctx);
+        param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));

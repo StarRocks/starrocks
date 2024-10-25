@@ -60,6 +60,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -101,7 +102,6 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
@@ -203,14 +203,6 @@ public class FileScanNode extends LoadScanNode {
                     throw new UserException(e.getMessage());
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            } else if (tbl instanceof TableFunctionTable) {
-                TableFunctionTable funcTable = (TableFunctionTable) tbl;
-                try {
-                    fileGroups = Lists.newArrayList(new BrokerFileGroup(funcTable));
-                } catch (AnalysisException e) {
-                    throw new UserException(e.getMessage());
-                }
-                brokerDesc = new BrokerDesc(funcTable.getProperties());
             }
             targetTable = tbl;
         }
@@ -298,14 +290,16 @@ public class FileScanNode extends LoadScanNode {
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
-            if (column_separator.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            if (column_separator.length > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "column separator",
+                        1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
             }
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
-            if (row_delimiter.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            if (row_delimiter.length > CsvFormat.MAX_ROW_DELIMITER_LENGTH){
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "row delimiter",
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
@@ -449,11 +443,7 @@ public class FileScanNode extends LoadScanNode {
 
         if (hasBroker) {
             FsBroker broker = null;
-            try {
-                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
-            }
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
             brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
         } else {
             brokerScanRange.addToBroker_addresses(new TNetworkAddress("", 0));
@@ -530,7 +520,7 @@ public class FileScanNode extends LoadScanNode {
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
         //     backends_size * parallelInstanceNum)
-        numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
+        int numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.max(1, numInstances);
 
@@ -676,9 +666,6 @@ public class FileScanNode extends LoadScanNode {
             processFileGroup(context, fileStatuses);
         }
 
-        // update numInstances
-        numInstances = locationsList.size();
-
         if (LOG.isDebugEnabled()) {
             for (TScanRangeLocations locations : locationsList) {
                 LOG.debug("Scan range is {}", locations);
@@ -750,10 +737,6 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
-    @Override
-    public int getNumInstances() {
-        return numInstances;
-    }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {

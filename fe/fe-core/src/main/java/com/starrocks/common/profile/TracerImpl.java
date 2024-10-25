@@ -30,12 +30,15 @@ class TracerImpl extends Tracer {
     private final TimeWatcher watcher;
     private final VarTracer varTracer;
     private final LogTracer logTracer;
+    private final LogTracer reasonTracer;
 
-    public TracerImpl(Stopwatch timing, TimeWatcher watcher, VarTracer vars, LogTracer logTracer) {
+    public TracerImpl(Stopwatch timing, TimeWatcher watcher, VarTracer vars, LogTracer logTracer,
+                      LogTracer reasonTracer) {
         this.timing = timing;
         this.watcher = watcher;
         this.varTracer = vars;
         this.logTracer = logTracer;
+        this.reasonTracer = reasonTracer;
     }
 
     private long timePoint() {
@@ -69,13 +72,20 @@ class TracerImpl extends Tracer {
         tracerCost.stop();
     }
 
+    @Override
+    public void reason(String reason, Object... args) {
+        tracerCost.start();
+        reasonTracer.log(timePoint(), reason, args);
+        tracerCost.stop();
+    }
+
     public void record(String name, String value) {
         tracerCost.start();
         varTracer.record(timePoint(), name, value);
         tracerCost.stop();
     }
 
-    public void count(String name, int count) {
+    public void count(String name, long count) {
         tracerCost.start();
         varTracer.count(timePoint(), name, count);
         tracerCost.stop();
@@ -160,6 +170,16 @@ class TracerImpl extends Tracer {
         return sb.toString();
     }
 
+    public String printReasons() {
+        StringBuilder sb = new StringBuilder();
+        for (LogTracer.LogEvent log : reasonTracer.getLogs()) {
+            sb.append("    ");
+            sb.append(log.getLog());
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
     // ----------------- runtime profile -----------------
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
                                              String prefix) {
@@ -192,13 +212,13 @@ class TracerImpl extends Tracer {
         return prefix;
     }
 
-    public void buildTimers(RuntimeProfile parent) {
+    private void buildTimers(RuntimeProfile parent) {
         for (Timer timer : watcher.getAllTimerWithOrder()) {
             parent.addInfoString(timer.toString(), "");
         }
     }
 
-    public void buildVars(RuntimeProfile parent) {
+    private void buildVars(RuntimeProfile parent) {
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", parent);
         for (Var<?> var : varTracer.getAllVarsWithOrder()) {
@@ -209,9 +229,17 @@ class TracerImpl extends Tracer {
         }
     }
 
+    private void buildReasons(RuntimeProfile profile) {
+        RuntimeProfile reasons = new RuntimeProfile("Reason");
+        profile.addChild(reasons);
+        for (LogTracer.LogEvent log : reasonTracer.getLogs()) {
+            reasons.addInfoString(log.getLog(), "");
+        }
+    }
+
     public void toRuntimeProfile(RuntimeProfile parent) {
         buildTimers(parent);
         buildVars(parent);
+        buildReasons(parent);
     }
-
 }

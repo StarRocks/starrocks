@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitand
 
-## Description
+
 
 Returns the bitwise AND of two numeric expressions.
 

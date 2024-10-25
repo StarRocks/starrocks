@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deployment overview
@@ -38,7 +38,6 @@ The deployment of StarRocks generally follows the steps outlined here:
      - [Deploy StarRocks manually](../deployment/deploy_manually.md).
      - [Deploy StarRocks on Kubernetes with operator](../deployment/sr_operator.md).
      - [Deploy StarRocks on Kubernetes with Helm](../deployment/helm.md).
-     - [Deploy StarRocks on AWS](../deployment/starrocks_on_aws.md).
 
 6. Perform necessary [post-deployment setup](../deployment/post_deployment_setup.md) measures.
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_contains
 
-## Description
+
 
 Checks whether the array contains a certain element. If yes, it returns 1; otherwise, it returns 0.
 

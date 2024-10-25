@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 
 # bitxor
 
-## Description
+
 
 Returns the bitwise XOR of two numeric expressions.
 

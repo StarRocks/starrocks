@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -27,8 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -76,50 +75,80 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+            throws UserException {
         String functionName = function.getFunctionName().getFunction();
-        List<Function> existFuncs = name2Function.get(functionName);
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        if (allowExists && createIfNotExists) {
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            throw new UserException(
+                    "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
+        }
         if (!isReplay) {
-            if (existFuncs != null) {
-                for (Function existFunc : existFuncs) {
-                    if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+            for (Function existFunc : existFuncs) {
+                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    if (createIfNotExists) {
+                        LOG.info("create function [{}] which already exists", functionName);
+                        return;
+                    } else if (!allowExists) {
                         throw new UserException("function already exists");
                     }
                 }
             }
-            // Get function id for this UDF, use CatalogIdGenerator. Only get function id
-            // when isReplay is false
-            long functionId = GlobalStateMgr.getCurrentState().getNextId();
-            // all user-defined functions id are negative to avoid conflicts with the builtin function
-            function.setFunctionId(-functionId);
+            assignIdToUserDefinedFunction(function);
         }
-
-        com.google.common.collect.ImmutableList.Builder<Function> builder =
-                com.google.common.collect.ImmutableList.builder();
-        if (existFuncs != null) {
-            builder.addAll(existFuncs);
-        }
-        builder.add(function);
-        name2Function.put(functionName, builder.build());
+        name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
     }
 
-    public synchronized void userAddFunction(Function f) throws UserException {
-        addFunction(f, false);
+    /**
+     * Add the function to the given list of functions. If an identical function exists within the list, it is replaced
+     * by the incoming function.
+     *
+     * @param function   The function to be added.
+     * @param existFuncs The list of functions to which the function is added. This list is not modified.
+     * @return a new list of functions with the given function added or replaced.
+     */
+    public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
+        return ImmutableList.<Function>builder()
+                .addAll(existFuncs.stream()
+                        .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                        .collect(ImmutableList.toImmutableList()))
+                .add(function)
+                .build();
+    }
+
+    /**
+     * Assign a globally unique id to the given user-defined function.
+     * All user-defined functions IDs are negative to avoid conflicts with the builtin function.
+     *
+     * @param function Function to be modified.
+     */
+    public static void assignIdToUserDefinedFunction(Function function) {
+        long functionId = GlobalStateMgr.getCurrentState().getNextId();
+        function.setFunctionId(-functionId);
+    }
+
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws UserException {
+        addFunction(f, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
-            addFunction(f, true);
+            addFunction(f, true, false, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
     }
 
-    private void dropFunction(FunctionSearchDesc function) throws UserException {
+    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
@@ -132,6 +161,10 @@ public class GlobalFunctionMgr {
             }
         }
         if (!isFound) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         ImmutableList<Function> newFunctions = builder.build();
@@ -142,47 +175,25 @@ public class GlobalFunctionMgr {
         }
     }
 
-    public synchronized void userDropFunction(FunctionSearchDesc f) throws UserException {
-        dropFunction(f);
+    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws UserException {
+        dropFunction(f, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(f);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc f) {
         try {
-            dropFunction(f);
+            dropFunction(f, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
     }
 
-    public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (long i = 0; i < count; ++i) {
-            Function f = Function.read(dis);
-            replayAddFunction(f);
-        }
-        return checksum;
-    }
-
-    public long saveGlobalFunctions(DataOutputStream dos, long checksum) throws IOException {
-        List<Function> functions = getFunctions();
-        int size = functions.size();
-        checksum ^= size;
-        dos.writeInt(size);
-
-        for (Function f : functions) {
-            f.write(dos);
-        }
-        return checksum;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<Function> functions = getFunctions();
 
         int numJson = 1 + functions.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_FUNCTION_MGR, numJson);
-        writer.writeJson(functions.size());
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_FUNCTION_MGR, numJson);
+        writer.writeInt(functions.size());
         for (Function function : functions) {
             writer.writeJson(function);
         }
@@ -191,11 +202,7 @@ public class GlobalFunctionMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            Function function = reader.readJson(Function.class);
-            replayAddFunction(function);
-        }
+        reader.readCollection(Function.class, this::replayAddFunction);
     }
 }
 

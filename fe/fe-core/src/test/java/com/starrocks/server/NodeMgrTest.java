@@ -14,17 +14,26 @@
 
 package com.starrocks.server;
 
+import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
 import java.net.UnknownHostException;
+import java.util.List;
 import java.util.UUID;
 
 public class NodeMgrTest {
+
+    @BeforeClass
+    public static void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
 
     @Test(expected = UnknownHostException.class)
     public void testCheckFeExistByIpOrFqdnException() throws UnknownHostException {
@@ -70,5 +79,23 @@ public class NodeMgrTest {
         Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.removeClusterIdAndRole();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+    }
+
+    @Test
+    public void testResetFrontends() throws Exception {
+        FrontendNodeType role = FrontendNodeType.FOLLOWER;
+        String nodeName = "node1";
+        Pair<String, Integer> selfNode = Pair.create("192.168.3.5", 9010);
+        NodeMgr leaderNodeMgr = new NodeMgr(role, nodeName, selfNode);
+        leaderNodeMgr.resetFrontends();
+
+        UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
+
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
+        Assert.assertEquals(1, frontends.size());
+        Assert.assertEquals(role, frontends.get(0).getRole());
+        Assert.assertEquals(nodeName, frontends.get(0).getNodeName());
+        Assert.assertEquals(selfNode.first, frontends.get(0).getHost());
+        Assert.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
     }
 }

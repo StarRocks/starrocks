@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_to_string
 
-## 功能
+
 
 将一个 bitmap 转化成一个逗号分隔的字符串。字符串中包含 bitmap 中所有 bit 位。输入是 null 的话会返回 null。
 

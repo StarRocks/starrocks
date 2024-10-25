@@ -180,8 +180,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
                 // don't need to add mapping for none-existed column
                 continue;
             } else {
-                auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0, file = $1",
-                                             col_name, options.filename);
+                auto s = strings::Substitute("Column: $0 is not found in file: $1", col_name, options.filename);
                 return Status::NotFound(s);
             }
         }

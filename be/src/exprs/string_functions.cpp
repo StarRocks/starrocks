@@ -38,6 +38,7 @@
 #include "common/status.h"
 #include "exprs/binary_function.h"
 #include "exprs/math_functions.h"
+#include "exprs/regexp_split.h"
 #include "exprs/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
@@ -55,7 +56,7 @@ namespace starrocks {
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
@@ -436,10 +437,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
         bytes.reserve(reserved);
     }
 
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
 
     auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -486,10 +485,8 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     }
 
     bytes.reserve(reserved);
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
@@ -2632,7 +2629,8 @@ StatusOr<ColumnPtr> StringFunctions::ascii(FunctionContext* context, const Colum
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
-    return std::string((char*)&value, 1);
+    char* p = (char*)&value;
+    return std::string(p, 1);
 }
 
 StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
@@ -2765,7 +2763,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
-        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+        list.emplace_back(col);
     }
     const auto num_rows = columns[0]->size();
     auto dst_bytes_max_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.end());
@@ -2918,7 +2916,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     // skip only null
     for (int i = 1; i < columns.size(); ++i) {
         if (!columns[i]->only_null()) {
-            list.emplace_back(ColumnViewer<TYPE_VARCHAR>(columns[i]));
+            list.emplace_back(columns[i]);
         }
     }
 
@@ -3730,6 +3728,204 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     re2::RE2::Options* options = state->options.get();
     return regexp_replace_general(context, options, columns);
+}
+
+static StatusOr<ColumnPtr> regexp_split_const(re2::RE2* const_re, const Columns& columns, int32_t max_split = -1) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit regexpSplit;
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(const_re, max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static StatusOr<ColumnPtr> regexp_split_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumnPtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit RegexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        RegexpSplit.init(const_re, max_split);
+        RegexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (RegexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(array, columns[0]->size());
+    }
+    return NullableColumn::create(array, nl_col);
+}
+
+static StatusOr<ColumnPtr> regexp_split_general(FunctionContext* context, re2::RE2::Options* options,
+                                                const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+    auto size = columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    RegexpSplit regexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        std::string ptn_value = ptn_viewer.value(row).to_string();
+        std::unique_ptr<re2::RE2> local_re;
+
+        if (ptn_value.size()) {
+            local_re = std::make_unique<re2::RE2>(ptn_value, *options);
+            if (!local_re.get()->ok()) {
+                context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
+                offset_col->append(index);
+                nl_col->append(1);
+                continue;
+            }
+        }
+
+        nl_col->append(0);
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(local_re.get(), max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array =
+            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    return NullableColumn::create(array, nl_col);
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (state->const_pattern) {
+        re2::RE2* const_re = nullptr;
+        if (!state->pattern.empty()) {
+            const_re = state->regex.get();
+        }
+        if (columns.size() > 2) {
+            if (columns[2]->is_constant()) {
+                return regexp_split_const(const_re, columns, ColumnHelper::get_const_value<TYPE_INT>(columns[2]));
+            } else {
+                return regexp_split_const_pattern(const_re, columns);
+            }
+        } else {
+            return regexp_split_const(const_re, columns);
+        }
+    }
+
+    re2::RE2::Options* options = state->options.get();
+    return regexp_split_general(context, options, columns);
 }
 
 struct ReplaceState {

@@ -44,12 +44,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -70,15 +73,15 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -170,7 +173,7 @@ public class MetadataViewer {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -199,17 +202,15 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exsit");
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
@@ -235,7 +236,7 @@ public class MetadataViewer {
             // backend id -> replica count
             Map<Long, Integer> countMap = Maps.newHashMap();
             // init map
-            List<Long> beIds = infoService.getBackendIds(false);
+            List<Long> beIds = getAllComputeNodeIds();
             for (long beId : beIds) {
                 countMap.put(beId, 0);
             }
@@ -270,10 +271,30 @@ public class MetadataViewer {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
+    }
+
+    private static List<Long> getAllComputeNodeIds() throws DdlException {
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> allComputeNodeIds = Lists.newArrayList();
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+            allComputeNodeIds.addAll(computeNodeIs);
+        } else {
+            allComputeNodeIds = infoService.getBackendIds(false);
+
+        }
+        return allComputeNodeIds;
     }
 
     private static String graph(int num, int totalNum, int mod) {

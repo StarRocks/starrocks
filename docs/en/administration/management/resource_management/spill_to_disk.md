@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # Spill to disk
 
-This topic describes how to spill intermediate computation results of large operators to disk.
+This topic describes how to spill intermediate computation results of large operators to local disks and object storage.
 
 ## Overview
 
@@ -19,12 +20,13 @@ Currently, StarRocks' spilling feature supports the following operators:
 - Aggregate operators
 - Sort operators
 - Hash join (LEFT JOIN, RIGHT JOIN, FULL JOIN, OUTER JOIN, SEMI JOIN, and INNER JOIN) operators
+- CTE operators (Supported from v3.3.4 onwards)
 
 ## Enable intermediate result spilling
 
 Follow these steps to enable intermediate result spilling:
 
-1. Specify the spill directory `spill_local_storage_dir`, which stores the spilled intermediate result, in the BE configuration file **be.conf**, and restart the cluster to allow the modification to take effect.
+1. Specify the local spill directory `spill_local_storage_dir`, which stores the spilled intermediate result on the local disk, in the BE configuration file **be.conf** or the CN configuration file **cn.conf**, and restart the cluster to allow the modification to take effect.
 
    ```Properties
    spill_local_storage_dir=/<dir_1>[;/<dir_2>]
@@ -56,7 +58,30 @@ Follow these steps to enable intermediate result spilling:
    | enable_spill | false       | Whether to enable intermediate result spilling. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries. |
    | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>This variable takes effect only when the variable `enable_spill` is set to `true`. |
 
+## [Preview] Spill intermediate result to object storage
+
+From v3.3.0 onwards, StarRocks supports spilling intermediate results to object storage.
+
+:::tip
+Before enabling spilling to object storage, you must create a storage volume to define the object storage you want to use. For detailed instruction on creating a storage volume, see [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md).
+:::
+
+After you have enabled spilling in the previous step, you can further set these system variables to allow the intermediate results to be spilled to object storage:
+
+```SQL
+SET enable_spill_to_remote_storage = true;
+
+-- Replace <storage_volume_name> with the name of the storage volume which you want to use.
+SET spill_storage_volume = '<storage_volume_name>';
+```
+
+After spilling to object storage has been enabled, the intermediate results of queries that triggered spilling will be first stored in the local disks of the BE or CN nodes, and then the object storage if the capacity limit of the local disks is reached.
+
+Please note that, if the storage volume you specified for `spill_storage_volume` does not exist, spilling to object storage will not be enabled.
+
 ## Limitations
 
 - Not all OOM issues can be resolved by spilling. For example, StarRocks cannot release the memory used for expression evaluation.
 - Usually, queries with spilling involved indicate a tenfold increase in query latency. We recommend you extend the query timeout for these queries by setting the session variable `query_timeout`.
+- There is a significant performance drop in spilling to object storage compared to spilling to local disks.
+- `spill_local_storage_dir` of each BE or CN node is shared among all queries running on the node. Currently, StarRocks does not support setting a size limit of spilled data to local disks individually for each query. Therefore, concurrent queries involved spilling may impact one another.

@@ -1,0 +1,271 @@
+-- name: test_mv_refresh_with_multi_union1 @slow
+
+CREATE TABLE `u1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u2` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u3` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u4` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u5` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `u6` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO u1 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14'),
+	 (11,'2024-03-15'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+INSERT INTO u2 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+INSERT INTO u3 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14'),
+	 (11,'2024-03-15'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+INSERT INTO u4 (id,dt) VALUES
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+INSERT INTO u5 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (16,'2024-03-18');
+INSERT INTO u6 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12');
+	 
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u1
+    union all
+    select dt from u2;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv2`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u3
+    union all
+    select dt from u4;
+    
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv3`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv4`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt 
+from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+     select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv5`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt 
+from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt;
+
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv6`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv7`
+PARTITION BY date_trunc('month', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv8`
+PARTITION BY date_trunc('month', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt
+from (
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5
+) t
+group by dt;
+
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+refresh materialized view test_mv5 with sync mode;
+refresh materialized view test_mv6 with sync mode;
+refresh materialized view test_mv7 with sync mode;
+refresh materialized view test_mv8 with sync mode;
+
+select count(1) from test_mv1;
+select count(1) from test_mv2;
+select count(1) from test_mv3;
+select count(1) from test_mv4;
+select count(1) from test_mv5;
+select count(1) from test_mv6;
+select count(1) from test_mv7;
+select count(1) from test_mv8;
+
+select dt from test_mv1 group by dt order by 1;
+select dt from test_mv2 group by dt order by 1;
+select dt from test_mv3 group by dt order by 1;
+select dt from test_mv4 group by dt order by 1;
+select dt from test_mv5 group by dt order by 1;
+select dt from test_mv6 group by dt order by 1;
+select dt from test_mv7 group by dt order by 1;
+select dt from test_mv8 group by dt order by 1;
+
+drop materialized view test_mv1;
+drop materialized view test_mv2;
+drop materialized view test_mv3;
+drop materialized view test_mv4;
+drop materialized view test_mv5;
+drop materialized view test_mv6;
+drop materialized view test_mv7;
+drop materialized view test_mv8;

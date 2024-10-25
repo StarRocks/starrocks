@@ -81,7 +81,7 @@ public class StarMgrServer {
     }
 
     private StarManagerServer starMgrServer;
-    private BDBJEJournalSystem journalSystem;
+    private StarOSBDBJEJournalSystem journalSystem;
 
     public StarMgrServer() {
         execution = new StateChangeExecution() {
@@ -99,7 +99,7 @@ public class StarMgrServer {
 
     // for checkpoint thread only
     public StarMgrServer(BDBJEJournal journal) {
-        journalSystem = new BDBJEJournalSystem(journal);
+        journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
 
@@ -107,7 +107,7 @@ public class StarMgrServer {
         return starMgrServer.getStarManager();
     }
 
-    public BDBJEJournalSystem getJournalSystem() {
+    public StarOSBDBJEJournalSystem getJournalSystem() {
         return journalSystem;
     }
 
@@ -116,7 +116,7 @@ public class StarMgrServer {
     }
 
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new BDBJEJournalSystem(environment);
+        journalSystem = new StarOSBDBJEJournalSystem(environment);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -135,6 +135,8 @@ public class StarMgrServer {
         com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
         com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
         com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+        com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+        com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
@@ -142,6 +144,8 @@ public class StarMgrServer {
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+            com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+            com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";

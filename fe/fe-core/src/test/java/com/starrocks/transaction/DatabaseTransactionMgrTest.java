@@ -36,9 +36,12 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -101,6 +104,34 @@ public class DatabaseTransactionMgrTest {
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
 
         lableToTxnId = addTransactionToTransactionMgr();
+    }
+
+    public void prepareCommittedTransaction() throws UserException {
+        long transactionId1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable10,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId3);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        transTablets.add(tabletCommitInfo3);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId1));
+        lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable10, transactionId1);
+
     }
 
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
@@ -305,6 +336,42 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.ABORTED, masterDbTransMgr.getTxnStatus(txnId3));
     }
 
+    @Test
+    public void testFinishTransactionTableRemove() throws UserException {
+        prepareCommittedTransaction();
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(long tableId) {
+                return null;
+            }
+        };
+
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+        masterDbTransMgr.finishTransaction(txnId, null);
+        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+    }
+
+
+    @Test
+    public void testFinishTransactionPartitionRemove() throws UserException {
+        prepareCommittedTransaction();
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long partitionId) {
+                return null;
+            }
+        };
+
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
+        masterDbTransMgr.finishTransaction(txnId, null);
+        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+    }
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {
         DatabaseTransactionMgr masterDbTransMgr =

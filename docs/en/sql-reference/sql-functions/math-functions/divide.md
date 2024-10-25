@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # divide
 
-## Description
+
 
 Return the quotient of x divide y. If y is 0, return null.
 

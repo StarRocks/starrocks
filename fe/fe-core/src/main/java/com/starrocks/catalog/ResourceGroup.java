@@ -14,15 +14,20 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
 
-import java.util.ArrayList;
+import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 public class ResourceGroup {
@@ -35,6 +40,8 @@ public class ResourceGroup {
     public static final String PLAN_CPU_COST_RANGE = "plan_cpu_cost_range";
     public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
+    public static final String CPU_WEIGHT = "cpu_weight";
+    public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
@@ -46,44 +53,105 @@ public class ResourceGroup {
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
-    public static final long DEFAULT_WG_ID = 0;
-    public static final long DEFAULT_MV_WG_ID = 1;
-    public static final long DEFAULT_MV_VERSION = 1;
+    /**
+     * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
+     * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
+     */
+    public static final long DEFAULT_WG_ID = 2;
+    public static final long DEFAULT_MV_WG_ID = 3;
 
-    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
-    public static final ResourceGroup DEFAULT_MV_WG = new ResourceGroup();
+    public static final Set<String> BUILTIN_WG_NAMES =
+            ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
-    static {
-        DEFAULT_WG.setId(DEFAULT_WG_ID);
-        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
+    // BE actually stores nanoseconds, so the maximum value needs to be limited to prevent overflow.
+    public static final long MAX_BIG_QUERY_CPU_SECOND_LIMIT = Long.MAX_VALUE / 1_000_000_000L;
 
-        DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
-        DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
+    private static class ColumnMeta {
+        public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
+            this(column, valueSupplier, true);
+        }
+
+        public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier,
+                          boolean visible) {
+            this.column = column;
+            this.valueSupplier = valueSupplier;
+            this.visible = visible;
+        }
+
+        private final Column column;
+        private final BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier;
+        private final boolean visible;
     }
 
-    public static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("id", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("spill_mem_limit_threshold", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("type", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
-                    .build();
+    private static final List<ColumnMeta> COLUMN_METAS = ImmutableList.of(
+            new ColumnMeta(
+                    new Column("name", ScalarType.createVarchar(100)),
+                    (rg, classifier) -> rg.getName()),
+            new ColumnMeta(
+                    new Column("id", ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getId()),
+            new ColumnMeta(
+                    new Column(CPU_WEIGHT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.geNormalizedCpuWeight()),
+            new ColumnMeta(
+                    new Column(EXCLUSIVE_CPU_CORES, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
+            new ColumnMeta(
+                    new Column(MEM_LIMIT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
+            new ColumnMeta(
+                    new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_MEM_LIMIT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryMemLimit(), 0)),
+            new ColumnMeta(
+                    new Column(CONCURRENCY_LIMIT, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getConcurrencyLimit()),
+            new ColumnMeta(
+                    new Column(SPILL_MEM_LIMIT_THRESHOLD, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> new DecimalFormat("#.##").format(
+                            Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
+            new ColumnMeta(
+                    new Column(GROUP_TYPE, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
+            new ColumnMeta(
+                    new Column("classifiers", ScalarType.createVarchar(1024)),
+                    (rg, classifier) -> classifier.toString())
+    );
+
+    public static final ShowResultSetMetaData META_DATA;
+    public static final ShowResultSetMetaData VERBOSE_META_DATA;
+
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        COLUMN_METAS.stream()
+                .filter(meta -> meta.visible)
+                .forEach(item -> builder.addColumn(item.column));
+        META_DATA = builder.build();
+
+        ShowResultSetMetaData.Builder verboseBuilder = ShowResultSetMetaData.builder();
+        COLUMN_METAS.forEach(item -> verboseBuilder.addColumn(item.column));
+        VERBOSE_META_DATA = verboseBuilder.build();
+    }
+
     @SerializedName(value = "classifiers")
     List<ResourceGroupClassifier> classifiers;
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "id")
     private long id;
+
     @SerializedName(value = "cpuCoreLimit")
-    private Integer cpuCoreLimit;
+    private Integer cpuWeight;
+    @SerializedName(value = "exclusiveCpuCores")
+    private Integer exclusiveCpuCores;
 
     @SerializedName(value = "maxCpuCores")
     private Integer maxCpuCores;
@@ -108,42 +176,18 @@ public class ResourceGroup {
     public ResourceGroup() {
     }
 
-    private List<String> showClassifier(ResourceGroupClassifier classifier) {
-        List<String> row = new ArrayList<>();
-        row.add(this.name);
-        row.add("" + this.id);
-        row.add("" + cpuCoreLimit);
-        row.add("" + (memLimit * 100) + "%");
-        row.add("" + maxCpuCores);
-        if (bigQueryCpuSecondLimit != null) {
-            row.add("" + bigQueryCpuSecondLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryScanRowsLimit != null) {
-            row.add("" + bigQueryScanRowsLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryMemLimit != null) {
-            row.add("" + bigQueryMemLimit);
-        } else {
-            row.add("" + 0);
-        }
-        row.add("" + concurrencyLimit);
-        if (spillMemLimitThreshold != null) {
-            row.add("" + (spillMemLimitThreshold * 100) + "%");
-        } else {
-            row.add("" + "100%");
-        }
-        row.add("" + resourceGroupType.name().substring("WG_".length()));
-        row.add(classifier.toString());
-        return row;
+    private List<String> showClassifier(ResourceGroupClassifier classifier, boolean verbose) {
+        return COLUMN_METAS.stream()
+                .filter(meta -> verbose || meta.visible)
+                .map(meta -> meta.valueSupplier.apply(this, classifier))
+                .collect(Collectors.toList());
     }
 
-    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip) {
-        return classifiers.stream().filter(c -> c.isVisible(user, activeRoles, ip))
-                .map(this::showClassifier).collect(Collectors.toList());
+    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip, boolean verbose) {
+        return classifiers.stream()
+                .filter(c -> c.isVisible(user, activeRoles, ip))
+                .map(c -> showClassifier(c, verbose))
+                .collect(Collectors.toList());
     }
 
     public long getVersion() {
@@ -154,11 +198,13 @@ public class ResourceGroup {
         this.version = version;
     }
 
-    public List<List<String>> show() {
+    public List<List<String>> show(boolean verbose) {
         if (classifiers.isEmpty()) {
-            return Collections.singletonList(showClassifier(new ResourceGroupClassifier()));
+            return Collections.singletonList(showClassifier(new ResourceGroupClassifier(), verbose));
         }
-        return classifiers.stream().map(this::showClassifier).collect(Collectors.toList());
+        return classifiers.stream()
+                .map(c -> showClassifier(c, verbose))
+                .collect(Collectors.toList());
     }
 
     public String getName() {
@@ -181,8 +227,8 @@ public class ResourceGroup {
         TWorkGroup twg = new TWorkGroup();
         twg.setName(name);
         twg.setId(id);
-        if (cpuCoreLimit != null) {
-            twg.setCpu_core_limit(cpuCoreLimit);
+        if (cpuWeight != null) {
+            twg.setCpu_core_limit(cpuWeight);
         }
         if (memLimit != null) {
             twg.setMem_limit(memLimit);
@@ -214,16 +260,56 @@ public class ResourceGroup {
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
         }
+
+        twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
+
         twg.setVersion(version);
         return twg;
     }
 
-    public Integer getCpuCoreLimit() {
-        return cpuCoreLimit;
+    public Integer getRawCpuWeight() {
+        return cpuWeight;
     }
 
-    public void setCpuCoreLimit(int cpuCoreLimit) {
-        this.cpuCoreLimit = cpuCoreLimit;
+    public void setCpuWeight(int cpuWeight) {
+        this.cpuWeight = cpuWeight;
+    }
+
+    public int geNormalizedCpuWeight() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return 0;
+        }
+        return cpuWeight;
+    }
+
+    /**
+     * The old version considers cpu_weight as a positive integer, but now it can be non-positive.
+     * To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
+     * And use geNormalizedCpuWeight() to get the normalized value when using cpu_weight.
+     */
+    public void normalizeCpuWeight() {
+        if (cpuWeight == null || cpuWeight <= 0) {
+            cpuWeight = 1;
+        }
+    }
+
+    public Integer getExclusiveCpuCores() {
+        return exclusiveCpuCores;
+    }
+    public int getNormalizedExclusiveCpuCores() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return exclusiveCpuCores;
+        }
+        // For compatibility, resource group of deprecated type `short_query` uses `cpu_weight` (the original `cpu_core_limit`)
+        // as the reserved cores.
+        if (resourceGroupType == TWorkGroupType.WG_SHORT_QUERY && cpuWeight != null && cpuWeight > 0) {
+            return cpuWeight;
+        }
+        return 0;
+    }
+
+    public void setExclusiveCpuCores(Integer exclusiveCpuCores) {
+        this.exclusiveCpuCores = exclusiveCpuCores;
     }
 
     public boolean isMaxCpuCoresEffective() {
@@ -321,6 +407,18 @@ public class ResourceGroup {
     @Override
     public int hashCode() {
         return Objects.hash(id, version);
+    }
+
+    public static void validateCpuParameters(Integer cpuWeight, Integer exclusiveCpuCores) {
+        if ((cpuWeight == null || cpuWeight <= 0) && (exclusiveCpuCores == null || exclusiveCpuCores <= 0)) {
+            throw new SemanticException(String.format("property '%s' or '%s' must be positive",
+                    ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
+        }
+        if ((cpuWeight != null && cpuWeight > 0) && (exclusiveCpuCores != null && exclusiveCpuCores > 0)) {
+            throw new SemanticException(
+                    String.format("property '%s' and '%s' cannot be present and positive at the same time",
+                            ResourceGroup.CPU_WEIGHT, ResourceGroup.EXCLUSIVE_CPU_CORES));
+        }
     }
 
 }

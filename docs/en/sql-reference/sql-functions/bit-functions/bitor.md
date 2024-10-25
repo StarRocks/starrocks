@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # bitor
 
-## Description
+
 
 Returns the bitwise OR of two numeric expressions.
 

@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 80
 ---
 
 # Blacklist Management
@@ -19,9 +20,9 @@ admin set frontend config ("enable_sql_blacklist" = "true")
 The admin user who has ADMIN_PRIV privileges can manage blacklists by executing the following commands:
 
 ~~~sql
-ADD SQLBLACKLIST #sql# 
-DELETE SQLBLACKLIST #sql# 
-SHOW SQLBLACKLISTS  
+ADD SQLBLACKLIST "<sql>"
+DELETE SQLBLACKLIST <sql_index_number>
+SHOW SQLBLACKLISTS
 ~~~
 
 * When `enable_sql_blacklist` is true, every SQL query needs to be filtered by sqlblacklist. If it matches, the user will be informed that theSQL is in the blacklist. Otherwise, the SQL will be executed normally. The message may be as follows when the SQL is blacklisted:
@@ -31,10 +32,16 @@ SHOW SQLBLACKLISTS
 ## Add blacklist
 
 ~~~sql
-ADD SQLBLACKLIST #sql#
+ADD SQLBLACKLIST "<sql>"
 ~~~
 
-**#sql#** is a regular expression for a certain type of SQL. Since SQL itself contains the common characters `(`, `)`, `*`, `.` that may be mixed up with the semantics of regular expressions, so we need to distinguish those by  using escape characters. Given that `(` and `)` are used too often in SQL, there is no need to use escape characters. Other special characters need to use the escape character `\` as a prefix. For example:
+**sql** is a regular expression for a certain type of SQL.
+
+:::tip
+Currently, StarRocks supports adding SELECT statements to the SQL Blacklist.
+:::
+
+Since SQL itself contains the common characters `(`, `)`, `*`, `.` that may be mixed up with the semantics of regular expressions, so we need to distinguish those by  using escape characters. Given that `(` and `)` are used too often in SQL, there is no need to use escape characters. Other special characters need to use the escape character `\` as a prefix. For example:
 
 * Prohibit `count(\*)`:
 
@@ -88,13 +95,15 @@ The SQL shown in `Forbidden SQL` is escaped for all SQL semantic characters.
 ## Delete blacklist
 
 ~~~sql
-DELETE SQLBLACKLIST #indexlist#
+DELETE SQLBLACKLIST <sql_index_number>
 ~~~
 
-For example, delete the sqlblacklist 3 and 4 in the above blacklist:
+`<sql_index_number>` is a list of SQL IDs separated by comma (,).
+
+For example, delete the No.3 and No.4 SQLs in the above blacklist:
 
 ~~~sql
-delete sqlblacklist  3, 4;   -- #indexlist# is a list of IDs separated by comma (,).
+delete sqlblacklist  3, 4;
 ~~~
 
 Then, the remaining sqlblacklist is as follows:

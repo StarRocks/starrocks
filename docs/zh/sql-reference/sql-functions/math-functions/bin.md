@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bin
 
-## 功能
+
 
 将参数`x`转成二进制。
 

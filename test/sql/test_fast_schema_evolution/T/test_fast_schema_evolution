@@ -205,7 +205,9 @@ select * from tab1;
 alter table tab1 modify column c1 largeint;
 function: wait_alter_table_finish()
 
-select * from tab1;
+alter table tab1 add column date1 datetime default current_timestamp;
+function: wait_alter_table_finish()
+show create table tab1;
 
 drop table tab1;
 drop database test_fast_schema_evolution_and_alter;
@@ -351,6 +353,7 @@ alter table tab1 add rollup r1 (k2,v2,v1);
 function: wait_alter_table_finish("ROLLUP", 8)
 
 alter table tab1 add column v6 bigint default "1";
+function: wait_alter_table_finish()
 select * from tab1;
 
 alter table tab1 drop column v2;

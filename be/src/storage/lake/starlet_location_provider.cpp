@@ -30,5 +30,20 @@ std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
     return build_starlet_uri(tablet_id, "");
 }
 
+StatusOr<std::string> StarletLocationProvider::real_location(const std::string& virtual_path) const {
+    ASSIGN_OR_RETURN(auto path_and_id, parse_starlet_uri(virtual_path));
+    auto info_or = g_worker->retrieve_shard_info(path_and_id.second);
+    if (!info_or.ok()) {
+        return to_status(info_or.status());
+    }
+    const auto& root_path = info_or->path_info.full_path();
+    const auto& child_path = path_and_id.first;
+    if (root_path.ends_with('/') || child_path.starts_with('/')) {
+        return fmt::format("{}{}", info_or->path_info.full_path(), path_and_id.first);
+    } else {
+        return fmt::format("{}/{}", info_or->path_info.full_path(), path_and_id.first);
+    }
+}
+
 } // namespace starrocks::lake
 #endif // USE_STAROS

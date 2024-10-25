@@ -40,7 +40,7 @@ public:
 
     bool has_output() const override { return false; }
     bool need_input() const override;
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;

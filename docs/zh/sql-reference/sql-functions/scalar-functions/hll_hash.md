@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # hll_hash
 
-## 功能
+
 
 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。
 

@@ -2,6 +2,9 @@
 set enable_pipeline_engine=false;
 -- result:
 -- !result
+set enable_constant_execute_in_fe = false;
+-- result:
+-- !result
 select 1;
 -- result:
 [REGEX].*non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.*

@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
 # where to put generated binaries
@@ -36,7 +32,7 @@ add_library(Service
 )
 
 # only build starrocks_be when TEST is off
-if (NOT ${MAKE_TEST} STREQUAL "ON")
+if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     add_executable(starrocks_be
         starrocks_main.cpp
         )

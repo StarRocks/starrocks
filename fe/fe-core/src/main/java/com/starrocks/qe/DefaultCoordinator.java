@@ -41,9 +41,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
@@ -56,6 +58,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -66,11 +69,15 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.QueryRuntimeProfile;
+import com.starrocks.qe.scheduler.dag.AllAtOnceExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,6 +86,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryType;
@@ -98,10 +106,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -154,6 +162,8 @@ public class DefaultCoordinator extends Coordinator {
     private ShortCircuitExecutor shortCircuitExecutor = null;
     private boolean isShortCircuit = false;
     private boolean isBinaryRow = false;
+
+    private ExecutionSchedule schedule;
 
     public static class Factory implements Coordinator.Factory {
 
@@ -220,7 +230,8 @@ public class DefaultCoordinator extends Coordinator {
 
         @Override
         public DefaultCoordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
-                                                                        DescriptorTable descTable, List<PlanFragment> fragments,
+                                                                        DescriptorTable descTable,
+                                                                        List<PlanFragment> fragments,
                                                                         List<ScanNode> scanNodes) {
 
             JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(context, queryId, descTable, fragments,
@@ -261,7 +272,8 @@ public class DefaultCoordinator extends Coordinator {
         FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
         executionDAG.addExecution(execState);
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, 1);
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        queryProfile.initFragmentProfiles(1);
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
@@ -273,10 +285,10 @@ public class DefaultCoordinator extends Coordinator {
         this.jobSpec = jobSpec;
         this.returnedAllResults = false;
 
-        this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
+        final boolean enablePhasedScheduler = context.getSessionVariable().enablePhasedScheduler();
+        this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec, enablePhasedScheduler);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
         List<PlanFragment> fragments = jobSpec.getFragments();
         List<ScanNode> scanNodes = jobSpec.getScanNodes();
         TDescriptorTable descTable = jobSpec.getDescTable();
@@ -285,12 +297,23 @@ public class DefaultCoordinator extends Coordinator {
             isBinaryRow = true;
         }
 
-        shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
-                isBinaryRow, jobSpec.isNeedReport(), jobSpec.getPlanProtocol());
+        shortCircuitExecutor =
+                ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow,
+                        jobSpec.isNeedReport(),
+                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
         }
+        if (enablePhasedScheduler) {
+            schedule = new PhasedExecutionSchedule(connectContext);
+        } else {
+            schedule = new AllAtOnceExecutionSchedule();
+        }
+
+        this.queryProfile =
+                new QueryRuntimeProfile(connectContext, jobSpec,
+                        isShortCircuit);
     }
 
     @Override
@@ -418,6 +441,11 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor.getWorkerProvider().isWorkerSelected(backendID);
     }
 
+    @Override
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
     private void lock() {
         lock.lock();
     }
@@ -456,6 +484,12 @@ public class DefaultCoordinator extends Coordinator {
             jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
         }
 
+        if (connectContext != null) {
+            if (connectContext.getSessionVariable().isEnableConnectorIncrementalScanRanges()) {
+                jobSpec.setIncrementalScanRanges(true);
+            }
+        }
+
         coordinatorPreprocessor.prepareExec();
 
         prepareResultSink();
@@ -467,6 +501,9 @@ public class DefaultCoordinator extends Coordinator {
     public void onFinished() {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         jobSpec.getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -512,6 +549,18 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
+        try {
+            schedule.tryScheduleNextTurn(fragmentInstanceId);
+        } catch (Exception e) {
+            LOG.warn("schedule fragment:{} next internal error:", DebugUtil.printId(fragmentInstanceId), e);
+            cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
+            return Status.internalError(e.getMessage());
+        }
+        return Status.OK;
+    }
+
+    @Override
     public String getSchedulerExplain() {
         return executionDAG.getFragmentsInPreorder().stream()
                 .map(ExecutionFragment::getExplainString)
@@ -519,10 +568,27 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void prepareProfile() {
+        this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
+
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
-            jobSpec.getQueryOptions().setEnable_profile(true);
+            // for non-pipeline engine, enable_profile is renamed from is_report_success,
+            // which is not only for report profile but also for report success.
+            // for pipeline engine, enable_profile is only for report profile.
+            // when enable_profile is true by default, the runtime profile of pipeline engine may use a lot of memory.
+            // so we only set enable_profile to true when use non-pipeline engine.
+            if (!jobSpec.isEnablePipeline()) {
+                jobSpec.getQueryOptions().setEnable_profile(true);
+            }
+            if (jobSpec.isBrokerLoad() && jobSpec.getQueryOptions().getBig_query_profile_threshold() == 0) {
+                jobSpec.getQueryOptions()
+                        .setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (jobSpec.getQueryOptions().getRuntime_profile_report_interval() < 30) {
+                jobSpec.getQueryOptions().setRuntime_profile_report_interval(30);
+            }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
@@ -541,14 +607,6 @@ public class DefaultCoordinator extends Coordinator {
         setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcIpAddress());
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
-            // TODO (by satanson): Other DataSink except ResultSink can not support global
-            //  runtime filter merging at present, we should support it in future.
-            // pipeline-level runtime filter needs to derive RuntimeFilterLayout, so we collect
-            // RuntimeFilterDescription
-            for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
-                PlanFragment fragment = execFragment.getPlanFragment();
-                fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            }
             return;
         }
 
@@ -581,15 +639,68 @@ public class DefaultCoordinator extends Coordinator {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
-                            this::handleErrorExecution);
-            for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
-                deployer.deployFragments(concurrentFragments, needDeploy);
-            }
-
+                            this::handleErrorExecution, needDeploy);
+            schedule.prepareSchedule(this, deployer, executionDAG);
+            this.schedule.schedule();
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();
         }
+    }
+
+    @Override
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws UserException {
+        List<DeployState> updatedStates = new ArrayList<>();
+        if (!jobSpec.isIncrementalScanRanges()) {
+            return updatedStates;
+        }
+        for (DeployState state : deployStates) {
+
+            Set<PlanFragmentId> planFragmentIds = new HashSet<>();
+            for (List<FragmentInstanceExecState> fragmentInstanceExecStates : state.getThreeStageExecutionsToDeploy()) {
+                for (FragmentInstanceExecState execState : fragmentInstanceExecStates) {
+                    planFragmentIds.add(execState.getFragmentId());
+                }
+            }
+
+            Set<PlanFragmentId> updatedPlanFragmentIds = new HashSet<>();
+            for (PlanFragmentId fragmentId : planFragmentIds) {
+                boolean hasMoreScanRanges = false;
+                ExecutionFragment fragment = executionDAG.getFragment(fragmentId);
+                for (ScanNode scanNode : fragment.getScanNodes()) {
+                    if (scanNode.hasMoreScanRanges()) {
+                        hasMoreScanRanges = true;
+                    }
+                }
+                if (hasMoreScanRanges) {
+                    coordinatorPreprocessor.assignIncrementalScanRangesToFragmentInstances(fragment);
+                    updatedPlanFragmentIds.add(fragmentId);
+                }
+            }
+
+            if (updatedPlanFragmentIds.isEmpty()) {
+                continue;
+            }
+
+            DeployState newState = new DeployState();
+            updatedStates.add(newState);
+            int index = 0;
+            for (List<FragmentInstanceExecState> fragmentInstanceExecStates : state.getThreeStageExecutionsToDeploy()) {
+                List<FragmentInstanceExecState> res = newState.getThreeStageExecutionsToDeploy().get(index);
+                index += 1;
+                for (FragmentInstanceExecState execState : fragmentInstanceExecStates) {
+                    if (!updatedPlanFragmentIds.contains(execState.getFragmentId())) {
+                        continue;
+                    }
+                    FragmentInstance instance = execState.getFragmentInstance();
+                    TExecPlanFragmentParams request = deployer.createIncrementalScanRangesRequest(instance);
+                    execState.setRequestToDeploy(request);
+                    res.add(execState);
+                }
+            }
+        }
+        return updatedStates;
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
@@ -600,9 +711,11 @@ public class DefaultCoordinator extends Coordinator {
                 throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 SimpleScheduler.addToBlocklist(execution.getWorker().getId());
-                throw new RpcException(execution.getWorker().getHost(), "rpc failed");
+                throw new RpcException(
+                        String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
+                        failure);
             default:
-                throw new UserException(status.getErrorMsg());
+                throw new UserException(status.getErrorMsg(), failure);
         }
     }
 
@@ -649,8 +762,6 @@ public class DefaultCoordinator extends Coordinator {
 
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             PlanFragment fragment = execFragment.getPlanFragment();
-            fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
-            fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
                 for (final FragmentInstance instance : execFragment.getInstances()) {
@@ -791,7 +902,12 @@ public class DefaultCoordinator extends Coordinator {
                 if (hostIndex != -1) {
                     errMsg = errMsg.substring(0, hostIndex);
                 }
-                throw new UserException(errMsg);
+                InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
+                if (copyStatus.isCancelled() &&
+                        copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                    ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                }
+                throw new UserException(ec, errMsg);
             }
         }
 
@@ -801,10 +917,13 @@ public class DefaultCoordinator extends Coordinator {
             // if this query is a block query do not cancel.
             long numLimitRows = executionDAG.getRootFragment().getPlanFragment().getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1 && hasLimit &&
-                    numReceivedRows >= numLimitRows) {
-                LOG.debug("no block query, return num >= limit rows, need cancel");
-                cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+            if (!jobSpec.isBlockQuery() && executionDAG.getInstanceIds().size() > 1) {
+                if (hasLimit && numReceivedRows >= numLimitRows) {
+                    LOG.debug("no block query, return num >= limit rows, need cancel");
+                    cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
+                } else {
+                    cancelInternal(PPlanFragmentCancelReason.QUERY_FINISHED);
+                }
             }
         } else {
             numReceivedRows += resultBatch.getBatch().getRowsSize();
@@ -845,21 +964,39 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private boolean isInternalCancel(PPlanFragmentCancelReason cancelReason) {
+        return cancelReason.equals(PPlanFragmentCancelReason.LIMIT_REACH) ||
+                cancelReason.equals(PPlanFragmentCancelReason.QUERY_FINISHED);
+    }
+
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-        if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
+        if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
         if (null != receiver) {
             receiver.cancel();
         }
-        cancelRemoteFragmentsAsync(cancelReason);
-        if (cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
+        if (isPhasedSchedule()) {
+            cancelRemoteQueryContext(cancelReason);
+        } else {
+            cancelRemoteFragmentsAsync(cancelReason);
+        }
+        if (!isInternalCancel(cancelReason)) {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
             }
         }
+    }
+
+    private boolean isPhasedSchedule() {
+        return schedule instanceof PhasedExecutionSchedule;
+    }
+
+    // For phased schedule execution, we cancel the query context. (BE will cancel the relevant fragment internally)
+    private void cancelRemoteQueryContext(PPlanFragmentCancelReason cancelReason) {
+        executionDAG.cancelQueryContext(cancelReason);
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
@@ -889,12 +1026,12 @@ public class DefaultCoordinator extends Coordinator {
 
         queryProfile.updateProfile(execState, params);
 
+        if (!execState.updateExecStatus(params)) {
+            return;
+        }
+
         lock();
         try {
-            if (!execState.updateExecStatus(params)) {
-                return;
-            }
-
             queryProfile.updateLoadChannelProfile(params);
         } finally {
             unlock();
@@ -988,7 +1125,10 @@ public class DefaultCoordinator extends Coordinator {
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
-            queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            boolean isFinished = queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            if (!isFinished) {
+                LOG.warn("failed to get profile within {} seconds", timeout);
+            }
         }
 
         lock();
@@ -1000,7 +1140,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
-        if (executionDAG.getExecutions().isEmpty()) {
+        if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
         if (!jobSpec.isNeedReport()) {
@@ -1045,9 +1185,10 @@ public class DefaultCoordinator extends Coordinator {
         final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
+        boolean awaitRes = false;
         while (leftTimeoutS > 0) {
             long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            boolean awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1063,11 +1204,19 @@ public class DefaultCoordinator extends Coordinator {
 
             leftTimeoutS -= waitTime;
         }
+
+        if (!awaitRes) {
+            LOG.warn("failed to get profile within {} seconds", timeoutS);
+        }
         return false;
     }
 
+    // build execution profile  from every BE's report
     @Override
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (isShortCircuit) {
+            return shortCircuitExecutor.buildQueryProfile(needMerge);
+        }
         return queryProfile.buildQueryProfile(needMerge);
     }
 
@@ -1127,13 +1276,21 @@ public class DefaultCoordinator extends Coordinator {
         return this.queryProfile.isProfileAlreadyReported();
     }
 
-    private void execShortCircuit() {
-        shortCircuitExecutor.exec();
-        Optional<RuntimeProfile> runtimeProfile = shortCircuitExecutor.getRuntimeProfile();
-        if (jobSpec.isNeedReport() && runtimeProfile.isPresent()) {
-            RuntimeProfile profile = runtimeProfile.get();
-            profile.setName("Short Circuit Executor");
-            queryProfile.getQueryProfile().addChild(profile);
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
         }
+        return connectContext.getSessionVariable().getWarehouseName();
+    }
+
+    @Override
+    public String getResourceGroupName() {
+        return jobSpec.getResourceGroup() == null ? ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME :
+                jobSpec.getResourceGroup().getName();
+    }
+
+    private void execShortCircuit() throws Exception {
+        shortCircuitExecutor.exec();
     }
 }

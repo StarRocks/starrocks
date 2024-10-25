@@ -60,6 +60,9 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule TABLE_FUNCTION_TABLE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
+    public static final PruneHDFSScanColumnRule ICEBERG_METADATA_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
     }
@@ -142,6 +145,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                                 scanOperator.getPredicate());
                 newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
                 newScanOperator.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
+                newScanOperator.setTableVersionRange(scanOperator.getTableVersionRange());
+
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } catch (Exception e) {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
@@ -160,13 +165,13 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                         collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
         if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
-            throw new StarRocksPlannerException("Table partition by float/decimal datatype is not supported",
+            throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
                     ErrorType.UNSUPPORTED);
         }
     }
 
     private boolean notSupportedPartitionColumnType(Type type) {
-        return type.isFloat() || type.isDecimalOfAnyVersion();
+        return type.isFloat() || type.isDouble() || type.isDecimalOfAnyVersion();
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {

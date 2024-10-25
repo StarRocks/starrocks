@@ -121,20 +121,18 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         return asyncLoad(key, executor);
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column)
-            throws AnalysisException {
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column) {
         return queryStatisticsData(context, tableId, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns)
-            throws AnalysisException {
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns) {
         return statisticExecutor.queryStatisticSync(context, null, tableId, columns);
     }
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statisticData.dbId);
         MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
-        Table table = db.getTable(statisticData.tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), statisticData.tableId);
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
         }

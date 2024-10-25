@@ -96,14 +96,19 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
-            if (hasCountAgg) {
+
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) || hasCountAgg) {
                 Column copiedColumn = new Column(c);
-                copiedColumn.setIsAllowNull(true);
+                if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                    copiedColumn.setType(Type.BIGINT);
+                }
+                if (hasCountAgg) {
+                    copiedColumn.setIsAllowNull(true);
+                }
                 newScanColumnRefs.put(metaColumn, copiedColumn);
             } else {
                 newScanColumnRefs.put(metaColumn, c);
             }
-
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();

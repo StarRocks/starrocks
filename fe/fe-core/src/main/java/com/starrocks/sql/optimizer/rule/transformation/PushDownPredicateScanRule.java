@@ -30,8 +30,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
-import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
-import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -54,6 +52,13 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule PAIMON_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
+    public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+
+    public static final PushDownPredicateScanRule ICEBERG_EQUALITY_DELETE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
+    public static final PushDownPredicateScanRule KUDU_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_KUDU_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
@@ -82,13 +87,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
-        // simplify case-when
-        if (context.getSessionVariable().isEnableSimplifyCaseWhen()) {
-            predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
-                    SimplifiedCaseWhenRule.INSTANCE,
-                    PruneTediousPredicateRule.INSTANCE
-            ));
-        }
+
+        predicates = ScalarOperatorRewriter.simplifyCaseWhen(predicates);
 
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)

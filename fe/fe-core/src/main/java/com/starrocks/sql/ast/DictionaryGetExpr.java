@@ -31,15 +31,18 @@ public class DictionaryGetExpr extends Expr {
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
+    private boolean nullIfNotExist;
 
     public DictionaryGetExpr(List<Expr> params) {
         this(params, NodePosition.ZERO);
+        this.nullIfNotExist = false;
     }
 
     public DictionaryGetExpr(List<Expr> params, NodePosition pos) {
         super(pos);
         this.children.addAll(params);
         this.skipStateCheck = false;
+        this.nullIfNotExist = false;
     }
 
     protected DictionaryGetExpr(DictionaryGetExpr other) {
@@ -52,18 +55,20 @@ public class DictionaryGetExpr extends Expr {
         this.dictionaryId = other.getDictionaryId();
         this.dictionaryTxnId = other.getDictionaryTxnId();
         this.keySize = other.getKeySize();
+        this.nullIfNotExist = other.getNullIfNotExist();
+        this.type = other.getType();
     }
 
     @Override
     protected String toSqlImpl() {
         String message = "DICTIONARY_GET(";
-        for (int i = 0; i < this.children.size(); ++i) {
+        int size = (this.children.size() == 3) ? this.children.size() - 1 : this.children.size();
+        for (int i = 0; i < size; ++i) {
             Expr expr = this.children.get(i);
             message += expr.toSql();
-            if (i != this.children.size() - 1) {
-                message += ", ";
-            }
+            message += ", ";
         }
+        message += (nullIfNotExist ? "true" : "false");
         message += ")";
         return message;
     }
@@ -74,6 +79,7 @@ public class DictionaryGetExpr extends Expr {
         dictionaryGetExpr.setDict_id(dictionaryId);
         dictionaryGetExpr.setTxn_id(dictionaryTxnId);
         dictionaryGetExpr.setKey_size(keySize);
+        dictionaryGetExpr.setNull_if_not_exist(nullIfNotExist);
         setDictionaryGetExpr(dictionaryGetExpr);
 
         msg.setNode_type(TExprNodeType.DICTIONARY_GET_EXPR);
@@ -123,6 +129,14 @@ public class DictionaryGetExpr extends Expr {
 
     public int getKeySize() {
         return this.keySize;
+    }
+
+    public void setNullIfNotExist(boolean nullIfNotExist) {
+        this.nullIfNotExist = nullIfNotExist;
+    }
+
+    public boolean getNullIfNotExist() {
+        return this.nullIfNotExist;
     }
 
     @Override

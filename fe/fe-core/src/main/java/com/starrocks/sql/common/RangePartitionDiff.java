@@ -25,25 +25,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-public class RangePartitionDiff {
+public class RangePartitionDiff extends PartitionDiff {
 
     private static final Logger LOG = LogManager.getLogger(RangePartitionDiff.class);
 
     private Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
-    private Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
     private Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
     public RangePartitionDiff() {
-    }
-
-    public Map<String, Set<String>> getRollupToBasePartitionMap() {
-        return rollupToBasePartitionMap;
-    }
-
-    public void setRollupToBasePartitionMap(Map<String, Set<String>> rollupToBasePartitionMap) {
-        this.rollupToBasePartitionMap = rollupToBasePartitionMap;
     }
 
     public Map<String, Range<PartitionKey>> getAdds() {
@@ -69,11 +59,10 @@ public class RangePartitionDiff {
      * Merged => [p0, p1, p2, p3]
      * NOTE: for intersected partitions, they must be identical
      */
-    public static RangePartitionDiff merge(List<RangePartitionDiff> diffList) {
+    public static void checkRangePartitionAligned(List<RangePartitionDiff> diffList) {
         if (diffList.size() == 1) {
-            return diffList.get(0);
+            return;
         }
-        RangePartitionDiff result = new RangePartitionDiff();
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (RangePartitionDiff diff : diffList) {
             for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
@@ -83,19 +72,23 @@ public class RangePartitionDiff {
                 if (!intersectedRange.isEmpty()) {
                     Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
                     if (intersectedRange.size() > 1 ||
-                            !existingRange.equals(add.getValue()) ||
-                            !addRanges.getEntry(existingRange.lowerEndpoint()).getKey().equals(add.getValue())) {
+                            !existingRange.equals(add.getValue())) {
                         throw new IllegalArgumentException(
                                 "partitions are intersected: " + existingRange + " and " + add);
                     }
                 }
             }
             diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
-            result.getAdds().putAll(diff.getAdds());
-            result.getDeletes().putAll(diff.getDeletes());
-            result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
         }
-        result.getDeletes().keySet().removeAll(result.getAdds().keySet());
-        return result;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("RangePartitionDiff{");
+        sb.append("adds=").append(adds);
+        sb.append(", deletes=").append(deletes);
+        sb.append('}');
+        return sb.toString();
     }
 }

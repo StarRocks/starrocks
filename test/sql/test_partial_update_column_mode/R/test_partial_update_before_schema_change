@@ -42,9 +42,9 @@ insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
 -- !result
 select * from tab1;
 -- result:
-300	k3_300	300	300	300	v4_300	v5_300
 200	k2_200	200	200	200	v4_200	v5_200
 100	k2_100	100	100	100	v4_100	v5_100
+300	k3_300	300	300	300	v4_300	v5_300
 -- !result
 insert into tab2 values (100, 100, 100, 100);
 -- result:
@@ -57,9 +57,9 @@ insert into tab2 values (300, 300, 300, 300);
 -- !result
 select * from tab2;
 -- result:
+300	300	300	300
 200	200	200	200
 100	100	100	100
-300	300	300	300
 -- !result
 update tab1 set v1 = (select sum(tab2.v1) from tab2), v2 = (select sum(tab2.v2) from tab2);
 -- result:
@@ -92,9 +92,9 @@ None
 -- !result
 select * from tab1;
 -- result:
+200	k2_200	600	200	v4_200	v5_200	100
 100	k2_100	600	100	v4_100	v5_100	100
 300	k3_300	600	300	v4_300	v5_300	100
-200	k2_200	600	200	v4_200	v5_200	100
 -- !result
 alter table tab1 drop column v5;
 -- result:
@@ -106,8 +106,8 @@ None
 select * from tab1;
 -- result:
 200	k2_200	600	200	v4_200	100
-100	k2_100	600	100	v4_100	100
 300	k3_300	600	300	v4_300	100
+100	k2_100	600	100	v4_100	100
 -- !result
 alter table tab1 modify column v1 BIGINT;
 -- result:
@@ -118,9 +118,9 @@ None
 -- !result
 select * from tab1;
 -- result:
-100	k2_100	600	100	v4_100	100
-200	k2_200	600	200	v4_200	100
 300	k3_300	600	300	v4_300	100
+200	k2_200	600	200	v4_200	100
+100	k2_100	600	100	v4_100	100
 -- !result
 alter table tab1 modify column v3 BIGINT;
 -- result:
@@ -131,7 +131,7 @@ None
 -- !result
 select * from tab1;
 -- result:
-200	k2_200	600	200	v4_200	100
-300	k3_300	600	300	v4_300	100
 100	k2_100	600	100	v4_100	100
+300	k3_300	600	300	v4_300	100
+200	k2_200	600	200	v4_200	100
 -- !result

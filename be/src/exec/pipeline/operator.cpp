@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
@@ -42,6 +43,10 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+    // some pipeline may have multiple limit operators with same plan_node_id, so add operator id to profile name
+    if (upper_name == "LIMIT") {
+        profile_name += " (operator id=" + std::to_string(id) + ")";
+    }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
@@ -96,7 +101,8 @@ void Operator::set_precondition_ready(RuntimeState* state) {
     const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
     _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
                                instance_runtime_filters.end());
-    VLOG_QUERY << "local in runtime filter num:" << _runtime_in_filters.size();
+    VLOG_QUERY << "plan_node_id:" << _plan_node_id << " sequence:" << _driver_sequence
+               << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
 }
 
 const LocalRFWaitingSet& Operator::rf_waiting_set() const {
@@ -195,6 +201,30 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
     return Status::OK();
 }
 
+Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
+    _init_conjuct_counters();
+    {
+        SCOPED_TIMER(_conjuncts_timer);
+        auto& in_filters = runtime_in_filters();
+        std::vector<ExprContext*> selected_vector;
+        for (ExprContext* in_filter : in_filters) {
+            if (in_filter->build_from_only_in_filter()) {
+                selected_vector.push_back(in_filter);
+            }
+        }
+        size_t before = chunk->num_rows();
+        _conjuncts_input_counter->update(before);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        size_t after = chunk->num_rows();
+        _conjuncts_output_counter->update(after);
+    }
+
+    return Status::OK();
+}
+
 Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter) {
     if (conjuncts.empty()) {
         return Status::OK();
@@ -258,6 +288,24 @@ void Operator::_init_conjuct_counters() {
         _conjuncts_timer = ADD_TIMER(_common_metrics, "ConjunctsTime");
         _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
+    }
+}
+
+void Operator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
+        ctx->update_push_rows_stats(_plan_node_id, _push_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
+            _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
     }
 }
 

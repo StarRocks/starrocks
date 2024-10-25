@@ -41,7 +41,7 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
-#include "storage/inverted/inverted_writer.h"
+#include "storage/index/inverted/inverted_writer.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -72,6 +72,7 @@ struct ColumnWriterOptions {
     bool need_zone_map = false;
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
+    bool need_vector_index = false;
     bool need_inverted_index = false;
     std::unordered_map<IndexType, std::string> standalone_index_file_paths;
     std::unordered_map<IndexType, TabletIndex> tablet_index;
@@ -85,6 +86,7 @@ struct ColumnWriterOptions {
     GlobalDictMap* global_dict = nullptr;
 
     bool need_flat = false;
+    bool is_compaction = false;
 
     std::string field_name;
 };
@@ -131,6 +133,8 @@ public:
     virtual Status write_bloom_filter_index() = 0;
 
     virtual Status write_inverted_index() { return Status::OK(); }
+
+    virtual Status write_vector_index(uint64_t* index_size) { return Status::OK(); }
 
     virtual ordinal_t get_next_rowid() const = 0;
 

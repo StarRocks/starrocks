@@ -26,17 +26,37 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 public class MvRewriteStrategy {
     public static final MvRewriteStrategy DEFAULT = new MvRewriteStrategy();
 
+    /**
+     * Materialized view rewrite strategy, when multi stages is enabled, we will rewrite query plan in multi stages.
+     * - Default: rewrite the query after required rules are executed in rule based rewrite stage.
+     * - MultiStage: rewrite the query in early stage(before some rules which may break plans' structure) and later stage
+     * (required rules are executed) in rule based rewrite stage.
+     * Attention: MultiStage may increase rewrite optimizer time, so it's disabled by default.
+     */
+    public enum MVStrategy {
+        DEFAULT(0),
+        MULTI_STAGES(1);
+        private int ordinal;
+        MVStrategy(int ordinal) {
+            this.ordinal = ordinal;
+        }
+        public int getOrdinal() {
+            return this.ordinal;
+        }
+        public boolean isMultiStages() {
+            return this == MULTI_STAGES;
+        }
+    }
+
     // general config
     public boolean enableMaterializedViewRewrite = false;
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
     public boolean enableForceRBORewrite = false;
+    public MVStrategy mvStrategy = MVStrategy.DEFAULT;
 
-    // rbo config
-    public boolean enableRBOViewBasedRewrite = false;
-    public boolean enableRBOSingleTableRewrite = false;
-
-    // cbo config
-    public boolean enableCBORewrite = false;
+    public boolean enableViewBasedRewrite = false;
+    public boolean enableSingleTableRewrite = false;
+    public boolean enableMultiTableRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -73,7 +93,7 @@ public class MvRewriteStrategy {
 
         private boolean isEnableRBOViewBasedRewrite() {
             return optimizerContext.getQueryMaterializationContext() != null
-                    && optimizerContext.getQueryMaterializationContext().getLogicalTreeWithView() != null
+                    && optimizerContext.getQueryMaterializationContext().getQueryOptPlanWithView() != null
                     && sessionVariable.isEnableViewBasedMvRewrite()
                     && !sessionVariable.isEnableCBOViewBasedMvRewrite();
         }
@@ -111,27 +131,44 @@ public class MvRewriteStrategy {
      * @param optimizerContext: optimizer context
      * @param connectContext: connect context
      * @param queryPlan: query plan to rewrite or not
-     * @param strategy: mv rewrite strategy to be updated
      */
-    public static void prepareRewriteStrategy(OptimizerContext optimizerContext,
-                                              ConnectContext connectContext,
-                                              OptExpression queryPlan,
-                                              MvRewriteStrategy strategy) {
+    public static MvRewriteStrategy prepareRewriteStrategy(OptimizerContext optimizerContext,
+                                                           ConnectContext connectContext,
+                                                           OptExpression queryPlan) {
+        MvRewriteStrategy strategy = new MvRewriteStrategy();
         Preconditions.checkState(strategy != null, "MvRewriteStrategy is null");
         MvStrategyArbitrator arbitrator = new MvStrategyArbitrator(optimizerContext, connectContext);
         strategy.enableMaterializedViewRewrite = arbitrator.isEnableMaterializedViewRewrite();
         // only rewrite when enableMaterializedViewRewrite is enabled
         if (!strategy.enableMaterializedViewRewrite) {
-            return;
+            return DEFAULT;
         }
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+
+        // only enable multi-stages when force rewrite is enabled
+        if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+            strategy.mvStrategy = MVStrategy.MULTI_STAGES;
+        }
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();
 
         // rbo strategies
-        strategy.enableRBOViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
-        strategy.enableRBOSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
+        strategy.enableViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
+        strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
-        strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+        strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+        return strategy;
+    }
+
+    @Override
+    public String toString() {
+        return "MvRewriteStrategy{" +
+                "enableMaterializedViewRewrite=" + enableMaterializedViewRewrite +
+                ", enableForceRBORewrite=" + enableForceRBORewrite +
+                ", enableViewBasedRewrite=" + enableViewBasedRewrite +
+                ", enableSingleTableRewrite=" + enableSingleTableRewrite +
+                ", enableMultiTableRewrite=" + enableMultiTableRewrite +
+                ", mvStrategy=" + mvStrategy +
+                '}';
     }
 }

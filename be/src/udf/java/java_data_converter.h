@@ -55,13 +55,13 @@ public:
     static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
                                                  const uint8_t* filter, int num_rows);
 
-    [[nodiscard]] static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                                       const Column** columns, int num_cols, int num_rows,
-                                                       std::vector<jobject>* res);
+    static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
 };
 
 template <bool handle_null>
 jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
+Status check_type_matched(MethodTypeDescriptor method_type_desc, jobject val);
 } // namespace starrocks

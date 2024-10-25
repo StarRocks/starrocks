@@ -49,7 +49,15 @@ public class Delimiter {
             }
             return writer.toString();
         } else {
-            return originStr;
+            return convertEscapedCharacters(originStr);
         }
+    }
+
+    public static String convertEscapedCharacters(String input) {
+        // replace \\t with \t
+        input = input.replaceAll("\\\\t", "\t");
+        // replace \\n with \n
+        input = input.replaceAll("\\\\n", "\n");
+        return input;
     }
 }

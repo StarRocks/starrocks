@@ -14,25 +14,23 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
-import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -43,13 +41,16 @@ import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.ColumnPrivilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -87,7 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
-import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -140,10 +141,10 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
@@ -198,30 +199,34 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
@@ -242,107 +247,49 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
-        Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        if (Config.authorization_enable_column_level_privilege) {
-            try {
-                checkSelectTableAction(context, allTablesRelations);
-            } catch (ErrorReportException e) {
-                Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
-                checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
-            }
-        } else {
-            checkSelectTableAction(context, allTablesRelations);
-        }
-        return null;
-    }
+        checkSelectTableAction(context, statement, Lists.newArrayList());
 
-    enum PrivilegeLevel {
-        TABLE, COLUMN
+        List<HintNode> hintNodes = null;
+        if (statement.getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
+            hintNodes = selectRelation.getSelectList().getHintNodes();
+        }
+
+        if (CollectionUtils.isNotEmpty(hintNodes)) {
+            for (HintNode hintNode : hintNodes) {
+                if (hintNode instanceof SetVarHint) {
+                    Map<String, String> optHints = hintNode.getValue();
+                    if (optHints.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                        // check warehouse privilege
+                        String warehouseName = optHints.get(SessionVariable.WAREHOUSE_NAME);
+                        if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                            checkWarehouseUsagePrivilege(warehouseName, context);
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     @Override
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
-        if (Config.authorization_enable_column_level_privilege) {
-            Set<String> columnNames = null;
-            PrivilegeLevel insertPrivLevel = null;
-            // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
-            if (!statement.isForCTAS()) {
-                try {
-                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            statement.getTableName(), PrivilegeType.INSERT);
-                    insertPrivLevel = PrivilegeLevel.TABLE;
-                } catch (AccessDeniedException e) {
-                    try {
-                        columnNames = statement.getTargetColumnNames() == null ? Collections.singleton("*") :
-                                new HashSet<>(statement.getTargetColumnNames());
-                        Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                statement.getTableName(), columnNames, PrivilegeType.INSERT);
-                        insertPrivLevel = PrivilegeLevel.COLUMN;
-                    } catch (AccessDeniedException exception) {
-                        AccessDeniedException.reportAccessDenied(
-                                statement.getTableName().getCatalog(),
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.INSERT.name(), ObjectType.COLUMN.name(),
-                                String.join(".", statement.getTableName().getTbl(),
-                                        String.join(",", columnNames)));
-                    }
-                }
-            }
-
-            Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-            Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+        // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
+        if (!statement.isForCTAS()) {
             try {
-                if (insertPrivLevel == PrivilegeLevel.TABLE) {
-                    // no need to check TABLE/COLUMN SELECT privilege when user already has this TABLE's INSERT privilege
-                    allTablesRelations.remove(statement.getTableName());
-                    allTouchedColumns.remove(statement.getTableName());
-                }
-                checkSelectTableAction(context, allTablesRelations);
-            } catch (ErrorReportException e) {
-                if (insertPrivLevel == PrivilegeLevel.COLUMN) {
-                    if (allTouchedColumns.containsKey(statement.getTableName())) {
-                        // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
-                        Set<String> usedCols = allTouchedColumns.get(statement.getTableName());
-                        if (usedCols.contains("*")) {
-                            usedCols = statement.getTargetTable().getColumns().stream().map(Column::getName)
-                                    .collect(Collectors.toSet());
-                            allTouchedColumns.put(statement.getTableName(), usedCols);
-                        }
-                        if (columnNames.contains("*")) {
-                            usedCols.clear();
-                        } else {
-                            usedCols.removeAll(columnNames);
-                        }
-                        if (usedCols.isEmpty()) {
-                            allTouchedColumns.remove(statement.getTableName());
-                            allTablesRelations.remove(statement.getTableName());
-                        }
-                    } else {
-                        allTablesRelations.remove(statement.getTableName());
-                    }
-                    checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
-                } else {
-                    // insertPrivLevel == PrivilegeLevel.TABLE
-                    checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
-                }
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(), PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
             }
-        } else {
-            // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
-            if (!statement.isForCTAS()) {
-                try {
-                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            statement.getTableName(), PrivilegeType.INSERT);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-                }
-            }
-
-            visit(statement.getQueryStatement(), context);
         }
+
+        visit(statement.getQueryStatement(), context);
         return null;
     }
 
@@ -356,216 +303,26 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
         }
-        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        allTouchedTables.remove(statement.getTableName());
-        if (Config.authorization_enable_column_level_privilege) {
-            try {
-                checkSelectTableAction(context, allTouchedTables);
-            } catch (ErrorReportException e) {
-                Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
-                tableColumns.remove(statement.getTableName());
-                checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
-            }
-        } else {
-            checkSelectTableAction(context, allTouchedTables);
-        }
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(statement.getTableName()));
         return null;
     }
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
-        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        if (Config.authorization_enable_column_level_privilege) {
-            Set<String> assignmentColumns = null;
-            PrivilegeLevel updatePrivLevel = null;
-            try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.UPDATE);
-                updatePrivLevel = PrivilegeLevel.TABLE;
-            } catch (AccessDeniedException e) {
-                try {
-                    assignmentColumns = statement.getAssignments().stream().map(ColumnAssignment::getColumn)
-                            .collect(Collectors.toSet());
-                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            statement.getTableName(), assignmentColumns, PrivilegeType.UPDATE);
-                    updatePrivLevel = PrivilegeLevel.COLUMN;
-                } catch (AccessDeniedException exception) {
-                    AccessDeniedException.reportAccessDenied(
-                            statement.getTableName().getCatalog(),
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.UPDATE.name(), ObjectType.COLUMN.name(),
-                            String.join(".", statement.getTableName().getTbl(),
-                                    String.join(",", assignmentColumns)));
-                }
-            }
-
-            Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
-            try {
-                if (updatePrivLevel == PrivilegeLevel.TABLE) {
-                    // no need to check TABLE/COLUMN SELECT privilege when user already has this TABLE's UPDATE privilege
-                    allTouchedTables.remove(statement.getTableName());
-                    tableColumns.remove(statement.getTableName());
-                }
-                checkSelectTableAction(context, allTouchedTables);
-            } catch (ErrorReportException e) {
-                if (updatePrivLevel == PrivilegeLevel.COLUMN) {
-                    // no need to check COLUMN SELECT privilege when user already has COLUMN UPDATE privilege
-                    if (tableColumns.containsKey(statement.getTableName())) {
-                        Set<String> usedCols = tableColumns.get(statement.getTableName());
-                        if (usedCols.contains("*")) {
-                            usedCols = statement.getTable().getColumns().stream().map(Column::getName)
-                                    .collect(Collectors.toSet());
-                            tableColumns.put(statement.getTableName(), usedCols);
-                        }
-                        usedCols.removeAll(assignmentColumns);
-                        if (usedCols.isEmpty()) {
-                            tableColumns.remove(statement.getTableName());
-                            allTouchedTables.remove(statement.getTableName());
-                        }
-                    } else {
-                        allTouchedTables.remove(statement.getTableName());
-                    }
-                    checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
-                } else {
-                    // updatePrivLevel == PrivilegeLevel.TABLE
-                    checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
-                }
-            }
-        } else {
-            try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.UPDATE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-            }
-            allTouchedTables.remove(statement.getTableName());
-            checkSelectTableAction(context, allTouchedTables);
+        try {
+            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getTableName(), PrivilegeType.UPDATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
         }
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(statement.getTableName()));
         return null;
     }
 
-    void checkSelectTableAction(ConnectContext context, Map<TableName, Relation> allTouchedTables) {
-        for (Map.Entry<TableName, Relation> tableToBeChecked : allTouchedTables.entrySet()) {
-            TableName tableName = tableToBeChecked.getKey();
-            Table table;
-            if (tableToBeChecked.getValue() instanceof TableRelation) {
-                table = ((TableRelation) tableToBeChecked.getValue()).getTable();
-            } else {
-                table = ((ViewRelation) tableToBeChecked.getValue()).getView();
-            }
-            if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                try {
-                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-                }
-            } else {
-                if (table instanceof View) {
-                    try {
-                        Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
-                    }
-                } else if (table.isMaterializedView()) {
-                    try {
-                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
-                    }
-                } else {
-                    try {
-                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                tableName.getCatalog(),
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
-                    }
-                }
-            }
-        }
-    }
-
-    private void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
-                                           Map<TableName, Relation> allTouchedTables) {
-        HashSet<TableName> usedTables = new HashSet<>(allTouchedTables.keySet());
-        HashSet<TableName> usedColOfTables = new HashSet<>(allTouchedTableColumns.keySet());
-        usedTables.removeAll(usedColOfTables);
-        if (!usedTables.isEmpty()) {
-            String warnMsg = String.format("The column usage information of some actually used tables " +
-                    "has not been successfully collected. tables: %s", usedTables);
-            LOG.warn(warnMsg);
-            // check SELECT privilege of all the columns(`*`) for these tables instead
-            for (TableName usedTable : usedTables) {
-                try {
-                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            usedTable, Collections.singleton("*"), PrivilegeType.SELECT);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            usedTable.getCatalog(),
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
-                            String.join(".", usedTable.getTbl(), "*"));
-                }
-            }
-        }
-        for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
-            TableName tableName = tableColumns.getKey();
-            Set<String> columns = tableColumns.getValue();
-            Relation relation = allTouchedTables.get(tableName);
-            if (relation == null) {
-                String warnMsg = String.format("Some used columns of tables were incorrectly collected. table: %s",
-                        tableName);
-                LOG.warn(warnMsg);
-                AccessDeniedException.reportAccessDenied(
-                        tableName.getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
-                        String.join(".", tableName.getTbl(),
-                                String.join(",", columns)));
-            } else {
-                Table table = relation instanceof TableRelation ? ((TableRelation) relation).getTable() :
-                        ((ViewRelation) relation).getView();
-                if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                    try {
-                        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.OPERATE);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
-                    }
-                } else {
-                    try {
-                        Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, columns, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                tableName.getCatalog(),
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
-                                String.join(".", tableName.getTbl(),
-                                        String.join(",", columns)));
-                    }
-                }
-            }
-        }
+    void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
+        ColumnPrivilege.check(context, statement, excludeTables);
     }
 
     // --------------------------------- Routine Load Statement ---------------------------------
@@ -579,6 +336,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName());
+        }
+
+        // check warehouse privilege
+        Map<String, String> properties = statement.getJobProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
     }
@@ -594,6 +358,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
+        }
+
+        // check warehouse privilege
+        Map<String, String> properties = statement.getJobProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
     }
@@ -700,6 +471,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName);
             }
         });
+
+        // check warehouse privilege
+        Map<String, String> properties = statement.getProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            checkWarehouseUsagePrivilege(warehouseName, context);
+        }
         return null;
     }
 
@@ -1346,6 +1124,11 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
         try {
+            if (statement.getUserIdentity().equals(UserIdentity.ROOT)
+                    && !context.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("Can not modify root user, except root itself");
+            }
+
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -1481,8 +1264,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitGrantRoleStatement(GrantRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
@@ -1502,15 +1285,15 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRevokeRoleStatement(RevokeRoleStmt statement, ConnectContext context) {
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
-                || r.equalsIgnoreCase(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME)
+                || r.equals(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME))) {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
             if (!userIdentity.equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not grant root or cluster_admin role except root user");
             }
         }
 
-        if (statement.getGranteeRole().stream().anyMatch(r -> r.equalsIgnoreCase(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
+        if (statement.getGranteeRole().stream().anyMatch(r -> r.equals(PrivilegeBuiltinConstants.ROOT_ROLE_NAME))) {
             if (statement.getUserIdentity() != null && statement.getUserIdentity().equals(UserIdentity.ROOT)) {
                 throw new SemanticException("Can not revoke root role from root user");
             }
@@ -1569,7 +1352,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } else if (statement.getRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                Set<String> roleNames =
+                        authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
                 if (!roleNames.contains(statement.getRole())) {
                     Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.GRANT);
@@ -1755,7 +1539,9 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         PrivilegeType.DROP.name(), ObjectType.VIEW.name(), statement.getTbl().getTbl());
             }
         } else {
+            Table table = null;
             try {
+                table = MetaUtils.getSessionAwareTable(context, null, statement.getTbl());
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         statement.getTbl(), PrivilegeType.DROP);
             } catch (AccessDeniedException e) {
@@ -1763,6 +1549,12 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         statement.getTbl().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+            } catch (Exception e) {
+                if (table == null && statement.isSetIfExists()) {
+                    // an exception will be thrown if table is not found, ignore it if `if exists` is set.
+                    return null;
+                }
+                throw e;
             }
         }
         return null;
@@ -1833,18 +1625,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
         if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
             if (db != null) {
-                Locker locker = new Locker();
-                try {
-                    locker.lockDatabase(db, LockType.READ);
-                    Table table = db.getTable(statement.getTableName());
-                    if (table == null || !table.isMaterializedView()) {
-                        // ignore privilege check for old mv
-                        return null;
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), statement.getTableName());
+                if (table == null || !table.isMaterializedView()) {
+                    // ignore privilege check for old mv
+                    return null;
                 }
             }
 
@@ -1873,6 +1660,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDescTableStmt(DescribeStmt statement, ConnectContext context) {
+        if (statement.isTableFunctionTable()) {
+            return null;
+        }
+
         try {
             Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getDbTableName());
@@ -2213,6 +2004,19 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    @Override
+    public Void visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
     // ---------------------------------------- restore & backup Statement --------------------------------
     @Override
     public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
@@ -2408,11 +2212,11 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             }
         } else {
             // going to restore some tables in database or some partitions in table
-            Database db = globalStateMgr.getDb(statement.getDbName());
+            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
             Locker locker = new Locker();
             if (db != null) {
                 try {
-                    locker.lockDatabase(db, LockType.READ);
+                    locker.lockDatabase(db.getId(), LockType.READ);
                     // check create_table on specified database
                     try {
                         Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -2425,7 +2229,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     }
                     // check insert on specified table
                     for (TableRef tableRef : tableRefs) {
-                        Table table = db.getTable(tableRef.getName().getTbl());
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(db.getFullName(), tableRef.getName().getTbl());
                         if (table != null) {
                             try {
                                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -2440,7 +2245,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
@@ -2470,6 +2275,14 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     statement.getTableName().getDb(), PrivilegeType.CREATE_MATERIALIZED_VIEW);
             visitQueryStatement(statement.getQueryStatement(), context);
+
+            // check warehouse privilege
+            Map<String, String> properties = statement.getProperties();
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                checkWarehouseUsagePrivilege(warehouseName, context);
+            }
+
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -2592,11 +2405,11 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
 
         // db function.
-        Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
         if (db != null) {
             Locker locker = new Locker();
             try {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 Function function = db.getFunction(statement.getFunctionSearchDesc());
                 if (null != function) {
                     try {
@@ -2610,7 +2423,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         return null;
@@ -2769,6 +2582,88 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    // --------------------------------- Warehouse Statement ---------------------------------
+    @Override
+    public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.CREATE_WAREHOUSE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.CREATE_WAREHOUSE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
+    public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
+    public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
+    public Void visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
+        // `show warehouses` only show warehouses that user has any privilege on, we will check it in
+        // the execution logic, not here, see `handleShowWarehouses()` for details.
+        return null;
+    }
+
+    public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName());
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+
     private String getTableNameByRoutineLoadLabel(ConnectContext context,
                                                   String dbName, String labelName) {
         RoutineLoadJob job = null;
@@ -2791,7 +2686,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     private void checkOperateLoadPrivilege(ConnectContext context, String dbName, String label) {
         GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_DB_NOT_FOUND, dbName);
         }
@@ -2825,5 +2720,16 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    private void checkWarehouseUsagePrivilege(String warehouseName, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectType.WAREHOUSE.name(), warehouseName);
+        }
     }
 }

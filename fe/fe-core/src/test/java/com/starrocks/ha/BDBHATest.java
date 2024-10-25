@@ -18,6 +18,7 @@ package com.starrocks.ha;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -33,7 +34,6 @@ public class BDBHATest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
-        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @Test
@@ -89,8 +89,8 @@ public class BDBHATest {
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getDataOutputStream());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getImageWriter());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.load(reader);
         reader.close();

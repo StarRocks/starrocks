@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # to_date
 
-## 功能
+
 
 返回 DATETIME 类型值中的日期部分。
 

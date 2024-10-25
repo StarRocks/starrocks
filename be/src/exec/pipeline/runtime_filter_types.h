@@ -18,7 +18,7 @@
 #include <utility>
 
 #include "common/statusor.h"
-#include "exec/hash_join_node.h"
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
@@ -47,15 +47,17 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, ColumnPtr column,
+    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
                                  MutableJoinRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
-              column(std::move(column)),
+              is_empty(is_empty),
+              columns(std::move(columns)),
               runtime_filter(std::move(runtime_filter)) {}
     bool multi_partitioned;
     bool eq_null;
-    ColumnPtr column;
+    bool is_empty;
+    std::vector<ColumnPtr> columns;
     MutableJoinRuntimeFilterPtr runtime_filter;
 };
 
@@ -275,10 +277,9 @@ public:
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
-    [[nodiscard]] StatusOr<bool> add_partial_filters(
-            size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
-            OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
-            RuntimeBloomFilters&& bloom_filter_descriptors) {
+    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
+                                       OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
+                                       RuntimeBloomFilters&& bloom_filter_descriptors) {
         DCHECK(idx < _partial_bloom_filter_build_params.size());
         // both _ht_row_counts, _partial_in_filters, _partial_bloom_filter_build_params are reserved beforehand,
         // each HashJoinBuildOperator mutates its corresponding slot indexed by driver_sequence, so concurrent
@@ -300,7 +301,7 @@ public:
         return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
-    [[nodiscard]] Status merge_local_in_filters() {
+    Status merge_local_in_filters() {
         bool can_merge_in_filters = true;
         size_t num_rows = 0;
         ssize_t k = -1;
@@ -324,7 +325,8 @@ public:
             num_rows = std::max(num_rows, _ht_row_counts[i]);
         }
 
-        can_merge_in_filters = can_merge_in_filters && (num_rows <= 1024) && k >= 0;
+        can_merge_in_filters =
+                can_merge_in_filters && (num_rows <= config::max_pushdown_conditions_per_column) && k >= 0;
         if (!can_merge_in_filters) {
             _partial_in_filters[0].clear();
             return Status::OK();
@@ -358,7 +360,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status merge_local_bloom_filters() {
+    Status merge_local_bloom_filters() {
         if (_bloom_filter_descriptors.empty()) {
             return Status::OK();
         }
@@ -370,7 +372,7 @@ public:
         }
     }
 
-    [[nodiscard]] Status merge_singleton_local_bloom_filters() {
+    Status merge_singleton_local_bloom_filters() {
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -437,12 +439,8 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
-                if (param.column == nullptr || param.column->empty()) {
-                    continue;
-                }
-                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(param.column, desc->build_expr_type(),
-                                                                             desc->runtime_filter(),
-                                                                             kHashJoinKeyColumnOffset, param.eq_null);
+                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(
+                        param, desc->build_expr_type(), desc->runtime_filter(), kHashJoinKeyColumnOffset);
                 if (!status.ok()) {
                     desc->set_runtime_filter(nullptr);
                     break;
@@ -452,7 +450,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status merge_multi_partitioned_local_bloom_filters() {
+    Status merge_multi_partitioned_local_bloom_filters() {
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -518,7 +516,7 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
-                if (param.column == nullptr || param.column->empty()) {
+                if (param.is_empty) {
                     continue;
                 }
                 rf->concat(param.runtime_filter.get());

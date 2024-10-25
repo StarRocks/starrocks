@@ -245,7 +245,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
+                    KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), this,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
                     kafkaTaskInfo.setWarehouseId(warehouseId);
@@ -317,13 +317,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return true;
         }
 
-        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // For compatible reason, the default behavior of empty load is still returning
+        // "No partitions have data available for loading" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
                 txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "all partitions have no load data" may only be returned.
+            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the offset to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -448,9 +449,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         summary.put("unselectedRows", Long.valueOf(unselectedRows));
         summary.put("receivedBytes", Long.valueOf(receivedBytes));
         summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
-        summary.put("receivedBytesRate", Long.valueOf(receivedBytes / totalTaskExcutionTimeMs * 1000));
+        summary.put("receivedBytesRate", Long.valueOf(receivedBytes * 1000 / totalTaskExcutionTimeMs));
         summary.put("loadRowsRate",
-                Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
+                Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
@@ -465,24 +466,24 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
         // check db and table
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDBName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
-        Table table = db.getTable(stmt.getTableName());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), stmt.getTableName());
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName());
         }
 
         long tableId = table.getId();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         // init kafka routine load job

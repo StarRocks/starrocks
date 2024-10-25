@@ -15,11 +15,16 @@
 package com.starrocks.catalog.system.sys;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
@@ -44,7 +49,10 @@ public class SysFeLocksTest {
     }
 
     @Test
-    public void testResolveLockItem() throws InterruptedException {
+    public void testResolveLockItem(@Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr)
+            throws InterruptedException {
+        Config.lock_manager_enabled = false;
+
         Database db = new Database(1, "test_lock");
 
         // empty lock
@@ -54,10 +62,21 @@ public class SysFeLocksTest {
                     item.toString());
         }
 
+        new Expectations(metadataMgr) {
+            {
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+
+                metadataMgr.getDb(anyLong);
+                result = db;
+            }
+        };
+
         // exclusive owner
         {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("EXCLUSIVE", item.getLock_mode());
@@ -68,8 +87,8 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
-                locker.lockDatabase(db, LockType.WRITE);
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.lockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }, "waiter");
             waiter.start();
 
@@ -81,13 +100,13 @@ public class SysFeLocksTest {
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
 
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         // shared lock
         {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("SHARED", item.getLock_mode());
@@ -98,8 +117,8 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
-                locker.lockDatabase(db, LockType.WRITE);
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.lockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }, "waiter");
             waiter.start();
 
@@ -115,8 +134,10 @@ public class SysFeLocksTest {
             item = SysFeLocks.resolveLockInfo(db);
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
+
+        Config.lock_manager_enabled = true;
     }
 
 }

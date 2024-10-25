@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # from_binary
 
-## 功能
+
 
 根据指定的格式，将二进制数据转化为 VARCHAR 类型的字符串。支持的二进制格式包括 Hex, Base64，和 UTF-8。如果未指定，默认为 Hex。
 

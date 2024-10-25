@@ -45,8 +45,8 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
-#include "storage/inverted/inverted_index_option.h"
-#include "storage/inverted/inverted_plugin_factory.h"
+#include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -372,7 +372,8 @@ ScalarColumnWriter::~ScalarColumnWriter() {
 }
 
 Status ScalarColumnWriter::init() {
-    RETURN_IF_ERROR(get_block_compression_codec(_opts.meta->compression(), &_compress_codec));
+    RETURN_IF_ERROR(
+            get_block_compression_codec(_opts.meta->compression(), &_compress_codec, _opts.meta->compression_level()));
 
     if (!_opts.need_speculate_encoding) {
         auto st = set_encoding(_opts.meta->encoding());

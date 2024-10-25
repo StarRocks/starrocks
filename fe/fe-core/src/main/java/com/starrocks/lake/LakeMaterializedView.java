@@ -32,13 +32,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -102,13 +100,6 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    @Override
     public boolean isDeleteRetryable() {
         return true;
     }
@@ -163,7 +154,6 @@ public class LakeMaterializedView extends MaterializedView {
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
 
         // storage_volume
-        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
                 PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");

@@ -23,6 +23,7 @@ permissions:
 
 env:
   HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+  REPO: ${{ github.repository }}
 
 jobs:
   INFO:
@@ -34,10 +35,17 @@ jobs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
       PR_STATE: ${{ steps.pr_details.outputs.PR_STATE }}
+      BUCKET_PREFIX: ${{ steps.bucket_info.outputs.bucket_prefix }}
     steps:
       - run: |
           sleep 10
-
+      
+      - name: INFO
+        id: bucket_info
+        run: |
+          bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+      
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v3
         with:
@@ -79,22 +87,14 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
+      bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: INFO
-        id: info
-        run: |
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
       - name: Download FE UT XML
         id: download-ut-xml
-        env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
@@ -113,7 +113,7 @@ jobs:
           fi
 
       - name: Publish UT Report
-        uses: mikepenz/action-junit-report@v3
+        uses: mikepenz/action-junit-report@v4
         id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
@@ -147,7 +147,6 @@ jobs:
           package_path: ${{ github.workspace }}/ci-tool/package
           fe_path: ${{ github.workspace }}/fe
           fe_core_path: ${{ github.workspace }}/fe/fe-core
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         if: steps.merge_report.outcome == 'success'
         run: |
           rm -rf result
@@ -215,16 +214,11 @@ jobs:
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
+      bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
-
-      - name: INFO
-        id: info
-        run: |
-          bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
         with:
@@ -232,8 +226,6 @@ jobs:
 
       - name: Download BE UT XML
         id: download-ut-xml
-        env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
           be_ut_res_path=${oss_path}/flag/be_ut_res
@@ -305,6 +297,74 @@ jobs:
           eci rm ${{ steps.merge.outputs.ECI_ID }} || true
           rm -rf ${{ steps.merge.outputs.COV_LOG }} ${{ steps.merge.outputs.COV_XML }} ${{ steps.merge.outputs.RES_FILE }}
 
+  JAVA-EXTENSION-REPORT:
+    runs-on: [ self-hosted, quick ]
+    needs: INFO
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
+    env:
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
+      bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Download Java Extension UT XML
+        id: download-ut-xml
+        run: |
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/java_extension_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            mkdir java-extensions && cd java-extensions
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
+            tar zxf java_extension_ut_report.tar.gz
+          elif [[ "${BASE_REF}" == "main" ]]; then
+            rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+            export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+            export PATH=$JAVA_HOME/bin:$PATH;
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover /var/local/env/java_extension_empty_coverage --github-token ${{ secrets.GITHUB_TOKEN }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
+              --module "Java-Extensions"
+          fi
+
+      - name: Publish UT Report
+        uses: mikepenz/action-junit-report@v4
+        id: publish_report
+        if: steps.download-ut-xml.outputs.size != '0'
+        env:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          check_name: 'Java Extensions UT Report'
+          detailed_summary: true
+          fail_on_failure: true
+          commit: ${{ github.event.workflow_run.head_sha }}
+          report_paths: ./java-extensions/xml_dir/*.xml
+
+      # Incremental Total Coverage
+      - name: Publish Incremental Coverage Report - Total
+        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
+        env:
+          code_path: ${{ github.workspace }}/java-extensions
+        run: |
+          rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            --cover ${code_path}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
+            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
+            -d ${code_path}/diff.txt -dt file --module "Java-Extensions"
+          rm -rf coverchecker
+          rm -rf ci-tools
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+  
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
@@ -364,22 +424,15 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
+      bucket_prefix: ${{ needs.INFO.outputs.bucket_prefix }}
     steps:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: INFO
-        id: info
-        run: |
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
       - name: Download Admit XML
         id: download-admit-xml
-        env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+
         run: |
           mkdir admit-result && cd admit-result
           oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/Admit-XML/${PR_NUMBER}/
@@ -410,7 +463,7 @@ jobs:
 
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
-    needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
+    needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT, JAVA-EXTENSION-REPORT ]
     if: always() && needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.PR_STATE != 'MERGED'
     env:
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}

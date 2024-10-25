@@ -43,13 +43,19 @@ public class DictionaryAnalyzer {
                 throw new SemanticException("dictionary: " + dictionaryName + " is exist");
             }
 
+            String catalogName = context.getCurrentCatalog();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                throw new SemanticException("invalid catalog");
+            }
+
             String queryableObject = statement.getQueryableObject();
-            Database db = GlobalStateMgr.getCurrentState().getDb(context.getDatabase());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, context.getDatabase());
             if (db == null) {
                 throw new SemanticException("USE a Database before CREATE DICTIONARY");
             }
-
-            Table tbl = db.getTable(queryableObject);
+            
+            Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                                getTable(catalogName, context.getDatabase(), queryableObject);
             if (tbl == null) {
                 throw new SemanticException(queryableObject + " does not exist");
             }

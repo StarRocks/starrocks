@@ -38,13 +38,15 @@ public:
                  const TabletSchemaCSPtr& tablet_schema = nullptr);
     // *captured_rowsets* is captured forward before creating TabletReader.
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                 std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema = nullptr);
+                 std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaCSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
-    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema, Schema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaCSPtr& tablet_schema, Schema schema);
     ~TabletReader() override { close(); }
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
+
+    void set_use_gtid(bool use_gtid) { _use_gtid = use_gtid; }
 
     Status prepare();
 
@@ -85,6 +87,7 @@ private:
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
+    Status _init_compaction_column_paths(const TabletReaderParams& read_params);
 
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -96,7 +99,6 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
-    PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -113,6 +115,8 @@ private:
     // used for pk index based pointer read
     const TabletReaderParams* _reader_params = nullptr;
     bool _is_asc_hint = true;
+
+    bool _use_gtid = false;
 };
 
 } // namespace starrocks

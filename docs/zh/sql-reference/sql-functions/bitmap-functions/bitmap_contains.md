@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_contains
 
-## 功能
+
 
 计算输入值是否在 Bitmap 列中。
 

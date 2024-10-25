@@ -64,14 +64,13 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     auto conf_deleter = [conf]() { delete conf; };
     DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
 
-    std::string group_id;
     auto it = ctx->kafka_info->properties.find("group.id");
     if (it == ctx->kafka_info->properties.end()) {
-        group_id = BackendOptions::get_localhost() + "_" + UniqueId::gen_uid().to_string();
+        _group_id = BackendOptions::get_localhost() + "_" + UniqueId::gen_uid().to_string();
     } else {
-        group_id = it->second;
+        _group_id = it->second;
     }
-    LOG(INFO) << "init kafka consumer with group id: " << group_id;
+    LOG(INFO) << "init kafka consumer with group id: " << _group_id;
 
     std::string errstr;
     auto set_conf = [&conf, &errstr](const std::string& conf_key, const std::string& conf_val) {
@@ -94,7 +93,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     };
 
     RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
-    RETURN_IF_ERROR(set_conf("group.id", group_id));
+    RETURN_IF_ERROR(set_conf("group.id", _group_id));
     // For transaction producer, producer will append one control msg to the group of msgs,
     // but the control msg will not return to consumer,
     // so we can't to judge whether the consumption has been completed by offset comparison.
@@ -158,7 +157,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
 Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset,
                                                   const std::string& topic, StreamLoadContext* ctx) {
-    DCHECK(_k_consumer);
+    DCHECK(_k_consumer && !_k_consumer->closed());
     // create TopicPartitions
     std::stringstream ss;
     std::vector<RdKafka::TopicPartition*> topic_partitions;
@@ -191,6 +190,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
 }
 
 Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
     LOG(INFO) << "start kafka consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
@@ -270,10 +270,28 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             }
             break;
         }
+        case RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED: {
+            LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
+            done = true;
+            st = Status::InternalError(fmt::format(
+                    "kafka consume failed, err: {}. You should add READ permission for this topic: {} in topic ACLs",
+                    msg->errstr(), _topic));
+            break;
+        }
+        case RdKafka::ERR_GROUP_AUTHORIZATION_FAILED: {
+            LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
+            done = true;
+            st = Status::InternalError(fmt::format(
+                    "kafka consume failed, err: {}. You should add or modify the consumer group '{}' with READ "
+                    "permission for this topic: {} in consumer group ACLs and set the routine load job with "
+                    "`property.group.id` property",
+                    msg->errstr(), _group_id, _topic));
+            break;
+        }
         default:
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
             done = true;
-            st = Status::InternalError(msg->errstr());
+            st = Status::InternalError(fmt::format("kafka consume failed, err: {}", msg->errstr()));
             break;
         }
 
@@ -294,6 +312,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
                                                std::vector<int64_t>* latest_offsets, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
@@ -322,6 +341,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 }
 
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
+    DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
@@ -344,6 +364,10 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
+        if (_k_event_cb.get_error_msg().empty()) {
+            // some authentication errors event can only be triggered when the consumer is closed.
+            _k_consumer->close();
+        }
         std::stringstream ss;
         ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
@@ -360,13 +384,20 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
             continue;
         }
 
-        if ((*it)->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART) {
+        err = (*it)->err();
+        if (err == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART) {
             LOG(WARNING) << "unknown topic: " << _topic;
             return Status::InternalError(fmt::format("unknown topic: {}", _topic));
-        } else if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
+        } else if (err == RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED) {
             std::stringstream ss;
-            ss << "err: " << err2str((*it)->err());
-            if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE) {
+            ss << "failed to get kafka topic meta, err: " << RdKafka::err2str(err)
+               << ". You should add READ permission for this topic: " << _topic << " in topic ACLs";
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        } else if (err != RdKafka::ERR_NO_ERROR) {
+            std::stringstream ss;
+            ss << "err: " << err2str(err);
+            if (err == RdKafka::ERR_LEADER_NOT_AVAILABLE) {
                 ss << ", try again";
             }
             LOG(WARNING) << ss.str();
@@ -400,17 +431,34 @@ Status KafkaDataConsumer::cancel(StreamLoadContext* ctx) {
 Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
+    DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
     _k_event_cb.reset_error_msg();
     return Status::OK();
 }
 
-Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
-    RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
+// The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+    DCHECK(!_k_consumer->closed());
+    std::vector<RdKafka::TopicPartition*> topic_partitions;
+    // delete TopicPartition finally
+    auto tp_deleter = [&topic_partitions]() {
+        std::for_each(topic_partitions.begin(), topic_partitions.end(),
+                      [](RdKafka::TopicPartition* tp1) { delete tp1; });
+    };
+    DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
+
+    for (auto& offset : offsets) {
+        RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(topic, offset.first, offset.second + 1);
+        topic_partitions.push_back(tp1);
+    }
+
+    RdKafka::ErrorCode err = _k_consumer->commitSync(topic_partitions);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to commit kafka offset : " << RdKafka::err2str(err);
+        ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+           << ", err: " << RdKafka::err2str(err);
         return Status::InternalError(ss.str());
     }
     return Status::OK();

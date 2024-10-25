@@ -26,6 +26,7 @@ import java.util.List;
 
 public final class QueryStatisticsItem {
 
+    private final String customQueryId;
     private final String queryId;
     private final String user;
     private final String sql;
@@ -36,8 +37,11 @@ public final class QueryStatisticsItem {
     // root query profile
     private final RuntimeProfile queryProfile;
     private final TUniqueId executionId;
+    private final String warehouseName;
+    private final String resourceGroupName;
 
     private QueryStatisticsItem(Builder builder) {
+        this.customQueryId = builder.customQueryId;
         this.queryId = builder.queryId;
         this.user = builder.user;
         this.sql = builder.sql;
@@ -47,6 +51,8 @@ public final class QueryStatisticsItem {
         this.fragmentInstanceInfos = builder.fragmentInstanceInfos;
         this.queryProfile = builder.queryProfile;
         this.executionId = builder.executionId;
+        this.warehouseName = builder.warehouseName;
+        this.resourceGroupName = builder.resourceGroupName;
     }
 
     public String getDb() {
@@ -74,6 +80,10 @@ public final class QueryStatisticsItem {
         return currentTime - queryStartTime;
     }
 
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
     public String getQueryId() {
         return queryId;
     }
@@ -90,7 +100,16 @@ public final class QueryStatisticsItem {
         return executionId;
     }
 
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
+    public String getResourceGroupName() {
+        return resourceGroupName;
+    }
+
     public static final class Builder {
+        private String customQueryId;
         private String queryId;
         private String db;
         private String user;
@@ -100,9 +119,16 @@ public final class QueryStatisticsItem {
         private List<FragmentInstanceInfo> fragmentInstanceInfos;
         private RuntimeProfile queryProfile;
         private TUniqueId executionId;
+        private String warehouseName;
+        private String resourceGroupName;
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
+        }
+
+        public Builder customQueryId(String customQueryId) {
+            this.customQueryId = customQueryId;
+            return this;
         }
 
         public Builder queryId(String queryId) {
@@ -150,12 +176,26 @@ public final class QueryStatisticsItem {
             return this;
         }
 
+        public Builder warehouseName(String warehouseName) {
+            this.warehouseName = warehouseName;
+            return this;
+        }
+
+        public Builder resourceGroupName(String resourceGroupName) {
+            this.resourceGroupName = resourceGroupName;
+            return this;
+        }
+
         public QueryStatisticsItem build() {
             initDefaultValue(this);
             return new QueryStatisticsItem(this);
         }
 
         private void initDefaultValue(Builder builder) {
+            if (customQueryId == null) {
+                builder.customQueryId = "";
+            }
+
             if (queryId == null) {
                 builder.queryId = "0";
             }

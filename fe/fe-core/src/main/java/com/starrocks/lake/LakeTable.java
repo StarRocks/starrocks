@@ -24,6 +24,7 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -47,7 +48,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -115,13 +115,6 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    @Override
     public boolean isDeleteRetryable() {
         return true;
     }
@@ -180,7 +173,7 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId) {
+                                          long partitionId, long shardGroupId, Database db) {
         FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
         Map<String, String> properties = new HashMap<>();
@@ -189,9 +182,10 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, properties);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
         for (long shardId : shardIds) {
@@ -242,6 +236,12 @@ public class LakeTable extends OlapTable {
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleLakeListPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getIsInMemory(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isUnPartitioned()) {
+            return new RecycleLakeUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
                     partitionInfo.getIsInMemory(partition.getId()),

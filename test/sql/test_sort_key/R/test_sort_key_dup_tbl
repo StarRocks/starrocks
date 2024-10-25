@@ -9,9 +9,9 @@ use sort_key_test_dup;
 CREATE TABLE `dup_test` (
     `k1` int(11) NOT NULL COMMENT "",
     `k2` int(11) NOT NULL COMMENT "",
-    `v1` bigint REPLACE NULL COMMENT "",
-    `v2` bigint REPLACE NULL COMMENT "",
-    `v3` bigint REPLACE NULL COMMENT ""
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
 )
 DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"
@@ -28,9 +28,9 @@ E: (1064, 'Duplicate sort key column k2 is not allowed.')
 CREATE TABLE `dup_test` (
     `k1` int(11) NOT NULL COMMENT "",
     `k2` int(11) NOT NULL COMMENT "",
-    `v1` bigint REPLACE NULL COMMENT "",
-    `v2` bigint REPLACE NULL COMMENT "",
-    `v3` bigint REPLACE NULL COMMENT ""
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
 )
 DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"
@@ -81,6 +81,42 @@ alter table dup_test order by (k2,v1,v1);
 E: (1064, 'Duplicated column[v1]')
 -- !result
 alter table dup_test order by (k2,v1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table dup_test;
+-- result:
+dup_test	CREATE TABLE `dup_test` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
+ORDER BY(`k2`, `v1`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+select * from dup_test;
+-- result:
+2	1	2	8	8
+3	1	2	8	8
+1	2	2	10	9
+2	2	2	9	7
+1	3	2	10	9
+2	3	2	9	7
+-- !result
+alter table dup_test modify column v1 bigint;
 -- result:
 -- !result
 function: wait_alter_table_finish()
@@ -165,9 +201,9 @@ use sort_key_dup_tbl_with_rollup;
 CREATE TABLE `dup_test` (
     `k1` int(11) NOT NULL COMMENT "",
     `k2` int(11) NOT NULL COMMENT "",
-    `v1` bigint REPLACE NULL COMMENT "",
-    `v2` bigint REPLACE NULL COMMENT "",
-    `v3` bigint REPLACE NULL COMMENT ""
+    `v1` int NULL COMMENT "",
+    `v2` bigint NULL COMMENT "",
+    `v3` bigint NULL COMMENT ""
 )
 DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"
@@ -200,11 +236,11 @@ insert into dup_test values (1,2,2,10,9),(2,3,2,9,7),(2,1,2,8,8);
 -- !result
 select * from dup_test;
 -- result:
-2	1	2	8	8
 3	1	2	8	8
-1	2	2	10	9
 2	2	2	9	7
 1	3	2	10	9
+2	1	2	8	8
+1	2	2	10	9
 2	3	2	9	7
 -- !result
 function: manual_compact("sort_key_dup_tbl_with_rollup", "dup_test")
@@ -232,7 +268,7 @@ show create table dup_test;
 dup_test	CREATE TABLE `dup_test` (
   `k1` int(11) NOT NULL COMMENT "",
   `k2` int(11) NOT NULL COMMENT "",
-  `v1` bigint(20) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
   `v2` bigint(20) NULL COMMENT "",
   `v3` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP 

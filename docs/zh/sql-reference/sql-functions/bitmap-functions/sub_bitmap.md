@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # sub_bitmap
 
-## 功能
+
 
 根据 `offset` 指定的起始位置，从 BITMAP 类型的 `src` 中截取 `len` 个元素，返回的元素为 `src` 的子集。该函数主要用于分页查询相关场景。该函数从 2.5 版本开始支持。
 

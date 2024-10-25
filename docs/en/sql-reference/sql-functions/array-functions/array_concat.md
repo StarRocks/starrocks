@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # array_concat
 
-## Description
+
 
 Concatenates multiple arrays into one array that contains all the elements in the arrays.
 

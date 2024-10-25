@@ -39,14 +39,14 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 protected:
     // It is used to perform aggregation algorithms shared by
@@ -57,6 +57,7 @@ protected:
     AggregatorPtr _aggregator = nullptr;
 
 private:
+    DECLARE_ONCE_DETECTOR(_set_finishing_once)
     // Whether prev operator has no output
     bool _is_finished = false;
     std::atomic<int64_t>& _shared_limit_countdown;
@@ -72,7 +73,7 @@ public:
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override {
+    Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
         return Status::OK();
     }

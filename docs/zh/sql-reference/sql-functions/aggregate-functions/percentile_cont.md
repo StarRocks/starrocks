@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # percentile_cont
 
-## 功能
+
 
 计算精确百分位数。该函数使用连续分布模型，如果未找到与百分位完全匹配的值，则返回临近两个值的线性插值。
 

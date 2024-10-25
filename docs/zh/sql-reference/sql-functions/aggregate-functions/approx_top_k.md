@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # approx_top_k
 
-## 功能
+
 
 返回表达式 `expr` 中最常出现的 `k` 个项目以及每个项目出现的近似次数。
 

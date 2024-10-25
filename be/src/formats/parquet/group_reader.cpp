@@ -14,22 +14,30 @@
 
 #include "formats/parquet/group_reader.h"
 
-#include <memory>
-#include <sstream>
+#include <glog/logging.h>
 
-#include "column/column_helper.h"
+#include <algorithm>
+#include <memory>
+#include <utility>
+
+#include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -44,24 +52,52 @@ Status GroupReader::init() {
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
     _process_columns_and_conjunct_ctxs();
+    _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
 
     return Status::OK();
 }
 
-Status GroupReader::prepare() {
-    RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    _init_read_chunk();
-    _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
+Status GroupReader::_deal_with_pageindex() {
     if (config::parquet_page_index_enable) {
         SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
         _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
-        auto page_index_reader = std::make_unique<PageIndexReader>(this, _param.file, _column_readers,
-                                                                   _row_group_metadata, _param.min_max_conjunct_ctxs);
+        auto page_index_reader =
+                std::make_unique<PageIndexReader>(this, _param.file, _column_readers, _row_group_metadata,
+                                                  _param.min_max_conjunct_ctxs, _param.conjunct_ctxs_by_slot);
         ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
         if (flag && !_is_group_filtered) {
             page_index_reader->select_column_offset_index();
         }
     }
+
+    return Status::OK();
+}
+
+Status GroupReader::prepare() {
+    // we need deal with page index first, so that it can work on collect_io_range,
+    // and pageindex's io has been collected in FileReader
+    RETURN_IF_ERROR(_deal_with_pageindex());
+
+    // if coalesce read enabled, we have to
+    // 1. allocate shared buffered input stream and
+    // 2. collect io ranges of every row group reader.
+    // 3. set io ranges to the stream.
+    if (config::parquet_coalesce_read_enable && _param.sb_stream != nullptr) {
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
+        int32_t counter = _param.lazy_column_coalesce_counter->load(std::memory_order_relaxed);
+        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
+            _param.stats->group_active_lazy_coalesce_together += 1;
+        } else {
+            _param.stats->group_active_lazy_coalesce_seperately += 1;
+        }
+        _set_end_offset(end_offset);
+        RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
+    }
+
+    RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
+    _init_read_chunk();
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
@@ -135,8 +171,13 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
 
             if (has_filter) {
-                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
-                lazy_chunk->filter_range(chunk_filter, 0, count);
+                Range<uint64_t> lazy_read_range = r.filter(&chunk_filter);
+                // if all data is filtered, we have skipped early.
+                DCHECK(lazy_read_range.span_size() > 0);
+                Filter lazy_filter = {chunk_filter.begin() + lazy_read_range.begin() - r.begin(),
+                                      chunk_filter.begin() + lazy_read_range.end() - r.begin()};
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, lazy_read_range, &lazy_filter, &lazy_chunk));
+                lazy_chunk->filter_range(lazy_filter, 0, lazy_read_range.span_size());
             } else {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk));
             }
@@ -148,12 +189,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             active_chunk->merge(std::move(*lazy_chunk));
         }
 
-        _read_chunk->swap_chunk(*active_chunk);
-        *row_count = _read_chunk->num_rows();
+        *row_count = active_chunk->num_rows();
 
         SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
         // convert from _read_chunk to chunk.
-        RETURN_IF_ERROR(_fill_dst_chunk(_read_chunk, chunk));
+        RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
         break;
     }
 
@@ -169,8 +209,7 @@ Status GroupReader::_read_range(const std::vector<int>& read_columns, const Rang
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+        RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
     }
 
     return Status::OK();
@@ -180,14 +219,14 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
                                                          ChunkPtr* chunk) {
     const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
     size_t round_cost = 0;
-    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost); });
+    double first_selectivity = -1;
+    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost, first_selectivity); });
     size_t hit_count = 0;
     for (int col_idx : read_order) {
         auto& column = _param.read_cols[col_idx];
         round_cost += _column_read_order_ctx->get_column_cost(col_idx);
         SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+        RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
 
         if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
             _dict_column_indices.end()) {
@@ -215,6 +254,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
                 break;
             }
         }
+        first_selectivity = first_selectivity < 0 ? hit_count * 1.0 / filter->size() : first_selectivity;
     }
 
     return hit_count;
@@ -263,6 +303,10 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
             RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
                                                  column.t_iceberg_schema_field, &column_reader));
         }
+        if (column_reader == nullptr) {
+            // this shouldn't happen but guard
+            return Status::InternalError("No valid column reader.");
+        }
 
         if (column.slot_type().is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
@@ -304,6 +348,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
             } else {
                 _active_column_indices.emplace_back(read_col_idx);
             }
+            _column_readers[slot_id]->set_can_lazy_decode(true);
         }
         ++read_col_idx;
     }
@@ -384,7 +429,6 @@ void GroupReader::_init_read_chunk() {
     }
     size_t chunk_size = _param.chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
-    _init_chunk_dict_column(&_read_chunk);
 }
 
 void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path) {
@@ -401,23 +445,15 @@ Status GroupReader::_rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
+            if (*is_group_filtered) {
+                return Status::OK();
+            }
             RETURN_IF_ERROR(
                     _column_readers[slot_id]->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path, 0));
         }
     }
 
     return Status::OK();
-}
-
-void GroupReader::_init_chunk_dict_column(ChunkPtr* chunk) {
-    // replace dict filter column
-    for (int col_idx : _dict_column_indices) {
-        const auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id();
-        for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-            _column_readers[slot_id]->init_dict_column((*chunk)->get_column_by_slot_id(slot_id), sub_field_path, 0);
-        }
-    }
 }
 
 StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
@@ -435,7 +471,7 @@ StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filt
     return true;
 }
 
-Status GroupReader::_fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk) {
+Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
     read_chunk->check_or_die();
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();

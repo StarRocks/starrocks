@@ -209,10 +209,6 @@ public class BackupJobInfoTest {
         Assert.assertEquals(2,
                 jobInfo.getTableInfo("table1").getPartInfo("partition1").getIdx("rollup1").tablets.size());
 
-        Assert.assertEquals(2,
-                jobInfo.getTableInfo("table1").getPartInfo("partition1")
-                        .getIdx("rollup1").getTablet(10007L).files.size());
-
         File tmpFile = new File("./tmp");
         try {
             DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));

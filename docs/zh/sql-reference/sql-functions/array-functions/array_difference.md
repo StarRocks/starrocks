@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_difference
 
-## 功能
+
 
 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。
 

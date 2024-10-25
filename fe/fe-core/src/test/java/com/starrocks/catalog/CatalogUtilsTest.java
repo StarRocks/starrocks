@@ -14,10 +14,61 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.FeConstants;
+import org.junit.Before;
+import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.when;
 
 public class CatalogUtilsTest {
+
+    @Mock
+    private OlapTable olapTable;
+
+    @Mock
+    private PartitionInfo partitionInfo;
+
+    @Mock
+    private Partition partition;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void testCalAvgBucketNumOfRecentPartitions_FewerPartitionsThanRecent() {
+        when(olapTable.getPartitions()).thenReturn(new ArrayList<>());
+        when(olapTable.getPartitionInfo()).thenReturn(partitionInfo);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+
+        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true);
+
+        assertEquals(FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM, bucketNum);
+    }
+
+    @Test
+    public void testCalAvgBucketNumOfRecentPartitions_CalculateByDataSize() {
+        List<Partition> partitions = new ArrayList<>();
+        partitions.add(partition);
+        when(olapTable.getPartitions()).thenReturn(partitions);
+        when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
+        when(partition.getVisibleVersion()).thenReturn(2L);
+        when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
+
+        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);
+
+        assertEquals(2, bucketNum); // 2 tablets based on 2GB size
+    }
+
     @Test
     public void testDivisibleByTwo() {
         Assertions.assertEquals(1, CatalogUtils.divisibleBucketNum(1));

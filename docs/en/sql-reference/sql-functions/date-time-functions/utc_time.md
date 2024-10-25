@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # utc_time
 
-## Description
+
 
 Returns the current UTC time as a value in 'HH:MM:SS'.
 

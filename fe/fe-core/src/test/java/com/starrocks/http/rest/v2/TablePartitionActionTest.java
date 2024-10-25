@@ -22,10 +22,10 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -52,6 +52,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -105,7 +106,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testOlapTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -152,7 +153,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLakeTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newLakeTable(
                 TB_LAKE_TABLE_ID, TB_LAKE_TABLE_NAME, PARTITION_SIZE));
 
@@ -199,7 +200,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testPages() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -313,8 +314,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static OlapTable newOlapTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 
@@ -325,10 +326,10 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         DistributionInfo defaultDistributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
         Index idx1 = new Index(
-                testIndexId, "idx1", Lists.newArrayList("c1"),
+                testIndexId, "idx1", Lists.newArrayList(ColumnId.create("c1")),
                 IndexDef.IndexType.BITMAP, "c_idx1", new HashMap<>());
         Index idx2 = new Index(
-                testIndexId + 1, "idx2", Lists.newArrayList("c2"),
+                testIndexId + 1, "idx2", Lists.newArrayList(ColumnId.create("c2")),
                 IndexDef.IndexType.NGRAMBF, "c_idx2", new HashMap<>());
         TableIndexes indexes = new TableIndexes(
                 Lists.newArrayList(idx1, idx2)
@@ -387,8 +388,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static LakeTable newLakeTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 
@@ -476,13 +477,12 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static RestBaseResultV2<PagedResult<PartitionView>> parseResponseBody(String body) {
         try {
-            System.out.println("resp: " + body);
             return GsonUtils.GSON.fromJson(
                     body,
                     new TypeToken<RestBaseResultV2<PagedResult<PartitionView>>>() {
                     }.getType());
         } catch (Exception e) {
-            fail("invalid resp body: " + body);
+            fail(e.getMessage() + ", resp: " + body);
             throw new IllegalStateException(e);
         }
     }

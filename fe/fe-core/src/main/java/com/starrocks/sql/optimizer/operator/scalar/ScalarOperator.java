@@ -16,12 +16,15 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -287,5 +290,28 @@ public abstract class ScalarOperator implements Cloneable {
                     && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isConstantRef();
         }
         return false;
+    }
+
+    public static void updateLiteralPredicates(ScalarOperator predicate, List<Expr> exprs) {
+        if (predicate instanceof CompoundPredicateOperator) {
+            updateCompoundLiteralPredicate((CompoundPredicateOperator) predicate, exprs);
+        } else {
+            updateSingleLiteralPredicate(predicate, exprs.get(0));
+        }
+    }
+
+    private static void updateCompoundLiteralPredicate(CompoundPredicateOperator compoundPredicate, List<Expr> exprs) {
+        for (int i = 0; i < compoundPredicate.getChildren().size(); i++) {
+            updateSingleLiteralPredicate(compoundPredicate.getChild(i), exprs.get(i));
+        }
+    }
+
+    private static void updateSingleLiteralPredicate(ScalarOperator predicate, Expr expr) {
+        Object realObjectValue = ((LiteralExpr) expr).getRealObjectValue();
+        Optional<ConstantOperator> constantOperator =
+                new ConstantOperator(realObjectValue, expr.getType()).castTo(predicate.getChild(1).getType());
+        if (constantOperator.isPresent()) {
+            predicate.setChild(1, constantOperator.get());
+        }
     }
 }

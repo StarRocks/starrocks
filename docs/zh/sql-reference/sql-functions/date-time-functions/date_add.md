@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # date_add,adddate
 
-## 功能
+
 
 向日期添加指定的时间间隔。
 

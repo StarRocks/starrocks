@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_filter
 
-## 功能
+
 
 根据设定的过滤条件返回数组中匹配的元素。该函数可用于普通的数组过滤，也可以搭配 Lambda 函数进行更灵活的数组过滤。有关 Lambda 表达式的详细信息，参见 [Lambda expression](../Lambda_expression.md)。该函数从 2.5 版本开始支持。
 

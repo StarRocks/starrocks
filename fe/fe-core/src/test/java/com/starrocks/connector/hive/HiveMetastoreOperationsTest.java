@@ -16,6 +16,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
@@ -135,7 +136,7 @@ public class HiveMetastoreOperationsTest {
     public void testGetPartition() {
         Partition partition = hmsOps.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
-        Assert.assertEquals(ORC, partition.getInputFormat());
+        Assert.assertEquals(ORC, partition.getFileFormat());
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = hmsOps.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -154,12 +155,12 @@ public class HiveMetastoreOperationsTest {
                 hmsOps.getPartitionByPartitionKeys(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
 
         Partition partition1 = partitions.get("col1=1");
-        Assert.assertEquals(ORC, partition1.getInputFormat());
+        Assert.assertEquals(ORC, partition1.getFileFormat());
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", partition1.getFullPath());
 
         Partition partition2 = partitions.get("col1=2");
-        Assert.assertEquals(ORC, partition2.getInputFormat());
+        Assert.assertEquals(ORC, partition2.getFileFormat());
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=2", partition2.getFullPath());
     }
@@ -273,7 +274,7 @@ public class HiveMetastoreOperationsTest {
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Database 'db' location is not set",
+                "Failed to find location in database 'db'",
                 () -> hmsOps.getDefaultLocation("db", "table"));
 
         new MockUp<HiveWriteUtils>() {
@@ -351,7 +352,7 @@ public class HiveMetastoreOperationsTest {
 
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
-                true,
+                false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
                         new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
@@ -363,8 +364,134 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        List<Column> columns = stmt.getColumnDefs()
+                .stream()
+                .map(columnDef -> columnDef.toColumn(null))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
+
+        Assert.assertTrue(mockedHmsOps.createTable(stmt));
+    }
+
+    @Test
+    public void testCreateTableWithLocation() throws DdlException {
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+            }
+
+            @Mock
+            public boolean pathExists(Path path, Configuration conf) {
+                return true;
+            }
+
+            @Mock
+            public boolean isEmpty(Path path, Configuration conf) {
+                return true;
+            }
+        };
+
+        HiveMetastoreOperations mockedHmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog") {
+            @Override
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("mytable_locatino");
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("location", "hdfs://path_to_file/file_name");
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                false,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
+                null,
+                properties,
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        stmt.setColumns(columns);
+
+        Assert.assertTrue(mockedHmsOps.createTable(stmt));
+    }
+
+    @Test
+    public void testCreateTableForExternal() throws DdlException {
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+            }
+        };
+
+        HiveMetastoreOperations mockedHmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog") {
+            @Override
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("mytable_locatino");
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("external_location", "hdfs://path_to_file/file_name");
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                true,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
+                null,
+                properties,
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        stmt.setColumns(columns);
+
+        Assert.assertTrue(mockedHmsOps.createTable(stmt));
+    }
+
+    @Test
+    public void testCreateTableForExternalWithoutLocation() throws DdlException {
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+            }
+        };
+
+        HiveMetastoreOperations mockedHmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog") {
+            @Override
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("mytable_locatino");
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                true,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
+                null,
+                properties,
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(def -> def.toColumn(null)).collect(Collectors.toList());
+        stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
     }
@@ -388,7 +515,7 @@ public class HiveMetastoreOperationsTest {
         // Table Like DDL, the system looks for the like table from hms.
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
-                true,
+                false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
                         new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
@@ -400,8 +527,11 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        List<Column> columns = stmt.getColumnDefs()
+                .stream()
+                .map(columnDef -> columnDef.toColumn(null))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
 
         CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
                 false,

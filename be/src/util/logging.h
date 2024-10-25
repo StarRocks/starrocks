@@ -35,4 +35,6 @@ void shutdown_logging();
 // Format a timestamp in the same format as used by GLog.
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
+void update_logging();
+
 } // namespace starrocks

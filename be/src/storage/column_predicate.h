@@ -26,8 +26,8 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
-#include "storage/inverted/inverted_index_iterator.h"
-#include "storage/inverted/inverted_reader.h"
+#include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
@@ -124,26 +124,23 @@ public:
 
     uint32_t column_id() const { return _column_id; }
 
-    [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection) const {
+    Status evaluate(const Column* column, uint8_t* selection) const {
         return evaluate(column, selection, 0, column->size());
     }
 
-    [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* selection) const {
+    Status evaluate_and(const Column* column, uint8_t* selection) const {
         return evaluate_and(column, selection, 0, column->size());
     }
 
-    [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* selection) const {
+    Status evaluate_or(const Column* column, uint8_t* selection) const {
         return evaluate_or(column, selection, 0, column->size());
     }
 
-    [[nodiscard]] virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from,
-                                          uint16_t to) const = 0;
+    virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    [[nodiscard]] virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from,
-                                              uint16_t to) const = 0;
+    virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
-    [[nodiscard]] virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from,
-                                             uint16_t to) const = 0;
+    virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
 
     virtual StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
         CHECK(false) << "not supported";
@@ -155,7 +152,7 @@ public:
     // Return false to filter out a data page.
     virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
-    virtual bool support_bloom_filter() const { return false; }
+    virtual bool support_original_bloom_filter() const { return false; }
 
     // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
     // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
@@ -164,19 +161,21 @@ public:
     virtual bool support_ngram_bloom_filter() const { return false; }
 
     // Return false to filter out a data page.
-    virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
+    virtual bool original_bloom_filter(const BloomFilter* bf) const { return true; }
 
     // Return false to filter out a data page.
     virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
         return true;
     }
 
-    [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+    virtual bool support_bitmap_filter() const { return false; }
+
+    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }
 
-    [[nodiscard]] virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                     roaring::Roaring* row_bitmap) const {
+    virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                       roaring::Roaring* row_bitmap) const {
         return Status::Cancelled("not implemented");
     }
 
@@ -203,8 +202,8 @@ public:
     // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }
 
-    [[nodiscard]] virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
-                                            ObjectPool* obj_pool) const = 0;
+    virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                              ObjectPool* obj_pool) const = 0;
 
     virtual std::string debug_string() const {
         std::stringstream ss;
@@ -246,6 +245,9 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
 
 ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                          const std::vector<std::string>& operands);
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size);
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);

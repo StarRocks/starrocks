@@ -15,9 +15,9 @@
 
 package com.starrocks.connector.odps;
 
-import com.starrocks.connector.hive.HiveTableName;
+import com.starrocks.connector.DatabaseTableName;
 
-public class OdpsTableName extends HiveTableName {
+public class OdpsTableName extends DatabaseTableName {
     public OdpsTableName(String databaseName, String tableName) {
         super(databaseName, tableName);
     }

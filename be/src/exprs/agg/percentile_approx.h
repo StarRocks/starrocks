@@ -29,6 +29,8 @@ public:
     PercentileApproxState() : percentile(new PercentileValue()) {}
     ~PercentileApproxState() = default;
 
+    int64_t mem_usage() const { return percentile->mem_usage(); }
+
     std::unique_ptr<PercentileValue> percentile;
     double targetQuantile = -1.0;
     bool is_null = true;
@@ -48,12 +50,18 @@ public:
             column_value = down_cast<const DoubleColumn*>(columns[0])->get_data()[row_num];
         }
 
-        DCHECK(!columns[1]->only_null());
+        if (columns[1]->only_null()) {
+            ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
+            return;
+        }
+
         DCHECK(!columns[1]->is_null(0));
 
+        int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         data(state).targetQuantile = columns[1]->get(0).get_double();
         data(state).is_null = false;
+        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -74,10 +82,11 @@ public:
         PercentileApproxState src_percentile;
         src_percentile.targetQuantile = quantile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
-
+        int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->merge(src_percentile.percentile.get());
         data(state).targetQuantile = quantile;
         data(state).is_null = false;
+        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

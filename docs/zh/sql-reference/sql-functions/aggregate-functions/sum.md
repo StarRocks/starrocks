@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 
 # sum
 
-## 功能
+
 
 返回指定列所有值的总和。该函数会忽略 NULL 值，可以与 DISTINCT 运算符搭配使用。
 

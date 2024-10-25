@@ -19,6 +19,7 @@
 
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/dictmapping_expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
 #include "exprs/runtime_filter.h"
@@ -125,7 +126,7 @@ struct FilterIniter {
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            const auto& data_array = GetContainer<ltype>().get_data(nullable_column->data_column().get());
+            const auto& data_array = GetContainer<ltype>::get_data(nullable_column->data_column().get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 if (!nullable_column->is_null(j)) {
                     filter->insert(data_array[j]);
@@ -136,7 +137,7 @@ struct FilterIniter {
                 }
             }
         } else {
-            const auto& data_array = GetContainer<ltype>().get_data(column.get());
+            const auto& data_array = GetContainer<ltype>::get_data(column.get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 filter->insert(data_array[j]);
             }
@@ -152,6 +153,20 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     }
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
+                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    for (const auto& column : columns) {
+        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
+    }
+    return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
+                                                      LogicalType type, JoinRuntimeFilter* filter,
+                                                      size_t column_offset) {
+    return fill_runtime_bloom_filter(param.columns, type, filter, column_offset, param.eq_null);
 }
 
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
@@ -182,7 +197,9 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
     new_expr->clear_children();
     new_expr->add_child(new_left);
     new_expr->add_child(literal);
-    return pool->add(new ExprContext(new_expr));
+    auto expr = pool->add(new ExprContext(new_expr));
+    expr->set_build_from_only_in_filter(true);
+    return expr;
 }
 
 struct FilterZoneMapWithMinMaxOp {
@@ -241,6 +258,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _join_mode = desc.build_join_mode;
     _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
     _skip_wait = _is_topn_filter;
+    _is_group_colocate_rf = desc.__isset.build_from_group_execution && desc.build_from_group_execution;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -434,22 +452,31 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
-        auto is_existent_slot_ref = [&](ExprContext* expr) {
-            auto* root = expr->root();
-            if (!root->is_slotref()) {
+        auto only_reference_existent_slots = [&](ExprContext* expr) {
+            std::vector<SlotId> slot_ids;
+            int n = expr->root()->get_slot_ids(&slot_ids);
+            DCHECK(slot_ids.size() == n);
+
+            // do not allow struct subfield
+            if (expr->root()->get_subfields(nullptr) > 0) {
                 return false;
             }
 
-            auto* col_ref = down_cast<ColumnRef*>(root);
-            return partial_chunk->is_slot_exist(col_ref->slot_id());
+            for (auto slot_id : slot_ids) {
+                if (!partial_chunk->is_slot_exist(slot_id)) {
+                    return false;
+                }
+            }
+
+            return true;
         };
 
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        bool can_use_rf_on_partial_chunk = is_existent_slot_ref(probe_expr);
+        bool can_use_rf_on_partial_chunk = only_reference_existent_slots(probe_expr);
         for (auto* part_by_expr : *partition_by_exprs) {
-            can_use_rf_on_partial_chunk &= is_existent_slot_ref(part_by_expr);
+            can_use_rf_on_partial_chunk &= only_reference_existent_slots(part_by_expr);
         }
 
         // skip runtime filter that references a non-existent column for the partial chunk
@@ -616,7 +643,25 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     }
 }
 
-void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
+static bool contains_dict_mapping_expr(Expr* expr) {
+    if (typeid(*expr) == typeid(DictMappingExpr)) {
+        return true;
+    }
+
+    return std::any_of(expr->children().begin(), expr->children().end(),
+                       [](Expr* child) { return contains_dict_mapping_expr(child); });
+}
+
+static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
+    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
+    if (probe_expr_ctx == nullptr) {
+        return false;
+    }
+    return contains_dict_mapping_expr(probe_expr_ctx->root());
+}
+
+void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
+                                            RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
                                             std::set<TPlanNodeId>& local_rf_waiting_set) {
     if (this == parent) return;
     auto iter = parent->_descriptors.begin();
@@ -626,7 +671,10 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
             ++iter;
             continue;
         }
-        if (desc->is_bound(tuple_ids)) {
+        if (desc->is_bound(tuple_ids) &&
+            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
+            !contains_dict_mapping_expr(desc)) {
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());

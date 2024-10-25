@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "storage/persistent_index_compaction_manager.h"
 
 namespace starrocks {
 
@@ -29,14 +30,22 @@ namespace lake {
 class UpdateManager;
 
 #ifdef USE_STAROS
-class LocalPkIndexManager {
+class LocalPkIndexManager : public PersistentIndexCompactionManager {
 public:
+    LocalPkIndexManager() = default;
+
+    ~LocalPkIndexManager();
+
     static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     // remove pk index meta first, and if success then remove dir.
     static Status clear_persistent_index(int64_t tablet_id);
+
+    void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo) override;
+
+    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction(UpdateManager* update_magager);
 
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);

@@ -48,9 +48,10 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -76,6 +77,13 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
 }
 
 Rowset::~Rowset() {
+#ifndef BE_TEST
+    if (_keys_type != PRIMARY_KEYS) {
+        // ONLY support non-pk table now.
+        // evict rowset before destroy, in case this rowset no close yet.
+        MetadataCache::instance()->evict_rowset(this);
+    }
+#endif
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -85,6 +93,7 @@ Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
     if (_rowset_state_machine.rowset_state() == ROWSET_LOADED) {
+        warmup_lrucache();
         return Status::OK();
     }
     // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
@@ -93,7 +102,7 @@ Status Rowset::load() {
         RETURN_IF_ERROR(do_load());
         RETURN_IF_ERROR(_rowset_state_machine.on_load());
     }
-    VLOG(1) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
+    VLOG(2) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
             << ", state from ROWSET_UNLOADED to ROWSET_LOADED. tabletid:" << _rowset_meta->tablet_id();
     return Status::OK();
 }
@@ -170,13 +179,33 @@ Status Rowset::do_load() {
         auto res = Segment::open(fs, seg_info, seg_id, _schema, &footer_size_hint,
                                  rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
-            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            auto st = res.status().clone_and_prepend(fmt::format(
+                    "Load rowset failed tablet:{} rowset:{} rssid:{} seg:{} path:{}", _rowset_meta->tablet_id(),
+                    rowset_id().to_string(), _rowset_meta->get_rowset_seg_id(), seg_id, seg_path));
+            LOG(WARNING) << st.message();
             _segments.clear();
-            return res.status();
+            return st;
         }
         _segments.push_back(std::move(res).value());
     }
+#ifndef BE_TEST
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+        // Add rowset to lru metadata cache for memory control.
+        // ONLY support non-pk table now.
+        MetadataCache::instance()->cache_rowset(this);
+    }
+#endif
     return Status::OK();
+}
+
+void Rowset::warmup_lrucache() {
+#ifndef BE_TEST
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+        // Move this item to newest item in lru cache.
+        // ONLY support non-pk table now.
+        MetadataCache::instance()->warmup_rowset(this);
+    }
+#endif
 }
 
 // this function is only used for partial update so far
@@ -237,11 +266,12 @@ Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr&
     return Status::OK();
 }
 
-int64_t Rowset::total_segment_data_size() {
+StatusOr<int64_t> Rowset::total_segment_data_size() {
     int64_t res = 0;
     for (auto& seg : _segments) {
         if (seg != nullptr) {
-            res += seg->get_data_size();
+            ASSIGN_OR_RETURN(auto sz, seg->get_data_size());
+            res += sz;
         }
     }
     return res;
@@ -260,7 +290,7 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
-        // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
+        // When creating segment iterators for compaction, we don't provide rowid_range_option and pred_tree_for_zone_map,
         // So here we don't need to consider the following two situation:
         //
         // if (options.rowid_range_option != nullptr) {
@@ -287,7 +317,7 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
 }
 
 Status Rowset::remove() {
-    VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
+    VLOG(2) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
@@ -309,6 +339,12 @@ Status Rowset::remove() {
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
                 LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
+            } else if (index.index_type() == IndexType::VECTOR) {
+                std::string vector_index_path = IndexDescriptor::vector_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto vst = fs->delete_file(vector_index_path);
+                LOG_IF(WARNING, !vst.ok()) << "Fail to delete vector_index_path " << vector_index_path << ": " << vst;
+                merge_status(vst);
             }
         }
     }
@@ -363,7 +399,7 @@ Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem
                 for (const auto& column_file : column_files) {
                     auto st = fs->delete_file(column_file);
                     if (st.ok() || st.is_not_found()) {
-                        VLOG(1) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
+                        VLOG(2) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
                     } else {
                         return st;
                     }
@@ -395,13 +431,13 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         // link inverted files
         if (!_schema->indexes()->empty()) {
             int segment_n = i;
-            for (int index_id = 0; index_id < _schema->indexes()->size(); index_id++) {
-                const auto& index = (*(_schema->indexes()))[index_id];
+            const auto& indexes = *_schema->indexes();
+            for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
 
                     RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                     std::set<std::string> files;
@@ -415,6 +451,15 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                             return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
                                                                             src_absolute_path, dst_absolute_path));
                         }
+                    }
+                } else if (index.index_type() == VECTOR) {
+                    std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                    std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                        PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                        return Status::RuntimeError("Fail to link index data file");
                     }
                 }
             }
@@ -436,7 +481,7 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
             return Status::RuntimeError(
                     fmt::format("Fail to link segment update file, src: {}, dst {}", src_file_path, dst_link_path));
         } else {
-            VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
+            VLOG(2) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
     RETURN_IF_ERROR(_link_delta_column_group_files(kvstore, dir, version));
@@ -470,7 +515,7 @@ Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::strin
                         return Status::RuntimeError(fmt::format("Fail to link segment cols file, src: {}, dst {}",
                                                                 src_file_path, dst_link_path));
                     } else {
-                        VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
+                        VLOG(2) << "success to link " << src_file_path << " to " << dst_link_path;
                     }
                 }
             }
@@ -595,7 +640,7 @@ Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::strin
                         return Status::RuntimeError(fmt::format("Fail to copy segment cols file, src: {}, dst {}",
                                                                 src_file_path, dst_copy_path));
                     } else {
-                        VLOG(1) << "success to copy " << src_file_path << " to " << dst_copy_path;
+                        VLOG(2) << "success to copy " << src_file_path << " to " << dst_copy_path;
                     }
                 }
             }
@@ -608,6 +653,14 @@ void Rowset::do_close() {
     _segments.clear();
 }
 
+size_t Rowset::segment_memory_usage() {
+    size_t total = 0;
+    for (const auto& segment : _segments) {
+        total += segment->mem_usage();
+    }
+    return total;
+}
+
 class SegmentIteratorWrapper : public ChunkIterator {
 public:
     SegmentIteratorWrapper(std::shared_ptr<Rowset> rowset, ChunkIteratorPtr iter)
@@ -618,12 +671,12 @@ public:
         _iter.reset();
     }
 
-    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);
     }
 
-    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         return _iter->init_output_schema(unused_output_column_ids);
     }
@@ -658,8 +711,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
-    seg_options.predicates = options.predicates;
-    seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
+    seg_options.pred_tree = options.pred_tree;
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -669,6 +722,9 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.tablet_schema = options.tablet_schema;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -689,6 +745,9 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -840,6 +899,7 @@ StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.rowset_path = _rowset_path;
 
     // open update file
     DCHECK(update_file_id < num_update_files());

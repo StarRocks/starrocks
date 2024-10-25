@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/base_tablet.h"
 #include "storage/lake/metadata_iterator.h"
@@ -48,7 +49,25 @@ enum WriterType : int;
 
 class Tablet : public BaseTablet {
 public:
-    explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {}
+    explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {
+        if (_mgr != nullptr) {
+            _location_provider = _mgr->location_provider();
+        }
+    }
+
+    explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
+                    TabletMetadataPtr tablet_metadata)
+            : _mgr(mgr), _id(id) {
+        _location_provider = std::move(location_provider);
+        _tablet_metadata = tablet_metadata;
+    }
+
+    explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
+                    std::shared_ptr<TabletSchema> tablet_schema)
+            : _mgr(mgr), _id(id) {
+        _location_provider = std::move(location_provider);
+        _tablet_schema = tablet_schema;
+    }
 
     ~Tablet() override = default;
 
@@ -58,19 +77,23 @@ public:
 
     [[nodiscard]] std::string root_location() const;
 
-    [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
+    Status put_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
+    Status put_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    [[nodiscard]] Status delete_metadata(int64_t version);
+    Status delete_metadata(int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status metadata_exists(int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLogPtr& log);
+
+    Status put_txn_slog(const TxnLogPtr& log);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
@@ -82,7 +105,7 @@ public:
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
-                                                       ThreadPool* flush_pool = nullptr);
+                                                       ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     const std::shared_ptr<const TabletSchema> tablet_schema() const override;
 
@@ -113,7 +136,7 @@ public:
 
     [[nodiscard]] std::string sst_location(std::string_view sst_name) const;
 
-    [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
@@ -133,12 +156,17 @@ public:
 
     int64_t data_size();
 
+    const std::shared_ptr<LocationProvider>& location_provider() const { return _location_provider; }
+
     size_t num_rows() const override;
 
 private:
     TabletManager* _mgr;
     int64_t _id;
     int64_t _version_hint = 0;
+    std::shared_ptr<LocationProvider> _location_provider;
+    TabletMetadataPtr _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
 };
 
 } // namespace starrocks::lake

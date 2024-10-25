@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # percentile_hash
 
-## 功能
+
 
 将 `double` 类型数值构造成 `percentile` 类型数值。
 

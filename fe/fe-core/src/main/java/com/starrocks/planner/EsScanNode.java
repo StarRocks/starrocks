@@ -48,8 +48,12 @@ import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -90,11 +94,6 @@ public class EsScanNode extends ScanNode {
         super.init(analyzer);
 
         assignNodes();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return shardScanRanges.size();
     }
 
     @Override
@@ -169,8 +168,22 @@ public class EsScanNode extends ScanNode {
     public void assignNodes() throws UserException {
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
-        for (ComputeNode node : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
-                backendAndComputeNodeStream().collect(Collectors.toList())) {
+
+        List<ComputeNode> nodes;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                warehouseName = ConnectContext.get().getCurrentWarehouseName();
+            }
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseName);
+            nodes = computeNodeIds.stream()
+                    .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
+        } else {
+            nodes = systemInfoService.backendAndComputeNodeStream().collect(Collectors.toList());
+        }
+        for (ComputeNode node : nodes) {
             if (node.isAlive()) {
                 nodeMap.put(node.getHost(), node);
                 nodeList.add(node);

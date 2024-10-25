@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # substring_index
 
-## Description
+
 
 Extracts a substring that precedes or follows the `count` occurrences of the delimiter.
 

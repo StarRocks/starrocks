@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
-import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
@@ -71,8 +70,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
             return;
         }
 
-        boolean isGatherFragment = fragment.getDataPartition() == DataPartition.UNPARTITIONED;
-        if (isGatherFragment) {
+        if (fragment.isGatherFragment()) {
             assignGatherFragmentToWorker(execFragment);
             return;
         }
@@ -183,9 +181,8 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         // is executed that way (could have been downgraded from distributed)
     }
 
-
     private Set<Long> adaptiveChooseNodes(PlanFragment fragment, List<Long> candidates,
-                                           Set<Long> childUsedHosts) {
+                                          Set<Long> childUsedHosts) {
         List<Long> childHosts = Lists.newArrayList(childUsedHosts);
 
         // sometimes we may reverse the fragment order like SHUFFLE_HASH_BUCKET plan, so we need sort

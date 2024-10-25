@@ -59,11 +59,11 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testConcatArray() throws Exception {
         String sql = "select concat(c1, c2) from test_array";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>))");
+        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(c1, c0) from test_array";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(2: c1, CAST([1: c0] AS ARRAY<VARCHAR(65533)>))");
+        assertContains(plan, "array_concat(2: c1, CAST([1: c0] AS ARRAY<VARCHAR>))");
 
         sql = "select concat(c0, c2) from test_array";
         plan = getFragmentPlan(sql);
@@ -98,8 +98,8 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([1,2,3] AS ARRAY<VARCHAR(65533)>), 3: s_1)");
+        assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), " +
+                "CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
 
         sql = "select concat(1,2, [1,2])";
         plan = getFragmentPlan(sql);
@@ -534,32 +534,32 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_difference(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,2)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(27,2)>;");
 
         sql = "select array_difference(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(5,3)>;");
 
         sql = "select array_difference(d_3) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([6: d_3, ARRAY<DECIMAL128(25,19)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,19)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(26,19)>;");
 
         sql = "select array_difference(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,5)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL32(9,5)>;");
 
         sql = "select array_difference(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(17,3)>;");
 
         sql = "select array_difference(d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([9: d_6, ARRAY<DECIMAL128(18,6)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,6)>;");
+                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(19,6)>;");
     }
 
     @Test

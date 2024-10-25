@@ -18,7 +18,9 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -86,9 +88,9 @@ public class ConstantExpressionTest extends PlanTestBase {
         {
             String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
             Assert.assertTrue(explainString,
-                    explainString.contains("LogicalViewScanOperator {table=\\'mv_base_table_9527_view_1\\'"));
-            Assert.assertTrue(explainString, explainString.contains("LogicalAggregation"));
-            Assert.assertTrue(explainString, explainString.contains("->  LogicalOlapScanOperator"));
+                    explainString.contains("1:Project\n" +
+                            "  |  <slot 2> : 'plan 0: \n" +
+                            "LogicalAggregation {type=GLOBAL ,aggrega...'"));
         }
 
         starRocksAssert.dropView("mv_base_table_9527_view_1");
@@ -478,5 +480,103 @@ public class ConstantExpressionTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setSqlMode(prevSqlMode);
         }
+    }
+
+    @Test
+    public void testGetQueryDump() throws Exception {
+        DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+
+        try {
+            connectContext.setDumpInfo(null);
+
+            // Non-constant arguments.
+            {
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
+                Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
+                        SemanticException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases.
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', false) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', true) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"SELECT count(tbl_mock_001.mock_002)...");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0') from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            // Failed cases.
+            {
+                String sql = "SELECT get_query_dump('') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: query is empty",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+            {
+                String sql = "SELECT get_query_dump('not-a-query') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: execute query failed.",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases after failed cases.
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+        } finally {
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+
+    @Test
+    public void testReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");
+            assertContains(plan, "<slot 2> : 'abc def ghi abc'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : '1234 def ghi 1234'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('', 'abc', '1234')");
+            assertContains(plan, "<slot 2> : ''");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE(NULL, 'abc', '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', NULL, '1234')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', 'abc', NULL)");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
     }
 }

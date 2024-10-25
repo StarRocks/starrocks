@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "gen_cpp/Types_types.h"
@@ -25,7 +27,7 @@ LakeMetaScanPrepareOperator::LakeMetaScanPrepareOperator(OperatorFactory* factor
                                                          int32_t driver_sequence, LakeMetaScanNode* const scan_node,
                                                          MetaScanContextPtr scan_ctx)
         : MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("lake_meta_scan_prepare"),
-                                  scan_ctx),
+                                  std::move(scan_ctx)),
           _scan_node(scan_node) {}
 
 Status LakeMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
@@ -44,7 +46,7 @@ Status LakeMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
 LakeMetaScanPrepareOperatorFactory::LakeMetaScanPrepareOperatorFactory(
         int32_t id, int32_t plan_node_id, LakeMetaScanNode* const scan_node,
         std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
-        : MetaScanPrepareOperatorFactory(id, plan_node_id, "lake_meta_scan_prepare", scan_ctx_factory),
+        : MetaScanPrepareOperatorFactory(id, plan_node_id, "lake_meta_scan_prepare", std::move(scan_ctx_factory)),
           _scan_node(scan_node) {}
 
 OperatorPtr LakeMetaScanPrepareOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

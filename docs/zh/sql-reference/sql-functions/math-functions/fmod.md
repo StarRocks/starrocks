@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # fmod
 
-## 功能
+
 
 取模函数，返回两个数相除之后的浮点余数。
 

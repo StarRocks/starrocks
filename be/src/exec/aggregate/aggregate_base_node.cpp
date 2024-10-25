@@ -14,7 +14,6 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
-#include "exprs/anyval_util.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -70,7 +69,7 @@ void AggregateBaseNode::close(RuntimeState* state) {
 
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 
     // check to see if runtime filters can be rewritten
     auto& descriptors = _runtime_filter_collector.descriptors();

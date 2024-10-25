@@ -14,10 +14,6 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 add_library(Common STATIC
   daemon.cpp
   greplog.cpp
@@ -27,6 +23,7 @@ add_library(Common STATIC
   configbase.cpp
   s3_uri.cpp
   tracer.cpp
+  process_exit.cpp
   prof/heap_prof.cpp
 )
 

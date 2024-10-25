@@ -28,8 +28,8 @@ class TabletManager;
 template <typename T>
 class MetadataIterator {
 public:
-    explicit MetadataIterator(TabletManager* manager, std::vector<std::string> files)
-            : _manager(manager), _files(std::move(files)), _iter(_files.begin()){};
+    explicit MetadataIterator(TabletManager* manager, int64_t tablet_id, std::vector<std::string> files)
+            : _manager(manager), _tablet_id(tablet_id), _files(std::move(files)), _iter(_files.begin()){};
 
     bool has_next() const { return _iter != _files.end(); }
 
@@ -45,6 +45,7 @@ private:
     StatusOr<T> get_metadata_from_tablet_manager(const std::string& path);
 
     TabletManager* _manager;
+    int64_t _tablet_id;
     std::vector<std::string> _files;
     std::vector<std::string>::iterator _iter;
 };

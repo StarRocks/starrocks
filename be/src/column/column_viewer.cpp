@@ -15,6 +15,7 @@
 #include "column/column_viewer.h"
 
 #include "column/column_helper.h"
+#include "runtime/global_variables.h"
 #include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
@@ -33,20 +34,20 @@ template <LogicalType Type>
 ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
     if (column->only_null()) {
-        _null_column = ColumnHelper::one_size_null_column;
+        _null_column = GlobalVariables::GetInstance()->one_size_null_column();
         _column = RunTimeColumnType<Type>::create();
         _column->append_default();
     } else if (column->is_constant()) {
         auto v = ColumnHelper::as_raw_column<ConstColumn>(column);
         _column = ColumnHelper::cast_to<Type>(v->data_column());
-        _null_column = ColumnHelper::one_size_not_null_column;
+        _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
     } else if (column->is_nullable()) {
         auto v = ColumnHelper::as_raw_column<NullableColumn>(column);
         _column = ColumnHelper::cast_to<Type>(v->data_column());
         _null_column = ColumnHelper::as_column<NullColumn>(v->null_column());
     } else {
         _column = ColumnHelper::cast_to<Type>(column);
-        _null_column = ColumnHelper::one_size_not_null_column;
+        _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
     }
 
     _data = _column->get_data().data();

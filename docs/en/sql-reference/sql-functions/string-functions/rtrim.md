@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # rtrim
 
-## Description
+
 
 Removes the trailing spaces or specified characters from the end (right) of the `str` argument. Removing specified characters are supported from StarRocks 2.5.0.
 

@@ -41,6 +41,7 @@
 #include <type_traits>
 
 #include "phmap.h"
+#include "testutil/sync_point.h"
 namespace phmap {
 
 namespace type_traits_internal {
@@ -247,14 +248,27 @@ public:
     BinaryOutputArchive(const char* file_path) { ofs_.open(file_path, std::ios_base::binary); }
 
     bool dump(const char* p, size_t sz) {
+        bool ret = true;
+        TEST_SYNC_POINT_CALLBACK("BinaryOutputArchive::dump::1", &ret);
+        if (!ret) return ret;
         ofs_.write(p, sz);
-        return true;
+        return !ofs_.fail();
     }
 
     template <typename V>
     typename std::enable_if<type_traits_internal::IsTriviallyCopyable<V>::value, bool>::type dump(const V& v) {
+        bool ret = true;
+        TEST_SYNC_POINT_CALLBACK("BinaryOutputArchive::dump::2", &ret);
+        if (!ret) return ret;
         ofs_.write(reinterpret_cast<const char*>(&v), sizeof(V));
-        return true;
+        return !ofs_.fail();
+    }
+
+    bool close() {
+        ofs_.flush(); // do flush, so we can check if it success at next line.
+        if (ofs_.fail()) return false;
+        ofs_.close();
+        return !ofs_.fail();
     }
 
 private:

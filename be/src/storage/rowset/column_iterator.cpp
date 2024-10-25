@@ -64,4 +64,28 @@ Status ColumnIterator::fetch_dict_codes_by_rowid(const Column& rowids, Column* v
     return fetch_dict_codes_by_rowid(p, rowids.size(), values);
 }
 
+Status ColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
+    auto iter = range.new_iterator();
+    auto to_read = range.span_size();
+    while (to_read > 0) {
+        RETURN_IF_ERROR(seek_to_ordinal(iter.begin()));
+        auto r = Range<>{iter.next(to_read)};
+        auto n = size_t{r.span_size()};
+        RETURN_IF_ERROR(next_batch(&n, dst));
+        CHECK_EQ(r.span_size(), n);
+        to_read -= n;
+    }
+    return Status::OK();
+}
+
+Status ColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    auto n = size_t{1};
+    for (auto i = size_t{0}; i < size; i++) {
+        RETURN_IF_ERROR(seek_to_ordinal(rowids[i]));
+        RETURN_IF_ERROR(next_batch(&n, values));
+        DCHECK_EQ(1, n);
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

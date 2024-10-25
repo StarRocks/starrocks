@@ -1,0 +1,63 @@
+-- name: test_mv_refresh_with_the_same_tables @slow
+CREATE TABLE `t1` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` decimal(38, 8) NULL COMMENT "",
+  `k3` decimal(38, 8) NULL COMMENT "",
+  `dt`  DATE  NULL COMMENT ""
+) 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+    START ("2023-12-31") END ("2025-01-01") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+CREATE MATERIALIZED VIEW  test_mv1
+PARTITION BY dt
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"partition_refresh_number"="-1"
+) REFRESH deferred MANUAL as
+select k1,k3,dt from t1;
+
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY dt
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"partition_refresh_number"="-1"
+) REFRESH MANUAL as
+select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt 
+from t1 left outer join test_mv1 t4 
+on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10);
+
+insert into `t1` values 
+(1,4212332.27340000,4232.27340000,"2024-05-16"), (2,421111132.27340000,-4232.27340000,"2024-05-16"),(2,121111132.2340000,-332.27340000,"2024-05-16"),
+(3,123222.27340000,113163302.95000000,"2024-05-16"),(4,22312.27340000,709018.20810000,"2024-05-16"),(1,123222.27340000,11316330.95000000,"2023-12-31"),
+(1,22312.27340000,70901.20810000,"2023-12-31"),(2,421111132.27340000,-1232.27340000,"2023-12-31"),(3,123222.27340000,11316330.95000000,"2023-12-31"),
+(4,22312.27340000,70901.20810000,"2023-12-31");
+
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+
+function: check_hit_materialized_view("select k1,k3,dt from t1", "test_mv1")
+function: check_hit_materialized_view("select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10)", "test_mv2")
+
+select * from test_mv1 order by 1, 2, 3;
+select * from test_mv2 order by 1, 2, 3;
+select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3 limit 5;
+insert into `t1` values (1,4212332.27340000,4232.27340000,"2024-05-17"),(2,421111132.27340000,-4232.27340000,"2024-05-17"),(3,123222.27340000,113163302.95000000,"2024-05-17"),(4,22312.27340000,709018.20810000,"2024-05-17");
+
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+function: check_hit_materialized_view("select k1,k3,dt from t1", "test_mv1")
+function: check_hit_materialized_view("select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10)", "test_mv2")
+
+select * from test_mv1 order by 1, 2, 3;
+select * from test_mv2 order by 1, 2, 3;
+select t1.k1, t1.k3 t1k3, t4.k3 k4k3, t1.k3-t4.k3 as upyear, t1.dt dt  from t1 left outer join test_mv1 t4  on t1.k1=t4.k1 and t4.dt=substr(date_sub(t1.dt,interval dayofyear(t1.dt) day),1,10) order by 1, 2, 3 limit 5;
+
+drop materialized view test_mv2;
+drop materialized view test_mv1;
+
+drop table t1;

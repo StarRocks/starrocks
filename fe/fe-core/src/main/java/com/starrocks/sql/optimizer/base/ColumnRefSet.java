@@ -51,6 +51,14 @@ public class ColumnRefSet implements Cloneable {
         return columnRefSet;
     }
 
+    public static ColumnRefSet of(ColumnRefOperator... columnRefs) {
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        for (ColumnRefOperator colRef : columnRefs) {
+            columnRefSet.union(colRef);
+        }
+        return columnRefSet;
+    }
+
     public int[] getColumnIds() {
         return bitSet.toArray();
     }

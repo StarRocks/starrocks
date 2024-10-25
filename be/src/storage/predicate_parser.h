@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "common/statusor.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
@@ -36,6 +37,8 @@ public:
 
     // check if an expression can be pushed down to the storage level
     bool can_pushdown(const ColumnPredicate* predicate) const;
+
+    bool can_pushdown(const ConstPredicateNodePtr& pred_tree) const;
 
     bool can_pushdown(const SlotDescriptor* slot_desc) const;
 

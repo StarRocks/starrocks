@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # multi_distinct_sum
 
-## 功能
+
 
 返回 `expr` 中去除重复值后的总和，功能等同于 sum(distinct expr)。
 

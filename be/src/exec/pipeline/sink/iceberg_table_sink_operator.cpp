@@ -18,6 +18,7 @@
 
 #include "exec/parquet_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 
 namespace starrocks::pipeline {
 
@@ -62,9 +63,8 @@ bool IcebergTableSinkOperator::is_finished() const {
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        _is_audit_report_done = false;
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
-                                                                         &_is_audit_report_done);
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
 
     for (const auto& writer : _partition_writers) {
@@ -80,10 +80,6 @@ Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 bool IcebergTableSinkOperator::pending_finish() const {
-    // audit report not finish, we need check until finish
-    if (!_is_audit_report_done) {
-        return true;
-    }
     return !is_finished();
 }
 

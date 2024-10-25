@@ -45,7 +45,7 @@ public:
         thrift_from_json_string(base, data);
     }
 
-    void init_fs_options(FSOptions* options, bool v2 = false) {
+    void init_fs_options(FSOptions* options) {
         TCloudConfiguration* cloud_configuration = _pool.add(new TCloudConfiguration());
         options->cloud_configuration = cloud_configuration;
         std::map<std::string, std::string> kvs = {
@@ -53,18 +53,7 @@ public:
                 {"yyy", "yyy0"},
                 {"zzz", "zzz0"},
         };
-        if (v2) {
-            cloud_configuration->__set_cloud_properties_v2(kvs);
-        } else {
-            std::vector<TCloudProperty> props;
-            for (const auto& kv : kvs) {
-                TCloudProperty prop;
-                prop.key = kv.first;
-                prop.value = kv.second;
-                props.push_back(prop);
-            }
-            cloud_configuration->__set_cloud_properties(props);
-        }
+        cloud_configuration->__set_cloud_properties(kvs);
     }
 
     void init_hdfs_scanner_context(HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
@@ -91,12 +80,11 @@ public:
         }
         tuple_desc_builder.build(&table_desc_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
                                     config::vector_chunk_size)
                       .ok());
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
         return tuple_desc;
     }
@@ -293,7 +281,7 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
 
     {
         FSOptions fs_options;
-        init_fs_options(&fs_options, true);
+        init_fs_options(&fs_options);
         options.fs_options = &fs_options;
 
         auto scanner = create_hive_jni_scanner(options);

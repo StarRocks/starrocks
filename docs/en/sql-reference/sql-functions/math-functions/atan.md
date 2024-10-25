@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # atan
 
-## Description
+
 
 Computes the arc tangent of the argument.
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ST_Distance_Sphere
 
-## 功能
+
 
 计算地球两点之间的球面距离，单位是「米」。
 

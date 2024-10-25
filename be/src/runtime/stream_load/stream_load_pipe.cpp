@@ -34,6 +34,9 @@
 
 #include "runtime/stream_load/stream_load_pipe.h"
 
+#include "util/alignment.h"
+#include "util/compression/compression_utils.h"
+
 namespace starrocks {
 
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
@@ -75,7 +78,7 @@ Status StreamLoadPipe::append(const char* data, size_t size) {
     // need to allocate a new chunk, min chunk is 64k
     size_t chunk_size = std::max(_min_chunk_size, size - pos);
     chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
-    _write_buf = ByteBuffer::allocate(chunk_size);
+    ASSIGN_OR_RETURN(_write_buf, ByteBuffer::allocate_with_tracker(chunk_size));
     _write_buf->put_bytes(data + pos, size - pos);
     return Status::OK();
 }
@@ -192,7 +195,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
                         // put back the read data to the buf_queue, read the data in the next time
                         size_t chunk_size = bytes_read;
                         chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
-                        ByteBufferPtr write_buf = ByteBuffer::allocate(chunk_size);
+                        ASSIGN_OR_RETURN(ByteBufferPtr write_buf, ByteBuffer::allocate_with_tracker(chunk_size));
                         write_buf->put_bytes((char*)data, bytes_read);
                         write_buf->flip();
                         // error happens iff pipe is cancelled
@@ -273,6 +276,70 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     _buffered_bytes += buf->remaining();
     _get_cond.notify_one();
     return Status::OK();
+}
+
+CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
+                                                               TCompressionType::type compression_type)
+        : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
+
+StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
+    size_t buffer_size = DEFAULT_DECOMPRESS_BUFFER_SIZE;
+    if (_decompressor == nullptr) {
+        auto compression = CompressionUtils::to_compression_pb(_compression_type);
+        if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
+            return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(_compression_type));
+        }
+        RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &_decompressor));
+    }
+
+    if (_decompressed_buffer == nullptr) {
+        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size));
+    }
+
+    ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
+
+    // try to read all compressed data into _decompressed_buffer
+    bool stream_end = false;
+    size_t total_bytes_read = 0;
+    size_t bytes_read = 0;
+    size_t bytes_written = 0;
+    RETURN_IF_ERROR(_decompressor->decompress(reinterpret_cast<uint8_t*>(buf->ptr), buf->remaining(), &bytes_read,
+                                              reinterpret_cast<uint8_t*>(_decompressed_buffer->ptr),
+                                              _decompressed_buffer->capacity, &bytes_written, &stream_end));
+    _decompressed_buffer->pos = bytes_written;
+    bytes_written = 0;
+    total_bytes_read += bytes_read;
+
+    std::list<ByteBufferPtr> pieces;
+    size_t pieces_size = 0;
+    // read all pieces
+    while (!stream_end) {
+        // buffer size grows exponentially
+        buffer_size = buffer_size < MAX_DECOMPRESS_BUFFER_SIZE ? buffer_size * 2 : MAX_DECOMPRESS_BUFFER_SIZE;
+        ASSIGN_OR_RETURN(auto piece, ByteBuffer::allocate_with_tracker(buffer_size));
+        RETURN_IF_ERROR(_decompressor->decompress(
+                reinterpret_cast<uint8_t*>(buf->ptr) + total_bytes_read, buf->remaining() - total_bytes_read,
+                &bytes_read, reinterpret_cast<uint8_t*>(piece->ptr), piece->capacity, &bytes_written, &stream_end));
+        piece->pos = bytes_written;
+        pieces.emplace_back(std::move(piece));
+        pieces_size += bytes_written;
+        total_bytes_read += bytes_read;
+        bytes_read = 0;
+        bytes_written = 0;
+    }
+
+    if (pieces_size > 0) {
+        if (_decompressed_buffer->remaining() < pieces_size) {
+            // align to 1024 bytes.
+            auto sz = ALIGN_UP(_decompressed_buffer->pos + pieces_size, 1024);
+            ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::reallocate_with_tracker(_decompressed_buffer, sz));
+        }
+        for (const auto& piece : pieces) {
+            _decompressed_buffer->put_bytes(piece->ptr, piece->pos);
+        }
+    }
+    _decompressed_buffer->flip();
+    return _decompressed_buffer;
 }
 
 StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read)

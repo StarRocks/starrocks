@@ -43,11 +43,11 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
 }
 
 Status StringFunctions::str_to_map_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    return StringFunctions::split_prepare(context, FunctionContext::FRAGMENT_LOCAL);
+    return StringFunctions::split_prepare(context, scope);
 }
 
 Status StringFunctions::str_to_map_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    return StringFunctions::split_close(context, FunctionContext::FRAGMENT_LOCAL);
+    return StringFunctions::split_close(context, scope);
 }
 
 /**

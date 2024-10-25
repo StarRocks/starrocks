@@ -1,0 +1,37 @@
+-- name: test_pruned_right_outer_local_bucket_shuffle_join
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c1 bigint
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 6
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 select generate_series, generate_series from TABLE(generate_series(0, 10000 - 1));
+
+-- Repeat the same query multiple times.
+with 
+  w1 as (select k1 from t1 where k1 = 10),
+  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+select count(1) from w3;
+
+with 
+  w1 as (select k1 from t1 where k1 = 10),
+  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+select count(1) from w3;
+
+with 
+  w1 as (select k1 from t1 where k1 = 10),
+  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+select count(1) from w3;
+
+with 
+  w1 as (select k1 from t1 where k1 = 10),
+  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+select count(1) from w3;

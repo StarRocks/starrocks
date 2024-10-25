@@ -16,8 +16,8 @@ package com.starrocks.credential.tencent;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -38,7 +38,7 @@ public class TencentCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         tencentCloudCredential.toThrift(properties);
     }

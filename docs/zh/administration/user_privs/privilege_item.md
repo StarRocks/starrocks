@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 权限项
@@ -21,7 +21,7 @@ displayed_sidebar: "Chinese"
 | CREATE EXTERNAL CATALOG | 创建 External Catalog。                                      |
 | PLUGIN                  | 安装、卸载一个插件。                                         |
 | REPOSITORY              | 创建、删除、查看仓库。                                       |
-| BLACKLIST               | 创建、删除、查看 SQL 黑名单。                                |
+| BLACKLIST               | 创建、删除、查看 SQL 黑名单和 BE 黑名单。                      |
 | FILE                    | 创建、删除、查看文件。                                       |
 | OPERATE                 | 管理副本、配置项、变量、transaction等。                      |
 | CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |

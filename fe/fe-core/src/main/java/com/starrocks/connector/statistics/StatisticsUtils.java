@@ -15,9 +15,18 @@
 package com.starrocks.connector.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import io.trino.hive.$internal.org.apache.commons.lang3.tuple.ImmutableTriple;
+import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class StatisticsUtils {
     public static Table getTableByUUID(String tableUUID) {
@@ -33,5 +42,33 @@ public class StatisticsUtils {
         } else {
             throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
         }
+    }
+
+    public static Triple<String, Database, Table> getTableTripleByUUID(String tableUUID) {
+        String[] splits = tableUUID.split("\\.");
+
+        Preconditions.checkState(splits.length == 4);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(splits[0], splits[1]);
+        if (db == null) {
+            throw new SemanticException("Database [%s.%s] is not existed", splits[0], splits[1]);
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(splits[0], splits[1], splits[2]);
+        if (table == null) {
+            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+        }
+        if (!table.getUUID().equals(tableUUID)) {
+            throw new SemanticException("Table [%s.%s.%s] is not existed", splits[0], splits[1], splits[2]);
+        }
+
+        return ImmutableTriple.of(splits[0], db, table);
+    }
+
+    public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(1);
+        statisticsBuilder.addColumnStatistics(
+                columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
+        return statisticsBuilder.build();
     }
 }

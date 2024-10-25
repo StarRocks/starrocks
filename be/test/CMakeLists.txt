@@ -1,17 +1,17 @@
 set(EXEC_FILES
         ./agent/agent_task_test.cpp
+        ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
-        ./column/column_pool_test.cpp
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
-        #./column/json_column_test.cpp
+        ./column/json_column_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
@@ -19,34 +19,42 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./column/schema_test.cpp
         ./common/config_test.cpp
+        ./common/process_exit_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/async_flush_output_stream_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
+        ./fs/encrypt_file_test.cpp
+        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
+        ./fs/poco_http_client_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
-        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
+        ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
+        ./exec/workgroup/pipeline_executor_set_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
+        ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -76,6 +84,7 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
+        ./exec/multi_olap_table_sink_test.cpp
         ./exec/avro_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
@@ -143,6 +152,7 @@ set(EXEC_FILES
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
+        ./exprs/vectorized_literal_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -160,6 +170,8 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/json/struct_column_test.cpp
+        ./formats/json/map_column_test.cpp
         ./formats/avro/binary_column_test.cpp
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
@@ -184,6 +196,8 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
+        ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -222,6 +236,7 @@ set(EXEC_FILES
         ./storage/persistent_index_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
+        ./storage/roaring2range_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
@@ -229,9 +244,10 @@ set(EXEC_FILES
         ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
-        ./storage/lake/location_provider_test.cpp
+        ./storage/lake/starlet_location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
         ./storage/lake/tablet_test.cpp
+        ./storage/lake/lake_data_source_test.cpp
         ./storage/lake/lake_scan_node_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
@@ -247,6 +263,7 @@ set(EXEC_FILES
         ./storage/lake/metacache_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
+        ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -271,10 +288,17 @@ set(EXEC_FILES
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/struct_column_rw_test.cpp
         ./storage/rowset/flat_json_column_rw_test.cpp
+        ./storage/rowset/flat_json_column_compact_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
+        ./storage/rowset/column_iterator_decorator_test.cpp
+        ./storage/rowset/cast_column_iterator_test.cpp
+        ./storage/rowset/series_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
+        ./storage/rowset/metadata_cache_test.cpp
+        ./storage/index/vector_index_test.cpp
+        ./storage/index/vector_search_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
@@ -283,7 +307,7 @@ set(EXEC_FILES
         ./storage/tablet_index_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
-        ./storage/table_schema_test.cpp
+        ./storage/tablet_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -326,8 +350,10 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+        ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -344,7 +370,9 @@ set(EXEC_FILES
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
+        ./runtime/memory/counting_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
+        ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
@@ -363,6 +391,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./types/type_checker_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
@@ -371,6 +400,7 @@ set(EXEC_FILES
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
         ./util/bitmap_test.cpp
+        ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
@@ -397,6 +427,7 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
+        ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
@@ -407,16 +438,20 @@ set(EXEC_FILES
         ./util/priority_queue_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
+        ./util/raw_container_test.cpp
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
+        ./util/threadpool_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/int96_test.cpp
+        ./util/internal_service_recoverable_stub_test.cpp
         ./util/bit_packing_test.cpp
+        ./util/bit_packing_simd_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
@@ -428,20 +463,27 @@ set(EXEC_FILES
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
+        ./util/numeric_types_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
+        ./storage/metadata_util_test.cpp
+        ./storage/delta_writer_test.cpp
         ./storage/compaction_parallelization_test.cpp
+        ./storage/rows_mapper_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./block_cache/datacache_utils_test.cpp
+        ./block_cache/block_cache_hit_rate_counter_test.cpp
+        ./util/thrift_rpc_helper_test.cpp
         )
 
-if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
+if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

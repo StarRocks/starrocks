@@ -1,0 +1,429 @@
+-- name: test_mv_refresh_with_multi_union1 @slow
+CREATE TABLE `u1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u2` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u3` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u4` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u5` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u6` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO u1 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14'),
+	 (11,'2024-03-15'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u2 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u3 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14'),
+	 (11,'2024-03-15'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u4 (id,dt) VALUES
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u5 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u6 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12');
+-- result:
+-- !result
+	 
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u1
+    union all
+    select dt from u2;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv2`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u3
+    union all
+    select dt from u4;
+-- result:
+-- !result
+    
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv3`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv4`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt 
+from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+     select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv5`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt 
+from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv6`
+PARTITION BY date_trunc('day', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv7`
+PARTITION BY date_trunc('month', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv8`
+PARTITION BY date_trunc('month', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH ASYNC 
+AS 
+select dt
+from (
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5
+) t
+group by dt;
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+refresh materialized view test_mv5 with sync mode;
+refresh materialized view test_mv6 with sync mode;
+refresh materialized view test_mv7 with sync mode;
+refresh materialized view test_mv8 with sync mode;
+select count(1) from test_mv1;
+-- result:
+17
+-- !result
+select count(1) from test_mv2;
+-- result:
+13
+-- !result
+select count(1) from test_mv3;
+-- result:
+36
+-- !result
+select count(1) from test_mv4;
+-- result:
+10
+-- !result
+select count(1) from test_mv5;
+-- result:
+10
+-- !result
+select count(1) from test_mv6;
+-- result:
+86
+-- !result
+select count(1) from test_mv7;
+-- result:
+86
+-- !result
+select count(1) from test_mv8;
+-- result:
+10
+-- !result
+select dt from test_mv1 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv2 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv3 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv4 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv5 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv6 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv7 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+select dt from test_mv8 group by dt order by 1;
+-- result:
+2024-03-10
+2024-03-11
+2024-03-12
+2024-03-13
+2024-03-14
+2024-03-15
+2024-03-16
+2024-03-17
+2024-03-18
+2024-04-10
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+drop materialized view test_mv4;
+-- result:
+-- !result
+drop materialized view test_mv5;
+-- result:
+-- !result
+drop materialized view test_mv6;
+-- result:
+-- !result
+drop materialized view test_mv7;
+-- result:
+-- !result
+drop materialized view test_mv8;
+-- result:
+-- !result

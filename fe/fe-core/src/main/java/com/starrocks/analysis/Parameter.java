@@ -83,4 +83,23 @@ public class Parameter extends Expr {
     protected String toSqlImpl() {
         return "?";
     }
+
+    @Override
+    public int hashCode() {
+        return slotId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+
+        if (obj.getClass() != this.getClass()) {
+            return false;
+        }
+
+        Parameter parameter = (Parameter) obj;
+        return this.slotId == parameter.slotId;
+    }
 }

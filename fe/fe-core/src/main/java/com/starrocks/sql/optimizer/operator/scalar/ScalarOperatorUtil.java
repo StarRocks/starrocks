@@ -23,6 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -74,5 +75,19 @@ public class ScalarOperatorUtil {
                     ((ScalarType) argTypes[0]).getScalarScale()));
         }
         return newFn;
+    }
+
+    public static boolean isSimpleLike(ScalarOperator op) {
+        return Utils.downcast(op, LikePredicateOperator.class)
+                .map(likeOp -> !likeOp.isRegexp() &&
+                        likeOp.getChild(0).isColumnRef() &&
+                        likeOp.getChild(1).isConstantRef())
+                .orElse(false);
+    }
+
+    public static boolean isSimpleNotLike(ScalarOperator op) {
+        return Utils.downcast(op, CompoundPredicateOperator.class)
+                .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
+                .orElse(false);
     }
 }

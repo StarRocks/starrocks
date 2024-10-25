@@ -1,4 +1,4 @@
--- name: test_nest_loop_join
+-- name: test_nest_loop_join @slow
 
 CREATE TABLE `t1` (
   `c1` int(11) NULL COMMENT "",
@@ -163,3 +163,14 @@ select count(*) from t1 join [broadcast] t2 on t1.c1>t2.c1;
 select t1.c2, t2.c2 from t1 join [broadcast] t2 on t1.c1>t2.c1 order by t1.c2, t2.c2 limit 10;
 select t1.c2, t2.c2 from t1 join [broadcast] t2 on t1.c1>t2.c1 order by t1.c2 desc, t2.c2 desc limit 10;
 select sum(t1.c2), sum(t2.c2) from t1 join [broadcast] t2 on t1.c1>t2.c1;
+
+
+-- nestloop join with runtiime filter
+truncate table t1;
+truncate table t2;
+insert into t1 select generate_series, generate_series from table(generate_series(1, 2000000));
+insert into t2 select generate_series, generate_series from table(generate_series(1, 1));
+-- apply to scan
+select t1.c1 from t1 join t2 on t1.c1 <= t2.c1;
+-- apply to exchange
+with L as ( select  c1 lk from  t1),R as ( select  c1 rk from  t1),DIM as ( select 1000000 as mx_lo_orderkey, 999999 as mn_lo_orderkey)select count(*)from  L join [shuffle] R on lk = rk join DIM where rk >= mn_lo_orderkey and rk <= mx_lo_orderkey;

@@ -19,7 +19,22 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+
 namespace starrocks {
+
+// Options to control how to create DataCache instance
+struct DataCacheOptions {
+    bool enable_datacache = false;
+    bool enable_cache_select = false;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int64_t modification_time = 0;
+    int32_t datacache_evict_probability = 100;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+};
 
 struct DirSpace {
     std::string path;
@@ -45,6 +60,7 @@ struct CacheOptions {
 };
 
 struct WriteCacheOptions {
+    int8_t priority = 0;
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
@@ -54,6 +70,11 @@ struct WriteCacheOptions {
     // the write finish. So the cache library can use the buffer directly without copying it to another buffer.
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
+
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
 
     struct Stats {
         int64_t write_mem_bytes = 0;
@@ -69,9 +90,4 @@ struct ReadCacheOptions {
         int64_t read_disk_bytes = 0;
     } stats;
 };
-
-int64_t parse_mem_size(const std::string& mem_size_str, int64_t mem_limit = -1);
-
-int64_t parse_disk_size(const std::string& disk_path, const std::string& disk_size_str, int64_t disk_limit = -1);
-
 } // namespace starrocks

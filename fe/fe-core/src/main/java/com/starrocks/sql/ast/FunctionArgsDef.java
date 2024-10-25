@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 
 import java.util.List;
 
@@ -41,7 +40,7 @@ public class FunctionArgsDef {
         return isVariadic;
     }
 
-    public void analyze() throws AnalysisException {
+    public void analyze() {
         argTypes = new Type[argTypeDefs.size()];
         int i = 0;
         for (TypeDef typeDef : argTypeDefs) {

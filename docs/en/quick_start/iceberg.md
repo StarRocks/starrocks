@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 3
 description: Data Lakehouse with Apache Iceberg
 toc_max_heading_level: 2
 ---
-import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 
 # Apache Iceberg Lakehouse
 
@@ -44,7 +44,7 @@ Frontend nodes are responsible for metadata management, client connection manage
 
 ### BE
 
-Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When using an external catalog (like the Iceberg catalog used in this guide) only local data is stored on the BE node(s).
+Backend (BE) nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When an external catalog (like the Iceberg catalog used in this guide) is used, the BE nodes can cache the data from the external catalog to accelerate queries.
 
 ---
 

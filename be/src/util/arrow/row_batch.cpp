@@ -44,7 +44,6 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
-#include <arrow/visitor_inline.h>
 #include <fmt/format.h>
 
 #include <memory>

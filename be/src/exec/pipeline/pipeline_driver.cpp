@@ -48,15 +48,21 @@ PipelineDriver::~PipelineDriver() noexcept {
     check_operator_close_states("deleting pipeline drivers");
 }
 
-void PipelineDriver::check_operator_close_states(std::string func_name) {
+void PipelineDriver::check_operator_close_states(const std::string& func_name) {
     if (_driver_id == -1) { // in test cases
         return;
     }
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
-                                   to_readable_string(), op->get_name(), func_name);
+            std::stringstream ss;
+            ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+               << " fragment_id="
+               << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+            auto msg = fmt::format(
+                    "{} close operator {}-{} failed, may leak resources when {}, please report an issue at "
+                    "https://github.com/StarRocks/starrocks/issues/new/choose.",
+                    ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
@@ -279,6 +285,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -329,6 +336,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                                                 to_readable_string()));
                         }
 
+                        maybe_chunk.value()->check_or_die();
+
                         total_rows_moved += row_num;
                         {
                             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
@@ -368,6 +377,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+                    curr_op->update_exec_stats(runtime_state);
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -402,6 +412,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
+            sink_operator()->update_exec_stats(runtime_state);
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
@@ -508,11 +519,12 @@ void PipelineDriver::mark_precondition_not_ready() {
     }
 }
 
-void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
+void PipelineDriver::mark_precondition_ready() {
     for (auto& op : _operators) {
-        op->set_precondition_ready(runtime_state);
+        op->set_precondition_ready(_runtime_state);
         submit_operators();
     }
+    _precondition_prepared = true;
 }
 
 void PipelineDriver::start_timers() {
@@ -548,7 +560,9 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
     if (this->query_ctx()->is_query_expired()) {
-        LOG(WARNING) << "begin to cancel operators for " << to_readable_string();
+        if (_has_log_cancelled.exchange(true) == false) {
+            VLOG_ROW << "begin to cancel operators for " << to_readable_string();
+        }
     }
     for (auto& op : _operators) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
@@ -601,9 +615,21 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
 
+        bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved)) {
+            need_spill = true;
             mem_resource_mgr.to_low_memory_mode();
         }
+
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto query_consumption = query_mem_tracker->consumption();
+        auto limited = query_mem_tracker->limit();
+        auto reserved_limit = query_mem_tracker->reserve_limit();
+
+        TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
+                        << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
+                        << " need_spill:" << need_spill << " query_consumption:" << query_consumption
+                        << " limit:" << limited << "query reserved limit:" << reserved_limit;
     }
 }
 
@@ -786,10 +812,11 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
     Status res = _mark_operator_finished(op, state);
-    if (!res.ok()) {
-        LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
-                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
-                                    res.message());
+    if (!res.ok() && !res.is_cancelled()) {
+        LOG(WARNING) << fmt::format(
+                "[Driver] failed to finish operator called by cancelling operator [fragment_id={}] [driver={}] "
+                "[operator={}] [error={}]",
+                print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(), res.message());
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {

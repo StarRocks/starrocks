@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # unhex
 
-## Description
+
 
 This function performs the opposite operation of hex().
 

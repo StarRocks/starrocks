@@ -15,28 +15,37 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.memory.MemoryTrackable;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.view.View;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
-public interface IcebergCatalog {
+public interface IcebergCatalog extends MemoryTrackable {
 
     IcebergCatalogType getIcebergCatalogType();
 
@@ -78,12 +87,24 @@ public interface IcebergCatalog {
         }
     }
 
-    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+    default boolean createView(ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+        throw new StarRocksConnectorException("This catalog doesn't support creating views");
+    }
+
+    default boolean dropView(String dbName, String viewName) {
+        throw new StarRocksConnectorException("This catalog doesn't support dropping views");
+    }
+
+    default View getView(String dbName, String viewName) {
+        throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
+    }
+
+    default List<String> listPartitionNames(String dbName, String tableName,  long snapshotId, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
-        List<String> partitionNames = Lists.newArrayList();
+        Set<String> partitionNames = Sets.newHashSet();
 
         if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-            return partitionNames;
+            return new ArrayList<>();
         }
 
         TableScan tableScan = icebergTable.newScan().planWith(executorService);
@@ -93,14 +114,15 @@ public interface IcebergCatalog {
             while (fileScanTaskIterator.hasNext()) {
                 FileScanTask scanTask = fileScanTaskIterator.next();
                 StructLike partition = scanTask.file().partition();
-                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
+                String partitionName = convertIcebergPartitionToPartitionName(scanTask.spec(), partition);
+                partitionNames.add(partitionName);
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
                     dbName, tableName), e);
         }
 
-        return partitionNames;
+        return new ArrayList<>(partitionNames);
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
@@ -113,5 +135,29 @@ public interface IcebergCatalog {
     }
 
     default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
+        return new StarRocksIcebergTableScan(
+                table,
+                table.schema(),
+                newTableScanContext(table),
+                srScanContext);
+    }
+
+    default String defaultTableLocation(String dbName, String tableName) {
+        return "";
+    }
+
+    default Map<String, Object> loadNamespaceMetadata(String dbName) {
+        return new HashMap<>();
+    }
+
+    default Map<String, Long> estimateCount() {
+        return new HashMap<>();
+    }
+
+    default List<Pair<List<Object>, Long>> getSamples() {
+        return new ArrayList<>();
     }
 }

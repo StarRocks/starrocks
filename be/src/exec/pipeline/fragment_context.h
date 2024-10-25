@@ -35,6 +35,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "storage/predicate_tree_params.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -93,7 +94,7 @@ public:
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
-    void set_exec_groups(ExecutionGroups&& exec_groups);
+    void set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines);
 
     Status prepare_all_pipelines();
 
@@ -130,6 +131,9 @@ public:
     bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
+    const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
+    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+
     size_t next_driver_id() { return _next_driver_id++; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -137,7 +141,7 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
 
     // STREAM MV
-    [[nodiscard]] Status reset_epoch();
+    Status reset_epoch();
     void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
@@ -165,6 +169,8 @@ public:
     bool enable_group_execution() const { return _enable_group_execution; }
     void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
 
+    void set_report_when_finish(bool report) { _report_when_finish = report; }
+
 private:
     bool _enable_group_execution = false;
     // Id of this query
@@ -186,6 +192,7 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
 
@@ -214,12 +221,16 @@ private:
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
 
+    PredicateTreeParams _pred_tree_params;
+
     size_t _expired_log_count = 0;
 
     std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
 
     RuntimeProfile::Counter* _jit_counter = nullptr;
     RuntimeProfile::Counter* _jit_timer = nullptr;
+
+    bool _report_when_finish{};
 };
 
 class FragmentContextManager {
@@ -235,7 +246,7 @@ public:
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
 
-    [[nodiscard]] Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
+    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
 
     void cancel(const Status& status);

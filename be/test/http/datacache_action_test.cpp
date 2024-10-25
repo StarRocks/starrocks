@@ -20,7 +20,7 @@
 #include <rapidjson/document.h>
 
 #include "block_cache/block_cache.h"
-#include "gen_cpp/FrontendService_types.h"
+#include "block_cache/block_cache_hit_rate_counter.hpp"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
@@ -97,6 +97,52 @@ TEST_F(DataCacheActionTest, stat_success) {
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("NORMAL", doc["status"].GetString());
 
+    _env._block_cache = nullptr;
+}
+
+TEST_F(DataCacheActionTest, app_stat_success) {
+    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    counter->reset();
+    auto cache = BlockCache::instance();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache).ok());
+    _env._block_cache = cache;
+
+    DataCacheAction action(&_env);
+
+    {
+        HttpRequest request(_evhttp_req);
+        request._method = HttpMethod::GET;
+        request._params.emplace("action", "app_stat");
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        EXPECT_EQ(0, doc["hit_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["miss_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["hit_rate"].GetDouble());
+        EXPECT_EQ(0, doc["hit_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["miss_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["hit_rate_last_minute"].GetDouble());
+    }
+
+    counter->update(3, 10);
+
+    {
+        HttpRequest request(_evhttp_req);
+        request._method = HttpMethod::GET;
+        request._params.emplace("action", "app_stat");
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        EXPECT_EQ(3, doc["hit_bytes"].GetInt64());
+        EXPECT_EQ(10, doc["miss_bytes"].GetInt64());
+        EXPECT_EQ(0.23, doc["hit_rate"].GetDouble());
+    }
     _env._block_cache = nullptr;
 }
 

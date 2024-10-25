@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # json_object
 
-## Description
+
 
 Converts one or more key-value pairs to a JSON object that consists of the key-value pairs. The key-value pairs are sorted by key in dictionary order.
 

@@ -14,8 +14,10 @@
 
 #include "formats/parquet/level_codec.h"
 
+#include "util/bit_stream_utils.inline.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
+#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -62,7 +64,6 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
 
 size_t LevelDecoder::_get_level_to_decode_batch_size(size_t row_num) {
     constexpr size_t min_level_batch_size = 4096;
-    constexpr size_t max_level_batch_size = 1024 * 1024;
     size_t levels_remaining = _levels_decoded - _levels_parsed;
     if (row_num <= levels_remaining) {
         return 0;
@@ -70,7 +71,6 @@ size_t LevelDecoder::_get_level_to_decode_batch_size(size_t row_num) {
 
     size_t levels_to_decode = std::max(min_level_batch_size, row_num - levels_remaining);
     levels_to_decode = std::min(levels_to_decode, static_cast<size_t>(_num_levels));
-    levels_to_decode = std::min(levels_to_decode, max_level_batch_size);
     return levels_to_decode;
 }
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群
@@ -25,13 +25,13 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
 1. 登录 [AWS CloudFormation 控制台](https://console.aws.amazon.com/cloudformation/)。
 
 2. 选择**创建堆栈** > **使用新资源(标准)。** <br />
-   ![使用新资源](../assets/8.1.3-1.png)
+   ![使用新资源](../_assets/8.1.3-1.png)
 3. 按照如下步骤，指定模板。
-   ![指定模板](../assets/8.1.3-2.png)
+   ![指定模板](../_assets/8.1.3-2.png)
    1. 在**先决条件-准备模版**部分，选择**模板已就绪。**
    2. 在**指定模版**部分，选择**模版源**为**Amazon S3 URL**。并在 **Amazon S3 URL** 中输入如下网址：
       `https://cf-templates-1euv6e68138u2-us-east-1.s3.amazonaws.com/templates/starrocks.template.yaml`
-      > 说明：您也可以选择**模版源**为**上传模版文件**，然后单击**选择文件**，上传 **starrocks.template.yaml** 文件。文件下载地址，请参见 StarRocks 项目中 [aws-cloudformation 仓库](https://github.com/StarRocks/aws-cloudformation)。![starrocks.template.yaml 文件](../assets/8.1.3-3.png)
+      > 说明：您也可以选择**模版源**为**上传模版文件**，然后单击**选择文件**，上传 **starrocks.template.yaml** 文件。文件下载地址，请参见 StarRocks 项目中 [aws-cloudformation 仓库](https://github.com/StarRocks/aws-cloudformation)。![starrocks.template.yaml 文件](../_assets/8.1.3-3.png)
 
    3. 单击**下一步**。
 
@@ -70,4 +70,4 @@ AWS CloudFormation 是 AWS 提供的一项服务，支持简单且快速地对 A
 
 7. 勾选如下两个复选框，并单击**创建堆栈**。
 
-![创建堆栈](../assets/8.1.3-4.png)
+![创建堆栈](../_assets/8.1.3-4.png)

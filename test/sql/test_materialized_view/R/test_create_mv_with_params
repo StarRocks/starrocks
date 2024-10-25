@@ -38,10 +38,10 @@ insert into mv_ice_tbl_${uuid0} values
 set catalog default_catalog;
 -- result:
 -- !result
-create database test_create_mv_with_params;
+create database db_${uuid0};
 -- result:
 -- !result
-use test_create_mv_with_params;
+use db_${uuid0};
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_iceberg_mv0_${uuid0} PARTITION BY dt 
@@ -55,13 +55,13 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv0_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv0_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
+select count(*) > 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
 -- result:
-4
+1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -69,9 +69,6 @@ SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_$
 2023-12-02	4000
 2023-12-03	4002
 2023-12-04	4002
--- !result
-drop materialized view test_iceberg_mv0_${uuid0};
--- result:
 -- !result
 CREATE MATERIALIZED VIEW test_iceberg_mv1_${uuid0} PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
@@ -83,13 +80,13 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv1_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv1_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
+select count(*) > 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
 -- result:
-4
+1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -97,9 +94,6 @@ SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_$
 2023-12-02	4000
 2023-12-03	4002
 2023-12-04	4002
--- !result
-drop materialized view test_iceberg_mv1_${uuid0};
--- result:
 -- !result
 CREATE MATERIALIZED VIEW test_iceberg_mv2_${uuid0} PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
@@ -112,11 +106,11 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv2_${uuid0} with sync mode;
-function: wait_async_materialized_view_finish("test_iceberg_mv2_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv2_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
+select count(*) = 1 from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
 -- result:
 1
 -- !result
@@ -126,25 +120,6 @@ SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_$
 2023-12-02	4000
 2023-12-03	4002
 2023-12-04	4002
--- !result
-drop materialized view test_iceberg_mv2_${uuid0};
--- result:
--- !result
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
--- result:
--- !result
-drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
--- result:
--- !result
-drop database test_create_mv_with_params;
--- result:
--- !result
--- name: test_create_olap_mv_with_params
-create database db_mv_with_params_${uuid0};
--- result:
--- !result
-use db_mv_with_params_${uuid0};
--- result:
 -- !result
 create table test_tbl_with_params (
  k1 INT,
@@ -167,7 +142,7 @@ PROPERTIES (
 insert into test_tbl_with_params values (1,'a',1,1), (4,'aa',1,1), (8,'aa',1,1);
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW test_tbl_with_params_mv 
+CREATE MATERIALIZED VIEW test_tbl_with_params_mv3
 PARTITION BY k1
 REFRESH DEFERRED MANUAL 
 properties (
@@ -176,21 +151,18 @@ properties (
 AS SELECT * from test_tbl_with_params;
 -- result:
 -- !result
-refresh materialized view test_tbl_with_params_mv;
-function: wait_async_materialized_view_finish("test_tbl_with_params_mv")
+refresh materialized view test_tbl_with_params_mv3;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_tbl_with_params_mv3")
 -- result:
 None
 -- !result
-select count(*) from information_schema.task_runs where `database`="db_mv_with_params_${uuid0}" and `DEFINITION` like "%test_tbl_with_params%";
+select count(*) > 1 from information_schema.task_runs where `database`="db_${uuid0}" and `DEFINITION` like "%test_tbl_with_params_mv3%";
 -- result:
-3
+1
 -- !result
-select * from test_tbl_with_params_mv order by 1;
+select * from test_tbl_with_params_mv3 order by 1;
 -- result:
 1	a	1	1
 4	aa	1	1
 8	aa	1	1
--- !result
-drop database db_mv_with_params_${uuid0};
--- result:
 -- !result

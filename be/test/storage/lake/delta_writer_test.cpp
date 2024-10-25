@@ -179,6 +179,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_immutable_tablet_size(1)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -188,7 +189,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -275,7 +276,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -347,12 +348,12 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 
     // write()
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish(DeltaWriter::kDontWriteTxnLog));
+    ASSERT_OK(delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog));
     delta_writer->close();
 
     // TxnLog should not exist
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
+    auto txn_log_path = _tablet_mgr->txn_log_location(tablet_id, txn_id);
+    ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
 
     // Segment file should exist
     int segment_files = 0;
@@ -376,7 +377,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
     // Check TxnLog
@@ -405,7 +406,7 @@ TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
-    ASSERT_ERROR(delta_writer->finish());
+    ASSERT_ERROR(delta_writer->finish_with_txnlog());
     delta_writer->close();
 }
 
@@ -436,7 +437,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -487,7 +488,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -496,6 +497,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
     ASSERT_EQ(tablet_id, txnlog->tablet_id());
     ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_EQ(_partition_id, txnlog->partition_id());
     ASSERT_TRUE(txnlog->has_op_write());
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
@@ -538,7 +540,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -589,7 +591,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -606,6 +608,37 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
+}
+
+TEST_F(LakeDeltaWriterTest, test_write_oom) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    int64_t old_limit = GlobalEnv::GetInstance()->load_mem_tracker()->limit();
+    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(1);
+    GlobalEnv::GetInstance()->load_mem_tracker()->consume(100);
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_immutable_tablet_size(1)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    // Write and flush
+    ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    GlobalEnv::GetInstance()->load_mem_tracker()->release(100);
+    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
 }
 
 } // namespace starrocks::lake

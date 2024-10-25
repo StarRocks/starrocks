@@ -1,4 +1,4 @@
--- name: test_mv_partition_compensate_hive
+-- name: test_mv_partition_compensate_hive @slow
 create external catalog mv_hive_${uuid0}
 properties
 (
@@ -8,7 +8,7 @@ properties
 );
 -- result:
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 set catalog mv_hive_${uuid0};
@@ -57,6 +57,9 @@ create database db_${uuid0};
 -- result:
 -- !result
 use db_${uuid0};
+-- result:
+-- !result
+set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
@@ -1627,5 +1630,11 @@ drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 force;
 -- result:
 -- !result
 drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop database default_catalog.db_${uuid0};
+-- result:
+-- !result
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
 -- result:
 -- !result

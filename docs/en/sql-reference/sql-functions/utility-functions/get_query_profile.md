@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # get_query_profile
 
-## Description
+
 
 Obtains the profile of a query by using its `query_id`. This function returns empty if the `query_id` does not exist or is incorrect.
 

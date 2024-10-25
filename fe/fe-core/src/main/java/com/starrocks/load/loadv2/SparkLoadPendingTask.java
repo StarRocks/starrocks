@@ -51,7 +51,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -89,6 +88,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // 1. create etl job config and write it into jobconfig.json file
 // 2. submit spark etl job
@@ -155,14 +156,14 @@ public class SparkLoadPendingTask extends LoadTask {
     }
 
     private void createEtlJobConf() throws LoadException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new LoadException("db does not exist. id: " + dbId);
         }
 
         Map<Long, EtlTable> tables = Maps.newHashMap();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             Map<Long, Set<Long>> tableIdToPartitionIds = Maps.newHashMap();
             Set<Long> allPartitionsTableIds = Sets.newHashSet();
@@ -172,7 +173,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 FileGroupAggKey aggKey = entry.getKey();
                 long tableId = aggKey.getTableId();
 
-                OlapTable table = (OlapTable) db.getTable(tableId);
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     throw new LoadException("table does not exist. id: " + tableId);
                 }
@@ -204,7 +205,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         String outputFilePattern = EtlJobConfig.getOutputFilePattern(loadLabel, FilePatternVersion.V1);
@@ -223,7 +224,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 continue;
             }
 
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 throw new LoadException("table does not exist. id: " + tableId);
             }
@@ -367,12 +368,10 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         // distribution column refs
-        List<String> distributionColumnRefs = Lists.newArrayList();
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         Preconditions.checkState(distributionInfo.getType() == DistributionInfoType.HASH);
-        for (Column column : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
-            distributionColumnRefs.add(column.getName());
-        }
+        List<String> distributionColumnRefs = MetaUtils.getColumnNamesByColumnIds(
+                table.getIdToColumn(), distributionInfo.getDistributionColumns());
 
         return new EtlPartitionInfo(type.typeString, partitionColumnRefs, distributionColumnRefs, etlPartitions);
     }
@@ -380,9 +379,8 @@ public class SparkLoadPendingTask extends LoadTask {
     private List<EtlPartition> initEtlListPartition(
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
-        for (Column column : listPartitionInfo.getPartitionColumns()) {
-            partitionColumnRefs.add(column.getName());
-        }
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn()).
+                stream().map(Column::getName).collect(Collectors.toList()));
         List<EtlPartition> etlPartitions = Lists.newArrayList();
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
@@ -430,9 +428,8 @@ public class SparkLoadPendingTask extends LoadTask {
             List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<EtlPartition> etlPartitions = Lists.newArrayList();
-        for (Column column : rangePartitionInfo.getPartitionColumns()) {
-            partitionColumnRefs.add(column.getName());
-        }
+        partitionColumnRefs.addAll(table.getPartitionInfo().getPartitionColumns(table.getIdToColumn())
+                .stream().map(Column::getName).collect(Collectors.toList()));
 
         List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = null;
         try {
@@ -574,7 +571,8 @@ public class SparkLoadPendingTask extends LoadTask {
         Map<String, String> hiveTableProperties = Maps.newHashMap();
         if (fileGroup.isLoadFromTable()) {
             long srcTableId = fileGroup.getSrcTableId();
-            HiveTable srcHiveTable = (HiveTable) db.getTable(srcTableId);
+            HiveTable srcHiveTable = (HiveTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), srcTableId);
             if (srcHiveTable == null) {
                 throw new LoadException("table does not exist. id: " + srcTableId);
             }

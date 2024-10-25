@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # date
 
-## 功能
+
 
 从日期或时间日期表达式中截取日期部分。
 

@@ -77,9 +77,9 @@ Status StreamPipelineTest::prepare() {
     _pipelines.clear();
     _pipeline_builder(_fragment_ctx->runtime_state());
     for (auto pipeline : _pipelines) {
-        exec_group->add_pipeline(std::move(pipeline));
+        exec_group->add_pipeline(std::move(pipeline.get()));
     }
-    _fragment_ctx->set_exec_groups({exec_group});
+    _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
     exec_group.reset();
     _pipelines.clear();
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());

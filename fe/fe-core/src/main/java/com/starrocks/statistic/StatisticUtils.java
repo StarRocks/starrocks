@@ -17,7 +17,6 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
@@ -27,43 +26,43 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
-import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-import org.apache.iceberg.Snapshot;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,15 +70,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.StringJoiner;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -99,9 +93,17 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
+        context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setCboCteReuse(true);
+        context.getSessionVariable().setCboCTERuseRatio(0);
+
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getBackgroundWarehouse();
+        context.getSessionVariable().setWarehouseName(warehouse.getName());
+
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -132,79 +134,20 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
-        if (!Config.enable_statistic_collect_on_first_load) {
-            return;
-        }
-        if (statisticDatabaseBlackListCheck(db.getFullName())) {
-            return;
-        }
+    public static void triggerCollectionOnInsertOverwrite(InsertOverwriteJobStats stats,
+                                                          Database db,
+                                                          Table table,
+                                                          boolean sync,
+                                                          boolean useLock) {
+        StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, sync, useLock);
+    }
 
-        // check if it's first load.
-        if (txnState.getIdToTableCommitInfos() == null) {
-            return;
-        }
-        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
-        if (tableCommitInfo == null) {
-            return;
-        }
-        // collectPartitionIds contains partition that is first loaded.
-        Set<Long> collectPartitionIds = Sets.newHashSet();
-        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            // partition commit info id is physical partition id.
-            // statistic collect granularity is logic partition.
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition != null) {
-                Partition partition = table.getPartition(physicalPartition.getParentId());
-                if (partition != null && partition.isFirstLoad()) {
-                    collectPartitionIds.add(partition.getId());
-                }
-            }
-        }
-        if (collectPartitionIds.isEmpty()) {
-            return;
-        }
-
-        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
-        Map<String, String> properties = Maps.newHashMap();
-        if (SAMPLE == analyzeType) {
-            properties = StatsConstants.buildInitStatsProp();
-        }
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
-        Future<?> future;
-        try {
-            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> {
-                        StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                        statsConnectCtx.setThreadLocalInfo();
-
-                        statisticExecutor.collectStatistics(statsConnectCtx,
-                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        new ArrayList<>(collectPartitionIds), null, null,
-                                        analyzeType, StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties()), analyzeStatus, false);
-                    });
-        } catch (Throwable e) {
-            LOG.error("failed to submit statistic collect job", e);
-            return;
-        }
-
-        if (sync) {
-            long await = Config.semi_sync_collect_statistic_await_seconds;
-            try {
-                future.get(await, TimeUnit.SECONDS);
-            } catch (InterruptedException | ExecutionException e) {
-                LOG.error("failed to execute statistic collect job", e);
-            } catch (TimeoutException e) {
-                LOG.warn("await collect statistic failed after {} seconds", await);
-            }
-        }
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState,
+                                                    Database db,
+                                                    Table table,
+                                                    boolean sync,
+                                                    boolean useLock) {
+        StatisticsCollectionTrigger.triggerOnFirstLoad(txnState, db, table, sync, useLock);
     }
 
     // check database in black list
@@ -223,8 +166,8 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null != db && null != db.getTable(tableId)) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -236,7 +179,7 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -248,7 +191,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            Table table = db.getTable(tableName);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
                 return false;
             }
@@ -273,31 +216,25 @@ public class StatisticUtils {
             long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
-        } else if (table.isHiveTable()) {
-            // for external table, we get last modified time from other system, there may be a time inconsistency
-            // between the two systems, so we add 60 seconds to make sure table update time is later than
-            // statistics update time
-            HiveTable hiveTable = (HiveTable) table;
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
-            List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
-            long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
-                    orElse(0L);
-            if (lastModifiedTime != 0L) {
-                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime).plusSeconds(60),
-                        Clock.systemDefaultZone().getZone());
-            } else {
+        } else {
+            try {
+                return ConnectorPartitionTraits.build(table).getTableLastUpdateTime(60);
+            } catch (Exception e) {
+                // ConnectorPartitionTraits do not support all type of table, ignore exception
                 return null;
             }
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
-                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
-        } else {
-            return null;
         }
+    }
+
+    public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+        // get updated partitions
+        Set<String> updatedPartitions = null;
+        try {
+            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(checkTime, 60);
+        } catch (Exception e) {
+            // ConnectorPartitionTraits do not support all type of table, ignore exception
+        }
+        return updatedPartitions;
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
@@ -378,9 +315,9 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -391,9 +328,9 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -479,20 +416,52 @@ public class StatisticUtils {
     }
 
     public static String quoting(String... parts) {
-        StringJoiner joiner = new StringJoiner(".");
-        for (String part : parts) {
-            joiner.add(quoting(part));
-        }
-        return joiner.toString();
+        return Arrays.stream(parts).map(c -> "`" + c + "`").collect(Collectors.joining("."));
     }
 
-    public static String quoting(String identifier) {
-        String[] splits = identifier.split("\\.");
-        StringBuilder sb = new StringBuilder();
-        for (String split : splits) {
-            sb.append("`").append(split).append("`.");
+    public static String quoting(Table table, String columnName) {
+        if (!columnName.contains(".")) {
+            return quoting(columnName);
         }
-        return sb.substring(0, sb.length() - 1);
+        Column c = table.getColumn(columnName);
+        if (c != null) {
+            return quoting(columnName);
+        }
+
+        int start = 0;
+        int end;
+
+        StringBuilder sb = new StringBuilder();
+        while ((end = columnName.indexOf(".", start)) > 0) {
+            start = end + 1;
+            String name = columnName.substring(0, end);
+            c = table.getColumn(name);
+            if (c != null && c.getType().isStructType()) {
+                sb.append(quoting(name));
+                columnName = columnName.substring(end + 1);
+                Type type = c.getType();
+                if (!columnName.contains(".")) {
+                    sb.append(".").append(quoting(columnName));
+                } else {
+                    int subStart = 0;
+                    int pos = 0;
+                    int subEnd;
+                    while ((subEnd = columnName.indexOf(".", pos)) > 0 && type.isStructType()) {
+                        String subName = columnName.substring(subStart, subEnd);
+                        if (((StructType) type).containsField(subName)) {
+                            sb.append(".").append(quoting(subName));
+                            type = ((StructType) type).getField(subName).getType();
+                            subStart = subEnd + 1;
+                        }
+                        pos = subEnd + 1;
+                    }
+                    sb.append(".").append(quoting(columnName.substring(subStart)));
+                }
+                break;
+            }
+        }
+        Preconditions.checkState(sb.length() != 0, "column name is not found in table");
+        return sb.toString();
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
@@ -520,6 +489,32 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 
+    /**
+     * Change the replication_num of system table according to cluster status
+     * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
+     * 3. When scale-in to less than 3 node, change it to retainedBackendNum
+     */
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        int replica = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().mayGetTable(StatsConstants.STATISTICS_DB_NAME, tableName)
+                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
+                .orElse((short) 1);
+
+        if (replica != expectedReplicationNum) {
+            String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
+                    StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
+            if (StringUtils.isNotEmpty(sql)) {
+                RepoExecutor.getInstance().executeDDL(sql);
+            }
+            LOG.info("changed replication_number of table {} from {} to {}",
+                    tableName, replica, expectedReplicationNum);
+            return true;
+        }
+        return false;
+    }
+
     // only support collect statistics for slotRef and subfield expr
     public static String getColumnName(Table table, Expr column) {
         String colName;
@@ -531,12 +526,12 @@ public class StatisticUtils {
         return colName;
     }
 
-    public static Type getQueryStatisticsColumnType(Table table, String column) throws AnalysisException {
+    public static Type getQueryStatisticsColumnType(Table table, String column) {
         String[] parts = column.split("\\.");
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
         if (base == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
         }
 
         Type baseColumnType = base.getType();

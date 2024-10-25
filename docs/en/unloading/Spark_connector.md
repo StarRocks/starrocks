@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Read data from StarRocks using Spark connector
@@ -269,6 +269,10 @@ The processing logic of the underlying storage engine used by StarRocks cannot c
 ## Examples
 
 The following examples assume you have created a database named `test` in your StarRocks cluster and you have the permissions of user `root`. The parameter settings in the examples are based on Spark Connector 1.1.0.
+
+### Network configuration
+
+Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
 
 ### Data example
 

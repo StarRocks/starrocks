@@ -15,7 +15,9 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -32,6 +34,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,6 +42,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -46,14 +50,26 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+    public static final String MV_ID = "mvId";
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
+    // list partition values to be refreshed
+    public static final String PARTITION_VALUES = "PARTITION_VALUES";
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // All properties that can be set in TaskRun
+    public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES);
+
+    // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
+
+    @SerializedName("taskRunId")
+    private final String taskRunId;
 
     private Map<String, String> properties;
 
@@ -72,8 +88,6 @@ public class TaskRun implements Comparable<TaskRun> {
     private Constants.TaskType type;
 
     private ExecuteOption executeOption;
-
-    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -136,7 +150,7 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-    public String getUUID() {
+    public String getTaskRunId() {
         return taskRunId;
     }
 
@@ -156,14 +170,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
         try {
             // NOTE: mvId is set in Task's properties when creating
-            long mvId = Long.parseLong(properties.get(PartitionBasedMvRefreshProcessor.MV_ID));
-            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            long mvId = Long.parseLong(properties.get(MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
                 return newProperties;
             }
 
-            Table table = database.getTable(mvId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), mvId);
             if (table == null) {
                 LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                         ctx.getDatabase());
@@ -171,7 +185,14 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
-            newProperties = materializedView.getProperties();
+            // Don't copy all table's properties to task's properties:
+            // 1. It will cause task run's meta-data to be too large
+            // 2. It may pollute the properties of task run.
+            newProperties.putAll(materializedView.getSessionProperties());
+
+            Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
+                    materializedView.getWarehouseId());
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
@@ -203,20 +224,22 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentCatalog(task.getCatalogName());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
-        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        if (status.getUserIdentity() != null) {
+            runCtx.setCurrentUserIdentity(status.getUserIdentity());
+        } else {
+            runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        }
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        runCtx.setIsLastStmt(true);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         runCtx.setThreadLocalInfo();
-        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}",
-                runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId);
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
-
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -230,6 +253,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}, " +
+                        "taskRunContextProperties:{}", runCtx.getQueryId(),
+                ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId, taskRunContextProperties);
         // If this is the first task run of the job, use its uuid as the job id.
         taskRunContext.setTaskRunId(taskRunId);
         taskRunContext.setCtx(runCtx);
@@ -302,20 +328,22 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
+        long created = createTime == null ? System.currentTimeMillis() : createTime;
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());
         status.setSource(task.getSource());
-        if (createTime == null) {
-            status.setCreateTime(System.currentTimeMillis());
-        } else {
-            status.setCreateTime(createTime);
-        }
+        status.setCreateTime(created);
         status.setUser(task.getCreateUser());
+        status.setUserIdentity(task.getUserIdentity());
         status.setCatalogName(task.getCatalogName());
         status.setDbName(task.getDbName());
         status.setPostRun(task.getPostRun());
-        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+        status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
+        // NOTE: definition will cause a lot of repeats and cost a lot of metadata memory resources,
+        // since history task runs has been stored in sr's internal table, we can save it in the
+        // task run status.
+        status.setDefinition(task.getDefinition());
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
@@ -325,13 +353,47 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
-            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        int ret = comparePriority(this.status, taskRun.status);
+        if (ret != 0) {
+            return ret;
+        }
+        return taskRunId.compareTo(taskRun.taskRunId);
+    }
+
+    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+        if (t0 == null || t1 == null) {
+            // prefer this
+            return 0;
+        }
+        // if priority is different, return the higher priority
+        if (t0.getPriority() != t1.getPriority()) {
+            return Integer.compare(t1.getPriority(), t0.getPriority());
         } else {
-            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+            // if priority is the same, return the older task
+            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
         }
     }
 
+    /**
+     * Check the taskRun is equal task to the given taskRun which means they have the same taskRunId and the same task.
+     */
+    public boolean isEqualTask(TaskRun o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (task.getDefinition() == null) {
+            return false;
+        }
+        return this.taskId == o.getTaskId() &&
+                this.task.getDefinition().equals(o.getTask().getDefinition());
+    }
+
+    /**
+     * TaskRun is equal if they have the same taskRunId and the same task.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -340,12 +402,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (task.getDefinition() == null) {
-            return false;
-        }
         TaskRun taskRun = (TaskRun) o;
-        return this.taskId == taskRun.getTaskId() &&
-                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
+        return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
     }
 
     @Override
@@ -359,9 +417,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 "taskId=" + taskId +
                 ", type=" + type +
                 ", uuid=" + taskRunId +
-                ", task_state=" + status.getState() +
+                ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
-                ", extra_message =" + status.getExtraMessage() +
+                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }

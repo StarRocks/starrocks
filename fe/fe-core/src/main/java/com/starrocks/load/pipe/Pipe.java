@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -35,7 +36,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -76,8 +76,8 @@ public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
 
-    public static final int DEFAULT_POLL_INTERVAL = 10;
-    public static final long DEFAULT_BATCH_SIZE = 1 << 30;
+    public static final int MAX_POLL_INTERVAL = 3600; // 1 hour
+    public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
@@ -113,7 +113,7 @@ public class Pipe implements GsonPostProcessable {
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
     private ErrorInfo lastErrorInfo = new ErrorInfo();
     private int failedTaskExecutionCount = 0;
-    private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
+    private int pollIntervalSecond = Config.pipe_default_poll_interval_s;
     private long lastPolledTime = 0;
     private boolean recovered = false;
 
@@ -133,7 +133,7 @@ public class Pipe implements GsonPostProcessable {
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
@@ -153,7 +153,7 @@ public class Pipe implements GsonPostProcessable {
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
+                    pipeSource.setAutoIngest(ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
@@ -314,7 +314,7 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
-            String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
@@ -352,6 +352,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        Runnable changeStateAction = null;
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
@@ -362,7 +363,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isError()) {
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeState(State.ERROR, false);
+                        changeStateAction = () -> changeState(State.ERROR, false);
                     }
                 }
                 if (task.isFinished()) {
@@ -376,6 +377,10 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+        }
+
+        if (changeStateAction != null) {
+            changeStateAction.run();
         }
 
         // Persist LoadStatus
@@ -450,7 +455,7 @@ public class Pipe implements GsonPostProcessable {
                 recordTaskError(taskDesc, "create task failed");
                 return;
             }
-            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption());
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task.getSource().isMergeable()));
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());
             if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {

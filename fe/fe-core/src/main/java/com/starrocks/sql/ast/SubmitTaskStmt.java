@@ -56,6 +56,9 @@ public class SubmitTaskStmt extends DdlStmt {
         this.taskName = taskName.getName();
         this.sqlBeginIndex = sqlBeginIndex;
         this.dataCacheSelectStmt = dataCacheSelectStatement;
+        if (this.dataCacheSelectStmt.getProperties() != null) {
+            this.properties.putAll(this.dataCacheSelectStmt.getProperties());
+        }
     }
 
     public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, InsertStmt insertStmt, NodePosition pos) {

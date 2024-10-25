@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ST_AsText,ST_AsWKT
 
-## Description
+
 
 Converts a geometric figure to WKT (Well Known Text) format.
 

@@ -23,6 +23,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +38,7 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     private final Map<String, Table> tableMap;
 
     public RBACMockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
         idGenerator = new IdGenerator();
         this.databaseSet = new HashMap<>();
@@ -114,17 +115,6 @@ public class RBACMockedMetadataMgr extends MetadataMgr {
     @Override
     public Table getTable(String catalogName, String dbName, String tblName) {
         return tableMap.get(tblName);
-    }
-
-    @Override
-    public Table getTable(Long databaseId, Long tableId) {
-        for (Table table : tableMap.values()) {
-            if (table.getId() == tableId) {
-                return table;
-            }
-        }
-
-        return null;
     }
 
     @Override

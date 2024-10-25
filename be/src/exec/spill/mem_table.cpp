@@ -31,6 +31,7 @@
 namespace starrocks::spill {
 
 void SpillableMemTable::reset() {
+    _is_done = false;
     _num_rows = 0;
     int64_t consumption = _tracker->consumption();
     _tracker->release(consumption);
@@ -42,6 +43,7 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
+    DCHECK(!_is_done);
     DCHECK(chunk != nullptr);
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
@@ -51,6 +53,7 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 }
 
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    DCHECK(!_is_done);
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
@@ -94,6 +97,7 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
 }
 
 void UnorderedMemTable::reset() {
+    DCHECK(_processed_index >= _chunks.size());
     SpillableMemTable::reset();
     _chunks.clear();
     _processed_index = 0;
@@ -163,7 +167,7 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
             return Status::OK();
         }
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-        auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
+        ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         bool need_aligned = _runtime_state->spill_enable_direct_io();
 
         RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
@@ -183,6 +187,8 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {

@@ -22,6 +22,7 @@
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
@@ -105,6 +106,26 @@ GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(chunk->get_column_by_slot_id(1)->is_binary());
     ASSERT_TRUE(chunk->get_column_by_slot_id(2)->is_large_binary());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_remove_column_by_slot_id) {
+    auto c1 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({2});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({3});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({4});
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(c1, 1);
+    chunk->append_column(c2, 2);
+    chunk->append_column(c3, 3);
+    chunk->append_column(c4, 4);
+
+    chunk->remove_column_by_slot_id(2);
+    ASSERT_EQ(chunk->get_column_by_slot_id(1)->get(0).get_int32(), 1);
+    ASSERT_FALSE(chunk->is_slot_exist(2));
+    ASSERT_EQ(chunk->get_column_by_slot_id(3)->get(0).get_int32(), 3);
+    ASSERT_EQ(chunk->get_column_by_slot_id(4)->get(0).get_int32(), 4);
 }
 
 // NOLINTNEXTLINE

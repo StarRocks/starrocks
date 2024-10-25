@@ -1,5 +1,6 @@
 -- name: test_deprecated_non_pipeline_engine @sequential
 set enable_pipeline_engine=false;
+set enable_constant_execute_in_fe = false;
 select 1;
 update information_schema.be_configs set value=60 where name = 'base_compaction_check_interval_seconds';
 select `value` from information_schema.be_configs where name = 'base_compaction_check_interval_seconds' limit 1;

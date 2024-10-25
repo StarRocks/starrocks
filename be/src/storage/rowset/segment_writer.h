@@ -76,6 +76,8 @@ struct SegmentWriterOptions {
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
     SegmentFileMark segment_file_mark;
+    std::string encryption_meta;
+    bool is_compaction = false;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -143,11 +145,14 @@ public:
 
     uint64_t current_filesz() const;
 
+    const std::string& encryption_meta() const { return _opts.encryption_meta; }
+
 private:
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
+    void _verify_footer();
 
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;

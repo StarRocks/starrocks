@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Query Trace Profile
@@ -23,7 +23,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `MV`：物化视图模块。
   - `OPTIMIZER`：优化器模块。
   - `SCHEDULE`：调度模块。
-  - `EXTERNAL`：外部模块。
+  - `EXTERNAL`：外表相关模块。
 
   如果未指定模块，默认使用 `BASE`。
 
@@ -154,5 +154,5 @@ MySQL > TRACE LOGS OPTIMIZER SELECT v1 FROM t1 ;
 
 日志将打印在 **fe.log** 中。
 
-![img](../../assets/query_trace_profile.png)
+![img](../../_assets/query_trace_profile.png)
 

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # is_role_in_session
 
-## 功能
+
 
 用于检查指定的角色（包括嵌套角色）在当前会话下是否已经激活。
 

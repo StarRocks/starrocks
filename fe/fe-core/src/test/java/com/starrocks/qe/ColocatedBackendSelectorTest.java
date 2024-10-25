@@ -269,7 +269,8 @@ public class ColocatedBackendSelectorTest {
                                           Map<Integer, Long> expectedSeqToBackendId)
             throws UserException {
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        ColocatedBackendSelector.Assignment colocatedAssignemnt = new ColocatedBackendSelector.Assignment(scanNodes.get(0));
+        ColocatedBackendSelector.Assignment colocatedAssignemnt =
+                new ColocatedBackendSelector.Assignment(scanNodes.get(0), scanNodes.size());
 
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =

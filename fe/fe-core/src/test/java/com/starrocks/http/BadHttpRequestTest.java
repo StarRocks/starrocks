@@ -60,6 +60,20 @@ public class BadHttpRequestTest extends StarRocksHttpTestCase {
         Assert.assertEquals(200, response.code());
     }
 
+    @Test
+    public void testInvalidAuthorityRequest() throws IOException {
+        RequestBody body = RequestBody.create(JSON, "{}");
+        Request.Builder requestBuilder = new Request.Builder()
+                .url(String.format(STREAM_LOAD_URL_FORMAT, DB_NAME, TABLE_NAME))
+                .put(body)
+                .addHeader("Authorization", "Basic xxx")
+                .addHeader("label", UUID.randomUUID().toString())
+                .addHeader("Expect", "100-continue");
+        Request request = requestBuilder.build();
+        Response response = networkClient.newCall(request).execute();
+        Assert.assertEquals(401, response.code());
+    }
+
     @NotNull
     private Request createRequest(int columnTotalLength) {
         RequestBody body = RequestBody.create(JSON, "{}");

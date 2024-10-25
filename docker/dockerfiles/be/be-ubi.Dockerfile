@@ -11,6 +11,10 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
+# The default run_as user when starting the container
+ARG RUN_AS_USER=root
+# The precreated non-privileged user account, the owner of the starrocks assets
+ARG USER=starrocks
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-centos7:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -39,7 +43,8 @@ RUN touch /.dockerenv
 WORKDIR $STARROCKS_ROOT
 
 # Run as starrocks user
-ARG USER=starrocks
+ARG USER
+ARG RUN_AS_USER
 ARG GROUP=starrocks
 RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
              --shell /usr/sbin/nologin $USER && \
@@ -47,13 +52,13 @@ RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000
 USER $USER
 
 # Copy all artifacts to the runtime container image
-COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
+COPY --from=artifacts --chown=$USER:$GROUP /release/be_artifacts/ $STARROCKS_ROOT/
 
 # Copy be k8s scripts to the runtime container image
-COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
+COPY --chown=$USER:$GROUP docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
 RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
 
 # run as root by default
-USER root
+USER $RUN_AS_USER

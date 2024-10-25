@@ -50,6 +50,8 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -756,12 +758,6 @@ bool SnapshotLoader::_end_with(const std::string& str, const std::string& match)
     return false;
 }
 
-bool SnapshotLoader::_is_index_files(const std::string& str) {
-    return _end_with(str, "fdt") || _end_with(str, "fdx") || _end_with(str, "fnm") || _end_with(str, "frq") ||
-           _end_with(str, "nrm") || _end_with(str, "prx") || _end_with(str, "tii") || _end_with(str, "tis") ||
-           _end_with(str, "null_bitmap") || _end_with(str, "segments_2") || _end_with(str, "segments.gen");
-}
-
 Status SnapshotLoader::_get_tablet_id_and_schema_hash_from_file_path(const std::string& src_path, int64_t* tablet_id,
                                                                      int32_t* schema_hash) {
     // path should be like: /path/.../tablet_id/schema_hash
@@ -866,6 +862,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -954,6 +951,7 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -1012,10 +1010,11 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         *new_file_name = ss.str();
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
-               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
+               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt") ||
+               _end_with(file_name, ".vi")) {
         *new_file_name = file_name;
         return Status::OK();
-    } else if (_is_index_files(file_name)) {
+    } else if (CLucenePlugin::is_index_files(file_name)) {
         *new_file_name = file_name;
         return Status::OK();
     } else {

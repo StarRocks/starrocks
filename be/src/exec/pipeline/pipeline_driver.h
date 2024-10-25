@@ -48,8 +48,8 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
-using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
-using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -215,7 +215,7 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
-    void check_operator_close_states(std::string func_name);
+    void check_operator_close_states(const std::string& func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -225,8 +225,8 @@ public:
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
-    [[nodiscard]] Status prepare(RuntimeState* runtime_state);
-    [[nodiscard]] virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
+    Status prepare(RuntimeState* runtime_state);
+    virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -297,7 +297,8 @@ public:
 
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
-    void mark_precondition_ready(RuntimeState* runtime_state);
+    void mark_precondition_ready();
+    bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
     void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
@@ -364,6 +365,10 @@ public:
         }
     }
 
+    bool has_precondition() const {
+        return !_local_rf_holders.empty() || !_dependencies.empty() || !_global_rf_descriptors.empty();
+    }
+
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
             return std::string(dependencies_block() ? "(dependencies," : "(") +
@@ -391,7 +396,7 @@ public:
 
             // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
             //  This writing method is a bit tricky, and when there is a better way, replace it
-            mark_precondition_ready(_runtime_state);
+            mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
             if (_state == DriverState::PENDING_FINISH) {
@@ -417,7 +422,7 @@ public:
     }
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
-    [[nodiscard]] Status check_short_circuit();
+    Status check_short_circuit();
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -469,10 +474,10 @@ protected:
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    [[nodiscard]] Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
@@ -488,6 +493,7 @@ protected:
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
+    bool _precondition_prepared = false;
 
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
@@ -512,13 +518,15 @@ protected:
     DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
-    phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
+    phmap::flat_hash_map<int32_t, OperatorStage, StdHash<int32_t>> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
     DriverQueue* _in_queue = nullptr;
     // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
+
+    std::atomic<bool> _has_log_cancelled{false};
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

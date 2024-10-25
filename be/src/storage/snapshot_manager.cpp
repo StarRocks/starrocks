@@ -46,7 +46,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
-#include "storage/inverted/index_descriptor.hpp"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -206,12 +207,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     std::vector<std::string> new_inverted_index_files;
     RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
     for (const auto& file : all_files) {
-        if (file.find(".fdt", 0) != std::string::npos || file.find(".fdx", 0) != std::string::npos ||
-            file.find(".fnm", 0) != std::string::npos || file.find(".frq", 0) != std::string::npos ||
-            file.find(".nrm", 0) != std::string::npos || file.find(".prx", 0) != std::string::npos ||
-            file.find(".tii", 0) != std::string::npos || file.find(".tis", 0) != std::string::npos ||
-            file.find("null_bitmap", 0) != std::string::npos || file.find("segments_2", 0) != std::string::npos ||
-            file.find("segments.gen", 0) != std::string::npos) {
+        if (CLucenePlugin::is_index_files(file)) {
             auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
             auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
             auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
@@ -793,13 +789,13 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
             if (tablet_schema != nullptr && !tablet_schema->indexes()->empty()) {
                 int segment_n = seg_id;
-                for (int index_id = 0; index_id < tablet_schema->indexes()->size(); index_id++) {
-                    const auto& index = (*(tablet_schema->indexes()))[index_id];
+                const auto& indexes = *tablet_schema->indexes();
+                for (const auto& index : indexes) {
                     if (index.index_type() == GIN) {
                         std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                                clone_dir, new_rowset_id.to_string(), segment_n, index_id);
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
                         std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                                clone_dir, old_rowset_id.to_string(), segment_n, index_id);
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
 
                         RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                         std::set<std::string> files;

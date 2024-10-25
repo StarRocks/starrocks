@@ -19,11 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -37,6 +37,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -55,6 +56,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
@@ -70,7 +72,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String newMvName = clause.getNewTableName();
         String oldMvName = table.getName();
 
-        if (db.getTable(newMvName) != null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newMvName) != null) {
             throw new SemanticException("Materialized view [" + newMvName + "] is already used");
         }
         table.setName(newMvName);
@@ -98,7 +100,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         Pair<String, PeriodDuration> ttlDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -115,7 +117,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, materializedView);
+        }
+        List<TableName> excludedRefreshBaseTables = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            excludedRefreshBaseTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, materializedView);
         }
         int maxMVRewriteStaleness = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
@@ -152,12 +160,26 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
             properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
         }
+        TableProperty.MVTransparentRewriteMode mvTransparentRewriteMode =
+                materializedView.getTableProperty().getMvTransparentRewriteMode();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+            mvTransparentRewriteMode = TableProperty.analyzeMVTransparentRewrite(value);
+            properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        }
 
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             materializedView.setWarehouseId(warehouse.getId());
+        }
+
+        // labels.location
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (!materializedView.isCloudNativeMaterializedView()) {
+                PropertyAnalyzer.analyzeLocation(materializedView, properties);
+            }
         }
 
         if (!properties.isEmpty()) {
@@ -175,6 +197,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                try {
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
+                } catch (DdlException e) {
+                    throw new SemanticException(e.getMessage());
+                }
                 setListItems.add(variable);
             }
             SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
@@ -220,6 +247,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
             isChanged = true;
         }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
+            materializedView.getTableProperty().setExcludedRefreshTables(excludedTriggerTables);
+            isChanged = true;
+        }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             materializedView.setUniqueConstraints(uniqueConstraints);
             isChanged = true;
@@ -253,6 +286,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
+        // enable_query_rewrite
         if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
             materializedView.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
@@ -263,6 +297,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             } else {
                 CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
             }
+            isChanged = true;
+        }
+        // transparent_mv_rewrite_mode
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mvTransparentRewriteMode));
+            materializedView.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
@@ -300,7 +341,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
                 taskManager.createTask(task, false);
             } else {
-                Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+                Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties(),
+                        currentTask);
                 TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
                 taskManager.alterTask(currentTask, changedTask, false);
                 task = currentTask;
@@ -308,17 +350,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             // for event triggered type, run task
             if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-                taskManager.executeTask(task.getName());
+                taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
             }
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
             Locker locker = new Locker();
-            if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
             }
             try {
                 // check
-                Table mv = db.getTable(materializedView.getId());
+                Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
                 if (mv == null) {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -337,7 +379,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {
                         if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
-                                !tableInfo.getTableChecked().isNativeTableOrMaterializedView()
+                                !MvUtils.getTableChecked(tableInfo).isNativeTableOrMaterializedView()
                         )) {
                             throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                                     "external table");
@@ -349,7 +391,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());

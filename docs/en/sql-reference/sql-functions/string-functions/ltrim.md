@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ltrim
 
-## Description
+
 
 Removes the leading spaces or specified characters from the beginning (left) of the `str` argument. Removing specified characters are supported from StarRocks 2.5.0.
 

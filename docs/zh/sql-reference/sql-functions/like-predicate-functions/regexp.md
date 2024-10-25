@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # regexp
 
-## 功能
+
 
 判断目标字符串 `expr` 是否匹配给定的正则表达式 `pattern`。匹配成功返回 1，否则返回 0。如果任何一个输入参数为 NULL，则返回 NULL。
 

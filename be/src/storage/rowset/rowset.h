@@ -50,6 +50,7 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 
 namespace starrocks {
 
@@ -155,7 +156,7 @@ public:
     Status reload();
     Status reload_segment(int32_t segment_id);
     Status reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema);
-    int64_t total_segment_data_size();
+    StatusOr<int64_t> total_segment_data_size();
 
     const TabletSchema& schema_ref() const { return *_schema; }
     const TabletSchemaCSPtr& schema() const { return _schema; }
@@ -228,8 +229,9 @@ public:
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
     int64_t num_rows() const override { return rowset_meta()->num_rows(); }
+    int64_t num_rows_upt() const { return rowset_meta()->num_rows_upt(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
-    size_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
+    int64_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
@@ -375,6 +377,8 @@ public:
 
     Status verify();
 
+    size_t segment_memory_usage();
+
 protected:
     friend class RowsetFactory;
 
@@ -386,6 +390,9 @@ protected:
 
     // release resources in this api
     void do_close();
+
+    // Move this item to newest item in lru cache.
+    void warmup_lrucache();
 
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version) {}
@@ -417,14 +424,56 @@ private:
     KeysType _keys_type;
 };
 
-class RowsetReleaseGuard {
+struct adopt_acquire_t {
+    explicit adopt_acquire_t() = default;
+};
+
+template <class T>
+class TReleaseGuard {
 public:
-    explicit RowsetReleaseGuard(std::shared_ptr<Rowset> rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
-    ~RowsetReleaseGuard() { _rowset->release(); }
+    explicit TReleaseGuard(T rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
+    explicit TReleaseGuard(T rowset, adopt_acquire_t) : _rowset(std::move(rowset)) {}
+    ~TReleaseGuard() {
+        if (_rowset) {
+            _rowset->release();
+        }
+    }
 
 private:
-    std::shared_ptr<Rowset> _rowset;
+    T _rowset;
 };
+
+template <class T>
+class TReleaseGuard<std::vector<std::vector<T>>> {
+public:
+    TReleaseGuard() = default;
+    explicit TReleaseGuard(std::vector<std::vector<T>>&& rowsets, adopt_acquire_t)
+            : _tablet_rowsets(std::move(rowsets)) {}
+
+    TReleaseGuard& operator=(TReleaseGuard&& other) noexcept {
+        std::swap(_tablet_rowsets, other._tablet_rowsets);
+        return *this;
+    }
+    ~TReleaseGuard() { reset(); }
+
+    void reset() {
+        for (auto& rowset_list : _tablet_rowsets) {
+            Rowset::release_readers(rowset_list);
+        }
+        _tablet_rowsets.clear();
+    }
+    const std::vector<std::vector<T>>& tablet_rowsets() const { return _tablet_rowsets; }
+
+    TReleaseGuard(TReleaseGuard&& other) = delete;
+    TReleaseGuard(const TReleaseGuard& other) = delete;
+    TReleaseGuard& operator=(const TReleaseGuard& other) = delete;
+
+private:
+    std::vector<std::vector<T>> _tablet_rowsets;
+};
+using RowsetReleaseGuard = TReleaseGuard<RowsetSharedPtr>;
+using MultiRowsetReleaseGuard = TReleaseGuard<std::vector<std::vector<RowsetSharedPtr>>>;
+
 using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
 
 } // namespace starrocks

@@ -62,8 +62,12 @@ struct MinMaxAnyDispatcher {
                     "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
                     "max", true, AggregateFactory::MakeMaxAggregateFunction<lt>());
-            resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
-                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
+            // For json type, use `AnyValueSemiState` state to store the value as other semi structures.
+            // This is because any_value's agg state may be flat json and cannot extract `JsonValue` from it directly.
+            if (lt_is_aggregate<lt>) {
+                resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
+                        "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
+            }
         }
     }
 };
@@ -75,11 +79,15 @@ struct MaxMinByDispatcherInner {
         if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(lt_is_aggregate<ret_type> ||
                                                                             lt_is_json<ret_type>)) {
             if constexpr (is_max_by) {
-                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
-                        "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type, false>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "max_by_v2", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type, true>());
             } else {
-                resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MinByAggregateData<arg_type>>(
-                        "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "min_by", true, AggregateFactory::MakeMinByAggregateFunction<arg_type, false>());
+                resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                        "min_by_v2", true, AggregateFactory::MakeMinByAggregateFunction<arg_type, true>());
             }
         }
     }

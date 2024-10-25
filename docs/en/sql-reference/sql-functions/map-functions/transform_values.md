@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # transform_values
 
-## Description
+
 
 Transforms values in a map using a [Lambda expression](../Lambda_expression.md) and produces a new value for each entry in the map.
 

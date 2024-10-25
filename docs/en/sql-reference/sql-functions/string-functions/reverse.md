@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # reverse
 
-## Description
+
 
 Reverses a string or array. Returns a string or array with the characters in the string or array elements in reverse order.
 

@@ -16,8 +16,10 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "storage/rowset/bloom_filter.h"
 
 namespace starrocks {
 
@@ -658,4 +660,38 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
+TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
+    // pattern contains special characters
+    std::string pattern = "abc%_abccc\\%e\\\\\\\\";
+    std::vector<std::string> ngram_set;
+    NgramBloomFilterReaderOptions options{4, false};
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(6, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccc", ngram_set[1]);
+    ASSERT_EQ("ccc%", ngram_set[2]);
+    ASSERT_EQ("cc%e", ngram_set[3]);
+    ASSERT_EQ("c%e\\", ngram_set[4]);
+    ASSERT_EQ("%e\\\\", ngram_set[5]);
+
+    // normal case
+    pattern = "abccd";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(2, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccd", ngram_set[1]);
+
+    // pattern is empty
+    pattern = "";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+
+    // pattern is too short
+    pattern = "abc";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+}
 } // namespace starrocks

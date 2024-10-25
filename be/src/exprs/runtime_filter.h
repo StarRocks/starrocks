@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <numeric>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -182,6 +184,10 @@ public:
     // we can use can_use() to check if this bloom filter can be used
     bool can_use() const { return _directory != nullptr; }
 
+    size_t get_alloc_size() const {
+        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
+    }
+
 private:
     // The number of bits to set in a tiny Bloom filter block
 
@@ -223,10 +229,6 @@ private:
 #endif
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
-
-    size_t get_alloc_size() const {
-        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
-    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
@@ -332,6 +334,15 @@ public:
         return _hash_partition_bf[0].can_use();
     }
 
+    size_t bf_alloc_size() const {
+        if (_hash_partition_bf.empty()) {
+            return _bf.get_alloc_size();
+        }
+        return std::accumulate(
+                _hash_partition_bf.begin(), _hash_partition_bf.end(), 0ull,
+                [](size_t total, const SimdBlockFilter& bf) -> size_t { return total + bf.get_alloc_size(); });
+    }
+
     // RuntimeFilter version
     // if the RuntimeFilter is updated, the version will be updated as well,
     // (usually used for TopN Filter)
@@ -365,9 +376,9 @@ public:
     void set_global() { this->_global = true; }
 
     // only used in local colocate filter
-    bool is_colocate_filter() const { return !_colocate_filters.empty(); }
-    std::vector<JoinRuntimeFilter*>& colocate_filter() { return _colocate_filters; }
-    const std::vector<JoinRuntimeFilter*>& colocate_filter() const { return _colocate_filters; }
+    bool is_group_colocate_filter() const { return !_group_colocate_filters.empty(); }
+    std::vector<JoinRuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
+    const std::vector<JoinRuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
 
 protected:
     void _update_version() { _rf_version++; }
@@ -381,7 +392,7 @@ protected:
     bool _always_true = false;
     size_t _rf_version = 0;
     // local colocate filters is local filter we don't have to serialize them
-    std::vector<JoinRuntimeFilter*> _colocate_filters;
+    std::vector<JoinRuntimeFilter*> _group_colocate_filters;
 };
 
 template <typename ModuloFunc>
@@ -883,7 +894,7 @@ private:
             if (const_column->only_null()) {
                 _selection[0] = _has_null;
             } else {
-                const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
+                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
                 _evaluate_min_max(input_data, _selection, 1);
                 if constexpr (can_use_bf) {
                     _rf_test_data<multi_partition>(_selection, input_data, _hash_values, 0);
@@ -893,7 +904,7 @@ private:
             memset(_selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            const auto& input_data = GetContainer<Type>().get_data(nullable_column->data_column());
+            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
             _evaluate_min_max(input_data, _selection, size);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -914,7 +925,7 @@ private:
                 }
             }
         } else {
-            const auto& input_data = GetContainer<Type>().get_data(input_column);
+            const auto& input_data = GetContainer<Type>::get_data(input_column);
             _evaluate_min_max(input_data, _selection, size);
             if constexpr (can_use_bf) {
                 for (int i = 0; i < size; ++i) {

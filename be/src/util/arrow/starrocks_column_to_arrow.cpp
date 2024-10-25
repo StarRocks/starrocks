@@ -22,6 +22,7 @@
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
+#include "runtime/types.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -294,7 +295,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
                     "Not support to convert type {} with nullable {} to arrow type {} for array element",
                     type_to_string(element_type_desc.type), element_is_nullable, element_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({element_type_desc, element_arrow_type, func});
+        column_context->child_column_contexts.emplace_back(element_type_desc, element_arrow_type, func);
         return arrow::Status::OK();
     }
 
@@ -371,7 +372,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
                         type_to_string(child_type_desc.type), child_is_nullable, child_arrow_type->name(),
                         type_desc.field_names[i]));
             }
-            column_context->child_column_contexts.push_back({child_type_desc, child_arrow_type, func});
+            column_context->child_column_contexts.emplace_back(child_type_desc, child_arrow_type, func);
         }
         return arrow::Status::OK();
     }
@@ -449,7 +450,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                     fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map key",
                                 type_to_string(key_type_desc.type), key_is_nullable, key_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({key_type_desc, key_arrow_type, key_func});
+        column_context->child_column_contexts.emplace_back(key_type_desc, key_arrow_type, key_func);
 
         auto& value_type_desc = type_desc.children[1];
         auto& value_arrow_type = arrow_type->item_field()->type();
@@ -460,7 +461,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                     fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map value",
                                 type_to_string(value_type_desc.type), value_is_nullable, value_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({value_type_desc, value_arrow_type, value_func});
+        column_context->child_column_contexts.emplace_back(value_type_desc, value_arrow_type, value_func);
         return arrow::Status::OK();
     }
 
@@ -614,6 +615,24 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
+        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
+        if (!arrow_st.ok()) {
+            return Status::InvalidArgument(arrow_st.ToString());
+        }
+    }
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    return Status::OK();
+}
+
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result) {
+    size_t num_columns = columns.size();
+    std::vector<std::shared_ptr<arrow::Array>> arrays(num_columns);
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        auto& array = arrays[i];
+        ColumnToArrowArrayConverter converter(columns[i], pool, type_descs[i], schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());

@@ -16,18 +16,19 @@
 
 #include <memory>
 
-#include "gen_cpp/olap_common.pb.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
 
 namespace starrocks {
 
-void DeltaColumnGroup::init(int64_t version, const std::vector<std::vector<uint32_t>>& column_ids,
-                            const std::vector<std::string>& column_files) {
+void DeltaColumnGroup::init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
+                            const std::vector<std::string>& column_files,
+                            const std::vector<std::string>& encryption_metas) {
     _version = version;
-    _column_ids = column_ids;
+    _column_uids = column_ids;
     _column_files = column_files;
+    _encryption_metas = encryption_metas;
     _calc_memory_usage();
 }
 
@@ -35,12 +36,18 @@ void DeltaColumnGroup::_calc_memory_usage() {
     size_t total_ids = 0;
     size_t total_column_name_size = 0;
 
-    for (int i = 0; i < _column_ids.size(); ++i) {
-        total_ids += _column_ids[i].size();
+    for (int i = 0; i < _column_uids.size(); ++i) {
+        total_ids += _column_uids[i].size();
         total_column_name_size += _column_files[i].length();
     }
 
-    _memory_usage = sizeof(size_t) + sizeof(int64_t) + sizeof(uint32_t) * total_ids + total_column_name_size;
+    size_t total_encryption_meta_size = 0;
+    for (const auto& encryption_meta : _encryption_metas) {
+        total_encryption_meta_size += encryption_meta.length();
+    }
+
+    _memory_usage = sizeof(size_t) + sizeof(int64_t) + sizeof(uint32_t) * total_ids + total_column_name_size +
+                    total_encryption_meta_size;
 }
 
 int DeltaColumnGroup::merge_into_by_version(DeltaColumnGroupList& dcgs, const std::string& dir,
@@ -62,13 +69,16 @@ bool DeltaColumnGroup::merge_by_version(DeltaColumnGroup& dcg, const std::string
 
     size_t orig_size = _column_files.size();
 
-    _column_ids.insert(_column_ids.end(), dcg.column_ids().begin(), dcg.column_ids().end());
+    _column_uids.insert(_column_uids.end(), dcg.column_ids().begin(), dcg.column_ids().end());
 
     _column_files.resize(_column_files.size() + dcg.relative_column_files().size());
     // update the file name suffix to finish merge
     for (size_t suffix = orig_size; suffix < _column_files.size(); ++suffix) {
         _column_files[suffix] =
                 file_name(Rowset::delta_column_group_path(dir, rowset_id, segment_id, _version, suffix));
+        if (dcg.encryption_metas().size() > 0) {
+            _encryption_metas.push_back(dcg.encryption_metas()[suffix - orig_size]);
+        }
     }
 
     _calc_memory_usage();
@@ -109,10 +119,31 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
     for (const auto& column_file : dcg_pb.column_files()) {
         _column_files.push_back(column_file);
     }
+    for (const auto& encryption_meta : dcg_pb.encryption_metas()) {
+        _encryption_metas.push_back(encryption_meta);
+    }
     for (const auto& cids : dcg_pb.column_ids()) {
-        _column_ids.emplace_back(std::vector<uint32_t>());
+        _column_uids.emplace_back();
         for (const auto& cid : cids.column_ids()) {
-            _column_ids.back().push_back(cid);
+            _column_uids.back().push_back(cid);
+        }
+    }
+    _calc_memory_usage();
+    return Status::OK();
+}
+
+Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_ver_pb) {
+    _version = version;
+    for (const auto& column_file : dcg_ver_pb.column_files()) {
+        _column_files.push_back(column_file);
+    }
+    for (const auto& encryption_meta : dcg_ver_pb.encryption_metas()) {
+        _encryption_metas.push_back(encryption_meta);
+    }
+    for (const auto& ucids : dcg_ver_pb.unique_column_ids()) {
+        _column_uids.emplace_back();
+        for (const auto& cid : ucids.column_ids()) {
+            _column_uids.back().push_back(cid);
         }
     }
     _calc_memory_usage();
@@ -124,7 +155,10 @@ std::string DeltaColumnGroup::save() const {
     for (const auto& column_file : _column_files) {
         dcg_pb.add_column_files(column_file);
     }
-    for (const auto& cids : _column_ids) {
+    for (const auto& encryption_meta : _encryption_metas) {
+        dcg_pb.add_encryption_metas(encryption_meta);
+    }
+    for (const auto& cids : _column_uids) {
         auto* dcg_col_pb = dcg_pb.add_column_ids();
         for (const auto& cid : cids) {
             dcg_col_pb->add_column_ids(cid);
@@ -143,6 +177,9 @@ std::string DeltaColumnGroupListSerializer::serialize_delta_column_group_list(co
         DeltaColumnGroupPB dcg_pb;
         for (const auto& relative_column_file : dcg->relative_column_files()) {
             dcg_pb.add_column_files(relative_column_file);
+        }
+        for (const auto& encryption_meta : dcg->encryption_metas()) {
+            dcg_pb.add_encryption_metas(encryption_meta);
         }
         for (const auto& cids : dcg->column_ids()) {
             auto* dcg_col_pb = dcg_pb.add_column_ids();
@@ -181,17 +218,21 @@ Status DeltaColumnGroupListSerializer::_deserialize_delta_column_group_list(cons
     DCHECK(dcgs_pb.versions_size() == dcgs_pb.dcgs_size());
     for (int i = 0; i < dcgs_pb.versions_size(); i++) {
         auto dcg = std::make_shared<DeltaColumnGroup>();
-        std::vector<std::vector<uint32_t>> column_ids;
+        std::vector<std::vector<ColumnUID>> column_ids;
         std::vector<std::string> column_files;
+        std::vector<std::string> encryption_metas;
         DCHECK(dcgs_pb.dcgs(i).column_ids().size() == dcgs_pb.dcgs(i).column_files().size());
         for (int j = 0; j < dcgs_pb.dcgs(i).column_ids().size(); ++j) {
-            column_ids.emplace_back(std::vector<uint32_t>());
+            column_ids.emplace_back();
             for (const auto& cid : dcgs_pb.dcgs(i).column_ids(j).column_ids()) {
                 column_ids.back().push_back(cid);
             }
             column_files.push_back(dcgs_pb.dcgs(i).column_files(j));
+            if (j < dcgs_pb.dcgs(i).encryption_metas_size()) {
+                encryption_metas.push_back(dcgs_pb.dcgs(i).encryption_metas(j));
+            }
         }
-        dcg->init(dcgs_pb.versions(i), column_ids, column_files);
+        dcg->init(dcgs_pb.versions(i), column_ids, column_files, encryption_metas);
         dcgs->push_back(dcg);
     }
     return Status::OK();

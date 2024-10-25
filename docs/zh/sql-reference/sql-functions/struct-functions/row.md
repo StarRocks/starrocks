@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # row
 
-## 功能
+
 
 根据给定的一个或多个值来构建 STRUCT。该函数支持 unnamed struct，使用该函数时无需指定字段名，StarRocks 会自动生成字段名，例如 `col1, col2,...`。
 

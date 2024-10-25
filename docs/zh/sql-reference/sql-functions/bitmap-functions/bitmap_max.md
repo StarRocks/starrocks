@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_max
 
-## 功能
+
 
 获取Bitmap中的最大值。如果Bitmap为NULL，则返回NULL。如果Bitmap为空，默认返回NULL。
 

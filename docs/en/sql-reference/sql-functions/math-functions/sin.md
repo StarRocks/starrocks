@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # sin
 
-## Description
+
 
 Returns the sine of `x`, where `x` is in radians.
 

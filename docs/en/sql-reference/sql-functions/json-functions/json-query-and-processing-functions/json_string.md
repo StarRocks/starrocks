@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # json_string
 
-## Description
+
 
 Converting JSON object to JSON string
 

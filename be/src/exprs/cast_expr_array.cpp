@@ -127,8 +127,27 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     }
 }
 
+Status CastStringToArray::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        if (is_constant()) {
+            ASSIGN_OR_RETURN(_constant_res, evaluate_const(context));
+        }
+    }
+    return Status::OK();
+}
+
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+    if (_constant_res != nullptr && _constant_res->is_constant()) {
+        auto* input = down_cast<ConstColumn*>(_constant_res.get());
+        size_t rows = input_chunk == nullptr ? 1 : input_chunk->num_rows();
+        if (input->only_null()) {
+            return ColumnHelper::create_const_null_column(rows);
+        } else {
+            return ConstColumn::create(input->data_column()->clone_shared(), rows);
+        }
+    }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -205,11 +224,11 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(res, null_column);
     }
+
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
         res = ConstColumn::create(res, column->size());
     }
-
     return res;
 }
 

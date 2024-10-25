@@ -19,6 +19,7 @@
     "@algolia/client-search": "^4.20.0",
     "@docsearch/react": "3",
     "@docusaurus/core": "^3.1.1",
+    "@docusaurus/plugin-client-redirects": "^3.1.1",
     "@docusaurus/preset-classic": "^3.1.1",
     "@docusaurus/theme-search-algolia": "^3.1.1",
     "@mdx-js/react": "^3.0.0",

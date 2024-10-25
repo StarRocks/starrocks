@@ -19,11 +19,13 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
+#include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/types.h"
 #include "simd/simd.h"
 
 namespace starrocks {
@@ -83,7 +85,7 @@ public:
                Type == TYPE_BIGINT;
     }
 
-    [[nodiscard]] Status prepare([[maybe_unused]] RuntimeState* state) {
+    Status prepare([[maybe_unused]] RuntimeState* state) {
         if (_is_prepare) {
             return Status::OK();
         }
@@ -93,7 +95,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status merge(Predicate* predicate) override {
+    Status merge(Predicate* predicate) override {
         if (auto* that = dynamic_cast<typeof(this)>(predicate)) {
             const auto& hash_set = that->hash_set();
             _hash_set.insert(hash_set.begin(), hash_set.end());
@@ -105,7 +107,7 @@ public:
         }
     }
 
-    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override {
+    Status prepare(RuntimeState* state, ExprContext* context) override {
         RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
@@ -126,8 +128,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
-                              FunctionContext::FunctionStateScope scope) override {
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             if (Type != _children[0]->type().type) {
@@ -326,6 +327,35 @@ public:
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
+    ColumnPtr get_all_values() const {
+        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        if constexpr (isSliceLT<Type>) {
+            for (auto v : _hash_set) {
+                // v -> SliceWithHash
+                Slice s{v.data, v.size};
+                values->append_datum(s);
+            }
+        } else {
+            for (auto v : _hash_set) {
+                values->append_datum(v);
+            }
+            if constexpr (can_use_array()) {
+                if (is_use_array()) {
+                    for (size_t i = 0; i < _array_size; i++) {
+                        if (_array_buffer[i]) {
+                            values->append_datum(static_cast<ValueType>(i)); //NOLINT
+                        }
+                    }
+                }
+            }
+        }
+
+        if (_null_in_set) {
+            values->append_nulls(1);
+        }
+        return values;
+    }
+
     void insert(const ValueType& value) { _hash_set.emplace(value); }
 
     void insert_array(const ValueType& value) {
@@ -405,8 +435,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicateGeneric(*this)); }
 
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
-                              FunctionContext::FunctionStateScope scope) override {
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             _const_input.resize(_children.size());
@@ -517,7 +546,7 @@ public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
             : _state(state), _pool(pool), _expr(expr) {}
 
-    [[nodiscard]] Status create();
+    Status create();
     void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }

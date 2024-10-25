@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ST_LineFromText,ST_LineStringFromText
 
-## Description
+
 
 Converts a WKT (Well Known Text) to a memory representation in the form of Line.
 

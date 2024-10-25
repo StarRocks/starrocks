@@ -25,35 +25,34 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
         //   name,       type,          size,                     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ORDINAL_POSITION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COLUMN_DEFAULT", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"IS_NULLABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_MAXIMUM_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CHARACTER_OCTET_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUMERIC_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"NUMERIC_SCALE", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DATETIME_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLUMN_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXTRA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIVILEGES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_SIZE", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DECIMAL_DIGITS", TYPE_BIGINT, sizeof(int64_t), true},
-        {"GENERATION_EXPRESSION", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"SRS_ID", TYPE_BIGINT, sizeof(int64_t), true},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ORDINAL_POSITION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COLUMN_DEFAULT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"IS_NULLABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATA_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_MAXIMUM_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CHARACTER_OCTET_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUMERIC_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUMERIC_SCALE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DATETIME_PRECISION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"COLUMN_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXTRA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIVILEGES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLUMN_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DECIMAL_DIGITS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"GENERATION_EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SRS_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
 };
 
 SchemaColumnsScanner::SchemaColumnsScanner()
-        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _timeout_ms(config::thrift_rpc_timeout_ms) {}
+        : SchemaScanner(_s_col_columns, sizeof(_s_col_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaColumnsScanner::~SchemaColumnsScanner() = default;
 
@@ -61,6 +60,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("schema columns scanner not inited.");
     }
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     if (_param->without_db_table) {
         return Status::OK();
     }
@@ -84,17 +84,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
         }
     }
 
-    {
-        SCOPED_TIMER(_param->_rpc_timer);
-        _timeout_ms = state->query_options().query_timeout * 1000;
-        if (nullptr != _param->ip && 0 != _param->port) {
-            RETURN_IF_ERROR(
-                    SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, _timeout_ms));
-        } else {
-            return Status::InternalError("IP or port doesn't exists");
-        }
-    }
-
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
     return Status::OK();
 }
 
@@ -502,7 +492,14 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // GENERATION_EXPRESSION
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(23);
-                fill_data_column_with_null(column.get());
+                if (_desc_result.columns[_column_index].columnDesc.__isset.generatedColumnExprStr &&
+                    _desc_result.columns[_column_index].columnDesc.generatedColumnExprStr.size() != 0) {
+                    std::string* str = &_desc_result.columns[_column_index].columnDesc.generatedColumnExprStr;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }
@@ -546,12 +543,7 @@ Status SchemaColumnsScanner::get_new_desc() {
         desc_params.__set_limit(_param->limit);
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result, _timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::describe_table(_ss_state, desc_params, &_desc_result));
     _column_index = 0;
 
     return Status::OK();
@@ -580,12 +572,7 @@ Status SchemaColumnsScanner::get_new_table() {
         }
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_table_names(*(_param->ip), _param->port, table_params, &_table_result, _timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_table_names(_ss_state, table_params, &_table_result));
     _table_index = 0;
     return Status::OK();
 }
@@ -598,7 +585,6 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         return Status::InternalError("input parameter is nullptr.");
     }
     {
-        SCOPED_TIMER(_param->_rpc_timer);
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
         // in this case, there is no predicate and limit clause is set,we can call the describe_table
         // interface only once, and no longer call get_db_names and get_table_names interface, which

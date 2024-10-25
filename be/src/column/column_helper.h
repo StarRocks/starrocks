@@ -20,7 +20,7 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
-#if defined(__ARM_NEON__) || defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -33,6 +33,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
+#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/phmap/phmap.h"
@@ -80,7 +81,7 @@ public:
     // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
-    // Find the non-null value in reversed order in [start, end), return start if all null
+    // Find the non-null value in reversed order in [start, end), return end if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     // Find first value in range [start, end) that not equal to target
@@ -332,6 +333,33 @@ public:
         }
     }
 
+    template <LogicalType LT>
+    static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
+        } else if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return down_cast<const ColumnType*>(const_column->data_column().get());
+        } else {
+            return reinterpret_cast<const ColumnType*>(column);
+        }
+    }
+
+    static NullColumn* get_null_column(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column().get();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column().get();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
@@ -358,6 +386,7 @@ public:
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
+
     template <typename T, bool avx512f>
     static size_t t_filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
@@ -390,9 +419,9 @@ public:
         auto m = (mask >> SHIFT) & MASK;                                        \
         if (m) {                                                                \
             __m512i dst;                                                        \
-            __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
-            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
-            _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+            __m512i src = _mm512_loadu_epi## WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi## WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi## WIDTH(data + result_offset, dst);                \
             result_offset += __builtin_popcount(m);                             \
         }                                                                       \
     }
@@ -431,35 +460,30 @@ public:
 
             start_offset += kBatchNums;
         }
-#elif defined(__ARM_NEON__) || defined(__aarch64__)
-        const uint8_t* f_data = filter.data() + from;
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        const uint8_t* filter_data = filter.data() + from;
         constexpr size_t data_type_size = sizeof(T);
 
         constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
         while (start_offset + kBatchNums < to) {
-            uint8x16_t filter = vld1q_u8(f_data);
-            if (vmaxvq_u8(filter) == 0) {
+            const uint8x16_t vfilter = vld1q_u8(filter_data);
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vmvnq_u8(vceqzq_u8(vfilter)));
+            if (nibble_mask == 0) {
                 // skip
-            } else if (vminvq_u8(filter)) {
+            } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
                 memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
                 result_offset += kBatchNums;
             } else {
-                for (int i = 0; i < kBatchNums; ++i) {
-                    // the index for vgetq_lane_u8 should be a literal integer
-                    // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
-                    // in ASAN/DEBUG
-#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER)
-                    if (vgetq_lane_u8(filter, i)) {
-#else
-                    if (f_data[i]) {
-#endif
-                        *(data + result_offset++) = *(data + start_offset + i);
-                    }
+                // Make each nibble only keep the highest bit 1, that is 0b1111 -> 0b1000.
+                nibble_mask &= 0x8888'8888'8888'8888ull;
+                for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                    uint32_t index = __builtin_ctzll(nibble_mask) >> 2;
+                    *(data + result_offset++) = *(data + start_offset + index);
                 }
             }
 
             start_offset += kBatchNums;
-            f_data += kBatchNums;
+            filter_data += kBatchNums;
         }
 #endif
         // clang-format on
@@ -507,29 +531,31 @@ public:
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
 
-    static NullColumnPtr one_size_not_null_column;
-
-    static NullColumnPtr one_size_null_column;
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
 
 // Hold a slice of chunk
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+    size_t segment_id = 0;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    Ptr cutoff(size_t required_rows);
+    ChunkUniquePtr cutoff(size_t required_rows);
     void reset(Ptr input);
 };
 
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-    const auto& get_data(const Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
-    const auto& get_data(const ColumnPtr& column) {
+    static const auto& get_data(const Column* column) {
+        return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+    }
+    static const auto& get_data(const ColumnPtr& column) {
         return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
     }
 };
@@ -537,10 +563,10 @@ struct GetContainer {
 #define GET_CONTAINER(ltype)                                                                  \
     template <>                                                                               \
     struct GetContainer<ltype> {                                                              \
-        const auto& get_data(const Column* column) {                                          \
+        static const auto& get_data(const Column* column) {                                   \
             return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
         }                                                                                     \
-        const auto& get_data(const ColumnPtr& column) {                                       \
+        static const auto& get_data(const ColumnPtr& column) {                                \
             return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
         }                                                                                     \
     };
@@ -549,5 +575,6 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

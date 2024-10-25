@@ -45,8 +45,13 @@ public class CachingMvPlanContextBuilder {
 
     public static class AstKey {
         private final String sql;
+
+        /**
+         * Create a AstKey with parseNode(sub parse node)
+         * @param parseNode
+         */
         public AstKey(ParseNode parseNode) {
-            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false).visit(parseNode);
+            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
         }
 
         @Override
@@ -115,12 +120,15 @@ public class CachingMvPlanContextBuilder {
         return mvPlanContextCache.getIfPresent(mv);
     }
 
+    /**
+     * Build the plan for MV, return an empty list if no plan is available
+     */
     private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
         try {
             return MvPlanContextBuilder.getPlanContext(mv);
         } catch (Throwable e) {
             LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
-            return null;
+            return Lists.newArrayList();
         }
     }
 
@@ -160,13 +168,10 @@ public class CachingMvPlanContextBuilder {
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
-        if (mv == null || !mv.isEnableRewrite()) {
+        if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
         try {
-            // initialize define query parse node each time
-            mv.initDefineQueryParseNode();
-
             // cache by ast
             ParseNode parseNode = mv.getDefineQueryParseNode();
             if (parseNode == null) {
@@ -184,11 +189,11 @@ public class CachingMvPlanContextBuilder {
      * @param parseNode: ast to query.
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
-    public Set<MaterializedView> getMvsByAst(ParseNode parseNode) {
-        if (parseNode == null) {
+    public Set<MaterializedView> getMvsByAst(AstKey ast) {
+        if (ast == null) {
             return null;
         }
-        return astToMvsMap.get(new AstKey(parseNode));
+        return astToMvsMap.get(ast);
     }
 
     /**

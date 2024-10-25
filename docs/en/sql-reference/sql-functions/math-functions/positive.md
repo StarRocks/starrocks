@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # positive
 
-## Description
+
 
 Returns `x` as a value.
 

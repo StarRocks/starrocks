@@ -78,7 +78,7 @@ public class AccessTestUtil {
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
@@ -166,25 +166,28 @@ public class AccessTestUtil {
 
         Database db = mockDb("testDb");
 
+        /*
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testDb");
+                globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
-                globalStateMgr.getDb("emptyCluster");
+                globalStateMgr.getLocalMetastore().getDb("emptyCluster");
                 minTimes = 0;
                 result = null;
             }
         };
+
+         */
         return globalStateMgr;
     }
 

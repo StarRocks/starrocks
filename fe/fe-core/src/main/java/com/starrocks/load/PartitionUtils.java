@@ -25,8 +25,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -61,13 +61,13 @@ public class PartitionUtils {
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
         try {
             // should check whether targetTable exists
-            Table tmpTable = db.getTable(targetTable.getId());
+            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }
@@ -100,13 +100,13 @@ public class PartitionUtils {
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             range, partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof SinglePartitionInfo) {
+                } else if (partitionInfo.isUnPartitioned()) {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof ListPartitionInfo) {
+                } else if (partitionInfo.isListPartition()) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
 
                     listPartitionInfo.setIdToIsTempPartition(partition.getId(), true);
@@ -147,16 +147,19 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
     public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : materializedIndex.getTablets()) {
-                    invertedIndex.deleteTablet(tablet.getId());
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex materializedIndex : subPartition.getMaterializedIndices(
+                            MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }
