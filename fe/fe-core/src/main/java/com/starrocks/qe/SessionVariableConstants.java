@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import org.apache.commons.lang3.EnumUtils;
+
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -74,5 +76,16 @@ public class SessionVariableConstants {
         TWO_STAGE,
         THREE_STAGE,
         FOUR_STAGE
+    }
+
+    // default, ndv, rewrite_by_hll_bitmap
+    public enum CountDistinctImplMode {
+        DEFAULT,                // default, keeps the original count distinct implementation
+        NDV,                    // ndv, uses HyperLogLog to estimate the count distinct
+        MULTI_COUNT_DISTINCT;
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static CountDistinctImplMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
     }
 }
