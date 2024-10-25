@@ -30,18 +30,22 @@ public class QueueIcebergRemoteFileInfoSource implements RemoteFileInfoSource {
 
     @Override
     public RemoteFileInfo getOutput() {
-        do {
-            if (!queue.isEmpty()) {
-                return queue.pop();
-            }
-            sourceTrigger.trigger();
-        } while (hasMoreOutput());
-
-        return RemoteFileInfo.EMPTY;
+        return queue.pop();
     }
 
     @Override
     public boolean hasMoreOutput() {
-        return !queue.isEmpty() || sourceTrigger.hasMoreOutput();
+        if (!queue.isEmpty()) {
+            return true;
+        }
+
+        while (sourceTrigger.hasMoreOutput()) {
+            sourceTrigger.trigger();
+            if (!queue.isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
