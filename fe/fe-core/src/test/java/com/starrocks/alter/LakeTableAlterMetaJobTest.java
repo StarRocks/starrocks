@@ -84,7 +84,7 @@ public class LakeTableAlterMetaJobTest {
                                 "PROPERTIES('enable_persistent_index'='false')");
         Assert.assertFalse(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
-                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
+                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
     }
 
     @After
@@ -228,7 +228,7 @@ public class LakeTableAlterMetaJobTest {
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
                     job.dbId, job.tableId, job.tableName,
-                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
+                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
         Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
         Map<Long, Long> commitVersionMap = job.getCommitVersionMap();

@@ -20,6 +20,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletSchema;
@@ -62,6 +63,16 @@ public class TabletMetadataUpdateAgentTaskFactory {
     public static TabletMetadataUpdateAgentTask createIsInMemoryUpdateTask(long backendId,
                                                                            List<Pair<Long, Boolean>> inMemoryConfigs) {
         return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
+    }
+
+    public static TabletMetadataUpdateAgentTask createLakePersistentIndexUpdateTask(long backend, Set<Long> tablets,
+                                                                                    Boolean enablePersistentIndex,
+                                                                                    String persistentIndexType) {
+        requireNonNull(tablets, "tablets is null");
+        List<Pair<Long, Pair<Boolean, String>>> valueList =
+                tablets.stream().map(id -> new Pair<>(id, new Pair<>(enablePersistentIndex, persistentIndexType)))
+                    .collect(Collectors.toList());
+        return new UpdateLakePersistentIndexTask(backend, valueList);
     }
 
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
@@ -197,6 +208,40 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(pair.first);
                 metaInfo.setEnable_persistent_index(pair.second);
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateLakePersistentIndexTask extends TabletMetadataUpdateAgentTask {
+        private final List<Pair<Long, Pair<Boolean, String>>> persistentIndexList;
+
+        private UpdateLakePersistentIndexTask(long backendId, List<Pair<Long, Pair<Boolean, String>>> persistentIndexList) {
+            super(backendId, persistentIndexList.hashCode());
+            this.persistentIndexList = persistentIndexList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return persistentIndexList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, Pair<Boolean, String>> pair : persistentIndexList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setEnable_persistent_index(pair.second.first);
+                if (pair.second.second.equalsIgnoreCase("CLOUD_NATIVE")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.CLOUD_NATIVE);
+                } else if (pair.second.second.equalsIgnoreCase("LOCAL")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.LOCAL);
+                } else {
+                    throw new IllegalArgumentException("Unknown persistent index type: " + pair.second.second);
+                }
                 metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 metaInfos.add(metaInfo);
             }
