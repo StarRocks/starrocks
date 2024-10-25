@@ -30,7 +30,7 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
 
-    private GetRemoteFilesParams(Builder builder) {
+    protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
         this.partitionAttachments = builder.partitionAttachments;
@@ -54,6 +54,11 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    public  <T extends GetRemoteFilesParams> T cast() {
+        return (T) this;
     }
 
     // Getters

@@ -408,7 +408,7 @@ class DeleteFileIndex {
             return Iterables.filter(deleteFiles, file -> file.dataSequenceNumber() > minSequenceNumber);
         }
 
-        private Collection<DeleteFile> loadDeleteFiles() {
+        public Collection<DeleteFile> loadDeleteFiles() {
             // read all of the matching delete manifests in parallel and accumulate the matching files in
             // a queue
             Queue<DeleteFile> files = new ConcurrentLinkedQueue<>();
