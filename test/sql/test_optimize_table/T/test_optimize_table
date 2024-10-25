@@ -352,3 +352,9 @@ select count(*) from t;
 function: wait_optimize_table_finish()
 show create table t;
 select count(*) from t;
+
+-- name: test_cancel_optimize
+create table t(k int) distributed by hash(k) buckets 10;
+alter table t distributed by hash(k);
+cancel alter table optimize from t;
+function: wait_optimize_table_finish(expect_status="CANCELLED")
