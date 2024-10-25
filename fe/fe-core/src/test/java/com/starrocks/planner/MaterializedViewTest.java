@@ -2814,7 +2814,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
-        setTracLogModule("MV");
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;")
                 .match("  |  <slot 2> : 6: user_id\n" +
                         "  |  <slot 5> : 7: bitmap_union(to_bitmap(tag_id))");
@@ -3297,7 +3296,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
-        setTracLogModule("MV");
         testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
                 "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
         starRocksAssert.dropTable("t_time_slice");
