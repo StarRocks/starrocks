@@ -437,10 +437,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
         bytes.reserve(reserved);
     }
 
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
 
     auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -487,10 +485,8 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     }
 
     bytes.reserve(reserved);
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
