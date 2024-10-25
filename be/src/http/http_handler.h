@@ -29,10 +29,10 @@ class HttpRequest;
 class HttpChannel;
 
 #define CHECK_RUNNING_COUNT()                                              \
+    _running_count++;                                                      \
     if (_running_count >= 10) {                                            \
         LOG(WARNING) << "DEBUG: so many running task: " << _running_count; \
     }                                                                      \
-    _running_count++;                                                      \
     DeferOp op([&] {                                                       \
         _running_count--;                                                  \
     });

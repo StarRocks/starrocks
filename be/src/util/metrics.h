@@ -379,7 +379,7 @@ public:
                     SCOPED_RAW_TIMER(&cost);
                     it.second->collect(_name, it.first, visitor);
                 }
-                if ((cost - start) >= 10000) {
+                if ((cost - start) >= 100000000) {
                     LOG(ERROR) << "DEBUG: long fetch metrics: " << it.first << ":" << (cost - start);
                 }
             }
