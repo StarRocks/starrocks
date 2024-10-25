@@ -749,7 +749,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     nodes->reserve(nodes->size() + _children.size());
 
     int index = nodes->size();
-    nodes->push_back(TRuntimeProfileNode());
+    nodes->emplace_back();
     TRuntimeProfileNode& node = (*nodes)[index];
     node.name = _name;
     node.num_children = _children.size();
@@ -768,11 +768,22 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         node.child_counters_map = _child_counter_map;
     }
 
+    // If the node has a MIN/MAX and they need to be displayed, the node itself also needs to be reserved,
+    // otherwise it will broke the tree structure
+    std::set<std::string> keep_counters;
+    for (auto& [name, pair] : counter_map) {
+        if (pair.first->should_display()) {
+            keep_counters.emplace(name);
+            keep_counters.emplace(pair.second);
+        }
+    }
+
     for (auto& iter : counter_map) {
-        auto& strategy = iter.second.first;
-        if (!strategy->should_display()) {
+        auto& name = iter.first;
+        if (keep_counters.count(name) == 0) {
             continue;
         }
+
         TCounter counter;
         counter.__set_name(iter.first);
         counter.__set_value(iter.second.first->value());
