@@ -720,6 +720,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public static String persistentIndexTypeToString(TPersistentIndexType type) {
+        if (type == null) {
+            return "";
+        }
         switch (type) {
             case LOCAL:
                 return LOCAL_INDEX_TYPE;
