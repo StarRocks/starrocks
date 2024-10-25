@@ -58,49 +58,7 @@ The authentication information used by StarRocks to access your storage system.
   | aws.s3.secret_key | Yes          | The Secret Access Key that you can use to access the Amazon S3 bucket. |
   | aws.s3.region     | Yes          | The region in which your AWS S3 bucket resides. Example: `us-west-2`. |
 
-<<<<<<< HEAD
 ## Return
-=======
-- Use the IAM user-based authentication to access GCS:
-
-  ```SQL
-  "fs.s3a.access.key" = "AAAAAAAAAAAAAAAAAAAA",
-  "fs.s3a.secret.key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-  "fs.s3a.endpoint" = "<gcs_endpoint>"
-  ```
-
-  | **Key**           | **Required** | **Description**                                              |
-  | ----------------- | ------------ | ------------------------------------------------------------ |
-  | fs.s3a.access.key | Yes          | The Access Key ID that you can use to access the GCS bucket. |
-  | fs.s3a.secret.key | Yes          | The Secret Access Key that you can use to access the GCS bucket.|
-  | fs.s3a.endpoint   | Yes          | The endpoint that you can use to access the GCS bucket. Example: `storage.googleapis.com`. Do not specify `https` in the endpoint address. |
-
-- Use Shared Key to access Azure Blob Storage:
-
-  ```SQL
-  "azure.blob.storage_account" = "<storage_account>",
-  "azure.blob.shared_key" = "<shared_key>"
-  ```
-
-  | **Key**                    | **Required** | **Description**                                              |
-  | -------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.storage_account | Yes          | The name of the Azure Blob Storage account.                  |
-  | azure.blob.shared_key      | Yes          | The Shared Key that you can use to access the Azure Blob Storage account. |
-
-#### columns_from_path
-
-From v3.2 onwards, StarRocks can extract the value of a key/value pair from the file path as the value of a column.
-
-```SQL
-"columns_from_path" = "<column_name> [, ...]"
-```
-
-Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
-
-### Return
-
-#### SELECT FROM FILES()
->>>>>>> 2572c1e5cb ([Doc] Forbid https in GCS endpoint (#52285))
 
 When used with SELECT, FILES() returns the data in the file as a table.
 
