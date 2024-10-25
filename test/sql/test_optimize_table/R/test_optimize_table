@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 -- name: test_optimize_table
 create table t(k int) distributed by hash(k) buckets 10;
 -- result:
@@ -71,7 +70,8 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p2020
 function: wait_optimize_table_finish()
 -- result:
 None
-=======
+-- !result
+
 -- name: test_disable_random
 create table t(k int);
 -- result:
@@ -79,7 +79,6 @@ create table t(k int);
 alter table t distributed by random buckets 10;
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
->>>>>>> 6e7a8e049a ([Enhancement] Disable optimize table on auto bucket table (#52120))
 -- !result
 
 
