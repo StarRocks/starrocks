@@ -54,8 +54,6 @@ public:
     virtual void on_chunk_data(HttpRequest* req) {}
     virtual void free_handler_ctx(void* handler_ctx) {}
 
-    virtual std::string type() const = 0;
-
 protected:
     std::atomic<int64_t> _running_count = 0;
 };
