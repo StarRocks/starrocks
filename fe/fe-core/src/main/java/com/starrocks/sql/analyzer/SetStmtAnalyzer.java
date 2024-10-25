@@ -317,6 +317,17 @@ public class SetStmtAnalyzer {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
         }
 
+        // count_distinct_implementation
+        if (variable.equalsIgnoreCase(SessionVariable.COUNT_DISTINCT_IMPLEMENTATION)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariableConstants.CountDistinctImplMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariableConstants.CountDistinctImplMode.class), ",");
+                throw new SemanticException(String.format("Unsupported count distinct implementation mode: %s, " +
+                        "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
         var.setResolvedExpression(resolvedExpression);
     }
 

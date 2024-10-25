@@ -1975,6 +1975,33 @@ class StarrocksSQLApiLib(object):
             if plan.find(expect) > 0:
                 return True
         return False
+    
+    def print_hit_materialized_views(self, query) -> str:
+        """
+        print all mv_names hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return ""
+        plan = res["result"]
+        if not plan:
+            return ""
+        mv_name = None
+        ans = []
+        for line in plan:
+            if len(line) != 1:
+                continue
+            content = line[0]
+            if content.find("MaterializedView: true") > 0:
+                if mv_name:
+                    ans.append(mv_name)
+                mv_name = None
+            if content.find("TABLE:") > 0:
+                mv_name = content.split("TABLE:")[1].strip()
+        return ",".join(ans)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
