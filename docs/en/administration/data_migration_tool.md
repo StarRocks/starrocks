@@ -372,7 +372,7 @@ The list of objects that support synchronization currently is as follows (those 
 
 ## Q&A
 
-### Q1: Why did only the table schemas get synchronized?
+### Q1: Which ports need to be opened between clusters?
 
 If you have enabled the firewall, you must open these ports:
 
