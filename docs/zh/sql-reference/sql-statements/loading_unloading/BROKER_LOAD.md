@@ -253,7 +253,7 @@ StarRocks 访问存储系统的认证配置。
   
     - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
   
-    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE（或 CN）节点的 `{deploy}/conf` 目录下。
+    - 如果采用无 Broker 的导入，您需要在各个 FE、BE、CN 节点的部署路径下的 `conf/core-site.xml` 文件中设置 `hadoop.security.authentication = kerberos`，并通过 `kinit` 命令配置 Kerberos 账号。
 
   - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
 
