@@ -225,6 +225,15 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
   - If you load data from a single HDFS cluster that has one Kerberos user configured, both broker-based loading and broker-free loading are supported.
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md
+=======
+  
+    - To perform broker-based loading, make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
+  
+    - To perform broker-free loading, you only need to set `hadoop.security.authentication = kerberos` in `conf/core-site.xml` under the deployment directories of all FE, BE, and CN nodes in your cluster, and use the `kinit` command to configure the Kerberos account.
+  
+  - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
+>>>>>>> 9e52d28867 ([Doc] Brokerless doc update (#52346)):docs/en/sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md
 
     - To perform broker-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
