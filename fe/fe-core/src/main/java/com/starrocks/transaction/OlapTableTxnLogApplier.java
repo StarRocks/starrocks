@@ -114,7 +114,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
-                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    List<Replica> replicas = ((LocalTablet) tablet).getAllReplicas();
                     for (Replica replica : replicas) {
                         if (txnState.isNewFinish()) {
                             updateReplicaVersion(version, replica, txnState.getFinishState());
