@@ -104,7 +104,7 @@ Status SchemaScanner::init_schema_scanner_state(RuntimeState* state) {
     _ss_state.ip = *(_param->ip);
     _ss_state.port = _param->port;
     _ss_state.timeout_ms = state->query_options().query_timeout * 1000;
-    VLOG(1) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+    VLOG(2) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
     _ss_state.param = _param;
     return Status::OK();
 }
@@ -345,7 +345,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     auto literal_col = literal_col_status.value();
     Slice padded_value(literal_col->get(0).get_slice());
     result = padded_value.to_string();
-    VLOG(1) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
+    VLOG(2) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
             << ", result_child_idx=" << result_child_idx;
     return true;
 }

@@ -182,7 +182,7 @@ Status SchemaScanNode::open(RuntimeState* state) {
 }
 
 Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    VLOG(1) << "SchemaScanNode::GetNext";
+    VLOG(2) << "SchemaScanNode::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     DCHECK(_is_init);

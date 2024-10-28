@@ -340,6 +340,7 @@ public:
 
 private:
     void _wait_for_fragments_finish();
+    size_t _get_running_fragments_count() const;
 
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override

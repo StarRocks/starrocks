@@ -534,6 +534,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
     public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE =
+            "enable_materialized_view_timeseries_agg_pushdown_rewrite";
 
     public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
             "enable_materialized_view_text_match_rewrite";
@@ -717,6 +719,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
+    public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
+
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
@@ -725,6 +729,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
+
+    public static final String COUNT_DISTINCT_IMPLEMENTATION = "count_distinct_implementation";
+
+    public static final String ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP = "enable_count_distinct_rewrite_by_hll_bitmap";
 
     // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
     // negative value means force interleaving under the group size of abs(interleaving_group_size)
@@ -1545,6 +1553,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorForceRebalance = false;
+
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
 
@@ -1567,6 +1578,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PLAN_ADVISOR)
     private boolean enablePlanAdvisor = true;
 
+    @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
+    private String countDistinctImplementation = "default";
+
+    // By default, we always use the created mv's bitmap/hll to rewrite count distinct, but result is not
+    // exactly matched with the original result.
+    // If we want to get the exactly matched result, we can disable this.
+    @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
+    private boolean enableCountDistinctRewriteByHllBitmap = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -1842,6 +1861,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE)
     private boolean enableMaterializedViewPushDownRewrite = false;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TIMESERIES_AGG_PUSHDOWN_REWRITE)
+    private boolean enableMaterializedViewTimeSeriesPushDownRewrite = true;
 
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
     private boolean enableForceRuleBasedMvRewrite = true;
@@ -2721,6 +2743,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
         this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public boolean getHdfsBackendSelectorForceRebalance() {
+        return hdfsBackendSelectorForceRebalance;
+    }
+
+    public void setHdfsBackendSelectorForceRebalance(boolean hdfsBackendSelectorForceRebalance) {
+        this.hdfsBackendSelectorForceRebalance = hdfsBackendSelectorForceRebalance;
     }
 
     public int getConsistentHashVirtualNodeNum() {
@@ -3665,6 +3695,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewPushDownRewrite = enableMaterializedViewPushDownRewrite;
     }
 
+    public boolean isEnableMaterializedViewTimeSeriesPushDownRewrite() {
+        return enableMaterializedViewTimeSeriesPushDownRewrite;
+    }
+
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+        this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
+    }
+
     public boolean isEnableMaterializedViewViewDeltaRewrite() {
         return enableMaterializedViewViewDeltaRewrite;
     }
@@ -4228,6 +4266,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
         this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
+    public void setCountDistinctImplementation(String countDistinctImplementation) {
+        this.countDistinctImplementation = countDistinctImplementation;
+    }
+
+    public SessionVariableConstants.CountDistinctImplMode getCountDistinctImplementation() {
+        return SessionVariableConstants.CountDistinctImplMode.parse(countDistinctImplementation);
+    }
+
+    public boolean isEnableCountDistinctRewriteByHllBitmap() {
+        return enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
+        this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

@@ -144,8 +144,8 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName),
+                    String.format("dangling counter %s->%s", parentName, name));
             Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
@@ -817,7 +817,7 @@ public class RuntimeProfile {
                     RuntimeProfile child = profile.getChild(childName);
                     if (child == null) {
                         identical = false;
-                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                        LOG.debug("find non-isomorphic children, profileName={}, requiredChildName={}",
                                 profile.name, childName);
                         continue;
                     }

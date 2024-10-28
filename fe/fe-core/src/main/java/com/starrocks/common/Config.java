@@ -312,7 +312,7 @@ public class Config extends ConfigBase {
      * In such cases, it is possible to disable this switch.
      */
     @ConfField(mutable = true)
-    public static boolean log_register_and_unregister_query_id = true;
+    public static boolean log_register_and_unregister_query_id = false;
 
     /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
@@ -848,6 +848,12 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int mysql_service_io_threads_num = 4;
+
+    /**
+     * Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+     */
+    @ConfField
+    public static boolean mysql_service_nio_enable_keep_alive = true;
 
     /**
      * max num of thread to handle task in mysql.
@@ -2110,10 +2116,10 @@ public class Config extends ConfigBase {
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_small_table_interval = 6 * 60 * 60; // unit: second, default 6h
+    public static long connector_table_query_trigger_analyze_small_table_interval = 2 * 3600; // unit: second, default 2h
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_large_table_interval = 24 * 60 * 60; // unit: second, default 24h
+    public static long connector_table_query_trigger_analyze_large_table_interval = 12 * 3600; // unit: second, default 12h
 
     @ConfField(mutable = true)
     public static int connector_table_query_trigger_analyze_max_running_task_num = 2;
@@ -2697,6 +2703,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
+    public static String lake_background_warehouse = "default_warehouse";
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2751,7 +2763,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
-    public static boolean lake_enable_ingest_slowdown = false;
+    public static boolean lake_enable_ingest_slowdown = true;
 
     @ConfField(mutable = true, comment =
             "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
@@ -2768,12 +2780,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment =
             "The upper limit for compaction score, only takes effect when lake_enable_ingest_slowdown=true.\n" +
-                    "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
-                    "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
-                    "The effective value will be set to the higher of the configured value here and " +
-                    "lake_compaction_score_selector_min_score.\n" +
+                    "When the compaction score exceeds this value, ingestion will be rejected.\n" +
                     "A value of 0 represents no limit.")
-    public static long lake_compaction_score_upper_bound = 0;
+    public static long lake_compaction_score_upper_bound = 2000;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2992,6 +3001,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_persistent_index_by_default = true;
 
+    /*
+     * Using cloud native persistent index in primary key table by default when creating table.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_cloud_native_persistent_index_by_default = true;
+
     /**
      * timeout for external table commit
      */
@@ -3184,7 +3199,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int replication_max_parallel_data_size_mb = 1048576; // 1T
     @ConfField(mutable = true)
-    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    public static int replication_transaction_timeout_sec = 24 * 60 * 60; // 24hour
     @ConfField(mutable = true)
     public static boolean enable_legacy_compatibility_for_replication = false;
 
@@ -3262,4 +3277,10 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
 }

@@ -117,7 +117,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, materializedView);
+        }
+        List<TableName> excludedRefreshBaseTables = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            excludedRefreshBaseTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, materializedView);
         }
         int maxMVRewriteStaleness = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
@@ -239,6 +245,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
                     propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES));
+            materializedView.getTableProperty().setExcludedRefreshTables(excludedTriggerTables);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {

@@ -236,6 +236,8 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
@@ -244,7 +246,7 @@ struct HdfsScannerContext {
         return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -381,10 +383,11 @@ public:
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
-protected:
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+
+protected:
     Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 

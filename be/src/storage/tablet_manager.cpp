@@ -670,7 +670,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
                 if (tablet_ptr->last_cumu_compaction_failure_status() == TStatusCode::NOT_FOUND) {
                     if (now_ms - last_failure_ts <= 5 * config::cumulative_compaction_check_interval_seconds * 1000) {
-                        VLOG(1) << "Too often to schedule no suitable compaction, skip it."
+                        VLOG(2) << "Too often to schedule no suitable compaction, skip it."
                                 << "compaction_type=" << compaction_type_str
                                 << ", last_failure_timestamp=" << last_failure_ts / 1000
                                 << ", tablet_id=" << tablet_ptr->tablet_id();
@@ -679,7 +679,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                 } else {
                     last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
                     if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
-                        VLOG(1) << "Too often to schedule failure compaction, skip it."
+                        VLOG(2) << "Too often to schedule failure compaction, skip it."
                                 << "compaction_type=" << compaction_type_str
                                 << ", min_cumulative_compaction_failure_interval_sec="
                                 << config::min_cumulative_compaction_failure_interval_sec
@@ -691,7 +691,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             } else if (compaction_type == CompactionType::BASE_COMPACTION) {
                 last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
                 if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
-                    VLOG(1) << "Too often to schedule failure compaction, skip it."
+                    VLOG(2) << "Too often to schedule failure compaction, skip it."
                             << "compaction_type=" << compaction_type_str
                             << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
                             << ", last_failure_timestamp=" << last_failure_ts / 1000
@@ -729,7 +729,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     }
 
     if (best_tablet != nullptr) {
-        VLOG(1) << "Found the best tablet to compact. "
+        VLOG(2) << "Found the best tablet to compact. "
                 << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
                 << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the

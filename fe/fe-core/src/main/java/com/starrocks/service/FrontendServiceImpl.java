@@ -131,6 +131,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
@@ -351,10 +352,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    private final ProxyContextManager proxyContextManager;
     public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
+        proxyContextManager = ProxyContextManager.getInstance();
         this.exeEnv = exeEnv;
     }
 
@@ -1120,11 +1123,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.info("receive forwarded stmt {} from FE: {}",
                 params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
         ConnectContext context = new ConnectContext(null);
-        ConnectProcessor processor = new ConnectProcessor(context);
-        TMasterOpResult result = processor.proxyExecute(params);
-        ConnectContext.remove();
-        return result;
+        String hostname = "";
+        if (clientAddr != null) {
+            hostname = clientAddr.getHostname();
+        }
+        context.setProxyHostName(hostname);
+        boolean addToProxyManager = params.isSetConnectionId();
+        final int connectionId = params.getConnectionId();
+
+        try (var guard = proxyContextManager.guard(hostname, connectionId, context, addToProxyManager)) {
+            ConnectProcessor processor = new ConnectProcessor(context);
+            return processor.proxyExecute(params);
+        } catch (Exception e) {
+            LOG.warn("unreachable path:", e);
+            final TMasterOpResult result = new TMasterOpResult();
+            result.setErrorMsg(e.getMessage());
+            return result;
+        }
     }
+
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
@@ -1257,7 +1274,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -1390,7 +1407,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("get txn status request: {}", request);
 
@@ -1427,7 +1444,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnPrepare(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn prepare request: {}", request);
 
@@ -1485,7 +1502,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
+        LOG.debug("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -1575,7 +1592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
+        LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
         LOG.debug("stream load put request: {}", request);
@@ -1712,7 +1729,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
-    private TNetworkAddress getClientAddr() {
+    public TNetworkAddress getClientAddr() {
         ThriftServerContext connectionContext = ThriftServerEventProcessor.getConnectionContext();
         // For NonBlockingServer, we can not get client ip.
         if (connectionContext != null) {
@@ -1873,7 +1890,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TImmutablePartitionResult updateImmutablePartition(TImmutablePartitionRequest request) throws TException {
-        LOG.info("Receive update immutable partition: {}", request);
+        LOG.debug("Receive update immutable partition: {}", request);
 
         TImmutablePartitionResult result;
         try {

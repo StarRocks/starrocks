@@ -216,7 +216,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             }
 
             context = new AggregatePushDownContext();
-            context.setAggregator(aggOp);
+            context.setAggregator(queryColumnRefFactory, aggOp);
             return context;
         }
 
@@ -459,7 +459,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             List<Table> queryTables = MvUtils.getAllTables(optExpression);
 
             final List<Table> mvTables = MvUtils.getAllTables(materializationContext.getMvExpression());
-            MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+            MatchMode matchMode = getMatchMode(queryTables, mvTables);
             if (matchMode == MatchMode.NOT_MATCH && mvTables.stream().noneMatch(queryTables::contains)) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
@@ -484,6 +484,8 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
 
                 if (uniqueAggregations.containsKey(aggCall)) {
                     ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
+                    // add into remapping even if it has existed.
+                    remapping.put(aggColRef, uniqueAggregations.get(aggCall));
                     continue;
                 }
                 // NOTE: This new aggregate type is final stage's type not the immediate/partial stage type.

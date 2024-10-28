@@ -202,7 +202,26 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                                                                  config::parallel_clone_task_per_path);
             return Status::OK();
         });
-
+      
+        _config_callback.emplace("make_snapshot_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MAKE_SNAPSHOT,
+                                                                 config::make_snapshot_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::RELEASE_SNAPSHOT,
+                                                                 config::release_snapshot_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("upload_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPLOAD, config::upload_worker_count);
+            return Status::OK();
+        });
+        _config_callback.emplace("download_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::DOWNLOAD, config::download_worker_count);
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::MOVE, config::download_worker_count);
+            return Status::OK();
+        });
         _config_callback.emplace("replication_threads", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT,
                                                                  config::replication_threads);

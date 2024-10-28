@@ -37,6 +37,7 @@ PROPERTIES (
 -- !result
 
 
+
 -- name: test_invalid_bucket_size
 create table t0(k int) properties('bucket_size'='0');
 -- result:
@@ -58,6 +59,7 @@ E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
 alter table t set('bucket_size'='2048');
 -- result:
 -- !result
+
 
 
 -- name: test_automatic_bucket
@@ -91,6 +93,7 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
+
 
 
 -- name: test_range_partition @sequential
@@ -153,6 +156,7 @@ select * from t;
 -- !result
 
 
+
 -- name: test_list_partition @sequential
 create database ddd;
 -- result:
@@ -213,6 +217,7 @@ select * from t;
 -- !result
 
 
+
 -- name: test_expr_partition @sequential
 create database eee;
 -- result:
@@ -266,6 +271,7 @@ select * from t;
 2021-01-01	1
 2021-01-01	1
 -- !result
+
 
 
 -- name: test_schema_change @sequential
@@ -373,6 +379,7 @@ select * from t;
 -- !result
 
 
+
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -456,6 +463,7 @@ select k, v1 from t;
 -- !result
 
 
+
 -- name: test_delete
 create table t(k int, v int)
 PROPERTIES (
@@ -493,6 +501,7 @@ delete from t where k = 1;
 select * from t;
 -- result:
 -- !result
+
 
 
 -- name: test_mutable_bucket @sequential
@@ -579,4 +588,33 @@ E: (1064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: 
 alter table t set('mutable_bucket_num'='a');
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+-- !result
+-- name: test_tablet_check
+create table t(k int)properties('bucket_size'='1');
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
+-- result:
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select * from t;
+-- result:
+1
+1
+1
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
+-- result:
 -- !result

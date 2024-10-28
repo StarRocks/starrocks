@@ -732,7 +732,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final RewriteContext rewriteContext = new RewriteContext(
                 queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
-                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
+                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet,
+                optimizerContext);
         // add agg push down rewrite info
         rewriteContext.setAggregatePushDownContext(mvRewriteContext.getAggregatePushDownContext());
 

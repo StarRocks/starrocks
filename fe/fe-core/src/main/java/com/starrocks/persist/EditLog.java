@@ -73,7 +73,6 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -91,6 +90,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -111,6 +111,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -494,7 +495,6 @@ public class EditLog {
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
-                    MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
                     break;
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
@@ -1089,6 +1089,24 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
                     break;
                 }
+                case OperationType.OP_CREATE_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_DROP_WAREHOUSE: {
+                    DropWarehouseLog log = (DropWarehouseLog) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayAlterWarehouse(wh);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1108,7 +1126,7 @@ public class EditLog {
     /**
      * submit log to queue, wait for JournalWriter
      */
-    protected void logEdit(short op, Writable writable) {
+    public void logEdit(short op, Writable writable) {
         JournalTask task = submitLog(op, writable, -1);
         waitInfinity(task);
     }
@@ -1858,7 +1876,7 @@ public class EditLog {
         logEdit(OperationType.OP_PIPE, opEntry);
     }
 
-    private void logJsonObject(short op, Object obj) {
+    public void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 

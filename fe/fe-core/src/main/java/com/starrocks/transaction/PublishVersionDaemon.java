@@ -271,6 +271,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
+        List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -280,9 +281,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
+                transactionIds.add(transactionState.getTransactionId());
             }
         }
+        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
             AgentTaskExecutor.submit(batchTask);
         }

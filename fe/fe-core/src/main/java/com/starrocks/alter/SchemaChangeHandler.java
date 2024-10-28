@@ -1985,7 +1985,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+            olapTable.setState(OlapTableState.OPTIMIZE);
+        } else {
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        }
 
         // 2. add schemaChangeJob
         addAlterJobV2(schemaChangeJob);
@@ -2568,6 +2572,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.OPTIMIZE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
                 throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }

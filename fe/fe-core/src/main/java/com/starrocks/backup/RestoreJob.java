@@ -197,7 +197,7 @@ public class RestoreJob extends AbstractJob {
     private AgentBatchTask batchTask;
 
     boolean enableColocateRestore = Config.enable_colocate_restore;
-
+    
     public RestoreJob() {
         super(JobType.RESTORE);
     }
@@ -494,9 +494,15 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isNativeTableOrMaterializedView()) {
-                    status = new Status(ErrCode.COMMON_ERROR, "Only support restore OLAP table: " + tbl.getName());
+                if (!tbl.isSupportBackupRestore()) {
+                    status = new Status(ErrCode.UNSUPPORTED,
+                                        "Table: " + tbl.getName() +
+                                        " can not support backup restore, type: {}" + tbl.getType());
                     return;
+                }
+
+                if (tbl.isOlapView()) {
+                    continue;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -526,6 +532,19 @@ public class RestoreJob extends AbstractJob {
                 Preconditions.checkNotNull(remoteTbl);
                 Table localTbl = globalStateMgr.getLocalMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+
+                if (localTbl != null && remoteTbl.isOlapView() && !localTbl.isOlapView()) {
+                    status = new Status(ErrCode.BAD_REPLACE,
+                                        "Table: " + localTbl.getName() + " has existed and it is not a View");
+                    return;
+                }
+
+                if (remoteTbl.isOlapView()) {
+                    remoteTbl.setId(globalStateMgr.getNextId());
+                    restoredTbls.add(remoteTbl);
+                    continue;
+                }
+
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
                         // it must be !isReplay == true
@@ -547,9 +566,10 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isNativeTableOrMaterializedView()) {
-                        status = new Status(ErrCode.COMMON_ERROR,
-                                "Only support retore olap table: " + localTbl.getName());
+                    if (!localTbl.isSupportBackupRestore()) {
+                        status = new Status(ErrCode.UNSUPPORTED,
+                                            "Table: " + localTbl.getName() +
+                                            " can not support backup restore, type: {}" + localTbl.getType());
                         return;
                     }
                     OlapTable localOlapTbl = (OlapTable) localTbl;
@@ -755,7 +775,7 @@ public class RestoreJob extends AbstractJob {
                             backupTableInfo.getPartInfo(restorePart.getName()), true);
                 }
                 // set restored table's new name after all 'genFileMapping'
-                ((OlapTable) restoreTbl).setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
+                restoreTbl.setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
             }
 
             LOG.debug("finished to generate create replica tasks. {}", this);
@@ -843,6 +863,10 @@ public class RestoreJob extends AbstractJob {
 
             // add restored tables
             for (Table tbl : restoredTbls) {
+                if (tbl.isOlapView()) {
+                    // for logical view, force drop and replace
+                    db.dropTable(tbl.getName());
+                }
                 if (!db.registerTableUnlocked(tbl)) {
                     status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
                             + " already exist in db: " + db.getOriginName());
@@ -1099,7 +1123,7 @@ public class RestoreJob extends AbstractJob {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table tbl = globalStateMgr.getLocalMetastore()
                             .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
-                if (tbl == null) {
+                if (tbl == null || tbl.isOlapView()) {
                     continue;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -1120,6 +1144,9 @@ public class RestoreJob extends AbstractJob {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+
+        // restored view need not to be added again here, because
+        // another edit log created by createView will done.
 
         LOG.info("replay check and prepare meta. {}", this);
     }
@@ -1436,7 +1463,7 @@ public class RestoreJob extends AbstractJob {
 
             for (long tblId : restoredVersionInfo.rowKeySet()) {
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getId(), tblId);
-                if (tbl == null) {
+                if (tbl == null || tbl.isOlapView()) {
                     continue;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -1492,7 +1519,7 @@ public class RestoreJob extends AbstractJob {
                                 tblInfo.name);
                         continue;
                     }
-                    if (!tbl.isNativeTableOrMaterializedView()) {
+                    if (!tbl.isSupportBackupRestore()) {
                         continue;
                     }
                     LOG.info("do post actions for table : {}", tbl.getName());
@@ -1729,7 +1756,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isNativeTableOrMaterializedView()) {
+            if (!tbl.isSupportBackupRestore() || tbl.isOlapView()) {
                 continue;
             }
 

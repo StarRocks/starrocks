@@ -654,6 +654,49 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     @Override
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        super.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        Map<Long, List<List<String>>> oldIdToMultiValues = this.idToMultiValues;
+        Map<Long, List<List<LiteralExpr>>> oldIdToMultiLiteralExprValues = this.idToMultiLiteralExprValues;
+        Map<Long, List<String>> oldIdToValues = this.idToValues;
+        Map<Long, List<LiteralExpr>> oldIdToLiteralExprValues = this.idToLiteralExprValues;
+        Map<Long, Boolean> oldIdToIsTempPartition = this.idToIsTempPartition;
+
+        this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
+        this.idToValues = new HashMap<>();
+        this.idToLiteralExprValues = new HashMap<>();
+        this.idToIsTempPartition = new HashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            List<List<String>> multiValues = oldIdToMultiValues.get(oldId);
+            if (multiValues != null) {
+                this.idToMultiValues.put(newId, multiValues);
+            }
+            List<List<LiteralExpr>> multiLiteralExprValues = oldIdToMultiLiteralExprValues.get(oldId);
+            if (multiLiteralExprValues != null) {
+                this.idToMultiLiteralExprValues.put(newId, multiLiteralExprValues);
+            }
+            List<String> values = oldIdToValues.get(oldId);
+            if (values != null) {
+                this.idToValues.put(newId, values);
+            }
+            List<LiteralExpr> literalExprValues = oldIdToLiteralExprValues.get(oldId);
+            if (literalExprValues != null) {
+                this.idToLiteralExprValues.put(newId, literalExprValues);
+            }
+            Boolean isTempPartition = oldIdToIsTempPartition.get(oldId);
+            if (isTempPartition != null) {
+                this.idToIsTempPartition.put(newId, isTempPartition);
+            }
+        }
+    }
+
+    @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
         if (partitionColumnIds.size() <= 0) {

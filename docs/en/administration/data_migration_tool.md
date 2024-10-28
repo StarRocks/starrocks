@@ -96,11 +96,11 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 | replication_max_parallel_table_count  | 100         | -        | The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table. |
 | replication_max_parallel_replica_count| 10240       | -        | The maximum number of tablet replica allowed for concurrent synchronization. |
 | replication_max_parallel_data_size_mb | 1048576     | MB       | The maximum size of data allowed for concurrent synchronization. |
-| replication_transaction_timeout_sec   | 3600        | Seconds  | The timeout duration for synchronization tasks.              |
+| replication_transaction_timeout_sec   | 86400       | Seconds  | The timeout duration for synchronization tasks.              |
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -372,7 +372,7 @@ The list of objects that support synchronization currently is as follows (those 
 
 ## Q&A
 
-### Q1: Why did only the table schemas get synchronized?
+### Q1: Which ports need to be opened between clusters?
 
 If you have enabled the firewall, you must open these ports:
 

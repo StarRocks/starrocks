@@ -45,6 +45,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -784,6 +785,25 @@ public class FunctionAnalyzer {
                         fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
                                 Function.CompareMode.IS_IDENTICAL);
                     }
+                }
+            }
+        } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
+            SessionVariableConstants.CountDistinctImplMode countDistinctImplementation =
+                    session.getSessionVariable().getCountDistinctImplementation();
+            if (countDistinctImplementation != null) {
+                switch (countDistinctImplementation) {
+                    case NDV:
+                        node.resetFnName("", FunctionSet.NDV);
+                        node.getParams().setIsDistinct(false);
+                        fn = Expr.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        break;
+                    case MULTI_COUNT_DISTINCT:
+                        node.resetFnName("", FunctionSet.MULTI_DISTINCT_COUNT);
+                        node.getParams().setIsDistinct(false);
+                        fn = Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        break;
                 }
             }
         }

@@ -34,8 +34,7 @@
 <div align="center"> 
 
 </div>
-StarRocks, a Linux Foundation project, is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
-It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br></br>
+StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
 
 Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
 
@@ -74,7 +73,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="docs/en/_assets/shared-data.png">
+    <img src="docs/en/_assets/shared-data.png" width="55%" height="55%">
    </a>
 </p>
 
@@ -116,6 +115,8 @@ We welcome all kinds of contributions from the community, individuals and partne
 **📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
+
+**💬 Developer Group：** Please join our [Google Groups](https://groups.google.com/g/starrocks-dev) to discuss StarRocks features, project directions, issues, pull requests, or share suggestions.
   
 <br>
   

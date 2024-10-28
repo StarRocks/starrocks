@@ -320,7 +320,7 @@ public enum ErrorCode {
             "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
-    ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+    ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
@@ -329,6 +329,7 @@ public enum ErrorCode {
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'2', '2', '0', '0', '0'}, "%s column: %s has no matching %s column"),
 
     /**
      * 5700 - 5799: Partition

@@ -162,6 +162,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinPushDownRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateTimeSeriesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
@@ -255,6 +256,7 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
+                MergeLimitDirectRule.CTE_CONSUMER,
                 MergeLimitDirectRule.TABLE_FUNCTION,
                 MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
@@ -415,6 +417,7 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 AggregateScanRule.getInstance(),
+                AggregateTimeSeriesRule.getInstance(),
                 OnlyScanRule.getInstance()
         ));
 

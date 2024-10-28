@@ -113,6 +113,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
@@ -468,6 +469,14 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
@@ -1488,7 +1497,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         FunctionCallExpr fun = (FunctionCallExpr) visit(context.functionCall());
         return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs());
     }
-
 
     @Override
     public ParseNode visitCancelAlterTableStatement(StarRocksParser.CancelAlterTableStatementContext context) {
@@ -4100,16 +4108,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+
         List<String> backends =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new AddBackendClause(backends, createPos(context));
+        return new AddBackendClause(backends, whName, createPos(context));
     }
 
     @Override
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new DropBackendClause(clusters, context.FORCE() != null, createPos(context));
+        return new DropBackendClause(clusters, context.FORCE() != null, whName, createPos(context));
     }
 
     @Override
@@ -4138,16 +4158,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new AddComputeNodeClause(hostPorts);
+        return new AddComputeNodeClause(hostPorts, whName, createPos(context));
     }
 
     @Override
     public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new DropComputeNodeClause(hostPorts, createPos(context));
+        return new DropComputeNodeClause(hostPorts, whName, createPos(context));
     }
 
     @Override
@@ -4717,6 +4749,84 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowPlanAdvisorStmt(createPos(context));
     }
 
+    // ---------------------------------------- Warehouse Statement ---------------------------------------------------
+    @Override
+    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
+        return new CreateWarehouseStmt(context.IF() != null, whName, properties, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitSuspendWarehouseStatement(StarRocksParser.SuspendWarehouseStatementContext context) {
+        String warehouseName = ((Identifier) visit(context.identifier())).getValue();
+        return new SuspendWarehouseStmt(warehouseName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitResumeWarehouseStatement(StarRocksParser.ResumeWarehouseStatementContext context) {
+        String warehouseName = ((Identifier) visit(context.identifier())).getValue();
+        return new ResumeWarehouseStmt(warehouseName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropWarehouseStatement(StarRocksParser.DropWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String warehouseName = identifier.getValue();
+        return new DropWarehouseStmt(context.IF() != null, warehouseName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitSetWarehouseStatement(StarRocksParser.SetWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String warehouseName = identifier.getValue();
+        return new SetWarehouseStmt(warehouseName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        return new ShowWarehousesStmt(pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
+        String whName = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowClustersStmt(whName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowNodesStatement(StarRocksParser.ShowNodesStatementContext context) {
+        String pattern = null;
+        String warehouseName = null;
+        if (context.WAREHOUSE() != null) {
+            warehouseName = ((Identifier) visit(context.identifier())).getValue();
+        } else if (context.WAREHOUSES() != null) {
+            if (context.pattern != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+                pattern = stringLiteral.getValue();
+            }
+        }
+        return new ShowNodesStmt(warehouseName, pattern, createPos(context));
+    }
+
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override
@@ -5222,7 +5332,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-
     // only used for mysql external table
     private String buildQueryPeriodString(StarRocksParser.QueryPeriodContext context) {
         StringBuilder sb = new StringBuilder();
@@ -5593,7 +5702,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
-        
+
         Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (context.properties() != null) {
             List<Property> propertyList = visit(context.properties().property(), Property.class);
@@ -5651,7 +5760,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (Property property : propertyList) {
             list.add(new SetUserPropertyVar(property.getKey(), property.getValue()));
         }
-        return new SetUserPropertyStmt(user.getUser(), list, createPos(context)); 
+        return new SetUserPropertyStmt(user.getUser(), list, createPos(context));
     }
 
     @Override
@@ -7832,6 +7941,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     /**
      * Create an agg state desc from ast context.
+     *
      * @param context agg desc context from parser
      * @return the deduced agg function's intermediate type and its associated agg state desc pair
      */
@@ -7874,7 +7984,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (!(result instanceof AggregateFunction)) {
             throw new ParsingException(String.format("AggStateType function %s with input %s found but not an aggregate " +
-                            "function", aggFuncName, argTypes), createPos(context));
+                    "function", aggFuncName, argTypes), createPos(context));
         }
         AggregateFunction aggFunc = (AggregateFunction) result;
         if (!AggStateUtils.isSupportedAggStateFunction(aggFunc)) {

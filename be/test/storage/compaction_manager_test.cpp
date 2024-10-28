@@ -81,6 +81,11 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+        config::max_compaction_concurrency = -1;
+        config::enable_event_based_compaction_framework = true;
+        config::max_compaction_candidate_num = 40960;
+        config::cumulative_compaction_num_threads_per_disk = 1;
+        config::base_compaction_num_threads_per_disk = 1;
     }
 
 protected:
@@ -358,6 +363,43 @@ TEST_F(CompactionManagerTest, test_compaction_parallel) {
 
     _engine->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
+TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
+    config::max_compaction_concurrency = 10;
+    config::cumulative_compaction_num_threads_per_disk = 2;
+    config::base_compaction_num_threads_per_disk = 2;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(4, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = 0;
+    config::base_compaction_num_threads_per_disk = 0;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(0, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = -1;
+    config::base_compaction_num_threads_per_disk = -1;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(5, compaction_concurrency);
+
+    _engine->compaction_manager()->init_max_task_num(compaction_concurrency);
+    _engine->compaction_manager()->schedule();
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(3);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(3, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(0);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(0, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(-1);
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(5, _engine->compaction_manager()->max_task_num());
 }
 
 } // namespace starrocks
