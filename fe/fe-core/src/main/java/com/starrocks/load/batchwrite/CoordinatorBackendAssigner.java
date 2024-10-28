@@ -32,11 +32,11 @@ public interface CoordinatorBackendAssigner {
      * Registers a batch write with the specified parameters.
      *
      * @param id The ID of the batch write operation.
-     * @param warehouseName The name of the warehouse.
+     * @param warehouseId The id of the warehouse.
      * @param tableId The identifier of the table.
      * @param expectParallel The expected parallelism.
      */
-    void registerBatchWrite(long id, String warehouseName, TableId tableId, int expectParallel);
+    void registerBatchWrite(long id, long warehouseId, TableId tableId, int expectParallel);
 
     /**
      * Unregisters a batch write.

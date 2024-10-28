@@ -27,7 +27,7 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
     }
 
     @Override
-    public void registerBatchWrite(long id, String warehouseName, TableId tableId, int expectParallel) {
+    public void registerBatchWrite(long id, long warehouseId, TableId tableId, int expectParallel) {
         throw new UnsupportedOperationException("Not implemented");
     }
 

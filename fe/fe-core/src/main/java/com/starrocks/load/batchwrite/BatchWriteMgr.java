@@ -195,7 +195,7 @@ public class BatchWriteMgr extends FrontendDaemon {
             IsomorphicBatchWrite newLoad = new IsomorphicBatchWrite(
                     id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
                     params.toMap(), new ConnectContext(), coordinatorBackendAssigner, threadPoolExecutor);
-            coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouse(), tableId, newLoad.getBatchWriteParallel());
+            coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId, newLoad.getBatchWriteParallel());
             return newLoad;
         });
 

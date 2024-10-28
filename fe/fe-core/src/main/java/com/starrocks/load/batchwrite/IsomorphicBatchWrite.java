@@ -123,8 +123,8 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         return tableId;
     }
 
-    public String getWarehouse() {
-        return warehouseName;
+    public long getWarehouseId() {
+        return streamLoadInfo.getWarehouseId();
     }
 
     public int getBatchWriteParallel() {

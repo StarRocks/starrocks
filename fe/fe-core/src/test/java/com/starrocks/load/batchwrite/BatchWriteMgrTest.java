@@ -188,7 +188,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         new MockUp<CoordinatorBackendAssignerImpl>() {
 
             @Mock
-            public void registerBatchWrite(long id, String warehouseName, TableId tableId, int expectParallel) {
+            public void registerBatchWrite(long id, long warehouseId, TableId tableId, int expectParallel) {
             }
 
             @Mock
