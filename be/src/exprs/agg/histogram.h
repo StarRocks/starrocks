@@ -16,11 +16,12 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/datum_convert.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -93,8 +94,8 @@ public:
 
     std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
-        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
-                           std::to_string((int64_t)(upper_repeats * sample_ratio)));
+        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, (int64_t)(count * sample_ratio),
+                           (int64_t)(upper_repeats * sample_ratio));
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
@@ -132,46 +133,22 @@ public:
             }
         }
 
+        const auto& type_desc = ctx->get_arg_type(0);
+        TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
         std::string bucket_json;
         if (buckets.empty()) {
             bucket_json = "[]";
         } else {
             bucket_json = "[";
-            if constexpr (lt_is_largeint<LT>) {
-                for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(LargeIntValue::to_string(buckets[i].lower),
-                                                LargeIntValue::to_string(buckets[i].upper), buckets[i].count,
-                                                buckets[i].upper_repeats, sample_ratio) +
-                                   ",";
-                }
-            } else if constexpr (lt_is_arithmetic<LT>) {
-                for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(std::to_string(buckets[i].lower), std::to_string(buckets[i].upper),
-                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
-                                   ",";
-                }
-            } else if constexpr (lt_is_date_or_datetime<LT>) {
-                for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
-                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
-                                   ",";
-                }
-            } else if constexpr (lt_is_decimal<LT>) {
-                int scale = ctx->get_arg_type(0)->scale;
-                int precision = ctx->get_arg_type(0)->precision;
-                for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(DecimalV3Cast::to_string<T>(buckets[i].lower, precision, scale),
-                                                DecimalV3Cast::to_string<T>(buckets[i].upper, precision, scale),
-                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
-                                   ",";
-                }
-            } else if constexpr (lt_is_string<LT>) {
-                for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
-                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
-                                   ",";
-                }
+
+            for (int i = 0; i < buckets.size(); ++i) {
+                std::string lower_str = datum_to_string(type_info.get(), Datum(buckets[i].lower));
+                std::string upper_str = datum_to_string(type_info.get(), Datum(buckets[i].upper));
+                bucket_json +=
+                        toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
+                        ",";
             }
+
             bucket_json[bucket_json.size() - 1] = ']';
         }
 
