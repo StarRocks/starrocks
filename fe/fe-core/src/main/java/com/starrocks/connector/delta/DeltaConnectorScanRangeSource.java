@@ -61,7 +61,9 @@ public class DeltaConnectorScanRangeSource implements ConnectorScanRangeSource {
 
     private long addPartition(FileScanTask fileScanTask) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
-        fileScanTask.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
+        table.getPartitionColumnNames().forEach(column -> {
+            partitionValues.add(fileScanTask.getPartitionValues().get(column));
+        });
         PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
                 table.getPartitionColumns(), table);
         if (partitionKeys.containsKey(partitionKey)) {
