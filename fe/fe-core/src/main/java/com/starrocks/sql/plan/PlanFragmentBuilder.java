@@ -3364,7 +3364,7 @@ public class PlanFragmentBuilder {
                     "FileScanNode", files, table.fileList().size());
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
-                    Collectors.toCollection(TreeSet::new));
+                    Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
             List<BrokerFileGroup> fileGroups = new ArrayList<>();
             try {
                 BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
