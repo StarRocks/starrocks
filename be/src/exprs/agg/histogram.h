@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/column_helper.h"
-#include "column/object_column.h"
+#include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -54,43 +54,41 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        T v;
-        if (columns[0]->is_nullable()) {
-            if (columns[0]->is_null(row_num)) {
-                return;
-            }
+        CHECK(false);
+    }
 
-            const auto* data_column = down_cast<const NullableColumn*>(columns[0]);
-            v = down_cast<const ColumnType*>(data_column->data_column().get())->get_data()[row_num];
-        } else {
-            v = down_cast<const ColumnType*>(columns[0])->get_data()[row_num];
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        ColumnViewer<LT> viewer(column);
+        for (size_t i = 0; i < chunk_size; i++) {
+            DCHECK((!viewer.is_null(i)));
+            this->data(state).data.emplace_back(viewer.value(i));
         }
-
-        this->data(state).data.emplace_back(v);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         //Histogram aggregation function only support one stage Agg
-        DCHECK(false);
+        CHECK(false);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         //Histogram aggregation function only support one stage Agg
-        DCHECK(false);
+        CHECK(false);
     }
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                              Column* to) const override {
         //Histogram aggregation function only support one stage Agg
-        DCHECK(false);
+        CHECK(false);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         //Histogram aggregation function only support one stage Agg
-        DCHECK(false);
+        CHECK(false);
     }
 
     std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,

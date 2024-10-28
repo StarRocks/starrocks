@@ -17,22 +17,20 @@
 #include "column/column_helper.h"
 #include "runtime/global_variables.h"
 #include "types/logical_type_infra.h"
-#include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
-static inline size_t not_const_mask(const ColumnPtr& column) {
-    return !column->only_null() && !column->is_constant() ? -1 : 0;
+static inline size_t not_const_mask(const Column& column) {
+    return !column.only_null() && !column.is_constant() ? -1 : 0;
 }
 
-static inline size_t null_mask(const ColumnPtr& column) {
-    return !column->only_null() && !column->is_constant() && column->is_nullable() ? -1 : 0;
+static inline size_t null_mask(const Column& column) {
+    return !column.only_null() && !column.is_constant() && column.is_nullable() ? -1 : 0;
 }
 
 template <LogicalType Type>
 ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
-        : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
+        : _not_const_mask(not_const_mask(*column)), _null_mask(null_mask(*column)) {
     if (column->only_null()) {
         _null_column = GlobalVariables::GetInstance()->one_size_null_column();
         _column = RunTimeColumnType<Type>::create();
@@ -51,6 +49,34 @@ ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
     }
 
     _data = _column->get_data().data();
+    _null_data = _null_column->get_data().data();
+}
+
+template <LogicalType Type>
+ColumnViewer<Type>::ColumnViewer(const Column* column)
+        : _not_const_mask(not_const_mask(*column)), _null_mask(null_mask(*column)) {
+    if (column->only_null()) {
+        _null_column = GlobalVariables::GetInstance()->one_size_null_column();
+        _column = RunTimeColumnType<Type>::create();
+        _column->append_default();
+        _raw_column = _column.get();
+    } else if (column->is_constant()) {
+        auto v = ColumnHelper::as_raw_column<ConstColumn>(column);
+        _column = ColumnHelper::cast_to<Type>(v->data_column());
+        _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
+        _raw_column = _column.get();
+    } else if (column->is_nullable()) {
+        auto v = ColumnHelper::as_raw_column<NullableColumn>(column);
+        _column = ColumnHelper::cast_to<Type>(v->data_column());
+        _null_column = ColumnHelper::as_column<NullColumn>(v->null_column());
+        _raw_column = _column.get();
+    } else {
+        _column = nullptr;
+        _raw_column = ColumnHelper::cast_to_raw<Type>(column);
+        _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
+    }
+
+    _data = _raw_column->get_data().data();
     _null_data = _null_column->get_data().data();
 }
 
