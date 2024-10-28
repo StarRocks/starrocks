@@ -215,7 +215,7 @@ MySQL [example_db]> select * from test_tbl;
 | sink.properties.partial_update      | 否      | `FALSE` | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
 | sink.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 
-##
+## 使用说明
 
 ### Flush 策略
 
