@@ -417,6 +417,11 @@ private:
 
     Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
+    StatusOr<std::shared_ptr<Segment>> _load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
+                                                     std::shared_ptr<FileSystem>& fs,
+                                                     const FooterPointerPB* partial_rowset_footer,
+                                                     size_t* foot_size_hint);
+
     std::vector<SegmentSharedPtr> _segments;
 
     std::atomic<bool> is_compacting{false};

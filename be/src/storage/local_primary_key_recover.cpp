@@ -14,6 +14,7 @@
 
 #include "storage/local_primary_key_recover.h"
 
+#include "fs/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
@@ -91,7 +92,12 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         std::vector<uint32_t> delidxs;
         for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
             auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
-            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+            RandomAccessFileOptions opts;
+            auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
+            if (!encryption_meta.empty()) {
+                ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+            }
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
             del_rfs.push_back(std::move(read_file));
             delidxs.push_back(rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(idx));
         }

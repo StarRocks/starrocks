@@ -5260,9 +5260,10 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         if (fs == nullptr) {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
         }
-        std::string seg_path =
-                Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(fs, FileInfo{seg_path}, rssid - iter->first, rowset->schema());
+        auto seg_id = rssid - iter->first;
+        std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), seg_id);
+        FileInfo finfo{.path = seg_path, .encryption_meta = rowset->rowset_meta()->get_segment_encryption_meta(seg_id)};
+        auto segment = Segment::open(fs, finfo, seg_id, rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -5277,7 +5278,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         iter_opts.use_page_cache = true;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
+        RandomAccessFileOptions ropts;
+        if ((*segment)->encryption_info()) {
+            ropts.encryption_info = *(*segment)->encryption_info();
+        }
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(ropts, (*segment)->file_info()));
         iter_opts.read_file = read_file.get();
 
         if (full_row_column) {
