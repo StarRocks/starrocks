@@ -18,16 +18,34 @@ package com.starrocks.sql.optimizer.statistics;
 import java.util.Objects;
 
 public class Bucket {
+    // The ordinal of this bucket in the histogram
+    // -1 means it's missed, otherwise it would be a positive value
+    private final int ordinal;
     private final double lower;
     private final double upper;
-    private final Long count;
+    // Accumulated count in the histogram, but not the count of this bucket
+    // To calculate the count of this bucket, you can subtract previous bucket
+    private final Long accumulatedCount;
     private final Long upperRepeats;
 
-    public Bucket(double lower, double upper, Long count, Long upperRepeats) {
+    public Bucket(int ordinal, double lower, double upper, Long count, Long upperRepeats) {
+        this.ordinal = ordinal;
         this.lower = lower;
         this.upper = upper;
-        this.count = count;
+        this.accumulatedCount = count;
         this.upperRepeats = upperRepeats;
+    }
+
+    public Bucket(double lower, double upper, Long count, Long upperRepeats) {
+        this.ordinal = -1;
+        this.lower = lower;
+        this.upper = upper;
+        this.accumulatedCount = count;
+        this.upperRepeats = upperRepeats;
+    }
+
+    public int getOrdinal() {
+        return ordinal;
     }
 
     public double getLower() {
@@ -39,7 +57,7 @@ public class Bucket {
     }
 
     public Long getCount() {
-        return count;
+        return accumulatedCount;
     }
 
     public Long getUpperRepeats() {
@@ -55,18 +73,19 @@ public class Bucket {
             return false;
         }
         Bucket bucket = (Bucket) o;
-        return Double.compare(lower, bucket.lower) == 0 && Double.compare(upper, bucket.upper) == 0 &&
-                Objects.equals(count, bucket.count) &&
+        return ordinal == bucket.ordinal &&
+                Double.compare(lower, bucket.lower) == 0 && Double.compare(upper, bucket.upper) == 0 &&
+                Objects.equals(accumulatedCount, bucket.accumulatedCount) &&
                 Objects.equals(upperRepeats, bucket.upperRepeats);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(lower, upper, count, upperRepeats);
+        return Objects.hash(ordinal, lower, upper, accumulatedCount, upperRepeats);
     }
 
     @Override
     public String toString() {
-        return String.format("[%f,%f,%d,%d]", lower, upper, count, upperRepeats);
+        return String.format("[%f,%f,%d,%d]", lower, upper, accumulatedCount, upperRepeats);
     }
 }

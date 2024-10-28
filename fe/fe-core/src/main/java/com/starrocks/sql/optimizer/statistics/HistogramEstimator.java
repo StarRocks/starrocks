@@ -52,10 +52,10 @@ public class HistogramEstimator {
         for (Bucket leftBucket : leftHistogram.getBuckets()) {
             for (Bucket rightBucket :
                     rightHistogram.getOverlappedBuckets(leftBucket.getLower(), leftBucket.getUpper())) {
-                double overlap = calculateBucketOverlap(leftBucket, rightBucket);
+                double overlap = calculateBucketOverlap(leftHistogram, leftBucket, rightHistogram, rightBucket);
                 overlapArea += overlap;
             }
-            totalArea += leftBucket.getCount();
+            totalArea = leftBucket.getCount();
         }
 
         // Calculate selectivity
@@ -69,11 +69,14 @@ public class HistogramEstimator {
         }
     }
 
-    private static double calculateBucketOverlap(Bucket leftBucket, Bucket rightBucket) {
+    private static double calculateBucketOverlap(Histogram leftHistogram, Bucket leftBucket,
+                                                 Histogram rightHistogram, Bucket rightBucket) {
         double leftLower = leftBucket.getLower();
         double leftUpper = leftBucket.getUpper();
+        double leftCount = leftHistogram.getRowCountOfBucket(leftBucket.getOrdinal());
         double rightLower = rightBucket.getLower();
         double rightUpper = rightBucket.getUpper();
+        double rightCount = rightHistogram.getRowCountOfBucket(rightBucket.getOrdinal());
 
         // Calculate overlap interval
         double overlapLower = Math.max(leftLower, rightLower);
@@ -89,7 +92,7 @@ public class HistogramEstimator {
             leftOverlapCount = leftBucket.getUpperRepeats();
         } else {
             double leftOverlapRatio = overlapRange / leftRange;
-            leftOverlapCount = leftBucket.getCount() * leftOverlapRatio;
+            leftOverlapCount = leftCount * leftOverlapRatio;
             // left:   [lower,      upper]
             // right:  [lower, upper]
             // upper repeats should be excluded
@@ -103,7 +106,7 @@ public class HistogramEstimator {
             rightOverlapCount = rightBucket.getUpperRepeats();
         } else {
             double rightOverlapRatio = overlapRange / rightRange;
-            rightOverlapCount = rightBucket.getCount() * rightOverlapRatio;
+            rightOverlapCount = rightCount * rightOverlapRatio;
             if (leftUpper < rightUpper) {
                 rightOverlapCount -= rightBucket.getUpperRepeats() * rightOverlapRatio;
             }

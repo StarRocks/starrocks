@@ -65,7 +65,7 @@ public class HistogramUtils {
                     high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
                 }
 
-                Bucket bucket = new Bucket(low, high,
+                Bucket bucket = new Bucket(i, low, high,
                         Long.parseLong(bucketJsonArray.get(2).getAsString()),
                         Long.parseLong(bucketJsonArray.get(3).getAsString()));
                 buckets.add(bucket);

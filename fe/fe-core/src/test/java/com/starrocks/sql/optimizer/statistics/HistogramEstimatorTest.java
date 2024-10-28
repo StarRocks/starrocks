@@ -128,8 +128,10 @@ public class HistogramEstimatorTest {
     private static Histogram createUniformedHistogram(int numBuckets, double bucketRange, long perBucketCount) {
         Histogram.Builder builder = new Histogram.Builder();
         double lower = 0.0;
+        long accumulatedCount = 0;
         for (int i = 0; i < numBuckets; i++) {
-            builder.addBucket(new Bucket(lower, lower + bucketRange, perBucketCount, 1L));
+            accumulatedCount += perBucketCount;
+            builder.addBucket(new Bucket(i, lower, lower + bucketRange, accumulatedCount, 1L));
             lower += bucketRange;
         }
         return builder.build();
@@ -139,8 +141,10 @@ public class HistogramEstimatorTest {
     private static Histogram createSingleElementHistogram(int numBuckets, double bucketRange, long perBucketCount) {
         Histogram.Builder builder = new Histogram.Builder();
         double lower = 0.0;
+        long accumulatedCount = 0;
         for (int i = 0; i < numBuckets; i++) {
-            builder.addBucket(new Bucket(lower, lower, perBucketCount, perBucketCount));
+            accumulatedCount += perBucketCount;
+            builder.addBucket(new Bucket(i, lower, lower, accumulatedCount, perBucketCount));
             lower += bucketRange;
         }
         return builder.build();
@@ -157,8 +161,10 @@ public class HistogramEstimatorTest {
 
     private static ColumnStatistic createColumnStatistic(double[] bounds, long[] counts) {
         Histogram.Builder builder = new Histogram.Builder();
+        long accumulatedCount = 0;
         for (int i = 0; i < counts.length; i++) {
-            builder.addBucket(new Bucket(bounds[i], bounds[i + 1], counts[i], 0L));
+            accumulatedCount += counts[i];
+            builder.addBucket(new Bucket(i, bounds[i], bounds[i + 1], accumulatedCount, 0L));
         }
         Histogram histogram = builder.build();
         return new ColumnStatistic(0, 0, 0, 0, 0, histogram, ColumnStatistic.StatisticType.ESTIMATE);

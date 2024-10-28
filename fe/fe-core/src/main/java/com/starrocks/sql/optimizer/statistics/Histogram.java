@@ -88,6 +88,18 @@ public class Histogram {
         }
     }
 
+    /**
+     * Get the row count of a bucket at the specified ordinal
+     */
+    public long getRowCountOfBucket(int ordinal) {
+        Bucket bucket = buckets.get(ordinal);
+        long count = bucket.getCount();
+        if (ordinal > 0) {
+            return count - buckets.get(ordinal - 1).getCount();
+        }
+        return count;
+    }
+
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
         Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
                 constantOperator.toString());
