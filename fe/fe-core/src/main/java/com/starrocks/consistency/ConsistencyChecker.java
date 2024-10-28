@@ -315,13 +315,8 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                         // sort partitions
                         Queue<MetaObject> partitionQueue =
-<<<<<<< HEAD
-                                new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
-                        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-=======
                                     new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
                         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                             // check partition's replication num. if 1 replication. skip
                             if (table.getPartitionInfo().getReplicationNum(physicalPartition.getParentId()) == (short) 1) {
                                 LOG.debug("partition[{}]'s replication num is 1. ignore", physicalPartition.getParentId());
@@ -329,15 +324,9 @@ public class ConsistencyChecker extends FrontendDaemon {
                             }
 
                             // check if this partition has no data
-<<<<<<< HEAD
-                            if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
-                                LOG.debug("partition[{}]'s version is {}. ignore", partition.getId(),
-                                        Partition.PARTITION_INIT_VERSION);
-=======
                             if (physicalPartition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
                                 LOG.debug("partition[{}]'s version is {}. ignore", physicalPartition.getId(),
                                             Partition.PARTITION_INIT_VERSION);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                                 continue;
                             }
                             if (physicalPartition instanceof Partition) {
@@ -352,11 +341,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =
-<<<<<<< HEAD
-                                    partition.getMaterializedIndices(IndexExtState.VISIBLE);
-=======
                                         physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                             Queue<MetaObject> indexQueue =
                                     new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);
@@ -381,20 +366,12 @@ public class ConsistencyChecker extends FrontendDaemon {
                                     if (physicalPartition.getVisibleVersion() == tablet.getCheckedVersion()) {
                                         if (tablet.isConsistent()) {
                                             LOG.debug("tablet[{}]'s version[{}-{}] has been checked. ignore",
-<<<<<<< HEAD
-                                                    chosenTabletId, tablet.getCheckedVersion(), partition.getVisibleVersion());
-                                        }
-                                    } else {
-                                        LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
-                                                table.getId(), partition.getId(), index.getId(), chosenTabletId);
-=======
                                                         chosenTabletId, tablet.getCheckedVersion(),
                                                         physicalPartition.getVisibleVersion());
                                         }
                                     } else {
                                         LOG.info("chose tablet[{}-{}-{}-{}-{}] to check consistency", db.getId(),
                                                     table.getId(), physicalPartition.getId(), index.getId(), chosenTabletId);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
 
                                         chosenTablets.add(chosenTabletId);
                                     }
@@ -440,7 +417,6 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
-<<<<<<< HEAD
         db.writeLock();
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
@@ -448,20 +424,9 @@ public class ConsistencyChecker extends FrontendDaemon {
                 LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
                 return;
             }
-            Partition partition = table.getPartition(info.getPartitionId());
-            if (partition == null) {
-=======
-        OlapTable table = (OlapTable) db.getTable(info.getTableId());
-        if (table == null) {
-            LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
-            return;
-        }
 
-        try (AutoCloseableLock ignore
-                    = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(info.getPhysicalPartitionId());
             if (physicalPartition == null) {
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                 LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
                 return;
             }

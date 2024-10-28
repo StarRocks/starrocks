@@ -914,7 +914,7 @@ public class LakeTableSchemaChangeJobTest {
             Assert.assertTrue(tabletMeta.isLakeTablet());
             Assert.assertEquals(db.getId(), tabletMeta.getDbId());
             Assert.assertEquals(table.getId(), tabletMeta.getTableId());
-            Assert.assertEquals(partition.getId(), tabletMeta.getPartitionId());
+            Assert.assertEquals(partition.getId(), tabletMeta.getPhysicalPartitionId());
             Assert.assertEquals(normalIndex.getId(), tabletMeta.getIndexId());
         }
 

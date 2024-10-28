@@ -299,12 +299,8 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-<<<<<<< HEAD
-                    for (Partition partition : GlobalStateMgr.getCurrentState().getAllPartitionsIncludeRecycleBin(olapTbl)) {
-=======
-                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
+                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState()
+                            .getLocalMetastore().getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
 
                         boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), physicalPartition.getId());
@@ -327,13 +323,8 @@ public class TabletChecker extends FrontendDaemon {
                             if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
-<<<<<<< HEAD
                             if (GlobalStateMgr.getCurrentState()
-                                    .getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
-=======
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartition.getId()) == null) {
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                                 continue;
                             }
                         }
@@ -350,13 +341,8 @@ public class TabletChecker extends FrontendDaemon {
                         }
 
                         short replicaNum = GlobalStateMgr.getCurrentState()
-<<<<<<< HEAD
-                                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
-=======
-                                .getLocalMetastore()
                                 .getReplicationNumIncludeRecycleBin(
                                         olapTbl.getPartitionInfo(), physicalPartition.getParentId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                         if (replicaNum == (short) -1) {
                             continue;
                         }

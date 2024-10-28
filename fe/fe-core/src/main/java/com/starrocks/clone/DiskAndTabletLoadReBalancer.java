@@ -1540,17 +1540,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         try {
-<<<<<<< HEAD
             db.readLock();
-            PhysicalPartition partition = globalStateMgr.getPhysicalPartitionIncludeRecycleBin(
-                    olapTable, tabletMeta.getPhysicalPartitionId());
-            if (partition == null) {
-=======
-            locker.lockDatabase(db, LockType.READ);
             PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                 return true;
             }
 
@@ -1564,13 +1557,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return true;
             }
 
-<<<<<<< HEAD
             short replicaNum = globalStateMgr
-                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
-=======
-            short replicaNum = globalStateMgr.getLocalMetastore()
                     .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), physicalPartition.getParentId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             if (replicaNum == (short) -1) {
                 return true;
             }
@@ -1578,13 +1566,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> statusPair =
                     TabletChecker.getTabletHealthStatusWithPriority(
                             tablet,
-<<<<<<< HEAD
                             GlobalStateMgr.getCurrentSystemInfo(),
-                            partition.getVisibleVersion(),
-=======
-                            globalStateMgr.getNodeMgr().getClusterInfo(),
                             physicalPartition.getVisibleVersion(),
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                             replicaNum,
                             aliveBeIds,
                             olapTable.getLocation());

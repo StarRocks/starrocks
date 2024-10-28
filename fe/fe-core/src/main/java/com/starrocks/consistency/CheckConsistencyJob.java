@@ -185,21 +185,12 @@ public class CheckConsistencyJob {
                 }
 
                 CheckConsistencyTask task = new CheckConsistencyTask(null, replica.getBackendId(),
-<<<<<<< HEAD
-                        tabletMeta.getDbId(),
-                        tabletMeta.getTableId(),
-                        tabletMeta.getPartitionId(),
-                        tabletMeta.getIndexId(),
-                        tabletId, checkedSchemaHash,
-                        checkedVersion);
-=======
                             tabletMeta.getDbId(),
                             tabletMeta.getTableId(),
                             tabletMeta.getPhysicalPartitionId(),
                             tabletMeta.getIndexId(),
                             tabletId, checkedSchemaHash,
                             checkedVersion);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
 
                 // add task to send
                 batchTask.addTask(task);
@@ -376,15 +367,9 @@ public class CheckConsistencyJob {
             tablet.setCheckedVersion(checkedVersion);
 
             // log
-<<<<<<< HEAD
-            ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
-                    index.getId(), tabletId, lastCheckTime,
-                    checkedVersion, isConsistent);
-=======
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
         } finally {
             db.writeUnlock();

@@ -708,44 +708,28 @@ public class TabletScheduler extends FrontendDaemon {
 
             OlapTableState tableState = tbl.getState();
 
-<<<<<<< HEAD
-            Partition partition = GlobalStateMgr.getCurrentState()
-                    .getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
-            if (partition == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
-            }
-
-            short replicaNum = GlobalStateMgr.getCurrentState()
-                    .getReplicationNumIncludeRecycleBin(tbl.getPartitionInfo(), partition.getId());
-=======
             PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(tbl, tabletCtx.getPhysicalPartitionId());
+                    .getPhysicalPartitionIncludeRecycleBin(tbl, tabletCtx.getPhysicalPartitionId());
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition "
                         + tabletCtx.getPhysicalPartitionId() + "does not exist");
             }
 
-            Partition logicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore()
+            Partition logicalPartition = GlobalStateMgr.getCurrentState()
                     .getPartitionIncludeRecycleBin(tbl, physicalPartition.getParentId());
             if (logicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition "
                         + physicalPartition.getParentId() + "does not exist");
             }
 
-            short replicaNum = GlobalStateMgr.getCurrentState().getLocalMetastore()
+            short replicaNum = GlobalStateMgr.getCurrentState()
                     .getReplicationNumIncludeRecycleBin(tbl.getPartitionInfo(), physicalPartition.getParentId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             if (replicaNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }
 
-<<<<<<< HEAD
             DataProperty dataProperty = GlobalStateMgr.getCurrentState()
-                    .getDataPropertyIncludeRecycleBin(tbl.getPartitionInfo(), partition.getId());
-=======
-            DataProperty dataProperty = GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getDataPropertyIncludeRecycleBin(tbl.getPartitionInfo(), physicalPartition.getParentId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             if (dataProperty == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition data property not exist");
             }
@@ -2093,17 +2077,8 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "table " + ctx.getTblId() + " dose not exist");
         }
 
-<<<<<<< HEAD
-        Partition partition = GlobalStateMgr.getCurrentState().getPartitionIncludeRecycleBin(tbl, ctx.getPartitionId());
-        if (partition == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPartitionId() + " dose not exist");
-        }
-
-        PhysicalPartition physicalPartition = partition.getSubPartition(ctx.getPhysicalPartitionId());
-=======
-        PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore()
+        PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState()
                 .getPhysicalPartitionIncludeRecycleBin(tbl, ctx.getPhysicalPartitionId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
         if (physicalPartition == null) {
             throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPhysicalPartitionId() + " dose not exist");
         }

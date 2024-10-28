@@ -242,17 +242,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     @VisibleForTesting
-<<<<<<< HEAD
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
-                           long idxId, long tabletId, long createTime) {
-        this(type, dbId, tblId, partId, partId, idxId, tabletId, createTime);
-    }
-
-    @VisibleForTesting
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
-=======
     public TabletSchedCtx(Type type, long dbId, long tblId, long physicalPartitionId,
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                           long idxId, long tabletId, long createTime, SystemInfoService infoService) {
         this.type = type;
         this.dbId = dbId;
@@ -1049,12 +1039,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
 
             short replicationNum =
-<<<<<<< HEAD
-                    globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
-=======
-                    globalStateMgr.getLocalMetastore()
+                    globalStateMgr
                             .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             if (replicationNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }

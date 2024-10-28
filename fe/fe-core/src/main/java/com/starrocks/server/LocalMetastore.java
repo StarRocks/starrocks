@@ -1695,14 +1695,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
-<<<<<<< HEAD
 
-        PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
-                id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
-=======
         PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(
-                id, name, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
+                id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);

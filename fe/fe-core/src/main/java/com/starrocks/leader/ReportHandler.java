@@ -1366,15 +1366,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
                 db.readLock();
                 try {
-<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) db.getTable(tableId);
                     if (olapTable == null) {
                         continue;
                     }
-                    Partition partition = olapTable.getPartition(partitionId);
-=======
                     PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                     if (partition == null) {
                         continue;
                     }
@@ -1736,24 +1732,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
         db.writeLock();
         try {
-<<<<<<< HEAD
             OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (olapTable == null) {
                 throw new MetaNotFoundException("table[" + tableId + "] does not exist");
             }
 
-            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId) == null) {
-                throw new MetaNotFoundException("partition[" + partitionId + "] does not exist");
-            }
-            short replicationNum =
-                    globalStateMgr.getLocalMetastore()
-                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
-            if (replicationNum == (short) -1) {
-                throw new MetaNotFoundException("invalid replication number of partition [" + partitionId + "]");
-            }
-
-=======
->>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
