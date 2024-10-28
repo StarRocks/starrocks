@@ -324,9 +324,6 @@ public class FragmentInstanceExecState {
             case EXECUTING:
             case CANCELLING:
             default:
-                if (params.isSetProfile()) {
-                    profile.update(params.profile);
-                }
                 if (params.isDone()) {
                     if (params.getStatus() == null || params.getStatus().getStatus_code() == TStatusCode.OK) {
                         transitionState(State.FINISHED);
@@ -335,6 +332,12 @@ public class FragmentInstanceExecState {
                     }
                 }
                 return true;
+        }
+    }
+
+    public synchronized void updateRunningProfile(TReportExecStatusParams execStatusParams) {
+        if (execStatusParams.isSetProfile()) {
+            profile.update(execStatusParams.profile);
         }
     }
 
