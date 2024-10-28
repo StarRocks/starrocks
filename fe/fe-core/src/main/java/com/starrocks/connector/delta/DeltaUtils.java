@@ -29,12 +29,15 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import io.delta.kernel.Table;
+import io.delta.kernel.data.ArrayValue;
+import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
 import io.delta.kernel.internal.util.ColumnMapping;
+import io.delta.kernel.internal.util.Preconditions;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
@@ -42,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Locale;
 
 import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -95,8 +99,23 @@ public class DeltaUtils {
         }
 
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
-                Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
+                loadPartitionColumnNames(snapshot), snapshot, path,
                 deltaEngine, createTime);
+    }
+
+    private static List<String> loadPartitionColumnNames(SnapshotImpl snapshot) {
+        ArrayValue partitionColumns = snapshot.getMetadata().getPartitionColumns();
+        ColumnVector partitionColNameVector = partitionColumns.getElements();
+        List<String> partitionColumnNames = Lists.newArrayList();
+        for (int i = 0; i < partitionColumns.getSize(); i++) {
+            Preconditions.checkArgument(!partitionColNameVector.isNullAt(i),
+                    "Expected a non-null partition column name");
+            String partitionColName = partitionColNameVector.getString(i);
+            Preconditions.checkArgument(partitionColName != null && !partitionColName.isEmpty(),
+                    "Expected non-null and non-empty partition column name");
+            partitionColumnNames.add(partitionColName.toLowerCase(Locale.ROOT));
+        }
+        return partitionColumnNames;
     }
 
     public static Column buildColumnWithColumnMapping(StructField field, Type type, String columnMappingMode) {
