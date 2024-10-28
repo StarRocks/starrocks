@@ -114,20 +114,18 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 columnType = Type.ARRAY_VARCHAR;
             }
 
-            ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+            ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
 
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
+            Column copiedColumn = new Column(c);
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
-                Column copiedColumn = new Column(c);
                 copiedColumn.setType(Type.BIGINT);
-                copiedColumn.setIsAllowNull(true);
-                newScanColumnRefs.put(metaColumn, copiedColumn);
-            } else {
-                newScanColumnRefs.put(metaColumn, c);
             }
+            copiedColumn.setIsAllowNull(true);
+            newScanColumnRefs.put(metaColumn, copiedColumn);
 
             // DictMerge meta aggregate function is special, need change their types from
             // VARCHAR to ARRAY_VARCHAR
