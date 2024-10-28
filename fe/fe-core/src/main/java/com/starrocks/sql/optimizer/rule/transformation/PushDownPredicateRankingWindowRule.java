@@ -22,14 +22,17 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -222,21 +225,37 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
 
         OptExpression grandChildOptExpr = childOptExpr.inputAt(0);
         if ((grandChildOptExpr.getOp() instanceof LogicalWindowOperator)) {
+            ColumnRefFactory columnFactory = context.getColumnRefFactory();
             LogicalWindowOperator secondWindowOperator = grandChildOptExpr.getOp().cast();
             if (samePartitionWithRankRelatedWindow(secondWindowOperator, rankRelatedWindowOperator)) {
-                topNBuilder.setPartitionPreAggCall(createNormalAgg(false, secondWindowOperator.getWindowCall()));
-                Map<ColumnRefOperator, CallOperator> newWindowCall =
-                        createNormalAgg(true, secondWindowOperator.getWindowCall());
+                Pair<Map<ColumnRefOperator, CallOperator>, Map<ColumnRefOperator, CallOperator>> twoMaps =
+                        splitWindowCall(
+                                secondWindowOperator.getWindowCall(), columnFactory);
+                Map<ColumnRefOperator, CallOperator> globalWindowCall = twoMaps.first;
+                Map<ColumnRefOperator, CallOperator> localWindowCall = twoMaps.second;
+
                 // change rankRelated window call's input column and mark this window op's input is binary
                 secondWindowOperator = new LogicalWindowOperator.Builder().withOperator(secondWindowOperator)
-                        .setWindowCall(newWindowCall)
+                        .setWindowCall(globalWindowCall)
                         .setInputIsBinary(true)
                         .build();
+
+                topNBuilder.setPartitionPreAggCall(localWindowCall);
 
                 OptExpression newTopNOptExp = OptExpression.create(topNBuilder.build(), grandChildOptExpr.getInputs());
                 OptExpression secondWindowOptExp = OptExpression.create(secondWindowOperator, newTopNOptExp);
                 OptExpression rankRelatedOptExp = OptExpression.create(rankRelatedWindowOperator, secondWindowOptExp);
-                return Collections.singletonList(OptExpression.create(filterOperator, rankRelatedOptExp));
+                // add project node
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+                childOptExpr.getOutputColumns().getColumnRefOperators(columnFactory).stream().forEach(columnRef -> {
+                    columnRefMap.put(columnRef, columnRef);
+                });
+                LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
+                builder.setColumnRefMap(columnRefMap);
+
+                OptExpression projectOpt = OptExpression.create(builder.build(), rankRelatedOptExp);
+
+                return Collections.singletonList(OptExpression.create(filterOperator, projectOpt));
             }
         }
 
@@ -246,41 +265,83 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
     }
 
-    public Map<ColumnRefOperator, CallOperator> createNormalAgg(boolean isGlobal,
-                                                                Map<ColumnRefOperator, CallOperator> aggregationMap) {
-        Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
-            ColumnRefOperator column = entry.getKey();
+    private Pair<Map<ColumnRefOperator, CallOperator>, Map<ColumnRefOperator, CallOperator>> splitWindowCall(
+            Map<ColumnRefOperator, CallOperator> windowCall, ColumnRefFactory columnFactory) {
+        Map<ColumnRefOperator, CallOperator> globalCall = Maps.newHashMap();
+        Map<ColumnRefOperator, CallOperator> localCall = Maps.newHashMap();
+
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : windowCall.entrySet()) {
+            ColumnRefOperator originalOutputColumnRefOp = entry.getKey();
             CallOperator aggregation = entry.getValue();
 
-            CallOperator callOperator;
             Type intermediateType = getIntermediateType(aggregation);
-            // For merge agg function, we need to replace the agg input args to the update agg function result
-            if (isGlobal) {
-                // make window function's input always nullable
-                // so In BE for every partition with topn elements left, we can output one column as window's input like below:
-                // row1  row2 ... row(n-1)   row(n)
-                // null  null      null      sum(column)
-                List<ScalarOperator> arguments = Lists.newArrayList(
-                        new ColumnRefOperator(column.getId(), intermediateType, column.getName(), true));
-                appendConstantColumns(arguments, aggregation);
-                Function newFn = aggregation.getFunction().copy();
-                //                newFn.getArgs()[0] = intermediateType;
-                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
-                        newFn);
-            } else {
-                callOperator = new CallOperator(aggregation.getFnName(), intermediateType, aggregation.getChildren(),
-                        aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());
-            }
 
-            // output column always nullable
-            newAggregationMap.put(
-                    new ColumnRefOperator(column.getId(), column.getType(), column.getName(), true),
-                    callOperator);
+            CallOperator localCallOperator =
+                    new CallOperator(aggregation.getFnName(), intermediateType, aggregation.getChildren(),
+                            aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());
+
+            // local output column always nullable
+            // localOutputColumnRefOp must have new ColumnId, which is different from two phase agg
+            ColumnRefOperator localOutputColumnRefOp =
+                    columnFactory.create(originalOutputColumnRefOp, intermediateType, true);
+            localCall.put(localOutputColumnRefOp, localCallOperator);
+
+            // make window function's input always nullable
+            // so In BE for every partition with topn elements left, we can output one column as window's input like below:
+            // row1  row2 ... row(n-1)   row(n)
+            // null  null      null      sum(column)
+            List<ScalarOperator> arguments = Lists.newArrayList(localOutputColumnRefOp);
+            appendConstantColumns(arguments, aggregation);
+            Function newFn = aggregation.getFunction().copy();
+            //                newFn.getArgs()[0] = intermediateType; 这样子会导致window找不到函数，所以在plan chunk那不进行校验
+            CallOperator glocalCallOperator =
+                    new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
+                            newFn);
+            ColumnRefOperator globalColumnRefOp =
+                    new ColumnRefOperator(originalOutputColumnRefOp.getId(), originalOutputColumnRefOp.getType(),
+                            originalOutputColumnRefOp.getName(), true);
+            globalCall.put(globalColumnRefOp, glocalCallOperator);
         }
 
-        return newAggregationMap;
+        return Pair.create(globalCall, localCall);
     }
+
+    //    public Map<ColumnRefOperator, CallOperator> createNormalAgg(boolean isGlobal,
+    //                                                                Map<ColumnRefOperator, CallOperator> aggregationMap,
+    //                                                                ColumnRefFactory columnFactory) {
+    //        Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
+    //        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
+    //            ColumnRefOperator column = entry.getKey();
+    //            CallOperator aggregation = entry.getValue();
+    //
+    //            CallOperator callOperator;
+    //            Type intermediateType = getIntermediateType(aggregation);
+    //            // For merge agg function, we need to replace the agg input args to the update agg function result
+    //            if (isGlobal) {
+    //                // make window function's input always nullable
+    //                // so In BE for every partition with topn elements left, we can output one column as window's input like below:
+    //                // row1  row2 ... row(n-1)   row(n)
+    //                // null  null      null      sum(column)
+    //                List<ScalarOperator> arguments = Lists.newArrayList(
+    //                        new ColumnRefOperator(column.getId(), intermediateType, column.getName(), true));
+    //                appendConstantColumns(arguments, aggregation);
+    //                Function newFn = aggregation.getFunction().copy();
+    //                //                newFn.getArgs()[0] = intermediateType; 这样子会导致window找不到函数，所以在plan chunk那不进行校验
+    //                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(), arguments,
+    //                        newFn);
+    //            } else {
+    //                callOperator = new CallOperator(aggregation.getFnName(), intermediateType, aggregation.getChildren(),
+    //                        aggregation.getFunction(), aggregation.isDistinct(), aggregation.isRemovedDistinct());
+    //            }
+    //
+    //            // output column always nullable
+    //            newAggregationMap.put(
+    //                    new ColumnRefOperator(column.getId(), column.getType(), column.getName(), true),
+    //                    callOperator);
+    //        }
+    //
+    //        return newAggregationMap;
+    //    }
 
     protected Type getIntermediateType(CallOperator aggregation) {
         AggregateFunction af = (AggregateFunction) aggregation.getFunction();

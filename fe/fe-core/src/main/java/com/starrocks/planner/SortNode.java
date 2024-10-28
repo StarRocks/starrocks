@@ -114,6 +114,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
         this.children.add(input);
         this.offset = offset;
+        if (info.getPreAggTupleDesc_() != null && !info.getPreAggTupleDesc_().getSlots().isEmpty()) {
+            this.tupleIds.addAll(Lists.newArrayList(info.getPreAggTupleDesc_().getId()));
+        }
         Preconditions.checkArgument(info.getOrderingExprs().size() == info.getIsAscOrder().size());
     }
 
@@ -212,7 +215,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 Expr.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
-        Preconditions.checkState(tupleIds.size() == 1, "Incorrect size for tupleIds in SortNode");
+        //        Preconditions.checkState(tupleIds.size() == 1, "Incorrect size for tupleIds in SortNode");
         sortInfo.setSort_tuple_slot_exprs(Expr.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);

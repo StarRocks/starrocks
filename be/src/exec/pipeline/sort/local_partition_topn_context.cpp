@@ -76,13 +76,16 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
     _agg_functions.resize(agg_size);
     _agg_expr_ctxs.resize(agg_size);
     _agg_input_columns.resize(agg_size);
+    _agg_input_raw_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = _t_pre_agg_exprs[i];
         const TFunction& fn = desc.nodes[0].fn;
 
-        _agg_input_columns[i].resize(desc.nodes[0].num_children);
+        auto num_args = desc.nodes[0].num_children;
+        _agg_input_columns[i].resize(num_args);
+        _agg_input_raw_columns[i].resize(num_args);
         int node_idx = 0;
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
@@ -94,6 +97,8 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         }
 
         const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+        const TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
+
         // temp
         // DCHECK(return_type.type == TYPE_VARBINARY) ;
         const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
@@ -119,7 +124,7 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         }
         _agg_functions[i] = func;
         // result always nullable
-        _agg_fn_types[i] = {return_type, desc.nodes[0].is_nullable, true};
+        _agg_fn_types[i] = {serde_type, desc.nodes[0].is_nullable, true};
     }
 
     // Compute agg state total size and offsets.
@@ -234,7 +239,7 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
         }
     }
     chunk = _chunks_partitioner->consume_from_passthrough_buffer();
-    if (_enable_pre_agg) {
+    if (_enable_pre_agg && chunk != nullptr) {
         RETURN_IF_ERROR(output_agg_streaming(chunk.get()));
     }
     return chunk;
@@ -306,31 +311,25 @@ Status LocalPartitionTopnContext::output_agg_streaming(Chunk* chunk) {
 
 Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (size_t j = 0; j < _agg_expr_ctxs.size(); j++) {
-            // _agg_input_raw_columns[i][j] != nullptr means this column has been evaluated
-            if (_agg_input_raw_columns[i][j] != nullptr) {
-                continue;
-
-                // For simplicity and don't change the overall processing flow,
-                // We handle const column as normal data column
-                // TODO(kks): improve const column aggregate later
-                ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
-                // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
-                if (j == 0) {
-                    _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+            // For simplicity and don't change the overall processing flow,
+            // We handle const column as normal data column
+            // TODO(kks): improve const column aggregate later
+            ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
+            // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
+            if (j == 0) {
+                _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+            } else {
+                // if function has at least two argument, unpack const column selectively
+                // for function like corr, FE forbid second args to be const, we will always unpack const column for it
+                // for function like percentile_disc, the second args is const, do not unpack it
+                if (_agg_expr_ctxs[i][j]->root()->is_constant()) {
+                    _agg_input_columns[i][j] = std::move(col);
                 } else {
-                    // if function has at least two argument, unpack const column selectively
-                    // for function like corr, FE forbid second args to be const, we will always unpack const column for it
-                    // for function like percentile_disc, the second args is const, do not unpack it
-                    if (_agg_expr_ctxs[i][j]->root()->is_constant()) {
-                        _agg_input_columns[i][j] = std::move(col);
-                    } else {
-                        _agg_input_columns[i][j] =
-                                ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
-                    }
+                    _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
                 }
-                _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
             }
+            _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
         }
     }
     return Status::OK();
