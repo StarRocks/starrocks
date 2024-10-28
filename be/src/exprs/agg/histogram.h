@@ -26,6 +26,9 @@
 
 namespace starrocks {
 
+// TODO(murphy) optimize performance for string column, whose has slowness at comparison
+// TODO(murphy) optimize the algorithm, downsample the data instead of holding all input data
+// TODO(muprhy) parallelise the algorithm
 template <LogicalType LT>
 struct Bucket {
     using RefType = AggDataRefType<LT>;
@@ -80,11 +83,6 @@ public:
                                    AggDataPtr __restrict state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         this->data(state).column->append(*column, 0, chunk_size);
-        // ColumnViewer<LT> viewer(column);
-        // for (size_t i = 0; i < chunk_size; i++) {
-        //     DCHECK((!viewer.is_null(i)));
-        //     AggDataTypeTraits<LT>::append_to_buffer(this->data(state).data, viewer.value(i));
-        // }
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -125,7 +123,6 @@ public:
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // Build bucket
-        // TODO(murphy) optimize performance for string column
         std::vector<Bucket<LT>> buckets;
         ColumnViewer<LT> viewer(this->data(state).column);
         for (size_t i = 0; i < viewer.size(); ++i) {
@@ -179,5 +176,69 @@ public:
 
     std::string get_name() const override { return "histogram"; }
 };
+
+/*
+      │     be/build_RELEASE/be/src/exprs/agg/histogram.h:136
+  9.44 │6b0:   incq       -0x8(%r15)
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:135
+  7.16 │       vmovdqu    -0x18(%r15),%xmm0
+ 10.67 │       vpsubq     -0x3323452(%rip),%xmm0,%xmm0        # 32e2300 <orc::DEC_32_TABLE+0x940>
+  3.86 │       vmovdqu    %xmm0,-0x18(%r15)
+  1.48 │6c8:   mov        %r14,%r13
+       │     starrocks::ColumnViewer<(starrocks::LogicalType)11>::size() const:
+       │     be/build_RELEASE/be/src/column/column_viewer.h:50
+  0.53 │6cb:   mov        -0x178(%rbp),%rax
+       │     std::vector<double, starrocks::ColumnAllocator<double> >::size() const:
+  5.51 │       mov        0x18(%rax),%rcx
+  4.54 │       sub        0x10(%rax),%rcx
+       │     starrocks::HistogramAggregationFunction<(starrocks::LogicalType)11, double>::finalize_to_column(starrocks::FunctionContext*, unsigned char const*, starrocks::Column*) const:
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:126
+  1.36 │       inc        %rbx
+       │     std::vector<double, starrocks::ColumnAllocator<double> >::size() const:
+  1.10 │       sar        $0x3,%rcx
+  5.17 │       mov        %r13,%r14
+       │     starrocks::HistogramAggregationFunction<(starrocks::LogicalType)11, double>::finalize_to_column(starrocks::FunctionContext*, unsigned char const*, starrocks::Column*) const:
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:126
+  4.39 │       cmp        %rcx,%rbx
+       │     ↑ jae        17e
+       │     starrocks::ColumnViewer<(starrocks::LogicalType)11>::value(unsigned long) const:
+       │     be/build_RELEASE/be/src/column/column_viewer.h:46
+  1.02 │6ed:   mov        -0x170(%rbp),%rax
+  0.60 │       mov        -0x160(%rbp),%rcx
+  5.43 │       and        %rbx,%rcx
+  7.85 │       vmovsd     (%rax,%rcx,8),%xmm1
+       │     _ZN9__gnu_cxxeqIPKN9starrocks6BucketILNS1_11LogicalTypeE11EEESt6vectorIS4_SaIS4_EEEEbRKNS_17__normal_iteratorIT_T0_EESF_QrqXeqcldtfp_4baseEcldtfp0_4baseERSt14convertible_toIbEE():
+  1.16 │       cmp        %r15,%r14
+       │     starrocks::HistogramAggregationFunction<(starrocks::LogicalType)11, double>::finalize_to_column(starrocks::FunctionContext*, unsigned char const*, starrocks::Column*) const:
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:128
+       │     ↓ je         750
+       │     starrocks::AggDataTypeTraits<(starrocks::LogicalType)11, int>::get_ref(double const&):
+       │     be/build_RELEASE/be/src/exprs/agg/aggregate_traits.h:41
+  0.49 │       vmovsd     -0x20(%r15),%xmm0
+       │     starrocks::AggDataTypeTraits<(starrocks::LogicalType)11, int>::is_equal(double const&, double const&):
+       │     be/build_RELEASE/be/src/exprs/agg/aggregate_traits.h:46
+  7.74 │       vucomisd   %xmm1,%xmm0
+       │     starrocks::HistogramAggregationFunction<(starrocks::LogicalType)11, double>::finalize_to_column(starrocks::FunctionContext*, unsigned char const*, starrocks::Column*) const:
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:134
+  5.37 │     ↓ jne        716
+  2.68 │     ↑ jnp        6b0
+  7.07 │716:   vmovsd     %xmm1,-0x30(%rbp)
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:139
+  0.06 │       mov        -0x8(%r15),%rax
+  0.83 │       cmp        -0x108(%rbp),%rax
+       │     ↓ jge        7a1
+  1.54 │       vmovq      -0x30(%rbp),%xmm0
+       │     starrocks::AggDataTypeTraits<(starrocks::LogicalType)11, int>::assign_value(double&, double const&):
+       │     be/build_RELEASE/be/src/exprs/agg/aggregate_traits.h:35
+  1.71 │       vmovq      %xmm0,-0x20(%r15)
+       │     starrocks::HistogramAggregationFunction<(starrocks::LogicalType)11, double>::finalize_to_column(starrocks::FunctionContext*, unsigned char const*, starrocks::Column*) const:
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:144
+  0.23 │       incq       -0x18(%r15)
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:145
+  0.73 │       inc        %rax
+  0.02 │       mov        %rax,-0x8(%r15)
+       │     be/build_RELEASE/be/src/exprs/agg/histogram.h:146
+  0.12 │       movq       $0x1,-0x10(%r15)
+  0.12 │     ↑ jmp        6c8*/
 
 } // namespace starrocks
