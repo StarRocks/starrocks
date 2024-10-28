@@ -302,13 +302,10 @@ public class AstToSQLBuilder {
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
                 if (partitionNames != null && !partitionNames.isEmpty()) {
-                    sqlBuilder.append(" PARTITIONS(");
+                    sqlBuilder.append(" PARTITION (");
+                    sqlBuilder.append(String.join(", ", partitionNames));
+                    sqlBuilder.append(")");
                 }
-                for (String partitionName : partitionNames) {
-                    sqlBuilder.append("`").append(partitionName).append("`").append(",");
-                }
-                sqlBuilder.deleteCharAt(sqlBuilder.length() - 1);
-                sqlBuilder.append(")");
             }
             
             for (TableRelation.TableHint hint : CollectionUtils.emptyIfNull(node.getTableHints())) {
