@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -325,5 +326,34 @@ public class LakeTableAlterMetaJobTest {
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
                     () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+    }
+
+    @Test
+    public void testModifyPropertyWithIndex() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
+        Assert.assertNotNull(job);
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexType() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // should throw exception
+        ExceptionChecker.expectThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+
+        // success
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assert.assertNotNull(job2);
+        db.dropTable(table2.getName());
     }
 }
