@@ -1393,7 +1393,7 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
-CONF_mBool(enable_pk_strict_memcheck, "false");
+CONF_mBool(enable_pk_strict_memcheck, "true");
 
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
