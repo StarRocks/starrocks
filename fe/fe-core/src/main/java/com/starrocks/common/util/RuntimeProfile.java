@@ -144,8 +144,8 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName),
+                    String.format("dangling counter %s->%s", parentName, name));
             Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
