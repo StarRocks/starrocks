@@ -44,7 +44,7 @@ with engine.connect() as connection:
 ### DDL Operation
 meta = MetaData()
 tbl = Table(
-    'table41,
+    'table1',
     meta,
     Column("id", Integer),
     starrocks_engine='OLAP',
