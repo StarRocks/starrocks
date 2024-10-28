@@ -212,7 +212,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                             replica.setLastReportVersion(backendTabletInfo.getVersion());
 
                             // check if tablet needs migration
-                            long partitionId = tabletMeta.getPartitionId();
+                            long partitionId = tabletMeta.getPhysicalPartitionId();
                             TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                             if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                                 if (storageMedium != backendTabletInfo.getStorage_medium()) {
@@ -240,7 +240,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                                             transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
                                     if (transactionState == null ||
                                             transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
-                                        transactionsToClear.put(transactionId, tabletMeta.getPartitionId());
+                                        transactionsToClear.put(transactionId, partitionId);
                                         LOG.debug("transaction id [{}] is not valid any more, "
                                                 + "clear it from backend [{}]", transactionId, backendId);
                                     } else if (transactionState.getTransactionStatus() ==
@@ -267,7 +267,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
                                                     transactionState.getTransactionId());
                                         } else {
                                             TPartitionVersionInfo versionInfo =
-                                                    new TPartitionVersionInfo(tabletMeta.getPartitionId(),
+                                                    new TPartitionVersionInfo(partitionId,
                                                             partitionCommitInfo.getVersion(), 0);
                                             Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
                                                     transactionsToPublish.computeIfAbsent(
@@ -416,11 +416,11 @@ public class TabletInvertedIndex implements MemoryTrackable {
                     }
 
                     // validate partition
-                    long partitionId = tabletMeta.getPartitionId();
-                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                    if (partition == null) {
-                        partition = recycleBin.getPhysicalPartition(partitionId);
-                        if (partition != null) {
+                    long partitionId = tabletMeta.getPhysicalPartitionId();
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                    if (physicalPartition == null) {
+                        physicalPartition = recycleBin.getPhysicalPartition(partitionId);
+                        if (physicalPartition != null) {
                             isInRecycleBin = true;
                         } else {
                             deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
@@ -432,7 +432,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
 
                     // validate index
                     long indexId = tabletMeta.getIndexId();
-                    MaterializedIndex index = partition.getIndex(indexId);
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
                     if (index == null) {
                         deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "materialized index " + dbId + "." + tableId + "." +
