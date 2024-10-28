@@ -192,6 +192,9 @@ protected:
     int _num_indexfile = 0;
     vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
+    std::vector<string> _segment_encryption_metas;
+    std::vector<string> _delfile_encryption_metas;
+    std::vector<string> _updatefile_encryption_metas;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 
