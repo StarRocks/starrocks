@@ -471,4 +471,78 @@ TEST_F(AlterTabletMetaTest, test_alter_pk_update_tablet_schema) {
     fp->setMode(trigger_mode);
 }
 
+TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info.__set_enable_persistent_index(true);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
+    ASSERT_TRUE(new_tablet_meta.value()->persistent_index_type() == PersistentIndexTypePB::LOCAL);
+
+    txn_id = next_id();
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({c0, c1}, _schema);
+    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+    // write segment #1
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+    // write txnlog
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    writer->close();
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 3, txn_id).status());
+    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+    ASSERT_TRUE(data_dir != nullptr);
+    ASSERT_OK(FileSystem::Default()->path_exists(data_dir->get_persistent_index_path() + "/" +
+                                                 std::to_string(tablet_id)));
+
+    int64_t txn_id2 = next_id();
+    TUpdateTabletMetaInfoReq update_tablet_meta_req2;
+    update_tablet_meta_req2.__set_txn_id(txn_id2);
+
+    TTabletMetaInfo tablet_meta_info2;
+    tablet_meta_info2.__set_tablet_id(tablet_id);
+    tablet_meta_info2.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
+    tablet_meta_info2.__set_enable_persistent_index(true);
+    tablet_meta_info2.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+
+    update_tablet_meta_req2.tabletMetaInfos.push_back(tablet_meta_info2);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req2));
+
+    auto new_tablet_meta2 = publish_single_version(tablet_id, 4, txn_id2);
+    ASSERT_OK(new_tablet_meta2.status());
+    ASSERT_EQ(true, new_tablet_meta2.value()->enable_persistent_index());
+    ASSERT_TRUE(new_tablet_meta2.value()->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE);
+}
+
 } // namespace starrocks::lake

@@ -135,6 +135,47 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testSetEnablePersistentWithLocalindex() throws Exception {
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), table.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "LOCAL");
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        job2.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assert.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assert.assertTrue(table.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+    }
+
+    @Test
+    public void testSetDisblePersistentIndex() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table2.getId(), table2.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "LOCAL");
+        Assert.assertTrue(table2.enablePersistentIndex());
+        Assert.assertTrue(table2.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        job2.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assert.assertFalse(table2.enablePersistentIndex());
+
+        db.dropTable(table2.getName());
+    }
+
+    @Test
     public void testUpdatePartitonMetaFailed() {
         new MockUp<WarehouseManager>() {
             @Mock
