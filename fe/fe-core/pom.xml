@@ -710,6 +710,14 @@ under the License.
                     <groupId>org.apache.paimon</groupId>
                     <artifactId>paimon-core</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.paimon</groupId>
+                    <artifactId>paimon-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.paimon</groupId>
+                    <artifactId>paimon-hive-catalog</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
