@@ -72,10 +72,10 @@ Status Operator::prepare(RuntimeState* state) {
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
-    _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
-    _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
-    _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
-    _prepare_timer = ADD_TIMER(_common_metrics, "PrepareTime");
+    _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
+    _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
+    _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
+    _prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "PrepareTime", 1_ms);
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);

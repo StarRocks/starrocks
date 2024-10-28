@@ -37,6 +37,7 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
@@ -78,15 +79,15 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _runtime_state = runtime_state;
 
-    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
     SCOPED_TIMER(prepare_timer);
 
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
-    _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
+    _overhead_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "OverheadTime", 1_ms);
+    _schedule_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "ScheduleTime", 1_ms);
 
-    _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
@@ -95,13 +96,16 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
 
-    _pending_timer = ADD_TIMER(_runtime_profile, "PendingTime");
-    _precondition_block_timer = ADD_CHILD_TIMER(_runtime_profile, "PreconditionBlockTime", "PendingTime");
-    _input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "InputEmptyTime", "PendingTime");
-    _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
-    _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
-    _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _pending_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PendingFinishTime", "PendingTime");
+    _pending_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "PendingTime", 1_ms);
+    _precondition_block_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PreconditionBlockTime", "PendingTime", 1_ms);
+    _input_empty_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "InputEmptyTime", "PendingTime", 1_ms);
+    _first_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime", 1_ms);
+    _followup_input_empty_timer =
+            ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime", 1_ms);
+    _output_full_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "OutputFullTime", "PendingTime", 1_ms);
+    _pending_finish_timer = ADD_CHILD_TIMER_THESHOLD(_runtime_profile, "PendingFinishTime", "PendingTime", 1_ms);
 
     _peak_driver_queue_size_counter = _runtime_profile->AddHighWaterMarkCounter(
             "PeakDriverQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
