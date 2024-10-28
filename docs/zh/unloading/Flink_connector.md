@@ -160,10 +160,10 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
-| JSON       | STRING <br> **说明** <br> **自 1.2.10 版起支持。** |
-| ARRAY      | ARRAY  <br> **说明** <br> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
-| STRUCT     | ROW    <br> **说明** <br> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
-| MAP        | MAP    <br> **说明** <br> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| JSON       | STRING <br /> **说明** <br /> **自 1.2.10 版起支持。** |
+| ARRAY      | ARRAY  <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| STRUCT     | ROW    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
+| MAP        | MAP    <br /> **说明** <br /> **自 1.2.10 版起支持，需要 StarRocks v3.1.12/v3.2.5 或更高版本。** |
 
 
 ## 使用示例
