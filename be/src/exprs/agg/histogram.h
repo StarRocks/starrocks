@@ -20,19 +20,36 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "storage/types.h"
 
 namespace starrocks {
 
-template <typename T>
+template <LogicalType LT>
 struct Bucket {
-public:
+    using RefType = AggDataRefType<LT>;
+    using ValueType = AggDataValueType<LT>;
+
     Bucket() = default;
-    Bucket(T lower, T upper, size_t count, size_t upper_repeats)
-            : lower(lower), upper(upper), count(count), upper_repeats(upper_repeats), count_in_bucket(1) {}
-    T lower;
-    T upper;
+
+    Bucket(RefType input_lower, RefType input_upper, size_t count, size_t upper_repeats)
+            : upper_repeats(upper_repeats), count_in_bucket(1) {
+        AggDataTypeTraits<LT>::assign_value(lower, input_lower);
+        AggDataTypeTraits<LT>::assign_value(upper, input_upper);
+    }
+
+    bool is_equals_to_upper(RefType value) {
+        return AggDataTypeTraits<LT>::is_equal(value, AggDataTypeTraits<LT>::get_ref(upper));
+    }
+
+    void update_upper(RefType value) { AggDataTypeTraits<LT>::assign_value(upper, value); }
+
+    Datum get_lower_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(lower)); }
+    Datum get_upper_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(upper)); }
+
+    ValueType lower;
+    ValueType upper;
     // Up to this bucket, the total value
     int64_t count;
     // the number of values that on the upper boundary
@@ -41,15 +58,16 @@ public:
     int64_t count_in_bucket;
 };
 
-template <typename T>
+template <LogicalType LT>
 struct HistogramState {
-    HistogramState() = default;
-    std::vector<T> data;
+    HistogramState() { column = RunTimeColumnType<LT>::create(); }
+
+    ColumnPtr column;
 };
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class HistogramAggregationFunction final
-        : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<LT, T>> {
+        : public AggregateFunctionBatchHelper<HistogramState<LT>, HistogramAggregationFunction<LT, T>> {
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
@@ -61,11 +79,12 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
-        ColumnViewer<LT> viewer(column);
-        for (size_t i = 0; i < chunk_size; i++) {
-            DCHECK((!viewer.is_null(i)));
-            this->data(state).data.emplace_back(viewer.value(i));
-        }
+        this->data(state).column->append(*column, 0, chunk_size);
+        // ColumnViewer<LT> viewer(column);
+        // for (size_t i = 0; i < chunk_size; i++) {
+        //     DCHECK((!viewer.is_null(i)));
+        //     AggDataTypeTraits<LT>::append_to_buffer(this->data(state).data, viewer.value(i));
+        // }
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -103,31 +122,33 @@ public:
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
-        int bucket_size = this->data(state).data.size() / bucket_num;
+        int bucket_size = this->data(state).column->size() / bucket_num;
 
-        //Build bucket
-        std::vector<Bucket<T>> buckets;
-        for (int i = 0; i < this->data(state).data.size(); ++i) {
-            T v = this->data(state).data[i];
+        // Build bucket
+        // TODO(murphy) optimize performance for string column
+        std::vector<Bucket<LT>> buckets;
+        ColumnViewer<LT> viewer(this->data(state).column);
+        for (size_t i = 0; i < viewer.size(); ++i) {
+            auto v = viewer.value(i);
             if (buckets.empty()) {
-                Bucket<T> bucket(v, v, 1, 1);
+                Bucket<LT> bucket(v, v, 1, 1);
                 buckets.emplace_back(bucket);
             } else {
-                Bucket<T>* lastBucket = &buckets.back();
+                Bucket<LT>* last_bucket = &buckets.back();
 
-                if (lastBucket->upper == v) {
-                    lastBucket->count++;
-                    lastBucket->count_in_bucket++;
-                    lastBucket->upper_repeats++;
+                if (last_bucket->is_equals_to_upper(v)) {
+                    last_bucket->count++;
+                    last_bucket->count_in_bucket++;
+                    last_bucket->upper_repeats++;
                 } else {
-                    if (lastBucket->count_in_bucket >= bucket_size) {
-                        Bucket<T> bucket(v, v, lastBucket->count + 1, 1);
+                    if (last_bucket->count_in_bucket >= bucket_size) {
+                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
                         buckets.emplace_back(bucket);
                     } else {
-                        lastBucket->upper = v;
-                        lastBucket->count++;
-                        lastBucket->count_in_bucket++;
-                        lastBucket->upper_repeats = 1;
+                        last_bucket->update_upper(v);
+                        last_bucket->count++;
+                        last_bucket->count_in_bucket++;
+                        last_bucket->upper_repeats = 1;
                     }
                 }
             }
@@ -142,8 +163,8 @@ public:
             bucket_json = "[";
 
             for (int i = 0; i < buckets.size(); ++i) {
-                std::string lower_str = datum_to_string(type_info.get(), Datum(buckets[i].lower));
-                std::string upper_str = datum_to_string(type_info.get(), Datum(buckets[i].upper));
+                std::string lower_str = datum_to_string(type_info.get(), buckets[i].get_lower_datum());
+                std::string upper_str = datum_to_string(type_info.get(), buckets[i].get_upper_datum());
                 bucket_json +=
                         toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                         ",";
