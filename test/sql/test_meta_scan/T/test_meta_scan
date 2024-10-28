@@ -100,7 +100,7 @@ CREATE TABLE `update_table_with_null_partition` (
     `k12` double,
     `k13` decimal(27,9)
 )
-DUPLICATE KEY(`k1`, `k2`)
+PRIMARY KEY(`k1`, `k2`)
 COMMENT "OLAP"
 PARTITION BY RANGE(`k1`)
 (
