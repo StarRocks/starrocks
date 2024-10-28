@@ -223,7 +223,7 @@ Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其
 
 - 缓存的数据的字节达到限制 `bufferflush.maxbytes`。
 - 自上次落盘以来经过的时间达到 connector 限制 `bufferflush.intervalms`。
-- 达到了 Task 偏移量的提交间隔，由 Kafka Connect 配置项控制 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), 默认值是 `60000`。
+- 达到了 Task 偏移量的提交间隔，由 Kafka Connect 配置项 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) 控制, 默认值是 `60000`。
 
 ### 使用限制
 
