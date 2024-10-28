@@ -23,8 +23,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
@@ -227,15 +225,7 @@ public class LoadExecutor implements Runnable {
             throw new LoadException(String.format("Database %s does not exist", tableId.getDbName()));
         }
 
-        Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            table = GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getTable(db.getFullName(), tableId.getTableName());
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
+        Table table = db.getTable(tableId.getTableName());
         if (table == null) {
             throw new LoadException(String.format(
                     "Table [%s.%s] does not exist", tableId.getDbName(), tableId.getTableName()));
