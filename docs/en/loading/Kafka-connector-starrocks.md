@@ -289,7 +289,7 @@ The data is successfully loaded when the above result is returned.
 ### bufferflush.intervalms
 
 **Required**: NO<br/>
-**Default value**: 300000<br/>
+**Default value**: 1000<br/>
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
 ### connect.timeoutms
@@ -322,7 +322,17 @@ The data is successfully loaded when the above result is returned.
 **Default value**: `row`<br/>
 **Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
 
-## Limits
+## Usage Notes
+
+### Flush Policy
+
+The Kafka connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. The flush will be triggered when any of the following conditions are met:
+
+- The bytes of buffered rows reaches the limit `bufferflush.maxbytes`.
+- The elapsed time since the last flush reaches the limit `bufferflush.intervalms`.
+- The interval at which the connector tries committing offsets for tasks is reached. The interval is controlled by the Kafka Connect configuration [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), and the default values is `60000`.
+
+### Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
 - The sink of the Kafka connector provided by StarRocks guarantees at-least-once semantics.
