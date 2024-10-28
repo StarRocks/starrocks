@@ -659,3 +659,11 @@ select array_contains_seq(@arr0, @arr1);
 -- result:
 1
 -- !result
+select array_contains_seq(['abc'],'a');
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 2-th input of array_contains_seq should be an array, rather than varchar.')
+-- !result
+select array_contains_seq('abc',['a']);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 1-th input of array_contains_seq should be an array, rather than varchar.')
+-- !result

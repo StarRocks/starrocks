@@ -141,3 +141,6 @@ select array_contains_seq([null,null,1,2],[null,1,2]);
 set @arr0 = array_append(array_repeat(1, 10000), 2);
 set @arr1 = array_append(array_repeat(1, 5000), 2);
 select array_contains_seq(@arr0, @arr1);
+
+select array_contains_seq(['abc'],'a');
+select array_contains_seq('abc',['a']);
