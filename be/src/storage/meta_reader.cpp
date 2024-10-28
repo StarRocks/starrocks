@@ -34,8 +34,8 @@
 
 namespace starrocks {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {FLAT_JSON_META, DICT_MERGE, MAX, MIN,
-                                                                         COUNT_ROWS,     COUNT_COL};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -116,7 +116,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         auto s_id = _collect_context.result_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
-        if (field == SegmentMetaCollecter::DICT_MERGE) {
+        if (field == META_DICT_MERGE) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
@@ -124,7 +124,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == SegmentMetaCollecter::COUNT_COL || field == SegmentMetaCollecter::COUNT_ROWS) {
+        } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_BIGINT;
             TypeDescriptor desc;
@@ -132,7 +132,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             ColumnPtr column = ColumnHelper::create_column(desc, true);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == SegmentMetaCollecter::FLAT_JSON_META) {
+        } else if (field == META_FLAT_JSON_META) {
             TypeDescriptor item_desc;
             item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
@@ -224,17 +224,17 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Column* column, LogicalType type) {
-    if (name == DICT_MERGE) {
+    if (name == META_DICT_MERGE) {
         return _collect_dict(cid, column, type);
-    } else if (name == MAX) {
+    } else if (name == META_MAX) {
         return _collect_max(cid, column, type);
-    } else if (name == MIN) {
+    } else if (name == META_MIN) {
         return _collect_min(cid, column, type);
-    } else if (name == COUNT_ROWS) {
+    } else if (name == META_COUNT_ROWS) {
         return _collect_rows(column, type);
-    } else if (name == FLAT_JSON_META) {
+    } else if (name == META_FLAT_JSON_META) {
         return _collect_flat_json(cid, column);
-    } else if (name == COUNT_COL) {
+    } else if (name == META_COUNT_COL) {
         return _collect_count(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);

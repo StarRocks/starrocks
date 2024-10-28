@@ -97,15 +97,14 @@ protected:
     Status _read(Chunk* chunk, size_t n);
 };
 
-class SegmentMetaCollecter {
-public:
-    static constexpr std::string COUNT_ROWS = "rows";
-    static constexpr std::string MIN = "min";
-    static constexpr std::string MAX = "max";
-    static constexpr std::string DICT_MERGE = "dict_merge";
-    static constexpr std::string FLAT_JSON_META = "flat_json_meta";
-    static constexpr std::string COUNT_COL = "count";
+static const std::string META_COUNT_ROWS = "rows";
+static const std::string META_MIN = "min";
+static const std::string META_MAX = "max";
+static const std::string META_DICT_MERGE = "dict_merge";
+static const std::string META_FLAT_JSON_META = "flat_json_meta";
+static const std::string META_COUNT_COL = "count";
 
+class SegmentMetaCollecter {
 public:
     SegmentMetaCollecter(SegmentSharedPtr segment);
     ~SegmentMetaCollecter();

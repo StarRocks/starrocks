@@ -84,13 +84,13 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
 
         // only collect the field of dict need read data page
         // others just depend on footer
-        if (collect_field == SegmentMetaCollecter::DICT_MERGE || collect_field == SegmentMetaCollecter::COUNT_COL) {
+        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL) {
             _collect_context.seg_collecter_params.read_page.emplace_back(true);
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
-        _has_count_agg |= (collect_field == SegmentMetaCollecter::COUNT_ROWS);
-        _has_count_agg |= (collect_field == SegmentMetaCollecter::COUNT_COL);
+        _has_count_agg |= (collect_field == META_COUNT_ROWS);
+        _has_count_agg |= (collect_field == META_COUNT_COL);
     }
     _collect_context.seg_collecter_params.tablet_schema = read_params.tablet_schema;
     return Status::OK();
