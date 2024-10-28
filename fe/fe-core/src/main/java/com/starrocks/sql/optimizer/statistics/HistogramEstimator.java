@@ -40,7 +40,7 @@ public class HistogramEstimator {
         if (leftHistogram == null || rightHistogram == null) {
             return null;
         }
-        if (CollectionUtils.isEmpty(leftHistogram.getBuckets()) &&
+        if (CollectionUtils.isEmpty(leftHistogram.getBuckets()) ||
                 CollectionUtils.isEmpty(rightHistogram.getBuckets())) {
             return null;
         }

@@ -1504,7 +1504,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboPushDownGroupingSetReshuffle = true;
 
     @VarAttr(name = CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION, flag = VariableMgr.INVISIBLE)
-    private boolean cboEnableHistogramJoinEstimation = true;
+    private boolean cboEnableHistogramJoinEstimation = false;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
