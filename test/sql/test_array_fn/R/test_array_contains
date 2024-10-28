@@ -1,0 +1,669 @@
+-- name: test_array_contains_with_const
+CREATE TABLE t ( 
+pk bigint not null ,
+str string,
+arr_bigint array<bigint>,
+arr_str array<string>,
+arr_decimal array<decimal(38,5)>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t select generate_series, md5sum(generate_series), array_repeat(generate_series, 1000),array_repeat(md5sum(generate_series), 100), array_repeat(generate_series, 1000) from table(generate_series(0, 9999));
+-- result:
+-- !result
+insert into t values (10000, md5sum(10000), array_append(array_generate(1000), null), array_append(array_repeat(md5sum(10000),100), null),array_append(array_generate(1000),null));
+-- result:
+-- !result
+select array_contains([1,2,3,4], 1) from t order by pk limit 10;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array_position([1,2,3,4], 1) from t order by pk limit 10;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array_contains([1,2,3,4], null) from t order by pk limit 10;
+-- result:
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select array_position([1,2,3,4], null) from t order by pk limit 10;
+-- result:
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+-- !result
+select array_contains([1,2,3,null], null) from t order by pk limit 10;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array_position([1,2,3,null], null) from t order by pk limit 10;
+-- result:
+4
+4
+4
+4
+4
+4
+4
+4
+4
+4
+-- !result
+select array_contains(null, null) from t order by pk limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select array_position(null, null) from t order by pk limit 10;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+set @arr = array_generate(10000);
+-- result:
+-- !result
+select sum(array_contains(@arr, pk)) from t;
+-- result:
+10000
+-- !result
+select sum(array_contains(@arr, 100)) from t;
+-- result:
+10001
+-- !result
+select sum(array_position(@arr, pk)) from t;
+-- result:
+50005000
+-- !result
+select sum(array_position(@arr, 100)) from t;
+-- result:
+1000100
+-- !result
+select sum(array_contains(array_append(@arr, null), pk)) from t;
+-- result:
+10000
+-- !result
+select sum(array_contains(array_append(@arr, null), null)) from t;
+-- result:
+10001
+-- !result
+select sum(array_contains(arr_bigint, 100)) from t;
+-- result:
+2
+-- !result
+select sum(array_position(arr_bigint, 100)) from t;
+-- result:
+101
+-- !result
+select sum(array_contains(arr_str, md5sum(100))) from t;
+-- result:
+1
+-- !result
+select sum(array_position(arr_str, md5sum(100))) from t;
+-- result:
+1
+-- !result
+select sum(array_contains(arr_decimal, pk)) from t;
+-- result:
+10000
+-- !result
+select sum(array_position(arr_decimal, pk)) from t;
+-- result:
+10000
+-- !result
+select sum(array_contains(arr_decimal, 100)) from t;
+-- result:
+2
+-- !result
+select sum(array_position(arr_decimal, 100)) from t;
+-- result:
+101
+-- !result
+set @arr = array_repeat("abcdefg", 1000000);
+-- result:
+-- !result
+select sum(array_contains(@arr, "abcdefg")) from t;
+-- result:
+10001
+-- !result
+select sum(array_contains(@arr, str)) from t;
+-- result:
+0
+-- !result
+-- name: test_array_contains_with_decimal
+create table t (
+    k bigint,
+    v1 array<decimal(38,5)>,
+    v2 array<array<decimal(38,5)>>,
+    v3 array<array<array<decimal(38,5)>>>
+) duplicate key (`k`)
+distributed by random buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into t values (1,[1.1], [[1.1]],[[[1.1]]]);
+-- result:
+-- !result
+select array_contains(v1, 1.1) from t;
+-- result:
+1
+-- !result
+select array_contains(v2, [1.1]) from t;
+-- result:
+1
+-- !result
+select array_contains(v3, [[1.1]]) from t;
+-- result:
+1
+-- !result
+select array_contains(v2, v1) from t;
+-- result:
+1
+-- !result
+select array_contains(v3, v2) from t;
+-- result:
+1
+-- !result
+select array_position(v1, 1.1) from t;
+-- result:
+1
+-- !result
+select array_position(v2, [1.1]) from t;
+-- result:
+1
+-- !result
+select array_position(v3, [[1.1]]) from t;
+-- result:
+1
+-- !result
+select array_position(v2, v1) from t;
+-- result:
+1
+-- !result
+select array_position(v3, v2) from t;
+-- result:
+1
+-- !result
+-- name: test_array_contains_all_and_seq
+CREATE TABLE t (
+  k bigint(20) NOT NULL,
+  arr_0 array<bigint(20)> NOT NULL,
+  arr_1 array<bigint(20)>,
+  arr_2 array<bigint(20)>
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t values 
+(1, [1,2,3], [1,2], [1]),
+(2, [1,2,null], [1,null], [null]),
+(3, [1,2,null],[3],[3]),
+(4, [1,2,null], null, [1,2,null]),
+(5, [1,2,null], [1,2,null], null),
+(6, [1,2,3],[],[]),
+(7, [null,null], [null,null,null], [null,null]),
+(8, [1,1,1,1,1,2], [1,2], [1]),
+(9, [1,1,1,1,1,null,2],[1,null,2],[null,2]);
+-- result:
+-- !result
+select array_contains_all(arr_0, arr_1) from t order by k;
+-- result:
+1
+1
+0
+None
+1
+1
+1
+1
+1
+-- !result
+select array_contains_all(arr_1, arr_0) from t order by k;
+-- result:
+0
+0
+0
+None
+1
+0
+1
+1
+1
+-- !result
+select array_contains_all(arr_0, arr_2) from t order by k;
+-- result:
+1
+1
+0
+1
+None
+1
+1
+1
+1
+-- !result
+select array_contains_all(arr_2, arr_0) from t order by k;
+-- result:
+0
+0
+0
+1
+None
+0
+1
+0
+0
+-- !result
+select array_contains_all(arr_1, arr_2) from t order by k;
+-- result:
+1
+1
+1
+None
+None
+1
+1
+1
+1
+-- !result
+select array_contains_all(arr_2, arr_1) from t order by k;
+-- result:
+0
+0
+1
+None
+None
+1
+1
+0
+0
+-- !result
+select array_contains_all([1,2,3,4], arr_0) from t order by k;
+-- result:
+1
+0
+0
+0
+0
+1
+0
+1
+0
+-- !result
+select array_contains_all([1,2,3,4], arr_1) from t order by k;
+-- result:
+1
+0
+1
+None
+0
+1
+0
+1
+0
+-- !result
+select array_contains_all([1,2,3,4,null], arr_1) from t order by k;
+-- result:
+1
+1
+1
+None
+1
+1
+1
+1
+1
+-- !result
+select array_contains_all(arr_0, [1,null]) from t order by k;
+-- result:
+0
+1
+1
+1
+1
+0
+0
+0
+1
+-- !result
+select array_contains_all(arr_0, []) from t order by k;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array_contains_all(null, arr_0) from t order by k;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select array_contains_all(arr_1, null) from t order by k;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+set @arr0 = array_repeat("abcdefg", 10000);
+-- result:
+-- !result
+set @arr1 = array_repeat("abcdef", 100000);
+-- result:
+-- !result
+select array_contains_all(@arr0, @arr1);
+-- result:
+0
+-- !result
+set @arr0 = array_generate(10000);
+-- result:
+-- !result
+set @arr1 = array_generate(20000);
+-- result:
+-- !result
+select array_contains_all(@arr0, @arr1);
+-- result:
+0
+-- !result
+select array_contains_all(@arr1, @arr0);
+-- result:
+1
+-- !result
+select array_contains_seq(arr_0, arr_1) from t order by k;
+-- result:
+1
+0
+0
+None
+1
+1
+0
+1
+1
+-- !result
+select array_contains_seq(arr_1, arr_0) from t order by k;
+-- result:
+0
+0
+0
+None
+1
+0
+1
+0
+0
+-- !result
+select array_contains_seq(arr_0, arr_2) from t order by k;
+-- result:
+1
+1
+0
+1
+None
+1
+1
+1
+1
+-- !result
+select array_contains_seq(arr_2, arr_0) from t order by k;
+-- result:
+0
+0
+0
+1
+None
+0
+1
+0
+0
+-- !result
+select array_contains_seq(arr_1, arr_2) from t order by k;
+-- result:
+1
+1
+1
+None
+None
+1
+1
+1
+1
+-- !result
+select array_contains_seq(arr_2, arr_1) from t order by k;
+-- result:
+0
+0
+1
+None
+None
+1
+0
+0
+0
+-- !result
+select array_contains_seq([1,2,3,4], arr_0) from t order by k;
+-- result:
+1
+0
+0
+0
+0
+1
+0
+0
+0
+-- !result
+select array_contains_seq([1,2,3,4], arr_1) from t order by k;
+-- result:
+1
+0
+1
+None
+0
+1
+0
+1
+0
+-- !result
+select array_contains_seq([1,2,3,4,null], arr_1) from t order by k;
+-- result:
+1
+0
+1
+None
+0
+1
+0
+1
+0
+-- !result
+select array_contains_seq(arr_0, [1,null]) from t order by k;
+-- result:
+0
+0
+0
+0
+0
+0
+0
+0
+1
+-- !result
+select array_contains_seq(arr_0, []) from t order by k;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array_contains_seq(null, arr_0) from t order by k;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select array_contains_seq(arr_1, null) from t order by k;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select array_contains_seq([1,1,2,3],[1,1]);
+-- result:
+1
+-- !result
+select array_contains_seq([1,1,2,3],[1,2]);
+-- result:
+1
+-- !result
+select array_contains_seq([1,1,2,3],[1,3]);
+-- result:
+0
+-- !result
+select array_contains_seq([1,1,2,3],[2,3]);
+-- result:
+1
+-- !result
+select array_contains_seq([1,1,2,3],[1,1,2]);
+-- result:
+1
+-- !result
+select array_contains_seq([null,null,1,2],[null]);
+-- result:
+1
+-- !result
+select array_contains_seq([null,null,1,2],[null,null]);
+-- result:
+1
+-- !result
+select array_contains_seq([null,null,1,2],[null,1]);
+-- result:
+1
+-- !result
+select array_contains_seq([null,null,1,2],[null,null,1]);
+-- result:
+1
+-- !result
+select array_contains_seq([null,null,1,2],[null,1,2]);
+-- result:
+1
+-- !result
+set @arr0 = array_append(array_repeat(1, 10000), 2);
+-- result:
+-- !result
+set @arr1 = array_append(array_repeat(1, 5000), 2);
+-- result:
+-- !result
+select array_contains_seq(@arr0, @arr1);
+-- result:
+1
+-- !result
+select array_contains_seq(['abc'],'a');
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 2-th input of array_contains_seq should be an array, rather than varchar.')
+-- !result
+select array_contains_seq('abc',['a']);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 1-th input of array_contains_seq should be an array, rather than varchar.')
+-- !result
