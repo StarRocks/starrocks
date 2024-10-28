@@ -1233,6 +1233,7 @@ public class ExpressionAnalyzer {
                     break;
                 }
                 case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAY_CONTAINS_SEQ:
                 case FunctionSet.ARRAYS_OVERLAP: {
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have only two inputs", node.getPos());
