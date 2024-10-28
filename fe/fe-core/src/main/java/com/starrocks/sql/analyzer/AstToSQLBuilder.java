@@ -302,7 +302,7 @@ public class AstToSQLBuilder {
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
                 if (partitionNames != null && !partitionNames.isEmpty()) {
-                    sqlBuilder.append(" PARTITION (");
+                    sqlBuilder.append(" PARTITIONS (");
                     sqlBuilder.append(String.join(", ", partitionNames));
                     sqlBuilder.append(")");
                 }
