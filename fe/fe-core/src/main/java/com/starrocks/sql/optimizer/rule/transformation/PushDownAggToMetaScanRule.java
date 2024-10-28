@@ -118,7 +118,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
 
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
-            Column copiedColumn = new Column(c);
+            Column copiedColumn = c.deepCopy();
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
