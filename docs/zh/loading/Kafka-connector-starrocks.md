@@ -219,10 +219,11 @@ MySQL [example_db]> select * from test_tbl;
 
 ### Flush 策略
 
-Kafka connector 先在内存中 buffer 数据，然后通过 Stream Load 将其一次性 flush 到 StarRocks。在满足以下任何条件时触发 flush:
-- buffer 数据的字节达到限制 `bufferflush.maxbytes`
-- 自上次 flush 以来经过的时间达到connector限制 `bufferflush.intervalms`
-- 达到了 task 偏移量的提交间隔，由 Kafka Connect 的配置控制 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), 默认值是 `60000`
+Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其一次性落盘至 StarRocks。落盘将在以下任何条件满足时触发：
+
+- 缓存的数据的字节达到限制 `bufferflush.maxbytes`。
+- 自上次落盘以来经过的时间达到 connector 限制 `bufferflush.intervalms`。
+- 达到了 Task 偏移量的提交间隔，由 Kafka Connect 配置项控制 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), 默认值是 `60000`。
 
 ### 使用限制
 
