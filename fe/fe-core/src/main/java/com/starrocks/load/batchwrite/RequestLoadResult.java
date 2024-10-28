@@ -14,6 +14,7 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.common.StatusOr;
 import com.starrocks.thrift.TStatus;
 
 /**
