@@ -812,11 +812,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         continue;
                     }
 
-                    if (globalStateMgr.getLocalMetastore()
-                            .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId()) == null) {
-                        continue;
-                    }
-
                     PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                             .getPhysicalPartitionIncludeRecycleBin(olapTable, partitionId);
                     if (partition == null) {
@@ -825,7 +820,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     short replicationNum =
                             globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                    tabletMeta.getPartitionId());
+                                    partition.getParentId());
                     if (replicationNum == (short) -1) {
                         continue;
                     }
@@ -1363,7 +1358,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long partitionId =
-                        tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                        tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db == null) {
@@ -1371,15 +1366,19 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
                 db.readLock();
                 try {
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) db.getTable(tableId);
                     if (olapTable == null) {
                         continue;
                     }
                     Partition partition = olapTable.getPartition(partitionId);
+=======
+                    PhysicalPartition partition = olapTable.getPhysicalPartition(partitionId);
+>>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
                     if (partition == null) {
                         continue;
                     }
-                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
+                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partition.getParentId());
                     if (beIsInMemory != feIsInMemory) {
                         tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                     }
@@ -1722,7 +1721,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-        long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long physicalPartitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
         long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
 
@@ -1738,6 +1736,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
         db.writeLock();
         try {
+<<<<<<< HEAD
             OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (olapTable == null) {
                 throw new MetaNotFoundException("table[" + tableId + "] does not exist");
@@ -1753,10 +1752,22 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 throw new MetaNotFoundException("invalid replication number of partition [" + partitionId + "]");
             }
 
+=======
+>>>>>>> bf04f84df6 ([BugFix] Fix tablet meta use tabletMeta uses partition_id and physica… (#52373))
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
                 throw new MetaNotFoundException("physical partition[" + physicalPartitionId + "] does not exist");
+            }
+
+            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getParentId()) == null) {
+                throw new MetaNotFoundException("partition[" + partition.getParentId() + "] does not exist");
+            }
+            short replicationNum =
+                    globalStateMgr.getLocalMetastore()
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
+            if (replicationNum == (short) -1) {
+                throw new MetaNotFoundException("invalid replication number of partition [" + partition.getParentId() + "]");
             }
 
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
