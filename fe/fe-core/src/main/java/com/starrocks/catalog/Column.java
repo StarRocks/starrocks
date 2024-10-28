@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -510,7 +511,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+            sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\" ");
         } else if (isGeneratedColumn()) {
             sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
@@ -608,9 +610,21 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else {
             sb.append("NOT NULL ");
         }
+<<<<<<< HEAD
         if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
         } else if (defaultExpr != null) {
+=======
+        if (defaultExpr == null) {
+            if (isAutoIncrement) {
+                sb.append("AUTO_INCREMENT ");
+            }
+            if (defaultValue != null && !type.isOnlyMetricType()) {
+                sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\" ");
+            }
+        } else {
+>>>>>>> a532d00ad3 ([BugFix] show create table displays Unicode encoding for default value of the field is entered in Chinese characters (#51997))
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 // compatible with mysql
                 sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
