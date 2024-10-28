@@ -160,10 +160,10 @@ The following data type mapping is valid only for Flink reading data from StarRo
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
-| JSON       | STRING <br> **NOTE:** <br> **Supported since version 1.2.10** |
-| ARRAY      | ARRAY  <br> **NOTE:** <br> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
-| STRUCT     | ROW    <br> **NOTE:** <br> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
-| MAP        | MAP    <br> **NOTE:** <br> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| JSON       | STRING <br /> **NOTE:** <br /> **Supported since version 1.2.10** |
+| ARRAY      | ARRAY  <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| STRUCT     | ROW    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| MAP        | MAP    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
 
 ## Examples
 
