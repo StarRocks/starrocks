@@ -328,9 +328,9 @@ The data is successfully loaded when the above result is returned.
 
 The Kafka connector will buffer the data in memory, and flush them in batch to StarRocks via Stream Load. The flush will be triggered when any of the following conditions are met:
 
-- the bytes of buffered rows reaches the limit `bufferflush.maxbytes`
-- the elapsed time since the last flush reaches the limit `bufferflush.intervalms`
-- the interval at which to try committing offsets for tasks. It's controlled by Kafka Connect's configuration [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), and the default values is `60000`
+- The bytes of buffered rows reaches the limit `bufferflush.maxbytes`.
+- The elapsed time since the last flush reaches the limit `bufferflush.intervalms`.
+- The interval at which the connector tries committing offsets for tasks is reached. The interval is controlled by the Kafka Connect configuration [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html), and the default values is `60000`.
 
 ### Limits
 
