@@ -186,15 +186,21 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             // open broker writer. file name end with ".part"
             // it will be renamed to ".md5sum" after upload finished
             auto full_remote_file = dest_path + "/" + local_file;
-            auto tmp_broker_file_name = full_remote_file + ".part";
+            auto tmp_remote_file_name = full_remote_file + ".part";
+            auto final_remote_file_name = full_remote_file + "." + md5sum;
             auto local_file_path = src_path + "/" + local_file;
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             if (!upload.__isset.use_broker || upload.use_broker) {
                 BrokerFileSystem fs_broker(upload.broker_addr, upload.broker_prop);
-                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
+                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_remote_file_name));
             } else {
-                ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_broker_file_name));
+                if (fs->type() != FileSystem::S3) {
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_remote_file_name));
+                } else {
+                    // Not need rename for S3
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, final_remote_file_name));
+                }
             }
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
             auto res = fs::copy(input_file.get(), remote_writable_file.get(), 1024 * 1024);
@@ -205,11 +211,13 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
-                RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part",
-                                                    full_remote_file + "." + md5sum, upload.broker_prop));
+                RETURN_IF_ERROR(
+                        _rename_remote_file(*client, tmp_remote_file_name, final_remote_file_name, upload.broker_prop));
             } else {
-                RETURN_IF_ERROR(_rename_remote_file_without_broker(fs, full_remote_file + ".part",
-                                                                   full_remote_file + "." + md5sum));
+                if (fs->type() != FileSystem::S3) {
+                    RETURN_IF_ERROR(
+                            _rename_remote_file_without_broker(fs, tmp_remote_file_name, final_remote_file_name));
+                }
             }
         } // end for each tablet's local files
 
