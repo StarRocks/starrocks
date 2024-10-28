@@ -47,7 +47,6 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -79,9 +78,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -93,11 +90,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -535,7 +529,25 @@ public class RestoreJob extends AbstractJob {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
                 Preconditions.checkNotNull(remoteTbl);
+<<<<<<< HEAD
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+=======
+                Table localTbl = globalStateMgr.getLocalMetastore()
+                            .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+
+                if (localTbl != null && remoteTbl.isOlapView() && !localTbl.isOlapView()) {
+                    status = new Status(ErrCode.BAD_REPLACE,
+                                        "Table: " + localTbl.getName() + " has existed and it is not a View");
+                    return;
+                }
+
+                if (remoteTbl.isOlapView()) {
+                    remoteTbl.setId(globalStateMgr.getNextId());
+                    restoredTbls.add(remoteTbl);
+                    continue;
+                }
+
+>>>>>>> e9f08ce378 ([BugFix] Fix several problem for logical view restore (#52291))
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
                         // it must be !isReplay == true
@@ -765,7 +777,7 @@ public class RestoreJob extends AbstractJob {
                             backupTableInfo.getPartInfo(restorePart.getName()), true);
                 }
                 // set restored table's new name after all 'genFileMapping'
-                ((OlapTable) restoreTbl).setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
+                restoreTbl.setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
             }
 
             LOG.debug("finished to generate create replica tasks. {}", this);
@@ -781,14 +793,6 @@ public class RestoreJob extends AbstractJob {
 
         // add all restored partition and tbls to globalStateMgr
         addRestorePartitionsAndTables(db);
-        if (!status.ok()) {
-            return;
-        }
-
-        // add all restored olap view into globalStateMgr
-        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
-                                       .map(x -> (View) x).collect(Collectors.toList());
-        addRestoreOlapView(restoredOlapViews);
         if (!status.ok()) {
             return;
         }
@@ -850,38 +854,6 @@ public class RestoreJob extends AbstractJob {
         }
     }
 
-    protected void addRestoreOlapView(List<View> restoredOlapViews) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
-
-        ConnectContext context = new ConnectContext();
-        context.setDatabase(db.getFullName());
-        context.setGlobalStateMgr(globalStateMgr);
-        context.setStartTime();
-        context.setThreadLocalInfo();
-
-        for (View restoredOlapView : restoredOlapViews) {
-            Table localTbl = db.getTable(restoredOlapView.getId());
-            if (localTbl != null && !localTbl.isOlapView()) {
-                status = new Status(ErrCode.BAD_REPLACE,
-                                    "Table: " + localTbl.getName() + " has existed and it is not a View");
-                return;
-            }
-
-            CreateViewStmt stmt = new CreateViewStmt(false, true, new TableName(db.getFullName(), restoredOlapView.getName()),
-                    Lists.newArrayList(), restoredOlapView.getComment(), restoredOlapView.getQueryStatement(), NodePosition.ZERO);
-            stmt.setColumns(restoredOlapView.getColumns());
-            stmt.setInlineViewDef(restoredOlapView.getInlineViewDef());
-            context.getSessionVariable().setSqlMode(restoredOlapView.getSqlMode());
-            try {
-                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
-            } catch (DdlException e) {
-                status = new Status(ErrCode.COMMON_ERROR,
-                                    "Failed to create view for restore. err message: " + e.getMessage());
-                return;
-            }
-        }
-    }
-
     protected void addRestorePartitionsAndTables(Database db) {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -893,6 +865,10 @@ public class RestoreJob extends AbstractJob {
 
             // add restored tables
             for (Table tbl : restoredTbls) {
+                if (tbl.isOlapView()) {
+                    // for logical view, force drop and replace
+                    db.dropTable(tbl.getName());
+                }
                 if (!db.registerTableUnlocked(tbl)) {
                     status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
                             + " already exist in db: " + db.getOriginName());
@@ -1146,8 +1122,14 @@ public class RestoreJob extends AbstractJob {
         try {
             // replay set all existing tables's state to RESTORE
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+<<<<<<< HEAD
                 Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (tbl == null) {
+=======
+                Table tbl = globalStateMgr.getLocalMetastore()
+                            .getTable(db.getFullName(), jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+                if (tbl == null || tbl.isOlapView()) {
+>>>>>>> e9f08ce378 ([BugFix] Fix several problem for logical view restore (#52291))
                     continue;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -1169,9 +1151,8 @@ public class RestoreJob extends AbstractJob {
             locker.unLockDatabase(db, LockType.WRITE);
         }
 
-        List<View> restoredOlapViews = backupMeta.getTables().values().stream().filter(Table::isOlapView)
-                                       .map(x -> (View) x).collect(Collectors.toList());
-        addRestoreOlapView(restoredOlapViews);
+        // restored view need not to be added again here, because
+        // another edit log created by createView will done.
 
         LOG.info("replay check and prepare meta. {}", this);
     }
@@ -1486,8 +1467,13 @@ public class RestoreJob extends AbstractJob {
             setTableStateToNormal(db);
 
             for (long tblId : restoredVersionInfo.rowKeySet()) {
+<<<<<<< HEAD
                 Table tbl = db.getTable(tblId);
                 if (tbl == null) {
+=======
+                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getId(), tblId);
+                if (tbl == null || tbl.isOlapView()) {
+>>>>>>> e9f08ce378 ([BugFix] Fix several problem for logical view restore (#52291))
                     continue;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
