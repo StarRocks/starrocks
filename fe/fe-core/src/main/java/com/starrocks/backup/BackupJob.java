@@ -707,11 +707,9 @@ public class BackupJob extends AbstractJob {
             localMetaInfoFilePath = metaInfoFile.getAbsolutePath();
 
             // 3. save job info file
-            // save table info into BackupJobInfo only for OlapTable or MV
-            List<Table> olapTbls = backupMeta.getTables().values().stream()
-                                   .filter(Table::isOlapTableOrMaterializedView).collect(Collectors.toList());
-            jobInfo = BackupJobInfo.fromCatalog(createTime, label, dbName, dbId, olapTbls, snapshotInfos);
-            LOG.warn("job info: {}. {}", jobInfo, this);
+            jobInfo = BackupJobInfo.fromCatalog(createTime, label, dbName, dbId, backupMeta.getTables().values(),
+                    snapshotInfos);
+            LOG.debug("job info: {}. {}", jobInfo, this);
             File jobInfoFile = new File(jobDir, Repository.PREFIX_JOB_INFO + createTimeStr);
             if (!jobInfoFile.createNewFile()) {
                 status = new Status(ErrCode.COMMON_ERROR, "Failed to create job info file: " + jobInfoFile.toString());
