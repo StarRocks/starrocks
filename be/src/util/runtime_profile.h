@@ -73,6 +73,10 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
 #define ADD_PEAK_COUNTER(profile, name, type) \
     (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
@@ -185,6 +189,10 @@ public:
         }
 
         int64_t display_threshold() const { return _strategy.display_threshold; }
+        bool should_display() const {
+            int64_t threshold = _strategy.display_threshold;
+            return threshold == 0 || value() > threshold;
+        }
 
     private:
         friend class RuntimeProfile;
