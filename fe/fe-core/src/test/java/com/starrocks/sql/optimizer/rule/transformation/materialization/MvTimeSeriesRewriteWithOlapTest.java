@@ -78,10 +78,29 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") ;");
-        cluster.runSql("test", "INSERT INTO t1 VALUES ('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,2,4,5,1.1," +
-                        "1.12,2.889),\n" +
-                " ('2020-10-23','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),\n" +
-                "  ('2020-10-24','2020-10-24 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);");
+        cluster.runSql("test", "INSERT INTO t1 VALUES " +
+                "('2020-10-22','2020-10-22 12:12:12','k3','k4',0,1,2,2,4,5,1.1,1.12,2.889),\n" +
+                "('2020-10-23','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),\n" +
+                "('2020-10-24','2020-10-24 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);");
+
+        starRocksAssert.withTable("CREATE TABLE t2(\n" +
+                " ts datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(ts)\n" +
+                " PARTITION BY date_trunc('day', ts)\n" +
+                "DISTRIBUTED BY HASH(ts);");
+        cluster.runSql("test", "INSERT INTO t2 VALUES \n" +
+                "  ('2020-01-22 12:12:12', 0,1),\n" +
+                "  ('2020-02-23 12:12:12',1,1),\n" +
+                "  ('2020-03-24 12:12:12',1,2),\n" +
+                "  ('2020-04-25 12:12:12',3,3),\n" +
+                "  ('2020-05-22 12:12:12', 0,1),\n" +
+                "  ('2020-06-23 12:12:12',1,1),\n" +
+                "  ('2020-07-24 12:12:12',1,2),\n" +
+                "  ('2020-08-24 12:12:12',1,2),\n" +
+                "  ('2020-09-24 12:12:12',1,2),\n" +
+                "  ('2020-10-25 12:12:12',3,3);");
     }
 
     @AfterClass
@@ -187,20 +206,21 @@ public class MvTimeSeriesRewriteWithOlapTest extends MvRewriteTestBase {
                 ")   as select date_trunc('month', dt) as dt, sum(sum_v1) as sum_v1, max(max_v2) as max_v2 " +
                 "from test_mv1 group by date_trunc('month', dt);");
         // date column should be the same with date_trunc('day', ct)
-        String query = "select sum(v1), max(v2) from t0 " +
-                "where k1 >= '2024-01-01 01:00:00'";
+        String query = "select sum(v1), max(v2) from t0 where k1 >= '2024-01-01 01:00:00'";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "     TABLE: test_mv2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 36: dt >= '2024-01-01 01:00:00'\n" +
                 "     partitions=3/4");
-        PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+        PlanTestBase.assertContains(plan, "  8:OlapScanNode\n" +
+                "     TABLE: test_mv1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('month', 45: dt) < '2024-01-01 01:00:00', 45: dt >= '2024-01-01 01:00:00'\n" +
                 "     partitions=31/63");
         PlanTestBase.assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: date_trunc('day', 25: k1) < '2024-01-01 01:00:00', 25: k1 >= '2024-01-01 01:00:00'");
+                "     PREDICATES: date_trunc('day', 25: k1) < '2024-01-01 01:00:00', 25: k1 >= '2024-01-01 01:00:00'\n" +
+                "     partitions=1/5");
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropMaterializedView("test_mv2");
     }

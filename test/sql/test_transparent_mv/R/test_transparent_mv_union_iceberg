@@ -408,71 +408,77 @@ SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}
 2020-06-18	120
 2020-06-21	168
 -- !result
-SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3
-
+SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3;
+-- result:
+2020-06-21	168
+2020-06-21	168
+2020-06-24	216
+-- !result
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (1, "2020-06-15"), (4, "2020-07-25");
 -- result:
-E: (1064, "Getting syntax error at line 3, column 0. Detail message: Unexpected input 'INSERT', the most similar input is {<EOF>, ';'}.")
 -- !result
-function: check_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt order by 1, 2 limit 3;
 -- result:
-2020-07-02	72
-2020-07-05	120
-2020-07-08	168
+2020-07-02	78
+2020-07-05	130
+2020-07-08	182
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-07-01' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
-2020-07-02	72
-2020-07-05	120
-2020-07-08	168
+2020-07-02	78
+2020-07-05	130
+2020-07-08	182
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt order by 1, 2 limit 3;
 -- result:
-2020-06-21	168
-2020-06-24	216
-2020-07-02	72
+2020-06-21	182
+2020-06-24	234
+2020-07-02	78
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
-2020-06-21	168
-2020-06-24	216
-2020-07-02	72
+2020-06-21	182
+2020-06-24	234
+2020-07-02	78
 -- !result
 SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt GROUP BY t2.dt having sum(t2.num) > 10 order by 1, 2 limit 3;
 -- result:
-2020-06-15	72
-2020-06-18	120
-2020-06-21	168
+2020-06-15	78
+2020-06-18	130
+2020-06-21	182
 -- !result
-SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3
-
+SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10 UNION ALL SELECT t2.dt, sum(t2.num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 on t1.dt and t2.dt where t2.dt > '2020-06-20' GROUP BY t2.dt having sum(t2.num) > 10) t order by 1, 2 limit 3;
+-- result:
+2020-06-21	182
+2020-06-21	182
+2020-06-24	234
+-- !result
 DROP MATERIALIZED VIEW test_mv1;
 -- result:
-E: (1064, "Getting syntax error at line 3, column 0. Detail message: Unexpected input 'DROP', the most similar input is {<EOF>, ';'}.")
 -- !result
 drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
 -- result:

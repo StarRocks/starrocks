@@ -223,6 +223,12 @@ public class MaterializationContext {
         final List<Table> mvTables = getBaseTables();
         final OperatorType queryOp = queryExpression.getOp().getOpType();
 
+        // if a query has been applied this mv, return false directly.
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
+        if (scanOperators.stream().anyMatch(op -> op.isOpAppliedMV(mv.getId()))) {
+            return false;
+        }
+
         if (!checkOperatorCompatible(queryOp)) {
             return false;
         }

@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -41,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeysToListPredicate;
 
@@ -65,8 +65,6 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         LogicalScanOperator scanOperator = optExpression.getOp().cast();
         Table refBaseTable = scanOperator.getTable();
 
-        // reset the partition prune flag to be pruned again.
-        Utils.resetOpAppliedRule(scanOperator, Operator.OP_PARTITION_PRUNE_BIT);
         if (refBaseTable.isNativeTableOrMaterializedView()) {
             List<Long> olapTableCompensatePartitionIds = Lists.newArrayList();
             if (compensations.containsKey(refBaseTable)) {
@@ -76,6 +74,8 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             }
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
             LogicalScanOperator newScanOperator = getOlapTableCompensatePlan(olapScanOperator, olapTableCompensatePartitionIds);
+            // reset the partition prune flag to be pruned again.
+            newScanOperator.resetOpRuleBit(OP_PARTITION_PRUNED);
             return OptExpression.create(newScanOperator);
         } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
             List<PartitionKey> partitionKeys = Lists.newArrayList();
@@ -85,6 +85,8 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                 partitionKeys = externalTableCompensation.getCompensations();
             }
             LogicalScanOperator newScanOperator = getExternalTableCompensatePlan(scanOperator, partitionKeys);
+            // reset the partition prune flag to be pruned again.
+            newScanOperator.resetOpRuleBit(OP_PARTITION_PRUNED);
             return OptExpression.create(newScanOperator);
         } else {
             return optExpression;

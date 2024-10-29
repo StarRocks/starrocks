@@ -980,7 +980,7 @@ public class MvRewritePreprocessor {
             }
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
-
+        // MV's selected partition ids/tablet ids are necessary for MV rewrite.
         return LogicalOlapScanOperator.builder()
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
