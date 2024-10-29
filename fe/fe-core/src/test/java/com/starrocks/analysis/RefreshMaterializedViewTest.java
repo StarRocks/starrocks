@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -1230,6 +1231,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         long count = mvEntity.histRefreshJobDuration.getCount();
         Assert.assertEquals(0, count);
 
+        Table table = getTable("trunc_db", "t1");
+        // Simulate writing to a non-existent MV
+        table.addRelatedMaterializedView(new MvId(1,1));
         String truncateStr = "truncate table trunc_db.t1;";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, connectContext);
