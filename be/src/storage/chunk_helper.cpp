@@ -647,15 +647,32 @@ public:
 
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
-        size_t from = _from;
-        for (size_t i = 0; i < _size; i++) {
-            size_t idx = _indexes[from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            DCHECK_LT(segment_id, columns.size());
-            DCHECK_LT(segment_offset, columns[segment_id]->size());
 
-            output_items[i] = (*buffers[segment_id])[segment_offset];
+        size_t num_segments = _segment_column->num_segments();
+        size_t from = _from;
+        if (num_segments <= 6) {
+            // Access the _indexes is much cheaper than the buffers, so in this way the memory access is more predictable
+            for (size_t segment_id = 0; segment_id < num_segments; segment_id++) {
+                ContainerT& target_buffer = *buffers[segment_id];
+                for (size_t i = 0; i < _size; i++) {
+                    size_t idx = _indexes[from + i];
+                    auto [k, segment_offset] = _segment_address(idx, segment_size);
+                    if (k == segment_id) {
+                        output_items[i] = target_buffer[segment_offset];
+                    }
+                }
+            }
+        } else {
+            for (size_t i = 0; i < _size; i++) {
+                size_t idx = _indexes[from + i];
+                auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+                DCHECK_LT(segment_id, columns.size());
+                DCHECK_LT(segment_offset, columns[segment_id]->size());
+
+                output_items[i] = (*buffers[segment_id])[segment_offset];
+            }
         }
+
         return {};
     }
 
