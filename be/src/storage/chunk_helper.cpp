@@ -770,10 +770,12 @@ public:
             null_columns.push_back(nullable->null_column());
         }
 
-        auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());
+        auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size(),
+                                                                       _segment_column->num_segments());
         SegmentedColumnSelectiveCopy copy_data(segmented_data_column, _indexes, _from, _size);
         (void)data_columns[0]->accept(&copy_data);
-        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
+        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size(),
+                                                                       _segment_column->num_segments());
         SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
         (void)null_columns[0]->accept(&copy_null);
         _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
