@@ -362,11 +362,6 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.MUTABLE_BUCKET_NUM);
-<<<<<<< HEAD
-=======
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
-                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
-                        TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
                 try {
                     GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
@@ -377,7 +372,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     LOG.warn("Failed to update base compaction forbidden time ranges: ", e);
                     throw new DdlException("Failed to update base compaction forbidden time ranges: " + e.getMessage());
                 }
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -718,10 +715,6 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
-
-            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                continue;
-            }
 
             if (newDataProperty != null) {
                 // for storage_cooldown_ttl

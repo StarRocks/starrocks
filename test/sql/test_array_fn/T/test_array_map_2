@@ -60,3 +60,12 @@ select array_map((x,y,z)->x+y+z, [1,2],[2,3],[3,4]) from t;
 select array_map((x,y,z)->x+y+z, [1,2],[2,null],[3,4]) from t;
 select array_map((x,y,z)->x+y+z, [1,2],[2,null],null) from t;
 
+select array_map(x->array_map(x->x+100,x), [[1,2,3]]);
+select array_map(x->array_map(x->x+100,x), [[1,2,3], [null]]);
+select array_map(x->array_map(x->array_map(x->x+100,x),x), [[[1,2,3]]]);
+
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg1) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg0) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg2) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_map(arg4->array_length(arg2) + arg4, arg3), arg2), arg1), arg0), [[[[[1,2]]]]] );
+

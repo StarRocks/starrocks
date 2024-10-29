@@ -265,8 +265,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzeBucketSize(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
             PropertyAnalyzer.analyzeMutableBucketNum(properties);
-<<<<<<< HEAD
-=======
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
@@ -280,7 +278,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -367,6 +364,11 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         if (olapTable.isMaterializedView()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize materialized view is not supported");
+        }
+
+        if (olapTable.getAutomaticBucketSize() > 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Random distribution table already supports automatic scaling and does not require optimization");
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();

@@ -126,9 +126,10 @@ public class DeltaLakeScanNode extends ScanNode {
     public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
-        DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), deltaMetadata);
 
         String catalogName = deltaLakeTable.getCatalogName();
+        DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
+
         Engine engine = deltaLakeTable.getDeltaEngine();
         long snapshotId = snapshot.getVersion(engine);
         String dbName = deltaLakeTable.getDbName();
@@ -151,7 +152,9 @@ public class DeltaLakeScanNode extends ScanNode {
         List<FileScanTask> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
         for (FileScanTask split : splitsInfo) {
             List<String> partitionValues = new ArrayList<>();
-            split.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
+            deltaLakeTable.getPartitionColumnNames().forEach(column -> {
+                partitionValues.add(split.getPartitionValues().get(column));
+            });
             PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
                     deltaLakeTable.getPartitionColumns(), deltaLakeTable);
             addPartitionLocations(partitionKeys, partitionKey, descTbl, split.getFileStatus(), deltaMetadata);

@@ -439,6 +439,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
+    public static final String ENABLE_CLOUD_NATIVE_PERSISTENT_INDEX_BY_DEFAULT =
+            "enable_cloud_native_persistent_index_by_default";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
@@ -696,6 +698,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String WAREHOUSE_NAME = "warehouse";
 
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
+
+    public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
@@ -1392,6 +1396,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
     private boolean enableAdaptiveSinkDop = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_CLOUD_NATIVE_PERSISTENT_INDEX_BY_DEFAULT, flag = VariableMgr.INVISIBLE)
+    private boolean enableCloudNativePersistentIndexByDefault = false;
+
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
@@ -1493,6 +1500,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_HASH_ALGORITHM, flag = VariableMgr.INVISIBLE)
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorForceRebalance = false;
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
@@ -2444,6 +2454,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableAdaptiveSinkDop = e;
     }
 
+    public boolean getEnableCloudNativePersistentIndexByDefault() {
+        return enableCloudNativePersistentIndexByDefault;
+    }
+
     public long getMaxExecMemByte() {
         return maxExecMemByte;
     }
@@ -2590,6 +2604,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setHdfsBackendSelectorHashAlgorithm(String hdfsBackendSelectorHashAlgorithm) {
         this.hdfsBackendSelectorHashAlgorithm = hdfsBackendSelectorHashAlgorithm;
+    }
+
+    public boolean getHdfsBackendSelectorForceRebalance() {
+        return hdfsBackendSelectorForceRebalance;
+    }
+
+    public void setHdfsBackendSelectorForceRebalance(boolean hdfsBackendSelectorForceRebalance) {
+        this.hdfsBackendSelectorForceRebalance = hdfsBackendSelectorForceRebalance;
     }
 
     public int getConsistentHashVirtualNodeNum() {

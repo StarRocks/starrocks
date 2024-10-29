@@ -1447,6 +1447,7 @@ public class ExpressionAnalyzer {
                     break;
                 }
                 case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAY_CONTAINS_SEQ:
                 case FunctionSet.ARRAYS_OVERLAP: {
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have only two inputs", node.getPos());
@@ -1747,6 +1748,10 @@ public class ExpressionAnalyzer {
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     node.setType(Type.VARCHAR);
                     node.setValue(SqlModeHelper.decode((long) node.getValue()));
+                } else if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.AUTO_COMMIT)) {
+                    node.setType(Type.BIGINT);
+                    node.setValue(((boolean) node.getValue()) ? (long) (1) : (long) 0);
                 }
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());

@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -116,7 +117,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
-                Map<Long, Long> indexRowCountMap = Maps.newHashMap();
+                Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -129,7 +130,8 @@ public class TabletStatMgr extends FrontendDaemon {
                                 for (Tablet tablet : index.getTablets()) {
                                     indexRowCount += tablet.getRowCount(version);
                                 } // end for tablets
-                                indexRowCountMap.put(index.getId(), indexRowCount);
+                                indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
+                                        indexRowCount);
                                 if (!olapTable.isTempPartition(partition.getId())) {
                                     totalRowCount += indexRowCount;
                                 }
@@ -150,7 +152,8 @@ public class TabletStatMgr extends FrontendDaemon {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex index :
                                     physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                                Long indexRowCount = indexRowCountMap.get(index.getId());
+                                Long indexRowCount =
+                                        indexRowCountMap.get(Pair.create(physicalPartition.getId(), index.getId()));
                                 if (indexRowCount != null) {
                                     index.setRowCount(indexRowCount);
                                 }

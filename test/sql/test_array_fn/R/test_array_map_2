@@ -130,9 +130,9 @@ None
 select array_map((x,y)->k, [1,2],[2,3]) from t order by k;
 -- result:
 [1,1]
-[1,1]
-[1,1]
-[1,1]
+[2,2]
+[3,3]
+[4,4]
 -- !result
 select array_map((x,y,z)->x+y+z, [1,2],[2,3],[3,4]) from t;
 -- result:
@@ -154,4 +154,32 @@ None
 None
 None
 None
+-- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3]]);
+-- result:
+[[101,102,103]]
+-- !result
+select array_map(x->array_map(x->x+100,x), [[1,2,3], [null]]);
+-- result:
+[[101,102,103],[null]]
+-- !result
+select array_map(x->array_map(x->array_map(x->x+100,x),x), [[[1,2,3]]]);
+-- result:
+[[[101,102,103]]]
+-- !result
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg1) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+-- result:
+[[[[2,3]]]]
+-- !result
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg0) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+-- result:
+[[[[2,3]]]]
+-- !result
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg2) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
+-- result:
+[[[[3,4]]]]
+-- !result
+select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_map(arg4->array_length(arg2) + arg4, arg3), arg2), arg1), arg0), [[[[[1,2]]]]] );
+-- result:
+[[[[[2,3]]]]]
 -- !result

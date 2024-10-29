@@ -71,6 +71,16 @@ public class DropPartitionTest {
         createTable(createTableStr);
     }
 
+    private static void waitPartitionClearFinished(long id, long time) {
+        while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(id) != null) {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     private static void createDb(String sql) throws Exception {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
@@ -113,6 +123,7 @@ public class DropPartitionTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("tbl1");
         Partition partition = table.getPartition("p20210202");
+        long partitionId = partition.getId();
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
@@ -129,6 +140,7 @@ public class DropPartitionTest {
                 () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        waitPartitionClearFinished(partitionId, System.currentTimeMillis());
         replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Assert.assertTrue(replicaList.isEmpty());
     }

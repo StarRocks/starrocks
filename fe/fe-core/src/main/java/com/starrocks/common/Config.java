@@ -2720,7 +2720,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
-    public static boolean lake_enable_ingest_slowdown = false;
+    public static boolean lake_enable_ingest_slowdown = true;
 
     @ConfField(mutable = true, comment =
             "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
@@ -2737,12 +2737,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment =
             "The upper limit for compaction score, only takes effect when lake_enable_ingest_slowdown=true.\n" +
-                    "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
-                    "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
-                    "The effective value will be set to the higher of the configured value here and " +
-                    "lake_compaction_score_selector_min_score.\n" +
+                    "When the compaction score exceeds this value, ingestion will be rejected.\n" +
                     "A value of 0 represents no limit.")
-    public static long lake_compaction_score_upper_bound = 0;
+    public static long lake_compaction_score_upper_bound = 2000;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2931,11 +2928,17 @@ public class Config extends ConfigBase {
     public static int routine_load_scheduler_interval_millisecond = 10000;
 
     /**
-     * Only when the stream load time exceeds this value,
+     * Only when the stream/routine load time exceeds this value,
      * the profile will be put into the profileManager
      */
+    @ConfField(mutable = true, aliases = {"stream_load_profile_collect_second"})
+    public static long stream_load_profile_collect_threshold_second = 0;
+
+    /**
+     * The interval of collecting load profile through table granularity
+     */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_second = 10; //10s
+    public static long load_profile_collect_interval_second = 0;
 
     /**
      * If set to <= 0, means that no limitation.
@@ -2954,6 +2957,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_persistent_index_by_default = true;
+
+    /*
+     * Using cloud native persistent index in primary key table by default when creating table.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_cloud_native_persistent_index_by_default = false;
 
     /**
      * timeout for external table commit
@@ -3147,7 +3156,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int replication_max_parallel_data_size_mb = 1048576; // 1T
     @ConfField(mutable = true)
-    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    public static int replication_transaction_timeout_sec = 24 * 60 * 60; // 24hour
     @ConfField(mutable = true)
     public static boolean enable_legacy_compatibility_for_replication = false;
 
@@ -3213,4 +3222,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
 }

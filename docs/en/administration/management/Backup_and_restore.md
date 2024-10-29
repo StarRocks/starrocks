@@ -105,7 +105,8 @@ PROPERTIES(
 
 > **NOTE**
 >
-> StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+> - StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
+> - Do not specify `https` in the endpoint address.
 
 After the repository is created, you can check the repository via [SHOW REPOSITORIES](../../sql-reference/sql-statements/backup_restore/SHOW_REPOSITORIES.md). After restoring data, you can delete the repository in StarRocks using [DROP REPOSITORY](../../sql-reference/sql-statements/backup_restore/DROP_REPOSITORY.md). However, data snapshots backed up in the remote storage system cannot be deleted through StarRocks. You need to delete them manually in the remote storage system.
 
@@ -189,9 +190,10 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 | Configuration item      | Description                                                                             |
 | ----------------------- | -------------------------------------------------------------------------------- |
-| upload_worker_count     | The maximum number of threads for the upload tasks of BACKUP jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the upload task. |
-| download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
-| max_download_speed_kbps | The upper limit of the download speed on a BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
+| make_snapshot_worker_count     | The maximum number of threads for the make snapshot tasks of BACKUP jobs on a BE node. Default: `5`. Increase the value of this configuration item to increase the concurrency of the make snapshot task. |
+| release_snapshot_worker_count     | The maximum number of threads for the release snapshot tasks of failed BACKUP jobs on a BE node. Default: `5`. Increase the value of this configuration item to increase the concurrency of the release snapshot task. |
+| upload_worker_count     | The maximum number of threads for the upload tasks of BACKUP jobs on a BE node. Default: `0`. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides. Increase the value of this configuration item to increase the concurrency of the upload task. |
+| download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `0`. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides. Increase the value of this configuration item to increase the concurrency of the download task. |
 
 ## Materialized view BACKUP and RESTORE
 

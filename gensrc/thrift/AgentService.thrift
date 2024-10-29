@@ -419,13 +419,9 @@ enum TTabletMetaType {
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
     STORAGE_TYPE,
-<<<<<<< HEAD
-    MUTABLE_BUCKET_NUM
-=======
     MUTABLE_BUCKET_NUM,
     ENABLE_LOAD_PROFILE,
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
 }
 
 struct TTabletMetaInfo {

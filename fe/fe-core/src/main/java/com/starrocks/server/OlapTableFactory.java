@@ -413,8 +413,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-<<<<<<< HEAD
-=======
             if (PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, false)) {
                 table.setEnableLoadProfile(true);
             }
@@ -441,7 +439,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));

@@ -816,8 +816,8 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     config::enable_load_segment_parallel = true;
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));

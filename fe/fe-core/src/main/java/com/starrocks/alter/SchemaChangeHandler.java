@@ -1981,7 +1981,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+            olapTable.setState(OlapTableState.OPTIMIZE);
+        } else {
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        }
 
         // 2. add schemaChangeJob
         addAlterJobV2(schemaChangeJob);
@@ -2095,8 +2099,6 @@ public class SchemaChangeHandler extends AlterHandler {
             if (mutableBucketNum == olapTable.getMutableBucketNum()) {
                 return;
             }
-<<<<<<< HEAD
-=======
         } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
             boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
             if (enableLoadProfile == olapTable.enableLoadProfile()) {
@@ -2108,7 +2110,6 @@ public class SchemaChangeHandler extends AlterHandler {
             if (baseCompactionForbiddenTimeRanges.equals(olapTable.getBaseCompactionForbiddenTimeRanges())) {
                 return;
             }
->>>>>>> 1c8e4b9cfb ([Enhancement] Support disable table base compaction by time ranges (#50120))
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
@@ -2563,6 +2564,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.OPTIMIZE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
                 throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }
