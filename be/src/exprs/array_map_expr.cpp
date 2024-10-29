@@ -203,6 +203,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             while (auto tmp_chunk = accumulator.pull()) {
                 tmp_chunk->check_or_die();
                 for (auto& column : tmp_chunk->columns()) {
+                    // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
+                    // in the future, this copy can be removed when we solve this problem.
                     if (column->is_array_view()) {
                         column = ArrayViewColumn::to_array_column(column);
                     }
