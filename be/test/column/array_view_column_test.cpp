@@ -44,10 +44,16 @@ PARALLEL_TEST(ArrayViewColumnTest, test_from_array) {
     ASSERT_EQ(array_view_column->debug_string(), "[[1],[2,3]]");
 }
 
+PARALLEL_TEST(ArrayViewColumnTest, test_to_array) {
+    auto array_column = create_int32_array_column({{1}, {2, 3}});
+    auto array_view_column = ArrayViewColumn::from_array_column(array_column);
+    auto result = ArrayViewColumn::to_array_column(array_view_column);
+    ASSERT_TRUE(result->is_array());
+    ASSERT_EQ(result->debug_string(), "[[1], [2,3]]");
+}
+
 PARALLEL_TEST(ArrayViewColumnTest, test_get_elements) {
     auto array_column = create_int32_array_column({{1}, {2, 3}});
-    // auto column = ArrayViewColumn::from_array_column(array_column);
-    // auto array_view_column = down_cast<ArrayViewColumn*>(column.get());
     auto array_view_column =
             std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
 

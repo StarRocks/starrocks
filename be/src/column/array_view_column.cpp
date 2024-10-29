@@ -280,6 +280,18 @@ MutableColumnPtr ArrayViewColumn::clone_empty() const {
     return create_mutable(_elements, UInt32Column::create(), UInt32Column::create());
 }
 
+void ArrayViewColumn::swap_column(Column& rhs) {
+    auto& array_view_column = down_cast<ArrayViewColumn&>(rhs);
+    _offsets->swap_column(*array_view_column.offsets_column());
+    _lengths->swap_column(*array_view_column.lengths_column());
+    _elements->swap_column(*array_view_column.elements_column());
+}
+
+void ArrayViewColumn::reset_column() {
+    _offsets->reset_column();
+    _lengths->reset_column();
+}
+
 ColumnPtr ArrayViewColumn::to_array_column() const {
     auto array_elements = _elements->clone_empty();
     auto array_offsets = UInt32Column::create();

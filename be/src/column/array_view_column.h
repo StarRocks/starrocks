@@ -30,7 +30,7 @@ class ArrayViewColumn final : public ColumnFactory<Column, ArrayViewColumn> {
     friend class ColumnFactory<Column, ArrayViewColumn>;
 
 public:
-    using ValueType = void; // @TODO need array view?
+    using ValueType = void;
 
     ArrayViewColumn(ColumnPtr elements, UInt32Column::Ptr offsets, UInt32Column::Ptr lengths)
             : _elements(std::move(elements)), _offsets(std::move(offsets)), _lengths(std::move(lengths)) {}
@@ -180,13 +180,9 @@ public:
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
-    void swap_column(Column& rhs) override {
-        // @TODO
-    }
+    void swap_column(Column& rhs) override;
 
-    void reset_column() override {
-        // @TODO
-    }
+    void reset_column() override;
 
     const Column& elements() const { return *_elements; }
     const ColumnPtr elements_column() const { return _elements; }
