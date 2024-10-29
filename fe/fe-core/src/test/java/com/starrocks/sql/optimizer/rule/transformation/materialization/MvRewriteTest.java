@@ -2296,4 +2296,52 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
     }
+
+    @Test
+    public void testRefreshMVWithListPartition1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        try {
+            starRocksAssert.withMaterializedView("create materialized view mv1 partition by dt " +
+                    "refresh manual as select dt,id from s1;\n");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view is partitioned by string type column dt but ref base " +
+                    "table s1 is range partitioned"));
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
+    }
+
+    @Test
+    public void testRefreshMVWithListPartition2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "PARTITION BY str2date(dt, \"%Y-%m-%d\")\n" +
+                "refresh manual as select dt,id from s1;\n");
+        refreshMaterializedView("test", "mv1");
+        MaterializedView mv = getMv("test", "mv1");
+        Assert.assertTrue(mv.getPartitionInfo().isRangePartition());
+        String plan = getFragmentPlan("select * from s1");
+        PlanTestBase.assertContains(plan, "mv1");
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
+    }
 }

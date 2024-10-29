@@ -819,6 +819,11 @@ public class MaterializedViewAnalyzer {
 
         private void determinePartitionType(CreateMaterializedViewStatement statement,
                                             Map<TableName, Table> tableNameTableMap) {
+            Expr mvPartitionByExpr = statement.getPartitionByExpr();
+            if (mvPartitionByExpr == null) {
+                statement.setPartitionType(PartitionType.UNPARTITIONED);
+                return;
+            }
             Expr partitionRefTableExpr = statement.getPartitionRefTableExpr();
             if (partitionRefTableExpr == null) {
                 statement.setPartitionType(PartitionType.UNPARTITIONED);
@@ -833,16 +838,19 @@ public class MaterializedViewAnalyzer {
                 statement.setPartitionType(PartitionType.UNPARTITIONED);
                 return;
             }
-
             if (refBaseTable.isNativeTableOrMaterializedView()) {
                 // To olap table, determine mv's partition by its ref base table's partition type.
-                OlapTable olapTable = (OlapTable) refBaseTable;
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.isRangePartition()) {
-                    // set the partition type
+                OlapTable refOlapTable = (OlapTable) refBaseTable;
+                PartitionInfo refPartitionInfo = refOlapTable.getPartitionInfo();
+                if (refPartitionInfo.isRangePartition() && mvPartitionByExpr.getType().isStringType()) {
+                    // if mv's partition column is string type and ref base table is range partitioned, please use str2date.
+                    throw new SemanticException(String.format("Materialized view is partitioned by string type " +
+                            "column %s but ref base table %s is range partitioned, please use str2date " +
+                            "partition expression", slotRef.getColumnName(), refOlapTable.getName()));
+                }
+                if (refPartitionInfo.isRangePartition()) {
                     statement.setPartitionType(PartitionType.RANGE);
-                } else if (partitionInfo.isListPartition()) {
-                    // set the partition type
+                } else if (refPartitionInfo.isListPartition()) {
                     statement.setPartitionType(PartitionType.LIST);
                 }
             } else {
@@ -856,14 +864,13 @@ public class MaterializedViewAnalyzer {
                 }
                 Column refPartitionCol = refPartitionColOpt.get();
                 Type partitionExprType = refPartitionCol.getType();
-                Expr partitionByExpr = statement.getPartitionByExpr();
                 // To olap table, determine mv's partition by its ref base table's partition column type:
                 // - if the partition column is string type && no use `str2date`, use list partition.
                 // - otherwise use range partition as before.
                 // To be compatible with old implementations, if the partition column is not a string type,
                 // still use range partition.
                 // TODO: remove this compatibility code in the future, use list partition directly later.
-                if (partitionExprType.isStringType() && (partitionByExpr instanceof SlotRef) &&
+                if (partitionExprType.isStringType() && (mvPartitionByExpr instanceof SlotRef) &&
                         !(partitionRefTableExpr instanceof FunctionCallExpr)) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
