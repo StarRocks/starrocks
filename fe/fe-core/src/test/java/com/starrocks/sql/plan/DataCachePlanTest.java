@@ -168,7 +168,8 @@ public class DataCachePlanTest extends PlanTestBase {
                 "where l_shipdate>='1998-01-03'";
         assertPlanContains(sql, "BLACKHOLE TABLE SINK");
 
-        sql = "insert into blackhole() select * from hive0.datacache_db.multi_partition_table join hive0.datacache_db.multi_partition_table as t";
+        sql = "insert into blackhole() select * from hive0.datacache_db.multi_partition_table join " +
+                "hive0.datacache_db.multi_partition_table as t";
         assertPlanContains(sql, "BLACKHOLE TABLE SINK");
     }
 }
