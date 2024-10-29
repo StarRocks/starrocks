@@ -802,8 +802,8 @@ private:
 SegmentedColumn::SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index)
         : _chunk(chunk), _column_index(column_index), _segment_size(chunk->segment_size()) {}
 
-SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size)
-        : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
+SegmentedColumn::SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size, size_t num_segments)
+        : _segment_size(segment_size), _cached_columns(std::move(columns)), _num_segments(num_segments) {}
 
 ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (num_segments() == 1) {
@@ -835,6 +835,9 @@ size_t SegmentedColumn::segment_size() const {
 }
 
 size_t SegmentedColumn::num_segments() const {
+    if (_num_segments > 0) {
+        return _num_segments;
+    }
     return _chunk.lock()->num_segments();
 }
 
