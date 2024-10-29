@@ -18,6 +18,7 @@ import com.google.common.collect.Table;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -33,6 +34,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
@@ -114,6 +116,22 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         Assert.assertTrue(table.enablePersistentIndex());
+    }
+
+    @Test
+    public void testSetEnablePersistentWithoutType() throws Exception {
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        job.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assert.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assert.assertTrue(table.getPersistentIndexType() == (Config.enable_cloud_native_persistent_index_by_default
+                ? TPersistentIndexType.CLOUD_NATIVE : TPersistentIndexType.LOCAL));
     }
 
     @Test

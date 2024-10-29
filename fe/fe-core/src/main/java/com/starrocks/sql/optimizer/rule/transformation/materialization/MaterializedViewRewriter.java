@@ -732,7 +732,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final RewriteContext rewriteContext = new RewriteContext(
                 queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
-                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
+                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet,
+                optimizerContext);
         // add agg push down rewrite info
         rewriteContext.setAggregatePushDownContext(mvRewriteContext.getAggregatePushDownContext());
 
@@ -1981,7 +1982,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
-            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
+            // Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
             // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
@@ -1991,7 +1992,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 deriveLogicalProperty(newQueryExpr);
             }
             return newQueryExpr;
-
         }
         return null;
     }
