@@ -26,6 +26,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import org.apache.logging.log4j.LogManager;
@@ -225,19 +226,20 @@ public class CachingMvPlanContextBuilder {
         // if transfer to active, put it into cache
         if (isActive) {
             putAstIfAbsent(mv);
-
-            long startTime = System.currentTimeMillis();
-            CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
-            // do not join.
-            future.whenComplete((result, e) -> {
-                long duration = System.currentTimeMillis() - startTime;
-                if (e == null) {
-                    LOG.info("updateMvPlanContextCache success: {}, cost: {}ms", mv.getName(),
-                            duration);
-                } else {
-                    LOG.warn("updateMvPlanContextCache failed: {}, cost: {}ms", mv.getName(), duration, e);
-                }
-            });
+            if (!FeConstants.runningUnitTest) {
+                long startTime = System.currentTimeMillis();
+                CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
+                // do not join.
+                future.whenComplete((result, e) -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    if (e == null) {
+                        LOG.info("updateMvPlanContextCache success: {}, cost: {}ms", mv.getName(),
+                                duration);
+                    } else {
+                        LOG.warn("updateMvPlanContextCache failed: {}, cost: {}ms", mv.getName(), duration, e);
+                    }
+                });
+            }
         }
     }
 
