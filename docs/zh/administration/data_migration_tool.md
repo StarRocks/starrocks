@@ -77,6 +77,14 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 ```
 
+### 禁用列过滤
+
+在 SCAN 阶段过滤未使用列的优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在数据迁移前禁用此优化：
+
+```SQL
+SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
+```
+
 ### 配置数据迁移（可选）
 
 您可以通过以下 FE 和 BE 参数配置数据迁移操作。通常情况下，默认配置即可满足需求。如果您想保留默认配置，可以选择跳过该步骤。
