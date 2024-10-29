@@ -2556,6 +2556,13 @@ public class OlapTable extends Table {
         return (long) 0;
     }
 
+    public String getBaseCompactionForbiddenTimeRanges() {
+        if (tableProperty != null) {
+            return tableProperty.getBaseCompactionForbiddenTimeRanges();
+        }
+        return "";
+    }
+
     public void setAutomaticBucketSize(long bucketSize) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2591,6 +2598,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE,
                         Boolean.valueOf(enableLoadProfile).toString());
         tableProperty.buildEnableLoadProfile();
+    }
+
+    public void setBaseCompactionForbiddenTimeRanges(String baseCompactionForbiddenTimeRanges) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+                        baseCompactionForbiddenTimeRanges);
+        tableProperty.buildBaseCompactionForbiddenTimeRanges();
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -3308,6 +3325,12 @@ public class OlapTable extends Table {
         Boolean enableLoadProfile = enableLoadProfile();
         if (enableLoadProfile) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
+        // base compaction forbidden time ranges
+        if (!getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+                    getBaseCompactionForbiddenTimeRanges());
         }
 
         // locations
