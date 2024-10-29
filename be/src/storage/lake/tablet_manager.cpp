@@ -867,4 +867,5 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
     }
 
     return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
+}
 } // namespace starrocks::lake
