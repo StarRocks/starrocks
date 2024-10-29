@@ -124,8 +124,8 @@ INSERT INTO update_table_with_null_partition VALUES
 ("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
 
 INSERT INTO update_table_with_null_partition PARTITION (p202007) VALUES
-("2020-07-01", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-("2020-07-02", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+("2020-07-01", "2020-07-12 12:00:00", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+("2020-07-02", "2020-07-13 12:00:00", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 
 INSERT INTO update_table_with_null_partition VALUES
 ("2020-09-01", "2020-09-01 12:00:00", null, "value1", true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
