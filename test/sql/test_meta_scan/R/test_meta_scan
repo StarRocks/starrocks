@@ -239,17 +239,14 @@ INSERT INTO update_table_with_null_partition VALUES
 ("2020-06-08", "2020-06-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
 ("2020-06-09", "2020-06-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
 ("2020-06-10", "2020-06-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
-("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null),
-("2020-06-12", null, "value12", "value12", true, 12, 12, 12, 12, 12, 12.0, 12.0, 12.0),
-(null, "2020-06-13 12:00:00", "value13", "value13", false, 13, 13, 13, 13, 13, 13.0, 13.0, 13.0);
+("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
 -- result:
-E: (1064, 'Insert has filtered data, txn_id = 121401, tracking sql = select tracking_log from information_schema.load_tracking_logs where job_id=169461')
 -- !result
 INSERT INTO update_table_with_null_partition PARTITION (p202007) VALUES
 ("2020-07-01", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 ("2020-07-02", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 -- result:
-E: (1064, 'Insert has filtered data, txn_id = 121402, tracking sql = select tracking_log from information_schema.load_tracking_logs where job_id=169462')
+E: (1064, 'Insert has filtered data, txn_id = 121767, tracking sql = select tracking_log from information_schema.load_tracking_logs where job_id=169710')
 -- !result
 INSERT INTO update_table_with_null_partition VALUES
 ("2020-09-01", "2020-09-01 12:00:00", null, "value1", true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
@@ -262,62 +259,60 @@ INSERT INTO update_table_with_null_partition VALUES
 ("2020-09-08", "2020-09-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
 ("2020-09-09", "2020-09-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
 ("2020-09-10", "2020-09-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
-("2020-09-11", "2020-09-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null),
-("2020-09-12", null, "value12", "value12", true, 12, 12, 12, 12, 12, 12.0, 12.0, 12.0);
+("2020-09-11", "2020-09-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
 -- result:
-E: (1064, 'Insert has filtered data, txn_id = 121404, tracking sql = select tracking_log from information_schema.load_tracking_logs where job_id=169464')
 -- !result
 SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	2020-06-11	2020-06-01	11
 -- !result
 SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	2020-06-11 12:00:00	2020-06-01 12:00:00	11
 -- !result
 SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	value9	value10	10
 -- !result
 SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	value9	value1	10
 -- !result
 SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	1	0	10
 -- !result
 SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11.0	1.0	10
 -- !result
 SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	11.0	1.0	10
 -- !result
 SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202006);
 -- result:
-0	None	None	0
+11	10.000000000	1.000000000	10
 -- !result
 SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202007);
 -- result:
@@ -425,55 +420,55 @@ SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_part
 -- !result
 SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	2020-09-11	2020-09-01	11
 -- !result
 SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	2020-09-11 12:00:00	2020-09-01 12:00:00	11
 -- !result
 SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	value9	value10	10
 -- !result
 SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	value9	value1	10
 -- !result
 SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	1	0	10
 -- !result
 SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11	1	10
 -- !result
 SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11.0	1.0	10
 -- !result
 SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	11.0	1.0	10
 -- !result
 SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202009);
 -- result:
-0	None	None	0
+11	10.000000000	1.000000000	10
 -- !result
 INSERT INTO update_table_with_null_partition VALUES
 ("2020-09-01", "2020-09-01 12:00:00", "value40", "value40", true, 40, 40, 40, 40, 40, 40.0, 40.0, 40.0),

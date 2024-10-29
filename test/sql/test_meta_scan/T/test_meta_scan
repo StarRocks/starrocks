@@ -121,9 +121,7 @@ INSERT INTO update_table_with_null_partition VALUES
 ("2020-06-08", "2020-06-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
 ("2020-06-09", "2020-06-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
 ("2020-06-10", "2020-06-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
-("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null),
-("2020-06-12", null, "value12", "value12", true, 12, 12, 12, 12, 12, 12.0, 12.0, 12.0),
-(null, "2020-06-13 12:00:00", "value13", "value13", false, 13, 13, 13, 13, 13, 13.0, 13.0, 13.0);
+("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
 
 INSERT INTO update_table_with_null_partition PARTITION (p202007) VALUES
 ("2020-07-01", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
@@ -140,8 +138,7 @@ INSERT INTO update_table_with_null_partition VALUES
 ("2020-09-08", "2020-09-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
 ("2020-09-09", "2020-09-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
 ("2020-09-10", "2020-09-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
-("2020-09-11", "2020-09-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null),
-("2020-09-12", null, "value12", "value12", true, 12, 12, 12, 12, 12, 12.0, 12.0, 12.0);
+("2020-09-11", "2020-09-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
 
 SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202006);
 SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202006);
