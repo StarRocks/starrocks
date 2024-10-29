@@ -844,9 +844,9 @@ public class MaterializedViewAnalyzer {
                 PartitionInfo refPartitionInfo = refOlapTable.getPartitionInfo();
                 if (refPartitionInfo.isRangePartition() && mvPartitionByExpr.getType().isStringType()) {
                     // if mv's partition column is string type and ref base table is range partitioned, please use str2date.
-                   throw new SemanticException(String.format("Materialized view is partitioned by string type " +
-                           "column %s but ref base table %s is range partitioned, please use str2date partition expression",
-                           slotRef.getColumnName(), refOlapTable.getName()));
+                    throw new SemanticException(String.format("Materialized view is partitioned by string type " +
+                            "column %s but ref base table %s is range partitioned, please use str2date " +
+                            "partition expression", slotRef.getColumnName(), refOlapTable.getName()));
                 }
                 if (refPartitionInfo.isRangePartition()) {
                     statement.setPartitionType(PartitionType.RANGE);
