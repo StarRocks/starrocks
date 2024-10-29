@@ -189,7 +189,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("partial_mv_6")
                 .contains("     TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 10: c3 < 3000, 9: c2 < 3000, 9: c2 >= 2000\n" +
+                        "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
                         "     partitions=5/5");
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
