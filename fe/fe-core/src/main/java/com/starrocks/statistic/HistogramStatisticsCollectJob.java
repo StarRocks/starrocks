@@ -34,13 +34,24 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName'," +
-                    " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), " +
-                    " $mcv," +
-                    " NOW()" +
-                    " FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
-                    " and $columnName is not null $MCVExclude" +
-                    " ORDER BY $columnName LIMIT $totalRows) t";
+            "WITH \n" +
+                    "        excluded AS (\n" +
+                    "           SELECT $columnName as column_key FROM `$dbName`.`$tableName` \n" +
+                    "           WHERE $columnName is not null $MCVExclude\n" +
+                    "        ),\n" +
+                    "        sampled AS (\n" +
+                    "           SELECT column_key from excluded\n" +
+                    "           WHERE rand() <= $sampleRatio\n" +
+                    "           LIMIT $totalRows\n" +
+                    "        ), \n" +
+                    "        sorted AS ( SELECT column_key FROM sampled ORDER BY 1 LIMIT $totalRows )\n" +
+                    "SELECT \n" +
+                    "        $tableId, \n" +
+                    "        '$columnNameStr', $dbId, '$dbName.$tableName',\n" +
+                    "        histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), \n" +
+                    "        $mcv,\n" +
+                    "        NOW()\n" +
+                    "FROM sorted";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
