@@ -1982,7 +1982,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
-            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
+            // Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
             // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
@@ -1992,7 +1992,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 deriveLogicalProperty(newQueryExpr);
             }
             return newQueryExpr;
-
         }
         return null;
     }
