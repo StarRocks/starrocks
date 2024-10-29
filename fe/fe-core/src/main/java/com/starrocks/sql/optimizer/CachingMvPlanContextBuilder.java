@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import org.apache.logging.log4j.LogManager;
@@ -160,6 +161,9 @@ public class CachingMvPlanContextBuilder {
     public List<MvPlanContext> getPlanContextIfPresent(SessionVariable sessionVariable,
                                                        MaterializedView mv) {
         CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
+        if (future == null) {
+            return Lists.newArrayList();
+        }
         return getMvPlanCacheFromFuture(sessionVariable, mv, future);
     }
 

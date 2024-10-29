@@ -761,7 +761,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return Sets.newHashSet();
         }
 
-        return ConnectorPartitionTraits.build(baseTable).getUpdatedPartitionNames(
+        return ConnectorPartitionTraits.build(this, baseTable).getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
                 this.getRefreshScheme().getAsyncRefreshContext());
     }
@@ -783,7 +783,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Optional.empty();
                 }
             }
-            Optional<Long> baseTableTs = ConnectorPartitionTraits.build(baseTable).maxPartitionRefreshTs();
+            Optional<Long> baseTableTs = ConnectorPartitionTraits.build(this, baseTable).maxPartitionRefreshTs();
             if (!baseTableTs.isPresent()) {
                 return Optional.empty();
             }
@@ -863,7 +863,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        return ConnectorPartitionTraits.build(baseTable).getUpdatedPartitionNames(
+        return ConnectorPartitionTraits.build(this, baseTable).getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
                 this.refreshScheme.getAsyncRefreshContext());
     }
