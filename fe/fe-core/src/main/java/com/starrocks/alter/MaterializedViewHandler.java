@@ -420,11 +420,14 @@ public class MaterializedViewHandler extends AlterHandler {
                         Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
                         ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                     }
+                    List<Long> originTableIds = originTablets.stream()
+                            .map(tablet -> tablet.getId())
+                            .collect(Collectors.toList());
                     List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                             originTablets.size(),
                             olapTable.getPartitionFilePathInfo(partitionId),
                             olapTable.getPartitionFileCacheInfo(partitionId),
-                            shardGroupId, null, shardProperties, workerGroupId.get());
+                            shardGroupId, originTableIds, shardProperties, workerGroupId.get());
                     Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                     TabletMeta shadowTabletMeta =
