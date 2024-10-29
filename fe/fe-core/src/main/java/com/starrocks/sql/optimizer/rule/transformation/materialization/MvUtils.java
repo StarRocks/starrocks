@@ -1345,7 +1345,9 @@ public class MvUtils {
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
-            Preconditions.checkState(statementBases.size() == 1);
+            if (statementBases.size() != 1) {
+                return null;
+            }
             StatementBase stmt = statementBases.get(0);
             Analyzer.analyze(stmt, connectContext);
             return stmt;

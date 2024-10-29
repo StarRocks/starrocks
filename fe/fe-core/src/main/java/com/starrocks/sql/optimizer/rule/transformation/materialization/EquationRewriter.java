@@ -46,7 +46,7 @@ public class EquationRewriter {
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
 
     private AggregateFunctionRewriter aggregateFunctionRewriter;
-    boolean underAggFunctionRewriteContext;
+    boolean isUnderAggFuncNormalizerContext;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -62,12 +62,12 @@ public class EquationRewriter {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
     }
 
-    public boolean isUnderAggFunctionRewriteContext() {
-        return underAggFunctionRewriteContext;
+    public boolean isUnderAggFuncNormalizerContext() {
+        return isUnderAggFuncNormalizerContext;
     }
 
-    public void setUnderAggFunctionRewriteContext(boolean underAggFunctionRewriteContext) {
-        this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
+    public void setUnderAggFuncNormalizerContext(boolean underAggFuncNormalizerContext) {
+        this.isUnderAggFuncNormalizerContext = underAggFuncNormalizerContext;
     }
 
     public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
@@ -150,14 +150,17 @@ public class EquationRewriter {
 
             // retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
             if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(call) &&
-                    !isUnderAggFunctionRewriteContext()) {
-                ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(call);
-                if (newChooseScalarOp != null) {
-                    setUnderAggFunctionRewriteContext(true);
+                    !isUnderAggFuncNormalizerContext()) {
+                boolean isRollup = shuttleContext == null ? false : shuttleContext.isRollup();
+                rewritten = aggregateFunctionRewriter.rewriteAggFunction(call, isRollup);
+                if (rewritten != null) {
+                    setUnderAggFuncNormalizerContext(true);
                     // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
                     // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
-                    rewritten = newChooseScalarOp.accept(this, null);
-                    setUnderAggFunctionRewriteContext(false);
+                    setUnderAggFuncNormalizerContext(false);
+                    if (aggregateFunctionRewriter.getNewColumnRefToAggFuncMap() != null) {
+                        shuttleContext.setNewColumnRefToAggFuncMap(aggregateFunctionRewriter.getNewColumnRefToAggFuncMap());
+                    }
                     return rewritten;
                 }
             }

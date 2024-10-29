@@ -29,6 +29,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
@@ -38,7 +39,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
-import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -47,6 +49,7 @@ import org.apache.kudu.shaded.com.google.common.collect.Streams;
 import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -57,26 +60,23 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public class AggStateCombinatorTest {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
+public class AggStateCombinatorTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        Config.alter_scheduler_interval_millisecond = 1;
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
-        Config.enable_strict_storage_medium_check = true;
-        Config.enable_auto_tablet_distribution = true;
-        Config.enable_experimental_rowstore = true;
-        Config.default_replication_num = 1;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        // create connect context
+        GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
+
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        String createDbStmtStr = "create database test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        starRocksAssert.useDatabase("test");
+        starRocksAssert.withEnableMV().withDatabase("test").useDatabase("test");
     }
+
     private static final Set<String> SUPPORTED_AGG_STATE_FUNCTIONS = ImmutableSet.of(
             "ndv", "percentile_disc", "corr", "multi_distinct_sum", "var_samp", "sum", "stddev_pop",
             "array_agg_distinct", "approx_count_distinct", "variance_samp", "min", "avg", "any_value",
@@ -864,4 +864,210 @@ public class AggStateCombinatorTest {
                 });
         starRocksAssert.dropTable("t1");
     }
+
+    @Test
+    public void testGenerateCreateSyncMVWithMultiCountDistinct() throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
+        List<String> colNames = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames);
+        List<String> stateColumns = Lists.newArrayList();
+
+        List<String> queryColumns = Lists.newArrayList();
+        for (int i = 0; i < funcNames.size(); i++) {
+            String fnName = funcNames.get(i);
+            if (!fnName.equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_COUNT)) {
+                continue;
+            }
+            List<String> argTypes = aggArgTypes.get(i);
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String col = String.format("%s(%s(%s)) as agg%s",
+                    FunctionSet.getAggStateUnionName(fnName), FunctionSet.getAggStateName(fnName), arg, i);
+            stateColumns.add(col);
+
+            String qCol = String.format("%s(%s) as agg%s",
+                    fnName, arg, i);
+            queryColumns.add(qCol);
+        }
+
+        // create sync mv with all agg functions
+        String sql1 = "CREATE MATERIALIZED VIEW test_mv1 as select k1, " +
+                Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
+        System.out.println(sql1);
+        starRocksAssert.withMaterializedView(sql1);
+
+        // no rollup
+        {
+            String query = String.format("select k1, %s from t1 group by k1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        // rollup
+        {
+            String query = String.format("select %s from t1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropTable("t1");
+    }
+
+    private void testCreateSyncMVWithSpecificAggFunc(String aggFuncName) throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
+        List<String> colNames = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames);
+        List<String> stateColumns = Lists.newArrayList();
+
+        List<String> queryColumns = Lists.newArrayList();
+        for (int i = 0; i < funcNames.size(); i++) {
+            String fnName = funcNames.get(i);
+            if (!fnName.equalsIgnoreCase(aggFuncName)) {
+                continue;
+            }
+            List<String> argTypes = aggArgTypes.get(i);
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String col = String.format("%s(%s(%s)) as agg%s",
+                    FunctionSet.getAggStateUnionName(fnName), FunctionSet.getAggStateName(fnName), arg, i);
+            stateColumns.add(col);
+            String qCol = String.format("%s(%s) as agg%s",
+                    fnName, arg, i);
+            queryColumns.add(qCol);
+        }
+
+        // create sync mv with all agg functions
+        String sql1 = "CREATE MATERIALIZED VIEW test_mv1 as select k1, " +
+                Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
+        System.out.println(sql1);
+        starRocksAssert.withMaterializedView(sql1);
+
+        // no rollup
+        {
+            String query = String.format("select k1, %s from t1 group by k1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        // rollup
+        {
+            String query = String.format("select %s from t1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    @Ignore
+    public void testCreateSyncMVWithArrayAggDistinct() throws Exception {
+        testCreateSyncMVWithSpecificAggFunc(FunctionSet.ARRAY_AGG_DISTINCT);
+    }
+
+    @Test
+    public void testCreateSyncMVWithArrayUniqueAgg() throws Exception {
+        testCreateSyncMVWithSpecificAggFunc(FunctionSet.ARRAY_UNIQUE_AGG);
+    }
+
+    @Test
+    public void testGenerateCreateAsyncMVWithAggState() throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
+        List<String> colNames = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames);
+        List<String> stateColumns = Lists.newArrayList();
+
+        List<String> queryColumns = Lists.newArrayList();
+        for (int i = 0; i < funcNames.size(); i++) {
+            String fnName = funcNames.get(i);
+            // TODO: remove this after ARRAY_AGG_DISTINCT is supported
+            if (fnName.equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT)) {
+                continue;
+            }
+            List<String> argTypes = aggArgTypes.get(i);
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String col = String.format("%s(%s(%s)) as agg%s",
+                    FunctionSet.getAggStateUnionName(fnName), FunctionSet.getAggStateName(fnName), arg, i);
+            stateColumns.add(col);
+            String qCol = String.format("%s(%s) as agg%s",
+                    fnName, arg, i);
+            queryColumns.add(qCol);
+        }
+
+        // create async mv with all agg functions
+        String sql1 = "CREATE MATERIALIZED VIEW test_mv1 REFRESH MANUAL as select k1, " +
+                Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
+        System.out.println(sql1);
+        starRocksAssert.withRefreshedMaterializedView(sql1);
+
+        // no rollup
+        {
+            String query = String.format("select k1, %s from t1 group by k1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        // rollup
+        {
+            String query = String.format("select %s from t1;", Joiner.on(", ").join(queryColumns));
+            System.out.println(query);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testGenerateCreateAsyncMVWithCountFunctions() throws Exception {
+        List<String> funcNames = Lists.newArrayList();
+        Map<String, String> colTypes = Maps.newLinkedHashMap();
+        List<List<String>> aggArgTypes = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
+        List<String> colNames = Lists.newArrayList();
+        buildTableT1(funcNames, colTypes, aggArgTypes, columns, colNames);
+        List<String> stateColumns = Lists.newArrayList();
+
+        List<String> queryColumns = Lists.newArrayList();
+        for (int i = 0; i < funcNames.size(); i++) {
+            String fnName = funcNames.get(i);
+            if (!fnName.equalsIgnoreCase(FunctionSet.COUNT)) {
+                continue;
+            }
+            List<String> argTypes = aggArgTypes.get(i);
+            String arg = buildAggFuncArgs(fnName, argTypes, colTypes);
+            String col = String.format("%s(%s(%s)) as agg%s",
+                    FunctionSet.getAggStateUnionName(fnName), FunctionSet.getAggStateName(fnName), arg, i);
+            stateColumns.add(col);
+            String qCol = String.format("%s(%s) as agg%s",
+                    fnName, arg, i);
+            queryColumns.add(qCol);
+        }
+
+        // create async mv with all agg functions
+        String sql1 = "CREATE MATERIALIZED VIEW test_mv1 REFRESH MANUAL as select k1, " +
+                Joiner.on(", ").join(stateColumns) + " from t1 group by k1;";
+        System.out.println(sql1);
+        starRocksAssert.withRefreshedMaterializedView(sql1);
+        MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
+        List<Column> mvCols = mv.getColumns();
+        // count agg function's output should be always not nullable.
+        for (Column col : mvCols) {
+            if (col.getName().startsWith("agg")) {
+                Assert.assertTrue(col.getType().isBigint());
+                Assert.assertFalse(col.isAllowNull());
+            }
+        }
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
 }
+
