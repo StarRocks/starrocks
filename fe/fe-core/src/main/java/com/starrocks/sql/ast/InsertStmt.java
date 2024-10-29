@@ -325,7 +325,12 @@ public class InsertStmt extends DmlStmt {
     }
 
     public Table makeBlackHoleTable() {
-        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        // rename each column's name, assign unique name
+        for (int i = 0; i < columns.size(); i++) {
+            columns.get(i).setName(columns.get(i).getName() + "_blackhole_" + i);
+        }
+        return new BlackHoleTable(columns);
     }
 
     public Table makeTableFunctionTable(SessionVariable sessionVariable) {
