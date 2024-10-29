@@ -266,6 +266,7 @@ AS
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
+- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会触发该表的数据刷新到物化视图。通常需要与属性 `excluded_trigger_tables` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
   > **注意**
   >
