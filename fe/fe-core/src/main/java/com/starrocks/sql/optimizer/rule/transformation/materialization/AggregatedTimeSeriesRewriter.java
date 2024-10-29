@@ -36,10 +36,11 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -239,6 +240,17 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         // add final state aggregation above union opt
         OptExpression result = getPushDownRollupFinalAggregateOpt(mvRewriteContext, ctx, remapping,
                 queryExpression, Lists.newArrayList(pdAggOptExpression));
+        return result;
+    }
+
+    @Override
+    public OptExpression postRewrite(OptimizerContext optimizerContext,
+                                     MvRewriteContext mvRewriteContext,
+                                     OptExpression candidate) {
+        OptExpression result = super.postRewrite(optimizerContext, mvRewriteContext, candidate);
+        MvUtils.getScanOperator(result)
+                .stream()
+                .forEach(op -> op.resetOpRuleBit(OpRuleBit.OP_PARTITION_PRUNED));
         return result;
     }
 
@@ -450,7 +462,6 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         LogicalScanOperator logicalOlapScanOp = scanOperators.get(0);
         logicalOlapScanOp.setPredicate(newPredicate);
-        Utils.resetOpAppliedRule(logicalOlapScanOp, Operator.OP_PARTITION_PRUNE_BIT);
         LogicalAggregationOperator aggregateOp = (LogicalAggregationOperator) queryExpression.getOp();
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         Map<ColumnRefOperator, ColumnRefOperator> aggColRefMapping = Maps.newHashMap();
@@ -483,7 +494,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .collect(Collectors.toList());
         List<ColumnRefOperator> newQueryOutputCols = duplicator.getMappedColumns(newOrigOutputColumns);
 
-        Utils.setOptScanOpsBit(queryDuplicateOptExpression, Operator.OP_UNION_ALL_BIT);
+        queryDuplicateOptExpression.getOp().setOpRuleBit(OpRuleBit.OP_MV_UNION_REWRITE);
 
         return Pair.create(queryDuplicateOptExpression, newQueryOutputCols);
     }

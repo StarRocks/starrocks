@@ -89,7 +89,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.mergeRanges;
 
@@ -182,7 +182,7 @@ public class MvPartitionCompensator {
         OptExpression newMvScanPlan = duplicator.duplicate(mvScanOptExpression);
         // output columns order by mv's columns
         List<ColumnRefOperator> mvScanOutputColumns = duplicator.getMappedColumns(orgMvScanOutputColumns);
-        newMvScanPlan.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
+        newMvScanPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
         return Pair.create(newMvScanPlan, mvScanOutputColumns);
     }
 
@@ -209,7 +209,7 @@ public class MvPartitionCompensator {
         deriveLogicalProperty(newMvQueryPlan);
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> mvQueryOutputColumnRefs = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
-        newMvQueryPlan.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
+        newMvQueryPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
         return Pair.create(newMvQueryPlan, mvQueryOutputColumnRefs);
     }
 
