@@ -577,8 +577,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT, isMonotonic = true),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT, isMonotonic = true)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
@@ -591,8 +591,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = 0;
@@ -611,7 +611,7 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true),
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
@@ -627,8 +627,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
