@@ -54,8 +54,8 @@ setup(
         "Topic :: Database :: Front-Ends",
     ],
     install_requires=[
-        "sqlalchemy>=1.4, <2",
-        "sqlalchemy-utils>=0.38.3, <0.39",
+        "sqlalchemy>=2.0",
+        "sqlalchemy-utils>=0.41.2",
         "pymysql>=1.1.0",
     ],
     setup_requires=["pytest-runner"],
