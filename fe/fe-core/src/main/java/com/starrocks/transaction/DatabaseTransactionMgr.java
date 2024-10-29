@@ -1012,6 +1012,7 @@ public class DatabaseTransactionMgr {
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        boolean txnOperated = false;
         try {
             transactionState.writeLock();
             try {
@@ -1169,7 +1170,6 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     return;
                 }
-                boolean txnOperated = false;
                 writeLock();
                 try {
                     transactionState.setErrorReplicas(errorReplicaIds);
@@ -1185,7 +1185,6 @@ public class DatabaseTransactionMgr {
                     LOG.debug("after set transaction {} to visible", transactionState);
                 } finally {
                     writeUnlock();
-                    transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
                 }
 
                 persistTxnStateInTxnLevelLock(transactionState);
@@ -1207,6 +1206,7 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
         transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
