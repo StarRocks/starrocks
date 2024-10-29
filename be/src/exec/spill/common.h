@@ -15,7 +15,7 @@
 #pragma once
 
 // #define TRACE_SPILL_LOG VLOG_QUERY
-#define TRACE_SPILL_LOG VLOG(1)
+#define TRACE_SPILL_LOG VLOG(10)
 
 #define AUTO_DEL_SPILL_FILE true
 
