@@ -59,7 +59,7 @@ public class HistogramEstimator {
         }
 
         // Calculate selectivity
-        if (totalArea > 0) {
+        if (overlapArea > 0 && totalArea > 0) {
             double selectivity = overlapArea / totalArea;
             Preconditions.checkState(0.0 <= selectivity && selectivity <= 1.0,
                     "exceptional selectivity: " + selectivity);

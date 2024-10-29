@@ -92,11 +92,11 @@ public class HistogramEstimatorTest {
                 Arguments.of(
                         createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
                         createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
-                        0.0),
+                        null),
                 Arguments.of(
                         createColumnStatistic(createUniformedHistogram(100, 1024, 1 << 16)),
                         createColumnStatistic(createSingleElementHistogram(100, 1024, 1 << 10)),
-                        0.0),
+                        null),
 
                 // Completely overlapping histograms
                 Arguments.of(
@@ -112,7 +112,7 @@ public class HistogramEstimatorTest {
                 Arguments.of(
                         createColumnStatistic(new double[] {1, 5, 10}, new long[] {100, 200}),
                         createColumnStatistic(new double[] {15, 20, 25}, new long[] {150, 250}),
-                        0.0),
+                        null),
 
                 // One empty histogram
                 Arguments.of(

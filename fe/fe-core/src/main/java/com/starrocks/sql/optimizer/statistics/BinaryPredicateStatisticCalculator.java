@@ -468,7 +468,8 @@ public class BinaryPredicateStatisticCalculator {
                     repeat = 0;
                 }
 
-                bucketList.add(new Bucket(bucket.getLower(), constantDouble, previousTotalRowCount + bucketRowCount, repeat));
+                bucketList.add(new Bucket(bucketList.size(), bucket.getLower(), constantDouble,
+                        previousTotalRowCount + bucketRowCount, repeat));
                 break;
             } else if (bucket.getLower() > constantDouble) {
                 break;
@@ -533,7 +534,7 @@ public class BinaryPredicateStatisticCalculator {
                 }
 
                 if (bucket.getCount() - previousTotalRowCount != 0) {
-                    bucketList.add(new Bucket(constantDouble, bucket.getUpper(),
+                    bucketList.add(new Bucket(bucketList.size(), constantDouble, bucket.getUpper(),
                             bucket.getCount() - previousTotalRowCount, bucket.getUpperRepeats()));
                 }
                 i++;
@@ -546,6 +547,7 @@ public class BinaryPredicateStatisticCalculator {
 
         for (; i < histogram.getBuckets().size(); i++) {
             Bucket bucket = new Bucket(
+                    bucketList.size(),
                     histogram.getBuckets().get(i).getLower(),
                     histogram.getBuckets().get(i).getUpper(),
                     histogram.getBuckets().get(i).getCount() - previousTotalRowCount,
