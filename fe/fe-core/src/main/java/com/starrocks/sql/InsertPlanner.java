@@ -863,7 +863,7 @@ public class InsertPlanner {
 
         List<String> targetColumnNames;
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumnNames = targetTable.getColumns().stream()
+            targetColumnNames = targetTable.getFullSchema().stream()
                     .map(Column::getName).collect(Collectors.toList());
         } else {
             targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());
