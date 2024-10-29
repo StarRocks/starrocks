@@ -135,7 +135,6 @@ public:
 
     int get_waiting_task_num();
 
-
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
     ThreadPool* TEST_get_compaction_thread_pool() { return _compaction_pool.get(); }
