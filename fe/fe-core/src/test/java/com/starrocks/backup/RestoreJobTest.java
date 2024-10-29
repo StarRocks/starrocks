@@ -708,7 +708,7 @@ public class RestoreJobTest {
     public void testRestoreView() {
         new Expectations() {
             {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
