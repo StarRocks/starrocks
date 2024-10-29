@@ -203,6 +203,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      LINUX_DISTRO: ubuntu
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
@@ -226,11 +227,11 @@ jobs:
           SKIP_OSS: 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}" != '' ]]; then
-              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+          if [[ "${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}" != '' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }}
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: build result
         run: |
