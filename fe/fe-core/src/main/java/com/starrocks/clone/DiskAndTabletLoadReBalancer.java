@@ -1541,7 +1541,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         try {
             db.readLock();
-            PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
+            PhysicalPartition physicalPartition = globalStateMgr
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
                 return true;
