@@ -47,11 +47,11 @@ public class CachingMvPlanContextBuilder {
 
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private final static Executor mvPlanCacheExecutor = Executors.newFixedThreadPool(
+    private static final Executor MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
             Config.mv_plan_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
-    private static final AsyncCacheLoader<MaterializedView, List<MvPlanContext>> mvCacheLoader =
+    private static final AsyncCacheLoader<MaterializedView, List<MvPlanContext>> MV_PLAN_CACHE_LOADER =
             new AsyncCacheLoader<>() {
                 @Override
                 public @NonNull CompletableFuture<List<MvPlanContext>> asyncLoad(@NonNull MaterializedView mv,
@@ -74,14 +74,14 @@ public class CachingMvPlanContextBuilder {
 
     // After view-based mv rewrite, one mv may has views as based tables, It can return logical plans with or without inline
     // views. So here should return a List<MvPlanContext> for one mv.
-    private static final AsyncLoadingCache<MaterializedView, List<MvPlanContext>> mvPlanContextCache = Caffeine.newBuilder()
+    private static final AsyncLoadingCache<MaterializedView, List<MvPlanContext>> MV_PLAN_CONTEXT_CACHE = Caffeine.newBuilder()
             .maximumSize(Config.mv_plan_cache_max_size)
-            .executor(mvPlanCacheExecutor)
+            .executor(MV_PLAN_CACHE_EXECUTOR)
             .recordStats()
-            .buildAsync(mvCacheLoader);
+            .buildAsync(MV_PLAN_CACHE_LOADER);
 
     // store the ast of mv's define query to mvs
-    private Map<AstKey, Set<MaterializedView>> astToMvsMap = Maps.newConcurrentMap();
+    private static final Map<AstKey, Set<MaterializedView>> AST_TO_MV_MAP = Maps.newConcurrentMap();
 
     public static class AstKey {
         private final String sql;
@@ -129,6 +129,10 @@ public class CachingMvPlanContextBuilder {
         return INSTANCE;
     }
 
+    public CompletableFuture<List<MvPlanContext>> getPlanContextAsync(MaterializedView mv) {
+        return MV_PLAN_CONTEXT_CACHE.get(mv);
+    }
+
     /**
      * Get plan cache, if enabled; otherwise, load plan context directly.
      */
@@ -137,8 +141,7 @@ public class CachingMvPlanContextBuilder {
         if (!sessionVariable.isEnableMaterializedViewPlanCache()) {
             return loadMvPlanContext(mv);
         }
-        CompletableFuture<List<MvPlanContext>> future = mvPlanContextCache.get(mv);
-        return getMvPlanCacheFromFuture(sessionVariable, mv, future);
+        return getOrLoadPlanContext(sessionVariable, mv);
     }
 
     /**
@@ -146,7 +149,7 @@ public class CachingMvPlanContextBuilder {
      */
     public List<MvPlanContext> getOrLoadPlanContext(SessionVariable sessionVariable,
                                                     MaterializedView mv) {
-        CompletableFuture<List<MvPlanContext>> future = mvPlanContextCache.get(mv);
+        CompletableFuture<List<MvPlanContext>> future = getPlanContextAsync(mv);
         return getMvPlanCacheFromFuture(sessionVariable, mv, future);
     }
 
@@ -155,7 +158,7 @@ public class CachingMvPlanContextBuilder {
      */
     public List<MvPlanContext> getPlanContextIfPresent(SessionVariable sessionVariable,
                                                        MaterializedView mv) {
-        CompletableFuture<List<MvPlanContext>> future = mvPlanContextCache.getIfPresent(mv);
+        CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
         return getMvPlanCacheFromFuture(sessionVariable, mv, future);
     }
 
@@ -172,16 +175,17 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
-     * Get mv plan cache from future with timeout(use new_planner_optimize_timeout/2 as timeout by default)
+     * Get mv plan cache from future with timeout (use new_planner_optimize_timeout as timeout by default)
      */
     private List<MvPlanContext> getMvPlanCacheFromFuture(SessionVariable sessionVariable,
                                                          MaterializedView mv,
                                                          CompletableFuture<List<MvPlanContext>> future) {
-        long optimizeTimeout = (sessionVariable == null ?
-                SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout()  :
-                sessionVariable.getOptimizerExecuteTimeout()) / 2;
+        long optimizeTimeout = sessionVariable == null ? SessionVariable.DEFAULT_SESSION_VARIABLE.getOptimizerExecuteTimeout() :
+                sessionVariable.getOptimizerExecuteTimeout();
+        List<MvPlanContext> result;
+        long startTime = System.currentTimeMillis();
         try {
-            return future.get(optimizeTimeout, TimeUnit.SECONDS);
+            result = future.get(optimizeTimeout, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             LOG.warn("get mv plan cache timeout: {}", mv.getName());
             return null;
@@ -189,6 +193,8 @@ public class CachingMvPlanContextBuilder {
             LOG.warn("get mv plan cache failed: {}", mv.getName(), e);
             return null;
         }
+        LOG.info("Get mv plan cache success: {}, cost: {}ms", mv.getName(), System.currentTimeMillis() - startTime);
+        return result;
     }
 
     /**
@@ -196,21 +202,42 @@ public class CachingMvPlanContextBuilder {
      */
     @VisibleForTesting
     public void rebuildCache() {
-        mvPlanContextCache.synchronous().invalidateAll();
+        MV_PLAN_CONTEXT_CACHE.synchronous().invalidateAll();
     }
 
     @VisibleForTesting
     public boolean contains(MaterializedView mv) {
-        return mvPlanContextCache.asMap().containsKey(mv);
+        return MV_PLAN_CONTEXT_CACHE.asMap().containsKey(mv);
     }
 
-    public void invalidateFromCache(MaterializedView mv, boolean isActive) {
-        mvPlanContextCache.synchronous().invalidate(mv);
-        invalidateAstFromCache(mv);
+    /**
+     * Update the cache of mv plan context which includes mv plan cache and mv ast cache.
+     */
+    public void updateMvPlanContextCache(MaterializedView mv, boolean isActive) {
+        // invalidate caches first
+        try {
+            MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+            invalidateAstFromCache(mv);
+        } catch (Throwable e) {
+            LOG.warn("updateMvPlanContextCache invalidate cache failed: {}", mv.getName(), e);
+        }
 
         // if transfer to active, put it into cache
         if (isActive) {
             putAstIfAbsent(mv);
+
+            long startTime = System.currentTimeMillis();
+            CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
+            // do not join.
+            future.whenComplete((result, e) -> {
+                long duration = System.currentTimeMillis() - startTime;
+                if (e == null) {
+                    LOG.info("updateMvPlanContextCache success: {}, cost: {}ms", mv.getName(),
+                            duration);
+                } else {
+                    LOG.warn("updateMvPlanContextCache failed: {}, cost: {}ms", mv.getName(), duration, e);
+                }
+            });
         }
     }
 
@@ -221,10 +248,10 @@ public class CachingMvPlanContextBuilder {
                 return;
             }
             AstKey astKey = new AstKey(parseNode);
-            if (!astToMvsMap.containsKey(astKey)) {
+            if (!AST_TO_MV_MAP.containsKey(astKey)) {
                 return;
             }
-            astToMvsMap.get(astKey).remove(mv);
+            AST_TO_MV_MAP.get(astKey).remove(mv);
             LOG.info("Remove mv {} from ast cache", mv.getName());
         } catch (Exception e) {
             LOG.warn("invalidateAstFromCache failed: {}", mv.getName(), e);
@@ -244,7 +271,7 @@ public class CachingMvPlanContextBuilder {
             if (parseNode == null) {
                 return;
             }
-            astToMvsMap.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
+            AST_TO_MV_MAP.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
                     .add(mv);
             LOG.info("Add mv {} input ast cache", mv.getName());
         } catch (Exception e) {
@@ -259,7 +286,7 @@ public class CachingMvPlanContextBuilder {
         if (ast == null) {
             return null;
         }
-        return astToMvsMap.get(ast);
+        return AST_TO_MV_MAP.get(ast);
     }
 
     /**
@@ -267,7 +294,7 @@ public class CachingMvPlanContextBuilder {
      */
     public List<AstKey> getAstsOfRelatedMvs(Set<MaterializedView> relatedMvs) {
         List<AstKey> keys = Lists.newArrayList();
-        for (Map.Entry<CachingMvPlanContextBuilder.AstKey, Set<MaterializedView>> e : this.astToMvsMap.entrySet()) {
+        for (Map.Entry<CachingMvPlanContextBuilder.AstKey, Set<MaterializedView>> e : this.AST_TO_MV_MAP.entrySet()) {
             CachingMvPlanContextBuilder.AstKey cacheKey = e.getKey();
             Set<MaterializedView> cacheMvs = e.getValue();
             if (Sets.intersection(cacheMvs, relatedMvs).isEmpty()) {
