@@ -32,9 +32,10 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -159,6 +160,10 @@ The following data type mapping is valid only for Flink reading data from StarRo
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **NOTE:** <br /> **Supported since version 1.2.10** |
+| ARRAY      | ARRAY  <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| STRUCT     | ROW    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| MAP        | MAP    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
 
 ## Examples
 
