@@ -35,8 +35,8 @@ Regarding StarRocks specifics, we have a list of product names and technical phr
 
 These words appear often on lists like this:
 
-1. [**word**](link/target.md): Something about wandb
-2. [**word2**](link/target2.md): Something about wandb again
+1. [**word**](link/target.md): Something about StarRocks
+2. [**word2**](link/target2.md): Something about StarRocks again
 etc...
 
 Never translate them in this context.
