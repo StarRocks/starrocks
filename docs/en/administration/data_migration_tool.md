@@ -77,6 +77,14 @@ After the data migration is completed, you need to remove the configuration `lak
 ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 ```
 
+### Disable column filtering
+
+The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration:
+
+```SQL
+SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
+```
+
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.
