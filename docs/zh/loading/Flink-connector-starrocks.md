@@ -119,13 +119,10 @@ Flink connector JAR 文件的命名格式如下：
 | sink.properties.column_separator  | No       | \t            | CSV 数据的列分隔符。                                         |
 | sink.properties.row_delimiter     | No       | \n            | CSV 数据的行分隔符。                                         |
 | sink.properties.max_filter_ratio  | No       | 0             | 导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0 。详细信息，请参见  [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-<<<<<<< HEAD
-=======
 | sink.properties.partial_update    | No       | false         | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。 |
 | sink.properties.partial_update_mode | No     | row           | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 | sink.properties.strict_mode       | No       | false         | 是否为 Stream Load 启用严格模式。在导入数据中出现不合格行（如列值不一致）时，严格模式会影响导入行为。有效值： `true` 和 `false`。具体参考 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | sink.properties.compression       | No       | NONE          | 此参数自 Flink connector 1.2.10 开始支持。指定用于 Stream Load 的压缩算法。目前只支持 JSON 格式的压缩。有效值：`lz4_frame`。仅 StarRocks v3.2.7 及更高版本支持 JSON 格式的压缩。 |
->>>>>>> 4eb5d54d6c ([Doc] Add Flink connect 1.2.10 doc (#52369))
 
 ## 数据类型映射
 
