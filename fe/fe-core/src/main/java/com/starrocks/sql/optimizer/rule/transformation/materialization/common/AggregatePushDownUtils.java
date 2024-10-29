@@ -106,7 +106,7 @@ public class AggregatePushDownUtils {
         final Map<ColumnRefOperator, CallOperator> aggregations = origAggregate.getAggregations();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
             ColumnRefOperator origAggColRef = entry.getKey();
-            CallOperator aggCall = entry.getValue();
+            CallOperator aggCall = (CallOperator) entry.getValue().clone();
             if (ctx.avgToSumCountMapping.containsKey(aggCall)) {
                 // if it's an avg function, we need to rewrite it to sum and count function
                 Pair<ColumnRefOperator, ColumnRefOperator> newAggPair = ctx.avgToSumCountMapping.get(aggCall);

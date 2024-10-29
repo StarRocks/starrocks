@@ -70,6 +70,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -123,6 +124,8 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1407,5 +1410,36 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+    }
+
+    /***
+     * Get the OptExpression of the query which is only optimized by rbo only.
+     */
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerConfig);
+        return optExpression;
+    }
+
+
+    /**
+     * Get the scan operators of the query which is only optimized by rbo only.
+     */
+    public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
+                                                                  String query) {
+        OptExpression optExpression = getQueryOptExpression(connectContext, query);
+        Assert.assertNotNull(optExpression);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
     }
 }
