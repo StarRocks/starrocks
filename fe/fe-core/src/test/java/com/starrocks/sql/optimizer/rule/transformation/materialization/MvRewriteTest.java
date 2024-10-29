@@ -285,8 +285,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testJoinMvRewrite() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+    public void testJoinMvRewrite1() throws Exception {
         createAndRefreshMv("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -340,7 +339,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan6, "join_mv_1");
 
         dropMv("test", "join_mv_1");
+    }
 
+    @Test
+    public void testJoinMvRewrite2() throws Exception {
         createAndRefreshMv("create materialized view join_mv_2" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -377,7 +379,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan10, "join_mv_2");
 
         dropMv("test", "join_mv_2");
+    }
 
+    @Test
+    public void testJoinMvRewrite3() throws Exception {
         createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -440,7 +445,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // query delta depends on join reorder
         String query16 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
                 " join emps on (emps.deptno = depts.deptno)";
-        String plan16 = getFragmentPlan(query16);
+        String plan16 = getFragmentPlan(query16, "MV");
         PlanTestBase.assertContains(plan16, "join_mv_3");
         OptExpression optExpression16 = getOptimizedPlan(query16, connectContext);
         List<PhysicalScanOperator> scanOperators16 = getScanOperators(optExpression16, "join_mv_3");
@@ -460,7 +465,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan17, "join_mv_3");
 
         dropMv("test", "join_mv_3");
+    }
 
+    @Test
+    public void testJoinMvRewrite4() throws Exception {
         createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -475,7 +483,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan18 = getFragmentPlan(query18);
         PlanTestBase.assertContains(plan18, "join_mv_4");
         dropMv("test", "join_mv_4");
+    }
 
+    @Test
+    public void testJoinMvRewrite5() throws Exception {
         createAndRefreshMv("create materialized view join_mv_5" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -495,7 +506,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_5");
         dropMv("test", "join_mv_6");
+    }
 
+    @Test
+    public void testJoinMvRewrite6() throws Exception {
         createAndRefreshMv("create materialized view join_mv_7" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -506,7 +520,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan20 = getFragmentPlan(query20);
         PlanTestBase.assertContains(plan20, "join_mv_7");
         dropMv("test", "join_mv_7");
+    }
 
+    @Test
+    public void testJoinMvRewrite7() throws Exception {
         // multi relations test
         createAndRefreshMv("create materialized view join_mv_8" +
                 " distributed by hash(empid)" +
@@ -517,7 +534,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan21 = getFragmentPlan(query21);
         PlanTestBase.assertContains(plan21, "join_mv_8");
         dropMv("test", "join_mv_8");
+    }
 
+    @Test
+    public void testJoinMvRewrite8() throws Exception {
         createAndRefreshMv("create materialized view join_mv_9" +
                 " distributed by hash(empid)" +
                 " as" +

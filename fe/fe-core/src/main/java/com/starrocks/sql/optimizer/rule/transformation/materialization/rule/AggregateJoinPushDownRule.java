@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
 
 /**
  * Support to push down aggregate functions below join operator and rewrite the query by mv transparently.
@@ -84,7 +85,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         if (!context.getSessionVariable().isEnableMaterializedViewPushDownRewrite()) {
             return false;
         }
-        if (Utils.isOptHasAppliedRule(input, Operator.OP_PUSH_DOWN_BIT)) {
+        if (Utils.isOptHasAppliedRule(input, OP_MV_AGG_PUSH_DOWN_REWRITE)) {
             return false;
         }
         return super.check(input, context);
