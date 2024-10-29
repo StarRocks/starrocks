@@ -109,7 +109,7 @@ GROUP BY
     date_trunc('hour', ts),
     k0
 ORDER BY
-    hour;
+    date_trunc('hour', ts);;
 
 INSERT INTO t0
 VALUES
@@ -198,4 +198,4 @@ GROUP BY
     date_trunc('hour', ts),
     k0
 ORDER BY
-    hour;
+    date_trunc('hour', ts);

@@ -110,7 +110,7 @@ GROUP BY
     date_trunc('hour', ts),
     k0
 ORDER BY
-    hour;
+    date_trunc('hour', ts);
 -- result:
 -49680.52
 217.58
@@ -203,7 +203,7 @@ GROUP BY
     date_trunc('hour', ts),
     k0
 ORDER BY
-    hour;
+    date_trunc('hour', ts);
 -- result:
 -99361.04
 435.16
