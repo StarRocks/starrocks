@@ -456,8 +456,8 @@ public class MvRewritePreprocessor {
             return null;
         }
 
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
@@ -525,21 +525,24 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
             return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
+        if (connectContext == null) {
+            return Pair.create(true, null);
+        }
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts = force ?
-                            CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
-                            CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (CollectionUtils.isNotEmpty(planContexts) &&
-                    planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
-                logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
-                        mv.getName(), planContexts.size());
-                String message = planContexts.stream()
-                        .map(MvPlanContext::getInvalidReason)
-                        .collect(Collectors.joining(";"));
-                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-                return Pair.create(false, "no valid plan: " + message);
-            }
+        List<MvPlanContext> planContexts = force ?
+                CachingMvPlanContextBuilder.getInstance()
+                        .getOrLoadPlanContext(connectContext.getSessionVariable(), mv) :
+                CachingMvPlanContextBuilder.getInstance()
+                        .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
+        if (CollectionUtils.isNotEmpty(planContexts) &&
+                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
+            logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
+                    mv.getName(), planContexts.size());
+            String message = planContexts.stream()
+                    .map(MvPlanContext::getInvalidReason)
+                    .collect(Collectors.joining(";"));
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return Pair.create(false, "no valid plan: " + message);
         }
         return Pair.create(true, null);
     }
@@ -554,8 +557,8 @@ public class MvRewritePreprocessor {
         for (MaterializedView mv : validMVs) {
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
-            List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                            .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
                     mvQueryScanOpDiff, mv.getLastRefreshTime());
