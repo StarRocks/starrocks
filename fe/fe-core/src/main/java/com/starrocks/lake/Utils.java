@@ -86,8 +86,8 @@ public class Utils {
             throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
-            for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
                         Long beId = chooseBackend((LakeTablet) tablet);
                         if (beId == null) {

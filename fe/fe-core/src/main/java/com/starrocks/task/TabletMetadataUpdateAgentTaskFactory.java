@@ -127,7 +127,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 }
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setPartition_id(tabletMeta.getPartitionId());
+                metaInfo.setPartition_id(tabletMeta.getPhysicalPartitionId());
                 metaInfo.setMeta_type(TTabletMetaType.PARTITIONID);
                 metaInfos.add(metaInfo);
                 // add at most 10000 tablet meta during one sync to avoid too large task
