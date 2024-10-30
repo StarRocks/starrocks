@@ -67,7 +67,7 @@ FROM
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 PROPERTIES('histogram_sample_ratio'='1.0', 'histogram_mcv_size'='10') ;
 -- result:
-analyze_test_3be5a35150fa48f4ac874409ea220c4b.t1	histogram	status	OK
+analyze_test_1d76c36837804415ba58d6e1315bd67e.t1	histogram	status	OK
 -- !result
 SELECT column_name, buckets FROM _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.t1' order by column_name;
 -- result:
