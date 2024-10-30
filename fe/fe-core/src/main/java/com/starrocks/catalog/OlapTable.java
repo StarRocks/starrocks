@@ -48,6 +48,7 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -3224,6 +3225,10 @@ public class OlapTable extends Table {
 
     public AlterJobV2Builder alterTable() {
         return new OlapTableAlterJobV2Builder(this);
+    }
+
+    public AlterJobV2Builder rollUp() {
+        return new OlapTableRollupJobBuilder(this);
     }
 
     public OptimizeJobV2Builder optimizeTable() {

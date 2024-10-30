@@ -136,6 +136,11 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
+    public AlterJobV2Builder rollUp() {
+        return LakeTableHelper.rollUp(this);
+    }
+
+    @Override
     public Map<String, String> getUniqueProperties() {
         Map<String, String> properties = Maps.newHashMap();
 

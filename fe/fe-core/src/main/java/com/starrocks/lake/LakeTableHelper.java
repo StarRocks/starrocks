@@ -20,6 +20,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.alter.LakeTableRollupBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -77,6 +78,11 @@ public class LakeTableHelper {
     static AlterJobV2Builder alterTable(OlapTable table) {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
         return new LakeTableAlterJobV2Builder(table);
+    }
+
+    static AlterJobV2Builder rollUp(OlapTable table) {
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+        return new LakeTableRollupBuilder(table);
     }
 
     static boolean removeShardRootDirectory(ShardInfo shardInfo) {

@@ -43,41 +43,33 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -88,8 +80,6 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -223,14 +213,12 @@ public class MaterializedViewHandler extends AlterHandler {
         // Step2: create mv job
         AlterJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
                 addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexId,
-                addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement(),
-                olapTable.isCloudNativeTable());
+                addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
 
         addAlterJobV2(rollupJobV2);
-
         olapTable.setState(OlapTableState.ROLLUP);
-
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
+
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
 
@@ -283,7 +271,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 AlterJobV2 alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
                         null, addRollupClause.getProperties(),
                         olapTable, db, baseIndexId, olapTable.getKeysType(), null,
-                        null, olapTable.isCloudNativeTable());
+                        null);
 
                 rollupNameJobMap.put(addRollupClause.getRollupName(), alterJobV2);
                 logJobIdSet.add(alterJobV2.getJobId());
@@ -334,15 +322,8 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   Expr whereClause, Map<String, String> properties,
                                                   OlapTable olapTable, Database db, long baseIndexId,
                                                   KeysType mvKeysType, OriginStatement origStmt,
-                                                  QueryStatement queryStatement, boolean isCloudNativeTable)
+                                                  QueryStatement queryStatement)
             throws DdlException, AnalysisException {
-        if (mvKeysType == null) {
-            // assign rollup index's key type, same as base index's
-            mvKeysType = olapTable.getKeysType();
-        }
-        // get rollup schema hash
-        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getBfColumnNames(),
-                olapTable.getBfFpp());
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
@@ -350,10 +331,6 @@ public class MaterializedViewHandler extends AlterHandler {
 
         // create rollup job
         long dbId = db.getId();
-        long tableId = olapTable.getId();
-        int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
-        // mvSchemaVersion will keep same with the src MaterializedIndex
-        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         long mvIndexId = globalStateMgr.getNextId();
@@ -370,140 +347,28 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
 
-        AlterJobV2 mvJob;
-        if (isCloudNativeTable) {
-            mvJob = new LakeRollupJob(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                    baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion,
-                    mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
-                    mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
-        } else {
-            mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                    baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion,
-                    mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
-                    mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
+        AlterJobV2Builder mvJobBuilder = olapTable.rollUp();
+        try {
+            AlterJobV2 mvJob = mvJobBuilder
+                    .withJobId(jobId)
+                    .withDbId(dbId)
+                    .withTimeoutSeconds(timeoutMs * 1000)
+                    .withBaseIndexId(baseIndexId)
+                    .withMvIndexId(mvIndexId)
+                    .withBaseIndexName(baseIndexName)
+                    .withMvName(mvName)
+                    .withMvColumns(mvColumns)
+                    .withWhereClause(whereClause)
+                    .withMvShortkeyColumnCoun(mvShortKeyColumnCount)
+                    .withRrigStmt(origStmt)
+                    .withViewDefineSql(viewDefineSql)
+                    .withIsColocateMv(isColocateMv).build();
+
+            LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
+            return mvJob;
+        } catch (UserException exception) {
+            throw new DdlException(exception.getMessage());
         }
-
-        /*
-         * create all rollup indexes. and set state.
-         * After setting, Tables' state will be ROLLUP
-         */
-        List<Tablet> addedTablets = Lists.newArrayList();
-        for (Partition partition : olapTable.getPartitions()) {
-            long partitionId = partition.getId();
-            TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-            short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partitionId);
-
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                long physicalPartitionId = physicalPartition.getId();
-                // index state is SHADOW
-                MaterializedIndex mvIndex = new MaterializedIndex(mvIndexId, IndexState.SHADOW);
-                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
-                TabletMeta mvTabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, mvIndexId, mvSchemaHash, medium);
-
-                if (isCloudNativeTable) {
-                    // create shard group
-                    long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                            createShardGroup(db.getId(), olapTable.getId(), partitionId, mvIndexId);
-                    mvIndex.setShardGroupId(shardGroupId);
-
-                    // create shard
-                    Map<String, String> shardProperties = new HashMap<>();
-                    properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(olapTable.getId()));
-                    properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
-                    properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(mvIndexId));
-
-                    List<Tablet> originTablets = partition.getIndex(baseIndexId).getTablets();
-                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                    Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
-                            ConnectContext.get().getCurrentWarehouseId());
-                    if (workerGroupId.isEmpty()) {
-                        Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                        ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
-                    }
-                    List<Long> originTableIds = originTablets.stream()
-                            .map(tablet -> tablet.getId())
-                            .collect(Collectors.toList());
-                    List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
-                            originTablets.size(),
-                            olapTable.getPartitionFilePathInfo(partitionId),
-                            olapTable.getPartitionFileCacheInfo(partitionId),
-                            shardGroupId, originTableIds, shardProperties, workerGroupId.get());
-                    Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
-
-                    TabletMeta shadowTabletMeta =
-                            new TabletMeta(dbId, tableId, physicalPartitionId, mvIndexId, 0, medium, true);
-                    for (int i = 0; i < originTablets.size(); i++) {
-                        Tablet originTablet = originTablets.get(i);
-                        Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
-                        mvIndex.addTablet(shadowTablet, shadowTabletMeta);
-                        mvJob.addTabletIdMap(physicalPartitionId, shadowTablet.getId(), originTablet.getId());
-                    }
-
-                } else {
-                    for (Tablet baseTablet : baseIndex.getTablets()) {
-                        long baseTabletId = baseTablet.getId();
-                        long mvTabletId = globalStateMgr.getNextId();
-
-                        Tablet newTablet = new LocalTablet(mvTabletId);
-
-                        mvIndex.addTablet(newTablet, mvTabletMeta);
-                        addedTablets.add(newTablet);
-
-                        mvJob.addTabletIdMap(physicalPartitionId, mvTabletId, baseTabletId);
-
-                        List<Replica> baseReplicas = ((LocalTablet) baseTablet).getImmutableReplicas();
-
-                        int healthyReplicaNum = 0;
-                        for (Replica baseReplica : baseReplicas) {
-                            long mvReplicaId = globalStateMgr.getNextId();
-                            long backendId = baseReplica.getBackendId();
-                            if (baseReplica.getState() == Replica.ReplicaState.CLONE
-                                    || baseReplica.getState() == Replica.ReplicaState.DECOMMISSION
-                                    || baseReplica.getLastFailedVersion() > 0) {
-                                LOG.info(
-                                        "base replica {} of tablet {} state is {}, and last failed version is {}, " +
-                                                "skip creating rollup replica",
-                                        baseReplica.getId(), baseTabletId, baseReplica.getState(),
-                                        baseReplica.getLastFailedVersion());
-                                continue;
-                            }
-                            Preconditions
-                                    .checkState(baseReplica.getState() == Replica.ReplicaState.NORMAL, baseReplica.getState());
-                            // replica's init state is ALTER, so that tablet report process will ignore its report
-                            Replica mvReplica = new Replica(mvReplicaId, backendId, Replica.ReplicaState.ALTER,
-                                    Partition.PARTITION_INIT_VERSION,
-                                    mvSchemaHash);
-                            ((LocalTablet) (newTablet)).addReplica(mvReplica);
-                            healthyReplicaNum++;
-                        } // end for baseReplica
-
-                        if (healthyReplicaNum < replicationNum / 2 + 1) {
-                            /*
-                             * TODO(cmy): This is a bad design.
-                             * Because in the rollup job, we will only send tasks to the rollup replicas that have been created,
-                             * without checking whether the quorum of replica number are satisfied.
-                             * This will cause the job to fail until we find that the quorum of replica number
-                             * is not satisfied until the entire job is done.
-                             * So here we check the replica number strictly and do not allow to submit the job
-                             * if the quorum of replica number is not satisfied.
-                             */
-                            for (Tablet tablet : addedTablets) {
-                                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
-                            }
-                            throw new DdlException("tablet " + baseTabletId + " has few healthy replica: " + healthyReplicaNum);
-                        }
-                    } // end for baseTablets
-                }
-
-                mvJob.addMVIndex(physicalPartitionId, mvIndex);
-
-                LOG.debug("create materialized view index {} based on index {} in partition {}:{}",
-                        mvIndexId, baseIndexId, partitionId, physicalPartitionId);
-            }
-        } // end for partitions
-
-        LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
-        return mvJob;
     }
 
     private List<Column> checkAndPrepareMaterializedView(CreateMaterializedViewStmt addMVClause, Database db,
@@ -904,7 +769,7 @@ public class MaterializedViewHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
