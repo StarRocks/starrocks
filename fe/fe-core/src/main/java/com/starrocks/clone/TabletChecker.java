@@ -948,12 +948,11 @@ public class TabletChecker extends FrontendDaemon {
             return createRedundantSchedCtx(TabletHealthStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     stats.getNeedFurtherRepairReplica());
         } else {
-            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
             // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
             // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
             // so that repair of replica with incomplete version won't be blocked and hence version publish process
             // of load task won't be blocked either.
-            if (availableBEs.size() > stats.getAliveCnt()) {
+            if (aliveBackendsNum > stats.getAliveCnt()) {
                 if (stats.getAliveCnt() < (replicationNum / 2) + 1) {
                     return Pair.create(TabletHealthStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
                 } else if (stats.getAliveCnt() < replicationNum) {
