@@ -47,7 +47,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
