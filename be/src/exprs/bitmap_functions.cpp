@@ -398,7 +398,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const constexpr LogicalType TYPE = TYPE_BIGINT;
-    size_t size = columns[0]->size();
+    size_t size = columns[0]->is_constant() ? 1 : columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
 
     Column* data_column = ColumnHelper::get_data_column(columns[0].get());
@@ -440,7 +440,8 @@ StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, c
         // append bitmap
         builder.append(std::move(bitmap));
     }
-    return builder.build(ColumnHelper::is_all_const(columns));
+    auto result = builder.build(false);
+    return columns[0]->is_constant() ? ConstColumn::create(std::move(result), columns[0]->size()) : result;
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::Columns& columns) {
