@@ -43,16 +43,19 @@ import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
+import com.starrocks.privilege.WarehousePEntryObject;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -399,6 +402,24 @@ public class GrantsTo {
                 } else if (ObjectType.PIPE.equals(privEntry.getKey())) {
                     PipePEntryObject pipePEntryObject = (PipePEntryObject) privilegeEntry.getObject();
                     objects.addAll(pipePEntryObject.expandObjectNames());
+                } else if (ObjectType.WAREHOUSE.equals(privEntry.getKey())) {
+                    WarehousePEntryObject warehousePEntryObject =
+                            (WarehousePEntryObject) privilegeEntry.getObject();
+                    long warehouseId = warehousePEntryObject.getId();
+                    if (warehouseId == PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID) {
+                        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                        Set<String> allWarehouseNames = warehouseManager.getAllWarehouseNames();
+                        for (String warehouseName : allWarehouseNames) {
+                            objects.add(Lists.newArrayList(null, null, warehouseName));
+                        }
+                    } else {
+                        Warehouse warehouse =
+                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                        if (warehouse == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, warehouse.getName()));
+                    }
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
