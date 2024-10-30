@@ -15,9 +15,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
