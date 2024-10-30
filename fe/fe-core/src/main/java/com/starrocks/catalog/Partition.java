@@ -91,9 +91,6 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
 
-    @SerializedName(value = "shardGroupIdList")
-    private List<Long> shardGroupIdList;
-
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
     private AtomicBoolean isImmutable = new AtomicBoolean(false);
@@ -196,7 +193,6 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         partition.versionTxnType = this.versionTxnType;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
-        partition.shardGroupIdList = this.shardGroupIdList;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
@@ -269,6 +265,10 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
     }
 
     @Override

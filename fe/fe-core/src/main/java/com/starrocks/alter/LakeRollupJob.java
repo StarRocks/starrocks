@@ -164,7 +164,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 }
                 TStorageMedium storageMedium = table.getPartitionInfo()
                         .getDataProperty(partition.getParentId()).getStorageMedium();
-                TTabletType tabletType = table.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()

@@ -131,48 +131,48 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     // physical partition id -> (rollup tablet id -> base tablet id)
     @SerializedName(value = "partitionIdToBaseRollupTabletIdMap")
-    protected Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+    private Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
     @SerializedName(value = "partitionIdToRollupIndex")
-    protected Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
+    private Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
 
     // rollup and base schema info
     @SerializedName(value = "baseIndexId")
-    protected long baseIndexId;
+    private long baseIndexId;
     @SerializedName(value = "rollupIndexId")
-    protected long rollupIndexId;
+    private long rollupIndexId;
     @SerializedName(value = "baseIndexName")
-    protected String baseIndexName;
+    private String baseIndexName;
     @SerializedName(value = "rollupIndexName")
-    protected String rollupIndexName;
+    private String rollupIndexName;
 
     @SerializedName(value = "rollupSchema")
-    protected List<Column> rollupSchema = Lists.newArrayList();
+    private List<Column> rollupSchema = Lists.newArrayList();
     @SerializedName(value = "rollupSchemaVersion")
-    protected int rollupSchemaVersion;
+    private int rollupSchemaVersion;
     @SerializedName(value = "baseSchemaHash")
-    protected int baseSchemaHash;
+    private int baseSchemaHash;
     @SerializedName(value = "rollupSchemaHash")
-    protected int rollupSchemaHash;
+    private int rollupSchemaHash;
 
     @SerializedName(value = "rollupKeysType")
-    protected KeysType rollupKeysType;
+    private KeysType rollupKeysType;
     @SerializedName(value = "rollupShortKeyColumnCount")
-    protected short rollupShortKeyColumnCount;
+    private short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    protected OriginStatement origStmt;
+    private OriginStatement origStmt;
 
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
     @SerializedName(value = "viewDefineSql")
-    protected String viewDefineSql;
+    private String viewDefineSql;
     @SerializedName(value = "isColocateMVIndex")
     protected boolean isColocateMVIndex = false;
 
-    protected Expr whereClause;
+    private Expr whereClause;
 
     // save all create rollup tasks
-    protected AgentBatchTask rollupBatchTask = new AgentBatchTask();
+    private AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;

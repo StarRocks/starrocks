@@ -60,9 +60,6 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = INVALID_SHARD_GROUP_ID;
 
-    @SerializedName(value = "shardGroupIdList")
-    private List<Long> shardGroupIdList;
-
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
     private AtomicBoolean isImmutable = new AtomicBoolean(false);
@@ -170,6 +167,11 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    @Override
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
     }
 
     @Override

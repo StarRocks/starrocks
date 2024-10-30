@@ -1605,6 +1605,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (index.getId() != olapTable.getBaseIndexId()) {
                 // add rollup index to partition
                 physicalPartition.createRollupIndex(index);
+            } else {
+                // base index set ShardGroupId for rollback to old version
+                physicalPartition.setShardGroupId(index.getShardGroupId());
             }
         }
 
@@ -1772,6 +1775,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
                 partition.createRollupIndex(index);
+            } else {
+                // base index set ShardGroupId for rollback to old version
+                index.setShardGroupId(shardGroupId);
+                partition.setShardGroupId(shardGroupId);
             }
         }
 
@@ -2774,6 +2781,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
                         table.getType().name() + " table[" + tableName + "]");
             }
+
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                 throw new DdlException(
