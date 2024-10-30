@@ -41,7 +41,7 @@ INSERT INTO t2 (c4, c5, c6) VALUES
 SELECT *
 FROM (
         SELECT c1, c2, c3, c4, c5
-                , c6, row_number() OVER (PARTITION BY c2 ORDER BY c1 ) AS _rowid
+                , c6, row_number() OVER (PARTITION BY c2 ORDER BY c1,c6 ) AS _rowid
         FROM (
                 SELECT *
                 FROM t1
@@ -54,7 +54,7 @@ WHERE _rowid  <= 2 order by c4;
 SELECT *
 FROM (
         SELECT c1, c2, c3, c4, c5
-                , c6, row_number() OVER (PARTITION BY t3.c2 ORDER BY c1 ) AS _rowid
+                , c6, row_number() OVER (PARTITION BY t3.c2 ORDER BY c1,c6 ) AS _rowid
                 , sum(t3.c2) OVER (PARTITION BY t3.c2) AS _sum
         FROM (
                 SELECT *
@@ -62,12 +62,12 @@ FROM (
                         JOIN t2 ON c2 = c5
         ) t3
 ) t4
-WHERE _rowid  <= 2 order by c4;
+WHERE _rowid  <= 2 order by c4,c6;
 
 -- case 3: pre agg with sum,avg,count
 SELECT *
 FROM (
-        SELECT c1, c2, c3, c4, c5,c6, row_number() OVER (PARTITION BY c2 ORDER BY c1,c4 ) AS _rowid
+        SELECT c1, c2, c3, c4, c5,c6, row_number() OVER (PARTITION BY c2 ORDER BY c1,c6 ) AS _rowid
                 , sum(c2) OVER (PARTITION BY t3.c2) AS _sum, 
                 	avg(c2) OVER (PARTITION BY t3.c2) AS _avg
         FROM (
@@ -76,4 +76,4 @@ FROM (
                         JOIN t2 ON c2 = c5
         ) t3
 ) t4
-WHERE _rowid <= 2 order by c4;
+WHERE _rowid <= 2 order by c4,c6;
