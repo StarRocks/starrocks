@@ -1,4 +1,4 @@
--- name: test_query_cache
+-- name: test_query_cache @cloud
 CREATE TABLE t0
 (
       `ts` datetime NOT NULL COMMENT "",
