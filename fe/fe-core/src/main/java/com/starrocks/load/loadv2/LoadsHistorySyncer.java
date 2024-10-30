@@ -17,11 +17,18 @@ package com.starrocks.load.loadv2;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.scheduler.history.TableKeeper;
+>>>>>>> 050b92abc1 ([BugFix] Fix loads syncer wrong replication num property (#52220))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,7 +41,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     public static final String LOADS_HISTORY_TABLE_NAME = "loads_history";
 
     private static final String LOADS_HISTORY_TABLE_CREATE =
-            "CREATE TABLE IF NOT EXISTS %s (" +
+            String.format("CREATE TABLE IF NOT EXISTS %s (" +
             "id bigint, " +
             "label varchar(2048), " +
             "profile_id varchar(2048), " +
@@ -64,10 +71,18 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             ") " +
             "PARTITION BY date_trunc('DAY', load_finish_time) " +
             "DISTRIBUTED BY HASH(label) BUCKETS 3 " +
+<<<<<<< HEAD
             "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_LOADS_HISTORY_REPLICATION_NUM =
             "ALTER TABLE %s SET ('default.replication_num'='3')";
+=======
+            "PROPERTIES( " +
+            "'replication_num' = '1', " +
+            "'partition_live_number' = '" + Config.loads_history_retained_days + "'" +
+            ")",
+            LOADS_HISTORY_TABLE_NAME);
+>>>>>>> 050b92abc1 ([BugFix] Fix loads syncer wrong replication num property (#52220))
 
     private static final String LOADS_HISTORY_SYNC =
             "INSERT INTO %s " +
@@ -77,15 +92,29 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             "AND load_finish_time > ( " +
             "SELECT COALESCE(MAX(load_finish_time), '0001-01-01 00:00:00') " +
             "FROM %s);";
+<<<<<<< HEAD
     
     private boolean databaseExists = false;
     private boolean tableExists = false;
     private boolean tableCorrected = false;
+=======
+
+    private boolean firstSync = true;
+
+    private static final TableKeeper KEEPER =
+            new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
+                    () -> Math.max(1, Config.loads_history_retained_days));
+
+    public static TableKeeper createKeeper() {
+        return KEEPER;
+    }
+>>>>>>> 050b92abc1 ([BugFix] Fix loads syncer wrong replication num property (#52220))
 
     public LoadsHistorySyncer() {
         super("Load history syncer", Config.loads_history_sync_interval_second * 1000L);
     }
 
+<<<<<<< HEAD
     public boolean checkDatabaseExists() {
         return GlobalStateMgr.getCurrentState().getDb(LOADS_HISTORY_DB_NAME) != null;
     }
@@ -134,12 +163,13 @@ public class LoadsHistorySyncer extends FrontendDaemon {
             tableCorrected = true;
         }
 
+=======
+    public void syncData() {
+>>>>>>> 050b92abc1 ([BugFix] Fix loads syncer wrong replication num property (#52220))
         if (getInterval() != Config.loads_history_sync_interval_second * 1000L) {
             setInterval(Config.loads_history_sync_interval_second * 1000L);
         }
-    }
 
-    public void syncData() {
         try {
             RepoExecutor.getInstance().executeDML(SQLBuilder.buildSyncSql());
         } catch (Exception e) {
@@ -150,7 +180,11 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         try {
-            checkMeta();
+            // wait table keeper to create table
+            if (firstSync) {
+                firstSync = false;
+                return;
+            }
             syncData();
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
@@ -161,6 +195,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
      * Generate SQL for operations
      */
     static class SQLBuilder {
+<<<<<<< HEAD
 
         public static String buildCreateTableSql() throws UserException {
             int replica = AutoInferUtil.calDefaultReplicationNum();
@@ -173,6 +208,8 @@ public class LoadsHistorySyncer extends FrontendDaemon {
                     CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME));
         }
 
+=======
+>>>>>>> 050b92abc1 ([BugFix] Fix loads syncer wrong replication num property (#52220))
         public static String buildSyncSql() {
             return String.format(LOADS_HISTORY_SYNC,
                     CatalogUtils.normalizeTableName(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME),
