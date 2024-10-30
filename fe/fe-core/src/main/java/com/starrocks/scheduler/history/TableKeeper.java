@@ -20,6 +20,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.StringUtils;
@@ -209,6 +210,7 @@ public class TableKeeper {
             super("TableKeeper", Config.table_keeper_interval_second * 1000L);
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
+            keeperList.add(LoadsHistorySyncer.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }
