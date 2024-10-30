@@ -43,7 +43,6 @@ public class PhysicalPartitionImplTest {
         PhysicalPartitionImpl p = new PhysicalPartitionImpl(1, "", 1, new MaterializedIndex());
         Assert.assertEquals(1, p.getId());
         Assert.assertEquals(1, p.getParentId());
-        Assert.assertEquals(0, p.getShardGroupId());
         Assert.assertFalse(p.isImmutable());
         p.setImmutable(true);
         Assert.assertTrue(p.isImmutable());

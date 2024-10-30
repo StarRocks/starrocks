@@ -53,7 +53,7 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
         AlterJobV2 mvJob = new RollupJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutMs,
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
-                olapTable.getKeysType(), rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
+                mvKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Tablet> addedTablets = Lists.newArrayList();

@@ -168,7 +168,7 @@ public class AlterJobMgr {
                 throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not found");
             }
             // check table type
-            if (table.getType() != TableType.OLAP) {
+            if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException(
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }

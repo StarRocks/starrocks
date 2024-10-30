@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.OriginStatement;
 
@@ -52,6 +53,7 @@ public abstract class AlterJobV2Builder {
     protected String rollupIndexName;
     protected Expr whereClause;
     List<Column> mvColumns;
+    KeysType mvKeysType;
     short rollupShortKeyColumnCount;
     protected OriginStatement origStmt;
     protected String viewDefineSql;
@@ -63,6 +65,11 @@ public abstract class AlterJobV2Builder {
 
     public AlterJobV2Builder withBaseIndexId(long baseIndexId) {
         this.baseIndexId = baseIndexId;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvKeysType(KeysType mvKeysType) {
+        this.mvKeysType = mvKeysType;
         return this;
     }
 

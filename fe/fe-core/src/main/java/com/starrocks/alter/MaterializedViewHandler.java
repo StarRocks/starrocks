@@ -324,6 +324,10 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   KeysType mvKeysType, OriginStatement origStmt,
                                                   QueryStatement queryStatement)
             throws DdlException, AnalysisException {
+        if (mvKeysType == null) {
+            // assign rollup index's key type, same as base index's
+            mvKeysType = olapTable.getKeysType();
+        }
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
@@ -362,6 +366,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     .withMvShortkeyColumnCoun(mvShortKeyColumnCount)
                     .withRrigStmt(origStmt)
                     .withViewDefineSql(viewDefineSql)
+                    .withMvKeysType(mvKeysType)
                     .withIsColocateMv(isColocateMv).build();
 
             LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
