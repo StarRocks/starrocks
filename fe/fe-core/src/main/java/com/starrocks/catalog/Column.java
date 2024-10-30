@@ -244,8 +244,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(Column column) {
         this.name = column.getName();
         this.columnId = column.getColumnId();
+        this.aggStateDesc = column.aggStateDesc;
         this.type = column.type;
-        this.type.setAggStateDesc(this.aggStateDesc);
+        this.type.setAggStateDesc(column.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
