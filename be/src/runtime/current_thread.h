@@ -490,6 +490,47 @@ private:
     bool _prev_catched;
 };
 
+// Case: allocate memory in a thread and release in the other thread
+class ThreadMemoryMigrator {
+public:
+    ThreadMemoryMigrator(MemTracker* target) : _target_tracker(target) {}
+    ~ThreadMemoryMigrator();
+
+    static std::unique_ptr<ThreadMemoryMigrator> migrate_to(MemTracker* tracker);
+
+    void consume(int64_t bytes);
+
+private:
+    int64_t _bytes = 0;
+    MemTracker* _target_tracker;
+};
+
+using ThreadMemoryMigratorPtr = std::unique_ptr<ThreadMemoryMigrator>;
+
+// Concept with a consume method
+template <typename T>
+concept MemoryConsumer = requires(T a, int64_t bytes) {
+    { a.consume(bytes) };
+};
+
+// Record the memory usage in a scope
+template <MemoryConsumer Consumer>
+class ScopeMemoryRecorder {
+public:
+    ScopeMemoryRecorder(Consumer& migrator) : _migrator(migrator) {
+        _before_bytes = CurrentThread::current().get_consumed_bytes();
+    }
+
+    ~ScopeMemoryRecorder() {
+        int64_t delta_bytes = CurrentThread::current().get_consumed_bytes() - _before_bytes;
+        _migrator.consume(delta_bytes);
+    }
+
+private:
+    int64_t _before_bytes;
+    Consumer& _migrator;
+};
+
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
 
 #define RELEASE_RESERVED_GUARD() \

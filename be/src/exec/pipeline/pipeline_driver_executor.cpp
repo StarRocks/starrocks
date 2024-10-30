@@ -22,6 +22,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
@@ -327,26 +328,18 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     // Load channel profile will be merged on FE
     auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
     MemTracker* mem_tracker = GlobalEnv::GetInstance()->query_profile_mem_tracker();
-    int64_t delta_bytes;
     std::shared_ptr<TReportExecStatusParams> params;
+    auto migrator = ThreadMemoryMigrator::migrate_to(mem_tracker);
     {
-        // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
-        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        ScopeMemoryRecorder scope(*migrator);
         params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
                                                                      load_channel_profile, status, done);
-        delta_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
-
-        CurrentThread::current().mem_release(delta_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta_bytes);
-
-        mem_tracker->consume_without_root(delta_bytes);
     }
 
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
-    auto report_task = [params, exec_env, fe_addr, fragment_id, mem_tracker, delta_bytes]() {
-        DeferOp defer([&]() { mem_tracker->release_without_root(delta_bytes); });
+    auto report_task = [ptr = std::move(migrator), params, exec_env, fe_addr, fragment_id]() {
         int retry_times = 0;
         while (retry_times++ < 3) {
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);

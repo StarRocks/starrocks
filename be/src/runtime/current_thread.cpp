@@ -15,7 +15,7 @@
 #include "runtime/current_thread.h"
 
 #include "runtime/exec_env.h"
-#include "storage/storage_engine.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -49,6 +49,29 @@ starrocks::MemTracker* CurrentThread::singleton_check_mem_tracker() {
 
 CurrentThread& CurrentThread::current() {
     return tls_thread_status;
+}
+
+std::unique_ptr<ThreadMemoryMigrator> ThreadMemoryMigrator::migrate_to(MemTracker* tracker) {
+    DCHECK(CurrentThread::mem_tracker() != tracker) << "should not transfer to current tracker";
+
+    return std::make_unique<ThreadMemoryMigrator>(tracker);
+}
+
+void ThreadMemoryMigrator::consume(int64_t bytes) {
+    _bytes = bytes;
+    // record the memory consumption in both PROCESS & TARGET:
+    // 1. The real memory release would happen at PROCESS, so consume it first
+    // 2. The target tracker also needs to be aware of that memory consumption
+    CurrentThread::current().mem_release(bytes);
+    GlobalEnv::GetInstance()->process_mem_tracker()->consume(bytes);
+    _target_tracker->consume_without_root(bytes);
+}
+
+ThreadMemoryMigrator::~ThreadMemoryMigrator() {
+    // TODO: consider support using an individual tracker
+    DCHECK(CurrentThread::mem_tracker()->type() == MemTracker::PROCESS) << "must release memory in PROCESS_MEM_TRACKER";
+
+    _target_tracker->release_without_root(_bytes);
 }
 
 } // namespace starrocks
