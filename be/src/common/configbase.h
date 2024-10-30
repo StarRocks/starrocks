@@ -142,9 +142,7 @@ public:
 
     bool set_value(std::string value);
 
-    bool rollback_last_value();
-
-    void set_last_update_value();
+    bool rollback();
 
     virtual std::string value() const = 0;
 
