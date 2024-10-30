@@ -396,7 +396,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             // check if mv index already exists in other table's materialized indexes
             for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (tbl.isOlapTable()) {
+                if (tbl.isOlapOrCloudNativeTable()) {
                     OlapTable otherOlapTable = (OlapTable) tbl;
                     if (otherOlapTable.getIndexNameToId().size() > 1 && otherOlapTable.hasMaterializedIndex(mvName)) {
                         throw new DdlException("Materialized view[" + mvName + "] already exists in table "
@@ -857,7 +857,7 @@ public class MaterializedViewHandler extends AlterHandler {
     /**
      * create tablet and alter tablet in be is thread safe,so we can run rollup job for one table concurrently
      */
-    private void runAlterJobWithConcurrencyLimit(RollupJobV2 rollupJobV2) {
+    private void runAlterJobWithConcurrencyLimit(AlterJobV2 rollupJobV2) {
         if (rollupJobV2.isDone()) {
             return;
         }
@@ -896,7 +896,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
     private void runAlterJobV2() {
         for (Map.Entry<Long, AlterJobV2> entry : getAlterJobsCopy().entrySet()) {
-            RollupJobV2 alterJob = (RollupJobV2) entry.getValue();
+            AlterJobV2 alterJob = entry.getValue();
             // run alter job
             runAlterJobWithConcurrencyLimit(alterJob);
             // the following check should be right after job's running, so that the table's state

@@ -570,11 +570,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
-        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
-    }
-
-    @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -583,7 +578,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     public static long peekNextTransactionId() {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
-
 
     void addRollIndexToCatalog(@NotNull LakeTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
@@ -623,7 +617,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
-
     boolean readyToPublishVersion() throws AlterCancelException {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
@@ -648,7 +641,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
-                // todo only publish visible
                 List<MaterializedIndex> allMaterializedIndex = table.getPartition(partitionId).
                         getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();

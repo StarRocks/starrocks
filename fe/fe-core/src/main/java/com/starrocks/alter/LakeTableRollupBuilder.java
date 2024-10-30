@@ -69,15 +69,12 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-            short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partitionId);
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.SHADOW);
                 MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
-                TabletMeta mvTabletMeta = new TabletMeta(dbId, olapTable.getId(),
-                        physicalPartitionId, rollupIndexId, mvSchemaHash, medium);
 
                 // create shard group
                 long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().

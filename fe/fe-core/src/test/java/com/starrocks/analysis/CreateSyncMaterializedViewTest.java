@@ -53,6 +53,9 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
+// If you add a test in this file,
+// please add it in another file LakeSyncMaterializedViewTest too.
+// The test cases for both files are the same, but the RunMode is different.
 public class CreateSyncMaterializedViewTest {
     private static final Logger LOG = LogManager.getLogger(CreateSyncMaterializedViewTest.class);
 
