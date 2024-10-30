@@ -683,6 +683,7 @@ select array_sum( cast ('[40360,40361]' as array<int>));
 select array_to_bitmap( cast ('[40360,40361]' as array<int>));
 select bitmap_to_array(array_to_bitmap(cast ('[40360,40361]' as array<int>)));
 select REVERSE( cast ('[40360,40361]' as array<int>));
+select bitmap_to_string(array_to_bitmap( cast ('[40360,40361]' as array<int>))) from table(generate_series(1,10,1));
 
 
 select array_contains( cast ('null' as array<int>), 40360);
