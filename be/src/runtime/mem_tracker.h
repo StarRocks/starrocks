@@ -102,7 +102,13 @@ public:
         COMPACTION,
         SCHEMA_CHANGE_TASK,
         RESOURCE_GROUP,
+<<<<<<< HEAD
         RESOURCE_GROUP_BIG_QUERY
+=======
+        RESOURCE_GROUP_BIG_QUERY,
+        JEMALLOC,
+        PASSTHROUGH,
+>>>>>>> 008ec4746b ([Enhancement] add passthrough buffer mem tracker (#52404))
     };
 
     /// 'byte_limit' < 0 means no limit

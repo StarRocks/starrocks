@@ -197,6 +197,22 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, query_pool_mem_tracker);
         REG_METHOD(GlobalEnv, load_mem_tracker);
         REG_METHOD(GlobalEnv, metadata_mem_tracker);
+<<<<<<< HEAD
+=======
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, consistency_mem_tracker);
+        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
+
+        // level 2
+>>>>>>> 008ec4746b ([Enhancement] add passthrough buffer mem tracker (#52404))
         REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
         REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
         REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
