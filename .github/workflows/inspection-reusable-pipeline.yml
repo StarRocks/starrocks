@@ -37,6 +37,9 @@ on:
         description: 'RUN ADMIT?'
         type: string
         default: 'true'
+      WITH_COV:
+        type: string
+        default: 'false'
 
     outputs:
       CONF_FILE:
@@ -70,6 +73,7 @@ env:
   CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
+  WITH_COV: ${{ inputs.WITH_COV }}
 
 jobs:
   deploy:
@@ -219,7 +223,8 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --skip-gcov
+          [[ "${WITH_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
 
       - name: Clean ENV
         if: always()
