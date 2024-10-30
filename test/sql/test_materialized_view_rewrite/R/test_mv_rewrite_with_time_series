@@ -84,7 +84,7 @@ True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where k2 > '2020-10-23 12:12:00' and k2 <= '2020-10-25 12:12:00'  group by k1 order by 1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where (k2 > '2020-10-23 12:12:00' or k2 <= '2020-10-24 12:12:00') and k8 > 2  group by k1 order by 1;", "test_mv1")
 -- result:
@@ -193,7 +193,7 @@ True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where k2 > '2020-10-23 12:12:00' and k2 <= '2020-10-25 12:12:00'  group by k1 order by 1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 function: print_hit_materialized_view("select k1, sum(k6), sum(k7), sum(k8), count(1) as cnt from t1  where (k2 > '2020-10-23 12:12:00' or k2 <= '2020-10-24 12:12:00') and k8 > 2  group by k1 order by 1;", "test_mv1")
 -- result:
