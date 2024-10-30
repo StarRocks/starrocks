@@ -194,7 +194,7 @@ bool Field::set_value(std::string value) {
         _last_set_val.swap(_current_set_val);
         _current_set_val = value;
     }
-    return flag;
+    return success;
 }
 
 bool Field::rollback() {
@@ -203,7 +203,7 @@ bool Field::rollback() {
         _current_set_val.swap(_last_set_val);
         _last_set_val.clear();
     }
-    return flag;
+    return success;
 }
 
 // Init conf fields.
