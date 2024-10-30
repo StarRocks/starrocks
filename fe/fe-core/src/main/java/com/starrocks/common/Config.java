@@ -3289,4 +3289,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
+
+    @ConfField(mutable = true)
+    public static int batch_write_gc_check_interval_ms = 60000;
+
+    @ConfField(mutable = true)
+    public static int batch_write_idle_ms = 3600000;
+
+    public static int batch_write_executor_threads_num = 4096;
 }
