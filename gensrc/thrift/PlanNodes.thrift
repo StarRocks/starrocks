@@ -280,6 +280,10 @@ struct TBrokerScanRange {
     3: required list<Types.TNetworkAddress> broker_addresses
     // used for channel stream load only
     4: optional i32 channel_id
+    // available when this is a stream load in batch write mode
+    5: optional bool enable_batch_write
+    6: optional i32 batch_write_interval_ms
+    7: optional map<string, string> batch_write_parameters;
 }
 
 // Es scan range
