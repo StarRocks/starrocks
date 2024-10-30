@@ -472,4 +472,15 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
     }
 
+    @Test
+    public void testGetDecommissionedBackends() throws Exception {
+        for (int i = 100; i < 200; i++) {
+            Backend be = new Backend(i, "decommissionedHost", 1000);
+            be.setStarletPort(i);
+            systemInfoService.addBackend(be);
+            be.setDecommissioned(true);
+        }
+        Assert.assertTrue(systemInfoService.getDecommissionedBackendIds().size() == 100);
+    }
+
 }

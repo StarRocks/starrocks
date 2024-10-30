@@ -879,57 +879,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public List<Long> getComputeNodeIds(boolean needAlive) {
-        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
         if (needAlive) {
-            Iterator<Long> iter = computeNodeIds.iterator();
-            while (iter.hasNext()) {
-                ComputeNode computeNode = this.getComputeNode(iter.next());
-                if (computeNode == null || !computeNode.isAlive()) {
-                    iter.remove();
-                }
-            }
+            return idToComputeNodeRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToComputeNodeRef.keySet());
         }
-        return computeNodeIds;
     }
 
     public List<Long> getBackendIds(boolean needAlive) {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
         if (needAlive) {
-            Iterator<Long> iter = backendIds.iterator();
-            while (iter.hasNext()) {
-                Backend backend = this.getBackend(iter.next());
-                if (backend == null || !backend.isAlive()) {
-                    iter.remove();
-                }
-            }
+            return idToBackendRef.entrySet().stream()
+                    .filter(entry -> entry.getValue().isAlive())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        } else {
+            return Lists.newArrayList(idToBackendRef.keySet());
         }
-        return backendIds;
     }
 
     public List<Long> getDecommissionedBackendIds() {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
-
-        Iterator<Long> iter = backendIds.iterator();
-        while (iter.hasNext()) {
-            Backend backend = this.getBackend(iter.next());
-            if (backend == null || !backend.isDecommissioned()) {
-                iter.remove();
-            }
-        }
-        return backendIds;
+        return idToBackendRef.entrySet().stream()
+                .filter(entry -> entry.getValue().isDecommissioned())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
     }
 
     public List<Long> getAvailableBackendIds() {
-        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
-
-        Iterator<Long> iter = backendIds.iterator();
-        while (iter.hasNext()) {
-            Backend backend = this.getBackend(iter.next());
-            if (backend == null || !backend.isAvailable()) {
-                iter.remove();
-            }
-        }
-        return backendIds;
+        return idToBackendRef.entrySet().stream().filter(entry -> entry.getValue().isAvailable()).map(
+                Map.Entry::getKey).collect(Collectors.toList());
     }
 
     public List<Long> getAvailableComputeNodeIds() {
