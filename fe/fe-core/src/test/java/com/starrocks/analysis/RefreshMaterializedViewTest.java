@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,6 +29,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +38,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -1199,5 +1203,46 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         Assert.assertEquals(expect, statement.getPartitionListDesc());
                     }
                 });
+    }
+
+    @Test
+    public void testTruncateTableInDiffDb() throws Exception {
+        starRocksAssert
+                .createDatabaseIfNotExists("trunc_db")
+                .useDatabase("trunc_db")
+                .withTable("CREATE TABLE t1 \n" +
+                        "(\n" +
+                        "    k1 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.createDatabaseIfNotExists("mv_db")
+                .useDatabase("mv_db")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
+                        + "DISTRIBUTED BY HASH(`k1`)\n"
+                        + "REFRESH ASYNC\n"
+                        + "AS SELECT k1 from trunc_db.t1;");
+
+        executeInsertSql(connectContext, "insert into trunc_db.t1 values(2, 10)");
+        MaterializedView mv1 = getMv("mv_db", "test_mv");
+        MaterializedViewMetricsEntity mvEntity =
+                (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
+        long count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(0, count);
+
+        Table table = getTable("trunc_db", "t1");
+        // Simulate writing to a non-existent MV
+        table.addRelatedMaterializedView(new MvId(1,1));
+        String truncateStr = "truncate table trunc_db.t1;";
+        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, connectContext);
+        // sleep 3s, wait for the refresh job to complete
+        Thread.sleep(3000);
+
+        mvEntity =
+                (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
+        count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(1, count);
     }
 }
