@@ -42,4 +42,10 @@ public class PartitionStatisticsSnapshot {
     Quantiles getCompactionScore() {
         return compactionScore;
     }
+
+    @Override
+    public String toString() {
+        return String.format("partition=%s score=%s priority=%s",
+                partition.toString(), compactionScore.toString(), priority.toString());
+    }
 }
