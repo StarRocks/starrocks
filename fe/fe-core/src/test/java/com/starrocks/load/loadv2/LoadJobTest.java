@@ -44,8 +44,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.server.WarehouseManagerEPack;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -131,8 +130,7 @@ public class LoadJobTest {
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor,
                             @Mocked WarehouseManagerEPack warehouseMgr)
-            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException,
-            WarehouseUnavailableException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
             {

@@ -293,8 +293,8 @@ public class AstToStringBuilder {
                     }
 
                     List<String> objectString = new ArrayList<>();
-                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
-                        objectString.add(tablePEntryObject.toString());
+                    for (PEntryObject pEntryObject : stmt.getObjectList()) {
+                        objectString.add(pEntryObject.toString());
                     }
                     sb.append(Joiner.on(", ").join(objectString));
                 }

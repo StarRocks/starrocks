@@ -12,33 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.sql.analyzer;
+package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.epack.sql.ast.AstVisitorEPack;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SetWarehouseStmt;
-import com.starrocks.epack.sql.ast.ShowClustersStmt;
-import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.analyzer.FeNameFormat;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 
 public class WarehouseAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
-        new WarehouseAnalyzer.WarehouseAnalyzerVisitor().visit(stmt, session);
+        new WarehouseAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class WarehouseAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
+    static class WarehouseAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -98,6 +96,7 @@ public class WarehouseAnalyzer {
         public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
             return null;
         }
+
 
         @Override
         public Void visitShowClusterStatement(ShowClustersStmt node, ConnectContext context) {

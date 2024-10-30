@@ -89,7 +89,6 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -234,7 +233,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     private DeleteJob createJob(DeleteStmt stmt, List<Predicate> conditions, Database db, OlapTable olapTable,
                                 List<Partition> partitions)
-            throws DdlException, AnalysisException, WarehouseUnavailableException, RunningTxnExceedException {
+            throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());

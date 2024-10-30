@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.AstVisitor;
@@ -67,11 +67,7 @@ public class CreateWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        if (visitor instanceof AstVisitorEPack) {
-            return ((AstVisitorEPack<R, C>) visitor).visitCreateWarehouseStatement(this, context);
-        } else {
-            return null;
-        }
+        return visitor.visitCreateWarehouseStatement(this, context);
     }
 
     @Override
@@ -89,6 +85,3 @@ public class CreateWarehouseStmt extends DdlStmt {
         return sb.toString();
     }
 }
-
-
-

@@ -14,6 +14,14 @@
 package com.starrocks.epack.sql.ast;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;

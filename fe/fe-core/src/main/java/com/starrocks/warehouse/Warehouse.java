@@ -55,5 +55,11 @@ public abstract class Warehouse implements Writable {
         Text.writeString(out, json);
     }
 
+    public abstract Long getAnyWorkerGroupId();
+
     public abstract List<Long> getWorkerGroupIds();
+
+    public abstract List<String> getWarehouseInfo();
+
+    public abstract List<List<String>> getWarehouseNodesInfo();
 }

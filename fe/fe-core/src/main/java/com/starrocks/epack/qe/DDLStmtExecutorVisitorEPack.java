@@ -16,7 +16,6 @@ package com.starrocks.epack.qe;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
-import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -33,18 +32,19 @@ import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 
 public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVisitor
         implements AstVisitorEPack<ShowResultSet, ConnectContext> {

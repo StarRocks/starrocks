@@ -17,9 +17,9 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_REVOKE_ROW_ACCESS_POLICY = 20010;
 
     // warehouse
-    public static final short OP_CREATE_WAREHOUSE = 20101;
-    public static final short OP_DROP_WAREHOUSE = 20102;
-    public static final short OP_ALTER_WAREHOUSE = 20103;
+    //public static final short OP_CREATE_WAREHOUSE = 20101;
+    //public static final short OP_DROP_WAREHOUSE = 20102;
+    //public static final short OP_ALTER_WAREHOUSE = 20103;
 
     // security integration and role mapping
     public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;

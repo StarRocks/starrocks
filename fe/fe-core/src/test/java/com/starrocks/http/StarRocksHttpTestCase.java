@@ -60,7 +60,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;

@@ -57,7 +57,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;

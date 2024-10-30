@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ResumeWarehouseStmt extends DdlStmt {
+public class SuspendWarehouseStmt extends DdlStmt {
     private String warehouseName;
 
-    public ResumeWarehouseStmt(String warehouseName) {
+    public SuspendWarehouseStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
     }
 
-    public ResumeWarehouseStmt(String warehouseName, NodePosition pos) {
+    public SuspendWarehouseStmt(String warehouseName, NodePosition pos) {
         super(pos);
         this.warehouseName = warehouseName;
     }
@@ -36,11 +36,6 @@ public class ResumeWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        if (visitor instanceof AstVisitorEPack) {
-            return ((AstVisitorEPack<R, C>) visitor).visitResumeWarehouseStatement(this, context);
-        } else {
-            return null;
-        }
+        return visitor.visitSuspendWarehouseStatement(this, context);
     }
-
 }

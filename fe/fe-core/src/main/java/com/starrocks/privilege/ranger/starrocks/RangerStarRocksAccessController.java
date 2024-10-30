@@ -451,4 +451,15 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     public String convertToAccessType(PrivilegeType privilegeType) {
         return privilegeType.name().toLowerCase(ENGLISH);
     }
+
+    @Override
+    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
 }

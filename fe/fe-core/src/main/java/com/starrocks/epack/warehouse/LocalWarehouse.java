@@ -21,9 +21,12 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
@@ -129,12 +133,35 @@ public class LocalWarehouse extends Warehouse {
 
     private void deleteWorkerFromStarMgr() throws DdlException {
         long workerGroupId = cluster.getWorkerGroupId();
-        StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         starOSAgent.deleteWorkerGroup(workerGroupId);
     }
 
     private void dropNodeFromSystem() throws DdlException {
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropNodes(this.getId());
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<ComputeNode> nodes = systemInfoService.backendAndComputeNodeStream().
+                filter(cn -> cn.getWarehouseId() == getId()).collect(Collectors.toList());
+
+        for (ComputeNode node : nodes) {
+            if (node instanceof Backend) {
+                if (systemInfoService.getBackendWithHeartbeatPort(node.getHost(), node.getHeartbeatPort()) == null) {
+                    continue;
+                }
+
+                systemInfoService.dropBackend(node.getHost(), node.getHeartbeatPort(), name, false);
+            } else {
+                if (systemInfoService.getComputeNodeWithHeartbeatPort(node.getHost(), node.getHeartbeatPort()) == null) {
+                    continue;
+                }
+
+                systemInfoService.dropComputeNode(node.getHost(), node.getHeartbeatPort(), name);
+            }
+        }
+    }
+
+    @Override
+    public Long getAnyWorkerGroupId() {
+        return getAnyAvailableCluster().getWorkerGroupId();
     }
 
     @Override
@@ -142,5 +169,54 @@ public class LocalWarehouse extends Warehouse {
         List<Long> list = new ArrayList<>(1);
         list.add(getAnyAvailableCluster().getWorkerGroupId());
         return list;
+    }
+
+    @Override
+    public List<List<String>> getWarehouseNodesInfo() {
+        List<List<String>> rows = new ArrayList<>();
+        for (Cluster cluster : getClusters().values()) {
+            List<Long> computeNodes = cluster.getComputeNodeIds();
+            for (Long computeNodeId : computeNodes) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(computeNodeId);
+
+                List<String> computeNodeInfo = Lists.newArrayList();
+                long warehouseId = node.getWarehouseId();
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                computeNodeInfo.add(warehouse.getName());
+
+                computeNodeInfo.add(String.valueOf(cluster.getId()));
+                computeNodeInfo.add(String.valueOf(cluster.getWorkerGroupId()));
+                long nodeId = node.getId();
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(nodeId);
+                computeNodeInfo.add(String.valueOf(nodeId));
+                computeNodeInfo.add(String.valueOf(workerId));
+
+                computeNodeInfo.add(node.getHost());
+
+                computeNodeInfo.add(String.valueOf(node.getHeartbeatPort()));
+                computeNodeInfo.add(String.valueOf(node.getBePort()));
+                computeNodeInfo.add(String.valueOf(node.getHttpPort()));
+                computeNodeInfo.add(String.valueOf(node.getBrpcPort()));
+                computeNodeInfo.add(String.valueOf(node.getStarletPort()));
+
+                computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastStartTime()));
+                computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastUpdateMs()));
+                computeNodeInfo.add(String.valueOf(node.isAlive()));
+
+                computeNodeInfo.add(node.getHeartbeatErrMsg());
+                computeNodeInfo.add(String.valueOf(node.getVersion()));
+
+                computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
+                computeNodeInfo.add(String.valueOf(node.getCpuCores()));
+                double memUsedPct = node.getMemUsedPct();
+                computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+                computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
+
+                rows.add(computeNodeInfo);
+            }
+        }
+
+        return rows;
     }
 }

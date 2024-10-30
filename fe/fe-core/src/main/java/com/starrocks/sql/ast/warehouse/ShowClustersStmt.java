@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -32,7 +32,6 @@ public class ShowClustersStmt extends ShowStmt {
                     .addColumn(new Column("Pending", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Running", ScalarType.createVarchar(20)))
                     .build();
-
 
     public ShowClustersStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
@@ -54,10 +53,6 @@ public class ShowClustersStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        if (visitor instanceof AstVisitorEPack) {
-            return ((AstVisitorEPack<R, C>) visitor).visitShowClusterStatement(this, context);
-        } else {
-            return null;
-        }
+        return visitor.visitShowClusterStatement(this, context);
     }
 }

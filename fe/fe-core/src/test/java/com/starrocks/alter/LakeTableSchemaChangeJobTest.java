@@ -25,7 +25,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;

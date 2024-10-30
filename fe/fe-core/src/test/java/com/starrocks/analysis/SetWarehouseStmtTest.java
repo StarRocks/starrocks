@@ -15,8 +15,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;

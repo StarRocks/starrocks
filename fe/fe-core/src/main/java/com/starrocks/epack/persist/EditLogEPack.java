@@ -14,14 +14,12 @@
 package com.starrocks.epack.persist;
 
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
-import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
-import com.starrocks.warehouse.Warehouse;
 
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -29,19 +27,6 @@ import java.util.concurrent.BlockingQueue;
 public class EditLogEPack extends EditLog {
     public EditLogEPack(BlockingQueue<JournalTask> journalQueue) {
         super(journalQueue);
-    }
-
-    // warehouse
-    public void logCreateWarehouse(Warehouse warehouse) {
-        logEdit(OperationTypeEPack.OP_CREATE_WAREHOUSE, warehouse);
-    }
-
-    public void logDropWarehouse(DropWarehouseLog log) {
-        logEdit(OperationTypeEPack.OP_DROP_WAREHOUSE, log);
-    }
-
-    public void logAlterWarehouse(Warehouse wh) {
-        logEdit(OperationTypeEPack.OP_ALTER_WAREHOUSE, wh);
     }
 
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
@@ -77,6 +62,7 @@ public class EditLogEPack extends EditLog {
     public void logMVChangeLog(MVChangeLog mvChangeLog) {
         logEdit(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
     }
+
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
@@ -84,24 +70,6 @@ public class EditLogEPack extends EditLog {
         short opCode = journal.getOpCode();
         try {
             switch (opCode) {
-                case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayCreateWarehouse(wh);
-                    break;
-                }
-                case OperationTypeEPack.OP_DROP_WAREHOUSE: {
-                    DropWarehouseLog log = (DropWarehouseLog) journal.getData();
-                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayDropWarehouse(log);
-                    break;
-                }
-                case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayAlterWarehouse(wh);
-                    break;
-                }
                 case OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION: {
                     SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
                     AuthenticationMgrEPack authenticationMgr =

@@ -48,9 +48,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.server.WarehouseManagerEPack;
-import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -65,6 +64,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
@@ -102,7 +102,7 @@ public class RoutineLoadManagerTest {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadManagerTest.class);
 
     @Mocked
-    private SystemInfoServiceEpack systemInfoService;
+    private SystemInfoService systemInfoService;
 
     @Before
     public void setUp() {

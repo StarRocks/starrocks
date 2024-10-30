@@ -49,7 +49,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
-import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -137,7 +136,7 @@ public class NodeMgr {
      * Backends and Compute Node
      */
     @SerializedName(value = "s")
-    private SystemInfoServiceEpack systemInfo;
+    private SystemInfoService systemInfo;
 
     /**
      * Broker
@@ -168,7 +167,7 @@ public class NodeMgr {
         this.leaderRpcPort = 0;
         this.leaderHttpPort = 0;
         this.leaderIp = "";
-        this.systemInfo = new SystemInfoServiceEpack();
+        this.systemInfo = new SystemInfoService();
 
         this.brokerMgr = new BrokerMgr();
     }
@@ -1120,9 +1119,9 @@ public class NodeMgr {
                 TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.getQueryStatistics(request));
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.getQueryStatistics(request));
                 if (response.getStatus().getStatus_code() != TStatusCode.OK) {
                     LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
                 } else if (response.isSetQueryStatistics_infos()) {

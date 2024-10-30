@@ -16,7 +16,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;

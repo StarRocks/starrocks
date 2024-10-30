@@ -54,7 +54,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -443,7 +442,7 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
-    public void testOverallGroupBalance(@Mocked SystemInfoServiceEpack infoService,
+    public void testOverallGroupBalance(@Mocked SystemInfoService infoService,
                                         @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
         new Expectations() {
             {

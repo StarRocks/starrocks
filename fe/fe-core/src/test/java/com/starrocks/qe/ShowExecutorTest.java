@@ -75,7 +75,7 @@ import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
-import com.starrocks.epack.server.WarehouseManagerEPack;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;

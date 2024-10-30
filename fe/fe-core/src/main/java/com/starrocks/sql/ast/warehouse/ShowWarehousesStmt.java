@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
@@ -47,7 +46,7 @@ public class ShowWarehousesStmt extends ShowStmt {
         this(pattern, NodePosition.ZERO);
     }
 
-    public ShowWarehousesStmt(String pattern,  NodePosition pos) {
+    public ShowWarehousesStmt(String pattern, NodePosition pos) {
         super(pos);
         this.pattern = Strings.nullToEmpty(pattern);
     }
@@ -73,11 +72,7 @@ public class ShowWarehousesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        if (visitor instanceof AstVisitorEPack) {
-            return ((AstVisitorEPack<R, C>) visitor).visitShowWarehousesStatement(this, context);
-        } else {
-            return null;
-        }
+        return visitor.visitShowWarehousesStatement(this, context);
     }
 }
 

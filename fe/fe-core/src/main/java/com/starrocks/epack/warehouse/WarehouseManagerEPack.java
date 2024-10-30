@@ -1,6 +1,6 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 
-package com.starrocks.epack.server;
+package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
@@ -12,25 +12,24 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
-import com.starrocks.epack.lake.StarOSAgentEpack;
-import com.starrocks.epack.persist.DropWarehouseLog;
-import com.starrocks.epack.persist.EditLogEPack;
-import com.starrocks.epack.persist.SRMetaBlockIDEPack;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
-import com.starrocks.epack.warehouse.Cluster;
-import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.DropWarehouseLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -73,7 +72,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     private void checkWarehouseState(LocalWarehouse warehouse) {
         if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouse.getName()));
+            ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
         }
     }
 
@@ -180,7 +179,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
+            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
@@ -192,6 +191,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
+    @Override
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
@@ -205,7 +205,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     LOG.info("Warehouse {} already exists", warehouseName);
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, warehouseName);
             }
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
@@ -215,7 +215,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
-                    StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
+                    StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
                     cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0"));
                 } catch (DdlException e) {
                     LOG.warn(e);
@@ -225,13 +225,14 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logCreateWarehouse(wh);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
             LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id + ", " +
                     "comment = " + comment);
         }
     }
 
+    @Override
     public void replayCreateWarehouse(Warehouse warehouse) {
         String whName = warehouse.getName();
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
@@ -241,6 +242,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    @Override
     public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
@@ -253,17 +255,18 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 if (stmt.isSetIfExists()) {
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
             }
 
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
             warehouse.dropSelf();
-            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropWarehouse(new DropWarehouseLog(warehouseName));
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
         }
     }
 
+    @Override
     public void replayDropWarehouse(DropWarehouseLog log) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             String warehouseName = log.getWarehouseName();
@@ -274,6 +277,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    @Override
     public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
@@ -286,14 +290,15 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
             }
             warehouse.suspendSelf();
-            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logAlterWarehouse(warehouse);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
         }
     }
 
+    @Override
     public void replayAlterWarehouse(Warehouse warehouse) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             nameToWh.put(warehouse.getName(), warehouse);
@@ -301,6 +306,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    @Override
     public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
@@ -312,16 +318,17 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     "Warehouse '%s' doesn't exist", warehouseName);
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == LocalWarehouse.WarehouseState.AVAILABLE) {
-                ErrorReport.reportDdlException("Can't resume an available warehouse");
+                throw new DdlException("Can't resume an available warehouse");
             }
             warehouse.resumeSelf();
-            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logAlterWarehouse(warehouse);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
         }
     }
 
+    @Override
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.WAREHOUSE_MGR, nameToWh.size() + 1);
         writer.writeInt(nameToWh.size());
         for (Warehouse warehouse : nameToWh.values()) {
             writer.writeJson(warehouse);
@@ -329,12 +336,15 @@ public class WarehouseManagerEPack extends WarehouseManager {
         writer.close();
     }
 
+    @Override
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        reader.readCollection(Warehouse.class, warehouse -> {
+        int nameToWhSize = reader.readInt();
+        for (int i = 0; i != nameToWhSize; ++i) {
+            Warehouse warehouse = reader.readJson(Warehouse.class);
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
-        });
+        }
     }
 
     @Override

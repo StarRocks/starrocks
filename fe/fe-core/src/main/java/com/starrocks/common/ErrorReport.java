@@ -34,7 +34,6 @@
 
 package com.starrocks.common;
 
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
@@ -99,11 +98,6 @@ public class ErrorReport {
 
     public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
-    }
-
-    public static void reportWarehouseUnavailableException(ErrorCode errorCode, Object... objs)
-            throws WarehouseUnavailableException {
-        throw new WarehouseUnavailableException(reportCommon(null, errorCode, objs));
     }
 
     public static void reportBeginTransactionException(ErrorCode errorCode, Object... objs)

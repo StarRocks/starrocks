@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.sql.ast;
+package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
@@ -37,11 +37,7 @@ public class SetWarehouseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        if (visitor instanceof AstVisitorEPack) {
-            return ((AstVisitorEPack<R, C>) visitor).visitSetWarehouseStatement(this, context);
-        } else {
-            return null;
-        }
+        return visitor.visitSetWarehouseStatement(this, context);
     }
 
     @Override

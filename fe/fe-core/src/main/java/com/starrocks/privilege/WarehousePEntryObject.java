@@ -1,13 +1,21 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific
 
-package com.starrocks.epack.authorization;
+package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivObjNotFoundException;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaNotFoundException;
 import com.starrocks.warehouse.Warehouse;
 
@@ -30,9 +38,9 @@ public class WarehousePEntryObject implements PEntryObject {
         }
         String name = tokens.get(0);
         if (name.equals("*")) {
-            return new WarehousePEntryObject(PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID);
+            return new WarehousePEntryObject(PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID);
         } else {
-            WarehouseManagerEPack warehouseManagerEPack = (WarehouseManagerEPack) mgr.getWarehouseMgr();
+            WarehouseManager warehouseManagerEPack = mgr.getWarehouseMgr();
             Warehouse warehouse = warehouseManagerEPack.getWarehouseAllowNull(name);
             if (warehouse == null) {
                 throw new PrivObjNotFoundException("cannot find warehouse: " + name);
@@ -58,7 +66,7 @@ public class WarehousePEntryObject implements PEntryObject {
             return false;
         }
         WarehousePEntryObject other = (WarehousePEntryObject) obj;
-        if (other.id == PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID) {
+        if (other.id == PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID) {
             return true;
         }
         return other.id == id;
@@ -66,7 +74,7 @@ public class WarehousePEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID == id;
+        return PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID == id;
     }
 
     @Override
@@ -107,7 +115,7 @@ public class WarehousePEntryObject implements PEntryObject {
 
     @Override
     public String toString() {
-        if (getId() == PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID) {
+        if (getId() == PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID) {
             return "ALL WAREHOUSES";
         } else {
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(getId());

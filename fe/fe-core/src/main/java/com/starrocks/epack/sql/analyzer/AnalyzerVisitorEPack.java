@@ -17,22 +17,15 @@ import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.DropWarehouseStmt;
-import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
-import com.starrocks.epack.sql.ast.SetWarehouseStmt;
-import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
-import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
-import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterSystemStmt;
@@ -176,50 +169,6 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     public Void visitDropRoleMappingStatement(DropRoleMappingStatement statement,
                                               ConnectContext context) {
         RoleMappingStatementAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    // ---------------------------------------- Warehouse Statement ---------------------------------------------------
-
-    @Override
-    public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-        WarehouseAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
-        WarehouseAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
-        WarehouseAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
-        WarehouseAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitSetWarehouseStatement(SetWarehouseStmt stmt, ConnectContext session) {
-        WarehouseAnalyzer.analyze(stmt, session);
-        return null;
-    }
-
-    @Override
-    public Void visitShowWarehousesStatement(ShowWarehousesStmt stmt, ConnectContext context) {
-        WarehouseAnalyzer.analyze(stmt, context);
-        return null;
-    }
-
-    @Override
-    public Void visitShowClusterStatement(ShowClustersStmt stmt, ConnectContext context) {
-        WarehouseAnalyzer.analyze(stmt, context);
         return null;
     }
 
