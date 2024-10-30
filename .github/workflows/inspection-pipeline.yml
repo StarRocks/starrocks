@@ -33,10 +33,6 @@ on:
         description: 'TAR PATH(ASAN & Ubuntu)'
         required: false
         type: string
-      IS_REBUILD:
-        description: 'REBUILD'
-        type: boolean
-        default: false
       INCLUDE_ADMIT:
         description: 'RUN ADMIT?'
         type: string
@@ -45,6 +41,14 @@ on:
         description: "ALL_LINUX? (⬜: Ubuntu && Release only)"
         type: string
         default: 'true'
+      IS_REBUILD:
+        description: 'REBUILD'
+        type: boolean
+        default: false
+      WITH_COV:
+        description: "WITH COV?"
+        type: boolean
+        default: false
       RETAIN_ENV:
         description: 'RETAIN THE ENVIRONMENT?'
         type: boolean
@@ -84,6 +88,7 @@ jobs:
       BE_UT_LINUX: ${{ steps.param.outputs.BE_UT_LINUX }}
       RETAIN_ENV: ${{ steps.param.outputs.RETAIN_ENV }}
       ALL_LINUX: ${{ steps.param.outputs.ALL_LINUX }}
+      WITH_COV: ${{ steps.param.outputs.WITH_COV }}
       INCLUDE_ADMIT: ${{ steps.param.outputs.INCLUDE_ADMIT }}
     steps:
       - name: CRON PARAM
@@ -124,6 +129,7 @@ jobs:
             echo "UBUNTU_ASAN_TAR_PATH=${{ inputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "RETAIN_ENV=${{ inputs.RETAIN_ENV }}" >> $GITHUB_OUTPUT
             echo "ALL_LINUX=${{ inputs.ALL_LINUX }}" >> $GITHUB_OUTPUT
+            echo "WITH_COV=${{ inputs.WITH_COV }}" >> $GITHUB_OUTPUT
             echo "INCLUDE_ADMIT=false" >> $GITHUB_OUTPUT
           fi
           
@@ -140,6 +146,7 @@ jobs:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
+      WITH_COV: ${{ needs.info.outputs.WITH_COV }}
     strategy:
       fail-fast: false
       matrix:
@@ -149,11 +156,15 @@ jobs:
         id: run_ut
         shell: bash
         timeout-minutes: 90
+        if: matrix.build_type != 'ASAN' || needs.info.outputs.WITH_COV != 'true'
         env:
           build_type: ${{ matrix.build_type }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be --build ${build_type} --linuxdistro ${LINUX}
+          if [[ "${WITH_COV}" == "true" && "${build_type}" == "Release" ]]; then
+            WITH_GCOV="--with-gcov"
+          fi
+          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be --build ${build_type} --linuxdistro ${LINUX} ${WITH_GCOV}
 
       - name: clean ECI
         if: always()
@@ -284,6 +295,7 @@ jobs:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       ALL_LINUX: ${{ needs.info.outputs.ALL_LINUX }}
+      WITH_COV: ${{ needs.info.outputs.WITH_COV }}
     steps:
       - name: CLEAN
         run: |
@@ -295,9 +307,13 @@ jobs:
         timeout-minutes: 90
         if: (matrix.build_type == 'Release' && matrix.linux == 'ubuntu') || env.ALL_LINUX == 'true'
         run: |
+          if [[ "${WITH_COV}" == "true" ]]; then
+            WITH_GCOV="--with-gcov"
+          fi
+          
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
-            --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }} --with-trivy
+            --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }} --with-trivy ${WITH_GCOV}
 
       - name: BUILD RESULT
         run: |
@@ -455,6 +471,7 @@ jobs:
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+      WITH_COV: ${{ needs.info.outputs.WITH_COV }}
 
   system-test-asan-ubuntu:
     name: 'ASAN/Ubuntu'
