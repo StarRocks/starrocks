@@ -16,6 +16,7 @@ package com.starrocks.kudu.reader;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 
@@ -23,6 +24,7 @@ public class KuduScannerUtils {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final Base64.Decoder BASE64_DECODER = Base64.getUrlDecoder();
+    public static final ZoneId ZONE_UTC = ZoneId.of("UTC");
 
     public static String formatDateTime(LocalDateTime dateTime) {
         return dateTime.format(DATETIME_FORMATTER);

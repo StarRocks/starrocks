@@ -41,11 +41,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableVersionRange;
-import com.starrocks.connector.iceberg.IcebergRemoteFileDesc;
+import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -155,9 +155,6 @@ import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.iceberg.DeleteFile;
-import org.apache.iceberg.FileContent;
-import org.apache.iceberg.FileScanTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -507,51 +504,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeIcebergEqualityDeleteScanNode(Operator node, ExpressionContext context, Table table,
                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        if (context.getStatistics() == null) {
-            TableVersionRange version;
-            ScalarOperator predicate;
-            List<Integer> equalityIds;
-            boolean needCheckEqualityIds;
-            if (node.isLogical()) {
-                version = ((LogicalIcebergEqualityDeleteScanOperator) node).getTableVersionRange();
-                predicate = ((LogicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
-                equalityIds = ((LogicalIcebergEqualityDeleteScanOperator) node).getEqualityIds();
-                needCheckEqualityIds = ((LogicalIcebergEqualityDeleteScanOperator) node).isHitMutableIdentifierColumns();
-            } else {
-                version = ((PhysicalIcebergEqualityDeleteScanOperator) node).getTableVersionRange();
-                predicate = ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
-                equalityIds = ((PhysicalIcebergEqualityDeleteScanOperator) node).getEqualityIds();
-                needCheckEqualityIds = ((PhysicalIcebergEqualityDeleteScanOperator) node).isHitMutableIdentifierColumns();
-            }
-            GetRemoteFilesParams params =
-                    GetRemoteFilesParams.newBuilder().setTableVersionRange(version).setPredicate(predicate).build();
-            IcebergRemoteFileDesc remoteFileDesc = (IcebergRemoteFileDesc) GlobalStateMgr.getCurrentState()
-                    .getMetadataMgr().getRemoteFiles(table, params).get(0).getFiles().get(0);
-
-            double rowCount = 0;
-            Set<String> seenFiles = new HashSet<>();
-            for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
-                for (DeleteFile deleteFile : fileScanTask.deletes()) {
-                    if (deleteFile.content() != FileContent.EQUALITY_DELETES) {
-                        continue;
-                    }
-
-                    if (needCheckEqualityIds && !deleteFile.equalityFieldIds().equals(equalityIds)) {
-                        continue;
-                    }
-
-                    if (seenFiles.add(deleteFile.path().toString())) {
-                        rowCount += deleteFile.recordCount();
-                    }
-                }
-            }
-            Statistics.Builder statisticsBuilder = Statistics.builder();
-            statisticsBuilder.setOutputRowCount(rowCount);
-            statisticsBuilder.addColumnStatistics(colRefToColumnMetaMap.keySet().stream()
-                    .collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
-            context.setStatistics(statisticsBuilder.build());
-        }
-
+        context.setStatistics(StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet()));
         return visitOperator(node, context);
     }
 
@@ -560,17 +513,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             TableVersionRange version;
+            IcebergMORParams icebergMORParams;
             if (node.isLogical()) {
                 version = ((LogicalIcebergScanOperator) node).getTableVersionRange();
+                icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
             } else {
                 version = ((PhysicalIcebergScanOperator) node).getTableVersionRange();
+                icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
             }
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
-                    node.getPredicate(), node.getLimit(), version);
-            context.setStatistics(stats);
+
+            Statistics statistics;
+            if (icebergMORParams == IcebergMORParams.EMPTY || icebergMORParams == IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE) {
+                statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                        optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
+                        node.getPredicate(), node.getLimit(), version);
+            } else {
+                statistics = StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet());
+            }
+
+            context.setStatistics(statistics);
             if (node.isLogical()) {
-                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                boolean hasUnknownColumns = statistics.getColumnStatistics().values().stream()
                         .anyMatch(ColumnStatistic::isUnknown);
                 ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
             }
@@ -1312,14 +1275,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<ColumnStatistic> estimateColumnStatistics = childOutputColumns.get(0).stream().map(columnRefOperator ->
                 context.getChildStatistics(0).getColumnStatistic(columnRefOperator)).collect(Collectors.toList());
 
+
+        boolean isFromIcebergEqualityDeleteRewrite;
+        if (node.isLogical()) {
+            isFromIcebergEqualityDeleteRewrite = ((LogicalUnionOperator) node).isFromIcebergEqualityDeleteRewrite();
+        } else {
+            isFromIcebergEqualityDeleteRewrite = ((PhysicalUnionOperator) node).isFromIcebergEqualityDeleteRewrite();
+        }
+
         for (int outputIdx = 0; outputIdx < outputColumnRef.size(); ++outputIdx) {
             double estimateRowCount = context.getChildrenStatistics().get(0).getOutputRowCount();
             for (int childIdx = 1; childIdx < context.arity(); ++childIdx) {
                 ColumnRefOperator childOutputColumn = childOutputColumns.get(childIdx).get(outputIdx);
                 Statistics childStatistics = context.getChildStatistics(childIdx);
-                ColumnStatistic estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
-                        estimateColumnStatistics.get(outputIdx), estimateRowCount,
-                        childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                ColumnStatistic estimateColumnStatistic;
+                if (!isFromIcebergEqualityDeleteRewrite) {
+                    estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
+                            estimateColumnStatistics.get(outputIdx), estimateRowCount,
+                            childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                } else {
+                    estimateColumnStatistic = estimateColumnStatistics.get(outputIdx);
+                }
+
                 // set new estimate column statistic
                 estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
                 estimateRowCount += childStatistics.getOutputRowCount();

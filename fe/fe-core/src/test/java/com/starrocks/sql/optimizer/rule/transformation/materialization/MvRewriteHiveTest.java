@@ -18,25 +18,20 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
-import com.starrocks.common.util.DebugUtil;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.Set;
+
+import static com.starrocks.utframe.UtFrameUtils.getQueryScanOperators;
 
 public class MvRewriteHiveTest extends MvRewriteTestBase {
 
@@ -486,22 +481,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         dropMv("test", "hive_partitioned_mv");
     }
 
-    private List<LogicalScanOperator> getQueryOptExpression(String query) {
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        QueryStatement statement = null;
-        try {
-            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
-        } catch (Exception e) {
-            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
-        }
-        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
-                logicalPlan, optimizerConfig);
-        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
-        return scanOperators;
-    }
-
     private ScanOperatorPredicates getScanOperatorPredicates(LogicalScanOperator logicalScanOperator) {
         try {
             return logicalScanOperator.getScanOperatorPredicates();
@@ -515,7 +494,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     public void testHivePartitionPruner0() {
         String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
-        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);
@@ -544,7 +523,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         );
         for (int i = 0; i < queries.size(); i++) {
             String query = queries.get(i);
-            List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+            List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
             Assert.assertTrue(scanOperators.size() == 1);
             ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
             Assert.assertTrue(scanOperatorPredicates != null);
@@ -565,7 +544,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
-        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);
@@ -587,7 +566,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 " WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
                 " and l_shipdate >= '1998-01-01' and l_orderkey > 1000 " +
                 " GROUP BY `l_orderkey`, `l_suppkey`;";
-        List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);

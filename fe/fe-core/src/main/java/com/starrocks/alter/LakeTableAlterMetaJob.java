@@ -63,6 +63,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                     String.valueOf(metaValue));
             table.getTableProperty().buildEnablePersistentIndex();
+            table.getTableProperty().buildPersistentIndexType();
         }
     }
 

@@ -387,7 +387,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         cursor.execute("SELECT CURRENT_VERSION()")
         val = cursor.fetchone()[0]
         cursor.close()
-        if util.py3k and isinstance(val, bytes):
+        if isinstance(val, bytes):
             val = val.decode()
 
         return self._parse_server_version(val)
@@ -525,3 +525,11 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
             indexes.append(index_d)
         return indexes
+
+    def has_table(self, connection, table_name, schema=None, **kw):
+        try:
+            return super().has_table(connection, table_name, schema, **kw)
+        except exc.DBAPIError as e:
+            if self._extract_error_code(e.orig) in (5501, 5502):
+                return False
+            raise
