@@ -822,6 +822,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     
     public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
 
+    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2231,6 +2233,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
     private boolean enablePushDownPreAggWithRank = true;
+
+    @VarAttr(name = INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG)
+    private boolean insertLocalShuffleForWindowPreAgg = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -3734,7 +3739,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
-    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(
+            boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
         this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
@@ -4341,6 +4347,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnablePushDownPreAggWithRank() {
         return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
     }
 
     // Serialize to thrift object

@@ -49,7 +49,7 @@ public:
     ChunksPartitioner(const bool has_nullable_partition_column, const std::vector<ExprContext*>& partition_exprs,
                       std::vector<PartitionColumnType> partition_types, MemPool* mem_pool);
 
-    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile, bool enable_pre_agg = false);
 
     // Chunk is divided into multiple parts by partition columns,
     // and each partition corresponds to a key-value pair in the hash map.

@@ -96,9 +96,8 @@ private:
     // calculate agg for the ‘partition_idx' partition
     Status compute_agg_state(Chunk* chunk, size_t partition_idx);
 
-    // when call chunk_sorter->get_next(), if this is last chunk it has, is_last_chunk is true
-    // next time call chunk_sorter->get_next(), eos is true, and chunk is nullptr
-    void output_agg_result(Chunk* chunk, bool eos, bool is_last_chunk);
+    // when call chunk_sorter->get_next(), if this is first chunk it has, is_first_chunk is true
+    void output_agg_result(Chunk* chunk, bool eos, bool is_first_chunk);
 
     Status output_agg_streaming(Chunk* chunk);
 
@@ -112,6 +111,7 @@ private:
 
     // only set when _enable_pre_agg=true
     bool _enable_pre_agg;
+    bool _is_first_chunk_of_current_sorter = true;
     const std::vector<TExpr>& _t_pre_agg_exprs;
     const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
 

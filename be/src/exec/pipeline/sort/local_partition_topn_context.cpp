@@ -67,7 +67,7 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state, RuntimeProfile* r
 
     _chunks_partitioner =
             std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types, _mem_pool.get());
-    return _chunks_partitioner->prepare(state, runtime_profile);
+    return _chunks_partitioner->prepare(state, runtime_profile, _enable_pre_agg);
 }
 
 Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
@@ -96,12 +96,10 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
-        const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
-        const TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
+        TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+        TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
 
-        // temp
-        // DCHECK(return_type.type == TYPE_VARBINARY) ;
-        const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
+        TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
         // Collect arg_typedescs for aggregate function.
         std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -112,8 +110,20 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
         state->obj_pool()->add(_agg_fn_ctxs[i]);
 
-        bool is_input_nullable = true;
+        bool is_input_nullable = false;
         const AggregateFunction* func = nullptr;
+        if (fn.name.function_name == "count") {
+            return_type.type = TYPE_BIGINT;
+            arg_type.type = TYPE_BIGINT;
+            serde_type.type = TYPE_BIGINT;
+            is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child);
+            _agg_fn_types[i] = {serde_type, false, false};
+        } else {
+            // For nullable aggregate function(sum, max, min, avg),
+            // we should always use nullable aggregate function.
+            is_input_nullable = true;
+            _agg_fn_types[i] = {serde_type, is_input_nullable, desc.nodes[0].is_nullable};
+        }
 
         func = get_window_function(fn.name.function_name, arg_type.type, return_type.type, is_input_nullable,
                                    fn.binary_type, state->func_version());
@@ -123,8 +133,6 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
                                                              is_input_nullable, fn.binary_type, state->func_version()));
         }
         _agg_functions[i] = func;
-        // result always nullable
-        _agg_fn_types[i] = {serde_type, desc.nodes[0].is_nullable, true};
     }
 
     // Compute agg state total size and offsets.
@@ -191,7 +199,10 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
 }
 
 void LocalPartitionTopnContext::sink_complete() {
-    _mem_pool.reset();
+    // when enable_pre_agg, mempool will allocate agg state which is used for source op
+    if (!_enable_pre_agg) {
+        _mem_pool.reset();
+    }
     _is_sink_complete = true;
 }
 
@@ -250,12 +261,14 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
     ChunkPtr chunk = nullptr;
     bool eos = false;
     RETURN_IF_ERROR(chunks_sorter->get_next(&chunk, &eos));
+
     if (_enable_pre_agg) {
-        bool is_last_chunk = (chunks_sorter->get_next_output_row() >= chunks_sorter->get_output_rows());
-        output_agg_result(chunk.get(), eos, is_last_chunk);
+        output_agg_result(chunk.get(), eos, _is_first_chunk_of_current_sorter);
     }
+    _is_first_chunk_of_current_sorter = false;
 
     if (eos) {
+        _is_first_chunk_of_current_sorter = true;
         // Current sorter has no output, try to get chunk from next sorter
         _sorter_index++;
     }
@@ -273,20 +286,29 @@ Columns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
     return agg_result_columns;
 }
 
-void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool is_last_chunk) {
-    if (eos) return;
+void LocalPartitionTopnContext::output_agg_result(Chunk* chunk, bool eos, bool is_first_chunk) {
+    // when eos, chunk is nullptr, just do nothing
+    if (eos || chunk == nullptr || chunk->num_rows() < 1) return;
 
-    const auto& agg_state = _managed_fn_states[_sorter_index]->data();
+    auto agg_state = _managed_fn_states[_sorter_index]->mutable_data();
 
     Columns agg_result_columns = _create_agg_result_columns(chunk->num_rows());
 
-    size_t num_default_rows = is_last_chunk ? chunk->num_rows() - 1 : chunk->num_rows();
-    for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-        agg_result_columns[i]->append_default(num_default_rows);
+    if (is_first_chunk) {
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            // add agg result into first row
+            _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i],
+                                                   agg_result_columns[i].get());
+            // reset agg result, after first row, we only append 'reset' result
+            _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_input_columns[i], agg_state + _agg_states_offsets[i]);
+        }
     }
 
-    if (is_last_chunk) {
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+    size_t num_default_rows = is_first_chunk ? chunk->num_rows() - 1 : chunk->num_rows();
+
+    for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        // add 'reset' rows
+        for (size_t j = 0; j < num_default_rows; j++) {
             _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], agg_state + _agg_states_offsets[i],
                                                    agg_result_columns[i].get());
         }

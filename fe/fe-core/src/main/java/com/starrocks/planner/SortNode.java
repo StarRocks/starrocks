@@ -255,13 +255,17 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         if (sqlSortKeysBuilder.length() > 0) {
             msg.sort_node.setSql_sort_keys(sqlSortKeysBuilder.toString());
         }
+
         if (!buildRuntimeFilters.isEmpty()) {
             List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
         }
+
         if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
             msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
+            msg.sort_node.setPre_agg_insert_local_shuffle(
+                    ConnectContext.get().getSessionVariable().isInsertLocalShuffleForWindowPreAgg());
         }
         if (preAggOutputColumnId != null && !preAggOutputColumnId.isEmpty()) {
             List<Integer> outputColumnsId = preAggOutputColumnId.stream().map(slotId -> slotId.asInt()).collect(

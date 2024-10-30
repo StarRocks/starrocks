@@ -123,6 +123,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
+    _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
+    if (_is_merge_funcs) {
+        _runtime_profile->add_info_string("isMerge", "true");
+    }
+
     _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
@@ -180,6 +185,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 return_type = TYPE_DOUBLE;
             }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
+            if (_is_merge_funcs && fn.name.function_name == "count") {
+                is_input_nullable = false;
+            }
             auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, return_type, is_input_nullable,
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
@@ -311,8 +319,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
-
-    _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
 
     return _prepare_processing_mode(state, runtime_profile);
 }

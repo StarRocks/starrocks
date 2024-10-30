@@ -34,7 +34,7 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
     _partition_columns.resize(partition_exprs.size());
 }
 
-Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
+Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_profile, bool enable_pre_agg) {
     _state = state;
     _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
@@ -45,6 +45,9 @@ Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_p
     _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<ChunksPartitionStatistics>>(
             &_statistics, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
+    if (enable_pre_agg) {
+        _hash_map_variant.set_enable_pre_agg();
+    }
     return Status::OK();
 }
 
