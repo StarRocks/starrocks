@@ -102,6 +102,7 @@ import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ImpersonatePrivInfo;
@@ -161,6 +162,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -953,6 +955,14 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_ADD_KEY: {
                 data = new Text(Text.readBinary(in));
+                break;
+            }
+            case OperationType.OP_CREATE_WAREHOUSE:
+            case OperationType.OP_ALTER_WAREHOUSE:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), Warehouse.class);
+                break;
+            case OperationType.OP_DROP_WAREHOUSE: {
+                data = DropWarehouseLog.read(in);
                 break;
             }
             default: {
