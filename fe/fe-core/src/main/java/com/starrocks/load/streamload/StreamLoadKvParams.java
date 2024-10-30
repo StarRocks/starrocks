@@ -19,15 +19,20 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import io.netty.handler.codec.http.HttpHeaders;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COLUMNS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COLUMN_SEPARATOR;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSION;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
@@ -145,11 +150,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Boolean> getNegative() {
-        String negative = params.get(HTTP_NEGATIVE);
-        if (negative == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Boolean.parseBoolean(negative));
+        return getBoolParam(HTTP_NEGATIVE);
     }
 
     @Override
@@ -163,20 +164,12 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Integer> getTimeout() {
-        String timeout = params.get(HTTP_TIMEOUT);
-        if (timeout == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Integer.parseInt(timeout));
+        return getIntParam(HTTP_TIMEOUT);
     }
 
     @Override
     public Optional<Boolean> getStrictMode() {
-        String strictMode = params.get(HTTP_STRICT_MODE);
-        if (strictMode == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Boolean.parseBoolean(strictMode));
+        return getBoolParam(HTTP_STRICT_MODE);
     }
 
     @Override
@@ -186,11 +179,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Long> getLoadMemLimit() {
-        String loadMemLimit = params.get(HTTP_LOAD_MEM_LIMIT);
-        if (loadMemLimit == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Long.parseLong(loadMemLimit));
+        return getLongParam(HTTP_LOAD_MEM_LIMIT);
     }
 
     @Override
@@ -200,20 +189,12 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Integer> getLoadDop() {
-        String loadDop = params.get(HTTP_LOAD_DOP);
-        if (loadDop == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Integer.parseInt(loadDop));
+        return getIntParam(HTTP_LOAD_DOP);
     }
 
     @Override
     public Optional<Boolean> getEnableReplicatedStorage() {
-        String enableReplicatedStorage = params.get(HTTP_ENABLE_REPLICATED_STORAGE);
-        if (enableReplicatedStorage == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Boolean.parseBoolean(enableReplicatedStorage));
+        return getBoolParam(HTTP_ENABLE_REPLICATED_STORAGE);
     }
 
     @Override
@@ -223,20 +204,12 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Long> getLogRejectedRecordNum() {
-        String logRejectedRecordNum = params.get(HTTP_LOG_REJECTED_RECORD_NUM);
-        if (logRejectedRecordNum == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Long.parseLong(logRejectedRecordNum));
+        return getLongParam(HTTP_LOG_REJECTED_RECORD_NUM);
     }
 
     @Override
     public Optional<Boolean> getPartialUpdate() {
-        String partialUpdate = params.get(HTTP_PARTIAL_UPDATE);
-        if (partialUpdate == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Boolean.parseBoolean(partialUpdate));
+        return getBoolParam(HTTP_PARTIAL_UPDATE);
     }
 
     @Override
@@ -282,11 +255,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Long> getSkipHeader() {
-        String skipHeader = params.get(HTTP_SKIP_HEADER);
-        if (skipHeader == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Long.parseLong(skipHeader));
+        return getLongParam(HTTP_SKIP_HEADER);
     }
 
     @Override
@@ -309,11 +278,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Boolean> getTrimSpace() {
-        String trimSpace = params.get(HTTP_TRIM_SPACE);
-        if (trimSpace == null) {
-            return Optional.empty();
-        }
-        return Optional.of(Boolean.parseBoolean(trimSpace));
+        return getBoolParam(HTTP_TRIM_SPACE);
     }
 
     @Override
@@ -328,11 +293,51 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Boolean> getStripOuterArray() {
-        String stripOuterArray = params.get(HTTP_STRIP_OUTER_ARRAY);
-        if (stripOuterArray == null) {
+        return getBoolParam(HTTP_STRIP_OUTER_ARRAY);
+    }
+
+    public Optional<Boolean> getEnableBatchWrite() {
+        return getBoolParam(HTTP_ENABLE_BATCH_WRITE);
+    }
+
+    public Optional<Boolean> getBatchWriteAsync() {
+        return getBoolParam(HTTP_BATCH_WRITE_ASYNC);
+    }
+
+    public Optional<Integer> getBatchWriteIntervalMs() {
+        return getIntParam(HTTP_BATCH_WRITE_INTERVAL_MS);
+    }
+
+    public Optional<Integer> getBatchWriteParallel() {
+        return getIntParam(HTTP_BATCH_WRITE_PARALLEL);
+    }
+
+    private Optional<Boolean> getBoolParam(String paramName) {
+        String value = params.get(paramName);
+        if (value == null) {
             return Optional.empty();
         }
-        return Optional.of(Boolean.parseBoolean(stripOuterArray));
+        return Optional.of(Boolean.parseBoolean(value));
+    }
+
+    private Optional<Integer> getIntParam(String paramName) {
+        String value = params.get(paramName);
+        if (value == null) {
+            return Optional.empty();
+        }
+        return Optional.of(Integer.parseInt(value));
+    }
+
+    private Optional<Long> getLongParam(String paramName) {
+        String value = params.get(paramName);
+        if (value == null) {
+            return Optional.empty();
+        }
+        return Optional.of(Long.parseLong(value));
+    }
+
+    public Map<String, String> toMap() {
+        return Collections.unmodifiableMap(params);
     }
 
     @Override

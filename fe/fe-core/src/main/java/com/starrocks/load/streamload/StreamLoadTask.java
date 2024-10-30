@@ -79,6 +79,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -767,7 +768,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
-        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(loadId, txnId, (int) timeoutMs / 1000, streamLoadParams);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
         if (table == null) {
             getTable();
         }
