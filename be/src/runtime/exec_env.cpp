@@ -242,6 +242,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
+    _passthrough_mem_tracker = regist_tracker(MemTracker::PASSTHROUGH, -1, "passthrough");
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());

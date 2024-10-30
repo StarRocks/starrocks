@@ -66,6 +66,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(passthrough_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);

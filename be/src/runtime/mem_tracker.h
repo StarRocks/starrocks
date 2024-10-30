@@ -104,6 +104,7 @@ public:
         RESOURCE_GROUP,
         RESOURCE_GROUP_BIG_QUERY,
         JEMALLOC,
+        PASSTHROUGH,
     };
 
     /// 'byte_limit' < 0 means no limit

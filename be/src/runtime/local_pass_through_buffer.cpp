@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -29,6 +30,7 @@ public:
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
             CurrentThread::current().mem_consume(_physical_bytes);
+            GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
         }
     }
 
@@ -39,6 +41,7 @@ public:
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
         CurrentThread::current().mem_release(physical_bytes);
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
@@ -50,7 +53,7 @@ public:
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
-
+        GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
         // Consume physical bytes in current MemTracker, since later it would be released
         CurrentThread::current().mem_consume(_physical_bytes);
         _total_bytes -= _physical_bytes;
