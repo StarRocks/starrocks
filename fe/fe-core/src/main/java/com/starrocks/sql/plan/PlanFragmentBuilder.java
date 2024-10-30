@@ -1069,13 +1069,14 @@ public class PlanFragmentBuilder {
         }
 
         private void prepareMinMaxExpr(HDFSScanNodePredicates scanNodePredicates,
-                                       ScanOperatorPredicates predicates, ExecPlan context) {
+                                       ScanOperatorPredicates predicates, ExecPlan context, Table referenceTable) {
             /*
              * populates 'minMaxTuple' with slots for statistics values,
              * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
              */
             List<ScalarOperator> minMaxConjuncts = predicates.getMinMaxConjuncts();
             TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
+            minMaxTuple.setTable(referenceTable);
             for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
                 for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
                     SlotDescriptor slotDescriptor =
@@ -1124,8 +1125,7 @@ public class PlanFragmentBuilder {
                 hudiScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 prepareCommonExpr(scanNodePredicates, predicates, context);
-                prepareMinMaxExpr(scanNodePredicates, predicates, context);
-
+                prepareMinMaxExpr(scanNodePredicates, predicates, context, referenceTable);
             } catch (Exception e) {
                 LOG.warn("Hudi scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1168,7 +1168,7 @@ public class PlanFragmentBuilder {
                 hdfsScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 prepareCommonExpr(scanNodePredicates, predicates, context);
-                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context, referenceTable);
             } catch (Exception e) {
                 LOG.warn("Hdfs scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1209,7 +1209,7 @@ public class PlanFragmentBuilder {
                 fileTableScanNode.setupScanRangeLocations();
 
                 prepareCommonExpr(scanNodePredicates, predicates, context);
-                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context, referenceTable);
             } catch (Exception e) {
                 LOG.warn("Hdfs scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1261,7 +1261,7 @@ public class PlanFragmentBuilder {
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1308,7 +1308,7 @@ public class PlanFragmentBuilder {
                 }
                 paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (Exception e) {
                 LOG.warn("Paimon scan node get scan range locations failed : ", e);
@@ -1359,7 +1359,7 @@ public class PlanFragmentBuilder {
                                 .collect(Collectors.toList());
                 odpsScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), partitionKeys);
                 HDFSScanNodePredicates scanNodePredicates = odpsScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, scanOperatorPredicates, context);
+                prepareMinMaxExpr(scanNodePredicates, scanOperatorPredicates, context, referenceTable);
                 prepareCommonExpr(scanNodePredicates, scanOperatorPredicates, context);
             } catch (Exception e) {
                 LOG.error("Odps scan node get scan range locations failed", e);
@@ -1402,7 +1402,7 @@ public class PlanFragmentBuilder {
                 }
                 kuduScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
                 HDFSScanNodePredicates scanNodePredicates = kuduScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (Exception e) {
                 LOG.warn("Kudu scan node get scan range locations failed : ", e);
@@ -1475,7 +1475,7 @@ public class PlanFragmentBuilder {
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
                 if (!isEqDeleteScan) {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
-                    prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                    prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 }
             } catch (UserException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
