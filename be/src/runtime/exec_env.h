@@ -122,8 +122,12 @@ public:
     static bool is_init();
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
+
+    // query
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
     MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
+    MemTracker* query_profile_mem_tracker() { return _query_profile_mem_tracker.get(); }
+
     MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
     MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
@@ -177,6 +181,7 @@ private:
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_pool_mem_tracker;
+    std::shared_ptr<MemTracker> _query_profile_mem_tracker;
 
     // Limit the memory used by load
     std::shared_ptr<MemTracker> _load_mem_tracker;
