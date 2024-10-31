@@ -47,13 +47,13 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
         int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
         int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
-        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getBfColumnNames(),
+        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, rollupColumns, olapTable.getBfColumnNames(),
                 olapTable.getBfFpp());
 
         AlterJobV2 mvJob = new RollupJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutMs,
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
-                mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
-                mvKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
+                rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
+                rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Tablet> addedTablets = Lists.newArrayList();
