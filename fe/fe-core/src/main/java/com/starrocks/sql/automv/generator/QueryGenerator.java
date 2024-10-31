@@ -19,11 +19,15 @@ import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Pair;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.DerivedColumn;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
+import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.PlanPieceVisitor;
 import com.starrocks.sql.automv.pieces.StarJoinPiece;
@@ -72,6 +76,34 @@ public class QueryGenerator {
         private Visitor(@Nullable PrettyPrinter traceLog) {
             this.optTraceLog = Optional.ofNullable(traceLog);
             this.aliasGenerator = AliasGenerator.getDefaultAliasGenerator();
+        }
+
+        private static String rectifyFullTableName(FQTable fqTable, boolean isRectifyName) {
+            if (!isRectifyName) {
+                return fqTable.getFQName();
+            }
+
+            if (fqTable.getTable().isHiveTable()) {
+                HiveTable hiveTable = (HiveTable) fqTable.getTable();
+                TableName fqName = fqTable.getFqTableName();
+                String catalogName = fqName.getCatalog();
+                if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    catalogName = hiveTable.getResourceName();
+                }
+                String dbName = fqName.getDb();
+                String tblName = fqName.getTbl();
+                PrettyPrinter dbTblSql = new PrettyPrinter()
+                        .addBacktickQuoted(dbName)
+                        .add(".")
+                        .addBacktickQuoted(tblName);
+                PrettyPrinter fqSql = new PrettyPrinter();
+                if (catalogName != null && !catalogName.isEmpty()) {
+                    fqSql.addBacktickQuoted(catalogName).add(".");
+                }
+                return fqSql.addSuperStep(dbTblSql).getResult();
+            } else {
+                return fqTable.getFQName();
+            }
         }
 
         @Override
@@ -283,7 +315,7 @@ public class QueryGenerator {
                 tableOriginalOutputColumns = tablePiece.getOutputColumns(requiredOriginalColumnIds);
             }
 
-            String tableName = tablePiece.getTableName();
+            String tableName = rectifyFullTableName(tablePiece.getTable(), context.isRectifyTableName());
             String tableAlias = aliasGenerator.nextAliasIfTableNameAbsent(tableName);
 
             TieredMap<Integer, ColumnAlias> columnAliases =

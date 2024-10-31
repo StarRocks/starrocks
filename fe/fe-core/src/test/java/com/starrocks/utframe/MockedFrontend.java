@@ -152,7 +152,7 @@ public class MockedFrontend {
         }
 
         this.runningDir = runningDir;
-        System.out.println("mocked frontend running in dir: " + this.runningDir);
+        // System.out.println("mocked frontend running in dir: " + this.runningDir);
 
         // root running dir
         createAndClearDir(this.runningDir);

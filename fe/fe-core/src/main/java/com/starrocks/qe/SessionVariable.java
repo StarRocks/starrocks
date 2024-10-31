@@ -2306,6 +2306,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = AUTOMV_DECAY_ACCELERATED_QUERIES, flag = VariableMgr.INVISIBLE)
     private boolean autoMVDecayAcceleratedQueries = false;
+
+    private boolean autoMVRectifyTableName = false;
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
                 Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
@@ -4481,6 +4483,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getAutoMVDefaultPartitionByTimeGranule() {
         return autoMVDefaultPartitionByTimeGranule;
+    }
+
+    public void setAutoMVRectifyTableName(boolean flag) {
+        this.autoMVRectifyTableName = flag;
+    }
+
+    public boolean isAutoMVRectifyTableName() {
+        return this.autoMVRectifyTableName;
     }
 
     public int getLikePredicateConsolidateMin() {

@@ -42,6 +42,8 @@ public class AutoMVOptions {
     private final boolean enableComplexDerivedDimensions;
     private final String defaultPartitionByTimeGranule;
     private final boolean decayAcceleratedQueries;
+    private final boolean rectifyTableName;
+
     private AutoMVOptions(
             PartitionExtractor partitionExtractor,
             int partialRollupMinAggregatePieces,
@@ -62,7 +64,8 @@ public class AutoMVOptions {
             boolean enableComplexDerivedMetrics,
             boolean enableComplexDerivedDimensions,
             String defaultPartitionByTimeGranule,
-            boolean decayAcceleratedQueries
+            boolean decayAcceleratedQueries,
+            boolean rectifyTableName
     ) {
         this.partitionExtractor = Objects.requireNonNull(partitionExtractor);
         this.partialRollupMinAggPieces = partialRollupMinAggregatePieces;
@@ -86,6 +89,7 @@ public class AutoMVOptions {
         this.enableComplexDerivedDimensions = enableComplexDerivedDimensions;
         this.defaultPartitionByTimeGranule = defaultPartitionByTimeGranule;
         this.decayAcceleratedQueries = decayAcceleratedQueries;
+        this.rectifyTableName = rectifyTableName;
     }
 
     public static AutoMVOptions of(PartitionExtractor partitionExtractor, SessionVariable sv) {
@@ -111,7 +115,12 @@ public class AutoMVOptions {
                 sv.isAutoMVEnableComplexDerivedMetrics(),
                 sv.isAutoMVEnableComplexDerivedDimensions(),
                 sv.getAutoMVDefaultPartitionByTimeGranule(),
-                sv.isAutoMVDecayAcceleratedQueries());
+                sv.isAutoMVDecayAcceleratedQueries(),
+                sv.isAutoMVRectifyTableName());
+    }
+
+    public boolean isRectifyTableName() {
+        return rectifyTableName;
     }
 
     public PartitionExtractor getPartitionExtractor() {

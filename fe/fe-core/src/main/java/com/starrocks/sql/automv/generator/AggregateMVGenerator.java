@@ -35,7 +35,8 @@ import java.util.stream.Collectors;
 public class AggregateMVGenerator {
     public static Optional<QueryGenerateResult> generate(AggregatePiece aggPiece, MVGenerateContext context) {
         PrettyPrinter mvSchema = new PrettyPrinter();
-        QueryGenerateContext queryGenerateContext = QueryGenerateContext.of(context.isEnableGenerateTraceLog(), false);
+        QueryGenerateContext queryGenerateContext = QueryGenerateContext.of(context.isEnableGenerateTraceLog(), false,
+                context.getOptions().isRectifyTableName());
         QueryGenerateResult result = QueryGenerator.generate(aggPiece, queryGenerateContext);
         TieredMap<Integer, ColumnAlias> columnAliases = result.getColumnAliases();
 

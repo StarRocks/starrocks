@@ -126,6 +126,11 @@ public class MetadataMgr {
     private final LocalMetastore localMetastore;
     private final TemporaryTableMgr temporaryTableMgr;
     private final ConnectorMgr connectorMgr;
+
+    public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
+        return connectorTblMetaInfoMgr;
+    }
+
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
     private static final RemovalListener<String, QueryMetadatas> CACHE_REMOVAL_LISTENER = (notification) -> {

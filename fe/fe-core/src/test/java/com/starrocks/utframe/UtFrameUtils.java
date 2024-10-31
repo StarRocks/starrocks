@@ -169,6 +169,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
@@ -938,6 +939,17 @@ public class UtFrameUtils {
         String q = initMockEnv(connectContext, dumpInfo);
         try {
             return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
+    }
+
+    public static <T> T execInMockedEnv(StarRocksAssert starRocksAssert, QueryDumpInfo dumpInfo,
+                                        BiFunction<StarRocksAssert, QueryDumpInfo, T> cb) throws Exception {
+        ConnectContext context = starRocksAssert.getCtx();
+        initMockEnv(context, dumpInfo);
+        try {
+            return cb.apply(starRocksAssert, dumpInfo);
         } finally {
             tearMockEnv();
         }

@@ -208,7 +208,7 @@ public class PlanPieceInfo {
     public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, PlanPiece piece) {
         piece = AggregatePolicies.perfectMatch(piece);
         String originalQuery = mvPlus.getCreateMaterializedViewSql();
-        QueryGenerateContext context = QueryGenerateContext.of(false, true);
+        QueryGenerateContext context = QueryGenerateContext.of(false, true, false);
         String query = QueryGenerator.generate(piece, context).getSubquery().getResult();
         PlanPieceInfo pieceInfo = from(originalQuery, query, piece, piece.getCommonState().getFqTableMap());
         PieceTraits traits = pieceInfo.getTraits();
@@ -220,7 +220,7 @@ public class PlanPieceInfo {
     public static PlanPieceInfo from(PlanPiece piece, AggregatePolicy policy,
                                      Map<String, FQTable> fqTableMap) {
         PlanPiece originalPiece = AggregatePolicies.perfectMatch(piece);
-        QueryGenerateContext context = QueryGenerateContext.of(false, true);
+        QueryGenerateContext context = QueryGenerateContext.of(false, true, false);
         String originalQuery = QueryGenerator.generate(originalPiece, context).getSubquery().getResult();
         String query = piece.cast(AggregatePiece.class)
                 .flatMap(policy::convert)

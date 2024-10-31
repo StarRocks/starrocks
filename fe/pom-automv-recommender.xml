@@ -1,0 +1,88 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+   
+    <!-- 项目信息 -->
+    <groupId>com.starrocks</groupId>
+    <artifactId>automv_recommender</artifactId>
+    <version>AUTOMV_RECOMMENDER_VERSION</version>
+    <packaging>jar</packaging>
+
+    <name>AutoMVRecommender</name>
+
+    <!-- 需要合并的依赖库 -->
+    <dependencies>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-core-jar-with-dependencies</artifactId>
+            <version>3.4.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.hazendaz.jmockit</groupId>
+            <artifactId>jmockit</artifactId>
+            <version>1.49.4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>4.11.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.1</version>
+        </dependency>
+
+    </dependencies>
+
+    <!-- 构建配置 -->
+    <build>
+        <plugins>
+            <!-- 使用 maven-shade-plugin 合并 JAR 包 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 减少依赖声明 -->
+                            <createDependencyReducedPom>true</createDependencyReducedPom>
+                            <!-- 合并 MANIFEST 文件 -->
+                            <transformers>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.starrocks.sql.automv.lattice.QueryDumpMVRecommenderCmd
+                                    </mainClass> <!-- 替换为实际主类 -->
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <resources>
+            <resource>
+                <directory>${project.basedir}/fe-core/target/test-classes</directory>
+                <includes>
+                    <include>**/*</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
+</project>

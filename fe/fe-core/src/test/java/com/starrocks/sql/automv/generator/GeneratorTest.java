@@ -101,7 +101,7 @@ public class GeneratorTest {
                 AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, traceLog);
                 aggPiece = policy.convert(aggPiece).orElse(aggPiece);
                 aggPiece = AggregatePolicies.applyRollupOrPerfectMatch(aggPiece);
-                QueryGenerateContext queryGenerateContext = QueryGenerateContext.of(false, true);
+                QueryGenerateContext queryGenerateContext = QueryGenerateContext.of(false, true, false);
 
                 String query = QueryGenerator.generate(aggPiece, queryGenerateContext).getSubquery().getResult();
 

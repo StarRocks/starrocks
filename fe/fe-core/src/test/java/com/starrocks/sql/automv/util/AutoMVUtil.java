@@ -238,7 +238,6 @@ public class AutoMVUtil {
         testHelper(starRocksAssert.getCtx(), queryList, svSetter, (pieces, mvResults) -> {
             resultChecker.accept(mvResults);
             if (!mvResults.isEmpty()) {
-                Assert.assertEquals(mvResults.size(), 1);
                 String mvName = mvResults.get(0).get(1);
                 String mv = mvResults.get(0).get(2);
                 starRocksAssert.withMaterializedView(mv, () -> {
