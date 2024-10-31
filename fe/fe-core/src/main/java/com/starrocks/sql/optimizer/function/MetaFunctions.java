@@ -345,8 +345,12 @@ public class MetaFunctions {
         try {
             MaterializedView mv = (MaterializedView) table;
             String plans = "";
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            boolean defaultUseCacheValue = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache.getBoolean());
             List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv);
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(defaultUseCacheValue);
             int size = planContexts.size();
             for (int i = 0; i < size; i++) {
                 MvPlanContext context = planContexts.get(i);
