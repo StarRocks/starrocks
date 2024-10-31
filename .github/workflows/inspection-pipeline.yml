@@ -79,7 +79,6 @@ jobs:
     env:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
-      TEST_ENV: ${IS_INSPECTION}/test
     outputs:
       BRANCH: ${{ steps.param.outputs.BRANCH }}
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
@@ -96,7 +95,6 @@ jobs:
       - name: CRON PARAM
         id: param
         run: |
-          echo ${TEST_ENV}
           BE_UT_LINUX=ubuntu
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [[ "${{ github.event.schedule }}" == "0 11 * * 1,3,5" ]]; then
