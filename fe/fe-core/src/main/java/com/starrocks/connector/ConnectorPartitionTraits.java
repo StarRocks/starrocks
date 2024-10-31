@@ -101,12 +101,12 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
-    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
-            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
         }
@@ -117,9 +117,14 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
-        return buildWithCache(ctx, table);
+        return buildWithCache(ctx, null, table);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {

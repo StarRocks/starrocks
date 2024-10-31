@@ -143,5 +143,5 @@ TRACE REASON MV
     FROM t1
     ORDER BY c1;
 -- result:
-    MV rewrite fail for mv1: invalid query plan 0/1: MV contains non-SPJG operators(no view rewrite): LOGICAL_TOPN 
+    MV rewrite fail for mv1: MV contains non-SPJG operators(no view rewrite): LOGICAL_TOPN 
 -- !result
