@@ -69,7 +69,9 @@ void ThreadMemoryMigrator::consume(int64_t bytes) {
 
 ThreadMemoryMigrator::~ThreadMemoryMigrator() {
     // TODO: consider support using an individual tracker
-    DCHECK(CurrentThread::mem_tracker()->type() == MemTracker::PROCESS) << "must release memory in PROCESS_MEM_TRACKER";
+    auto current_tracker_type = CurrentThread::mem_tracker()->type();
+    DCHECK(current_tracker_type == MemTracker::PROCESS || current_tracker_type == MemTracker::NO_SET)
+            << "must release memory in PROCESS_MEM_TRACKER but in " << current_tracker_type;
 
     _target_tracker->release_without_root(_bytes);
 }
