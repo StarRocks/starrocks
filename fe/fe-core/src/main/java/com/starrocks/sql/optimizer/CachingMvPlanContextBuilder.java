@@ -263,6 +263,7 @@ public class CachingMvPlanContextBuilder {
                     // remove mv from ast cache
                     Set<MaterializedView> relatedMVs = AST_TO_MV_MAP.get(astKey);
                     relatedMVs.remove(mv);
+
                     // remove ast key if no related mvs
                     if (relatedMVs.isEmpty()) {
                         AST_TO_MV_MAP.remove(astKey);
@@ -283,12 +284,12 @@ public class CachingMvPlanContextBuilder {
             return;
         }
         try {
+            // cache by ast
+            List<AstKey> astKeys = getAstKeysOfMV(mv);
+            if (CollectionUtils.isEmpty(astKeys)) {
+                return;
+            }
             synchronized (AST_TO_MV_MAP) {
-                // cache by ast
-                List<AstKey> astKeys = getAstKeysOfMV(mv);
-                if (CollectionUtils.isEmpty(astKeys)) {
-                    return;
-                }
                 for (AstKey astKey : astKeys) {
                     AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet()).add(mv);
                 }
