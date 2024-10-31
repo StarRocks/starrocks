@@ -177,7 +177,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
-    private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
+    private final Map<TableIdentifier, org.apache.iceberg.Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
@@ -358,12 +358,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
-        if (tables.containsKey(identifier)) {
-            return tables.get(identifier);
-        }
 
         try {
-            org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+            org.apache.iceberg.Table icebergTable;
+            if (tables.containsKey(identifier)) {
+                icebergTable = tables.get(identifier);
+            } else {
+                icebergTable = icebergCatalog.getTable(dbName, tblName);
+            }
+
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
             if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
@@ -372,8 +375,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
-
-            tables.put(identifier, table);
+            tables.put(identifier, icebergTable);
             return table;
         } catch (StarRocksConnectorException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
