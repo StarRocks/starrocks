@@ -43,7 +43,7 @@ jobs:
     runs-on: [ self-hosted, quick ]
     env:
       OSS_CMD: "ossutil64 --config-file ~/.ossutilconfig"
-      oss_path: "oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}"
+
       JAVA_HOME: /var/local/env/jdk1.8.0_202
 
     steps:
@@ -58,6 +58,7 @@ jobs:
       - name: Download FE UT XML
         id: download-ut-xml
         run: |
+          oss_path=oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}
           size=$(${OSS_CMD} ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" == "0" ]]; then
@@ -96,6 +97,7 @@ jobs:
           java -jar $package_path/jacococli.jar report ${fe_path}/merge.exec --classfiles ${fe_core_path}/target/classes/ \
             --html ./result --xml ${{ github.workspace }}/coverage.xml \
             --sourcefiles ${fe_core_path}/src/main/java/ --encoding utf-8 --name fe-coverage
+          oss_path=oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}
           ${OSS_CMD} cp coverage.xml ${oss_path}/ -f
 
       # Incremental Total Coverage
