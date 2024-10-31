@@ -21,26 +21,26 @@ on:
         description: 'TAR PATH(Release & Centos)'
         required: false
         type: string
-      CENTOS_ASAN_TAR_PATH:
-        description: 'TAR PATH(ASAN & Centos)'
-        required: false
-        type: string
+#      CENTOS_ASAN_TAR_PATH:
+#        description: 'TAR PATH(ASAN & Centos)'
+#        required: false
+#        type: string
       UBUNTU_TAR_PATH:
         description: 'TAR PATH(Release & Ubuntu)'
         required: false
         type: string
-      UBUNTU_ASAN_TAR_PATH:
-        description: 'TAR PATH(ASAN & Ubuntu)'
-        required: false
-        type: string
+#      UBUNTU_ASAN_TAR_PATH:
+#        description: 'TAR PATH(ASAN & Ubuntu)'
+#        required: false
+#        type: string
       INCLUDE_ADMIT:
         description: 'RUN ADMIT?'
         type: string
         default: 'true'
       ALL_LINUX:
         description: "ALL_LINUX? (⬜: Ubuntu && Release only)"
-        type: string
-        default: 'true'
+        type: boolean
+        default: true
       IS_REBUILD:
         description: 'REBUILD'
         type: boolean
@@ -49,6 +49,10 @@ on:
         description: "WITH COV?"
         type: boolean
         default: false
+      COV_BASE_COMMIT:
+        description: ''
+        type: string
+        default: ''
 
 permissions:
   checks: write
@@ -66,6 +70,7 @@ permissions:
 
 env:
   IS_INSPECTION: true
+  SHARE_PATH: /var/local/env
 
 jobs:
   info:
@@ -123,10 +128,15 @@ jobs:
             echo "CENTOS_ASAN_TAR_PATH=${{ inputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_TAR_PATH=${{ inputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_ASAN_TAR_PATH=${{ inputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "RETAIN_ENV=${{ inputs.RETAIN_ENV }}" >> $GITHUB_OUTPUT
             echo "ALL_LINUX=${{ inputs.ALL_LINUX }}" >> $GITHUB_OUTPUT
             echo "WITH_COV=${{ inputs.WITH_COV }}" >> $GITHUB_OUTPUT
             echo "INCLUDE_ADMIT=false" >> $GITHUB_OUTPUT
+          
+            # check cov params
+            if [[ "${{ inputs.WITH_COV }}" == "true" && "${{ inputs.COV_BASE_COMMIT }}" == "" ]]; then
+              echo "::error::[Coverage] Base commit is missing!"
+              exit 1
+            fi
           fi
           
           echo "BE_UT_LINUX=${BE_UT_LINUX}" >> $GITHUB_OUTPUT
@@ -280,7 +290,7 @@ jobs:
     name: BUILD
     needs:
       - info
-    if: github.event_name == 'schedule' || inputs.IS_REBUILD
+    if: github.event_name == 'schedule' || inputs.IS_REBUILD || inputs.WITH_COV == 'true'
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -486,6 +496,48 @@ jobs:
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
 
+  diff-info:
+    runs-on: [self-hosted, quick]
+    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_COV == 'true'
+    name: Gen Diff File
+    env:
+      commit_id: ${{ inputs.COMMIT_ID }}
+      base_commit_id: ${{ inputs.COV_BASE_COMMIT }}
+    outputs:
+      DIFF_FILE: ${{ steps.diff.outputs.DIFF_FILE }}
+    needs:
+      - info
+      - fe-ut
+      - system-test-release-ubuntu
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: diff
+        id: diff
+        run: |
+          diff_file=${SHARE_PATH}/${base_commit_id}_${commit_id}.diff
+          git diff ${base_commit_id} ${commit_id} > ${diff_file}
+          echo "DIFF_FILE=${diff_file}" >> $GITHUB_OUTPUT
+
+  FE-COV-REPORT:
+    uses: ./.github/workflows/inspection-fe-coverage.yml
+    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_COV == 'true'
+    needs:
+      - info
+      - diff-info
+    secrets: inherit
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
+          
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
@@ -515,67 +567,10 @@ jobs:
       UBUNTU_RELEASE_RESULT: ${{ needs.system-test-release-ubuntu.result }}
       UBUNTU_ASAN_RESULT: ${{ needs.system-test-asan-ubuntu.result }}
       BE_UT_LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
-      RETAIN_ENV: ${{ needs.info.outputs.RETAIN_ENV }}
     steps:
       - name: init
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
-
-      - name: Backup SR Info (Release & Centos)
-        if: env.RELEASE_CONF_FILE != ''
-        id: backup_release_centos
-        env:
-          build_type: Release
-          linuxdistro: centos7
-        run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${RELEASE_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          
-          if [[ "${RETAIN_ENV}" != "true" ]]; then
-            ./bin/elastic-cluster.sh --delete
-          fi
-
-      - name: Backup SR Info (ASAN & Centos)
-        if: env.ASAN_CONF_FILE != ''
-        id: backup_asan_centos
-        env:
-          build_type: ASAN
-          linuxdistro: centos7
-        run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${ASAN_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          
-          if [[ "${RETAIN_ENV}" != "true" ]]; then
-            ./bin/elastic-cluster.sh --delete
-          fi
-
-      - name: Backup SR Info (Release & Ubuntu)
-        if: env.UBUNTU_RELEASE_CONF_FILE != ''
-        id: backup_release_ubuntu
-        env:
-          build_type: Release
-          linuxdistro: ubuntu
-        run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${UBUNTU_RELEASE_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          
-          if [[ "${RETAIN_ENV}" != "true" ]]; then
-            ./bin/elastic-cluster.sh --delete
-          fi
-
-      - name: Backup SR Info (ASAN & Ubuntu)
-        if: env.UBUNTU_ASAN_CONF_FILE != ''
-        id: backup_asan_ubuntu
-        env:
-          build_type: ASAN
-          linuxdistro: ubuntu
-        run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${UBUNTU_ASAN_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          
-          if [[ "${RETAIN_ENV}" != "true" ]]; then
-            ./bin/elastic-cluster.sh --delete
-          fi
 
       - name: save unstable cases
         if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
@@ -583,30 +578,7 @@ jobs:
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh
 
-      - name: clean ECI
-        if: always()
-        run: |
-          if [[ "${RELEASE_MYSQL_ECI_ID}" != "" ]]; then
-            eci rm ${RELEASE_MYSQL_ECI_ID}
-          fi
-          
-          if [[ "${ASAN_MYSQL_ECI_ID}" != "" ]]; then
-            eci rm ${ASAN_MYSQL_ECI_ID}
-          fi
-          
-          if [[ "${UBUNTU_RELEASE_MYSQL_ECI_ID}" != "" ]]; then
-            eci rm ${UBUNTU_RELEASE_MYSQL_ECI_ID}
-          fi
-          
-          if [[ "${UBUNTU_ASAN_MYSQL_ECI_ID}" != "" ]]; then
-            eci rm ${UBUNTU_ASAN_MYSQL_ECI_ID}
-          fi
-
       - name: Clean
         if: always()
         run: |
-          rm -f $RELEASE_CONF_FILE
-          rm -f $ASAN_CONF_FILE
-          rm -f $UBUNTU_RELEASE_CONF_FILE
-          rm -f $UBUNTU_ASAN_CONF_FILE
           rm -rf ${{ github.workspace }}/*

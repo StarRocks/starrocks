@@ -40,6 +40,9 @@ on:
       WITH_COV:
         type: string
         default: 'false'
+      RETAIN_ENV:
+        type: string
+        default: 'false'
 
     outputs:
       CONF_FILE:
@@ -74,6 +77,7 @@ env:
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
   WITH_COV: ${{ inputs.WITH_COV }}
+  RETAIN_ENV: ${{ inputs.RETAIN_ENV }}
 
 jobs:
   deploy:
@@ -286,5 +290,40 @@ jobs:
 
       - name: Clean ENV
         if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  clean:
+    runs-on: [ self-hosted, normal ]
+    name: CLEAN ENV
+    needs:
+      - deploy
+      - admit
+      - SQL-Tester
+    if: always()
+    env:
+      conf_file: ${{ needs.deploy.outputs.deploy_conf_file }}
+      linuxdistro: ${{ env.LINUX_DISTRO }}
+      mysql_eci_id: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+    steps:
+      - name: init
+        run: rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
+
+      - name: Backup Cluster Info
+        if: always() && env.conf_file != ''
         run: |
-          rm -rf ${{ github.workspace }}/*
+          cd ci-tool && source lib/init.sh
+          ./bin/backup_log_cores.sh \
+            --branch "${BRANCH}" \
+            --pr "${PR_NUMBER}" \
+            --build "${BUILD_TYPE}" \
+            --conf "${conf_file}" \
+            --repository "${GITHUB_REPOSITORY}" || true
+          ./bin/elastic-cluster.sh --delete
+
+      - name: Delete MySQL Env
+        if: always() && env.mysql_eci_id != ''
+        run: eci rm ${mysql_eci_id}
+
+      - name: Delete Conf
+        if: always() && env.conf_file != ''
+        run: rm -rf ${conf_file}
