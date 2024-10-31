@@ -129,7 +129,7 @@ This project is used by the following companies. Learn more about their use case
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Tencent(LLM)](https://www.youtube.com/watch?v=WVHXFks9EQk)
-- [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
+- [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
