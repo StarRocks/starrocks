@@ -191,7 +191,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName == null || serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
