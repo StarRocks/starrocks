@@ -23,6 +23,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -467,7 +468,12 @@ public class ExternalOlapTable extends OlapTable {
                     null, // TODO(wulei): fix it
                     defaultDistributionInfo);
 
-            PhysicalPartition physicalPartition = logicalPartition.getDefaultPhysicalPartition();
+            PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
+                    partitionMeta.getPartition_name(),
+                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
+                    0, null);
+
+            logicalPartition.addSubPartition(physicalPartition);
 
             physicalPartition.setNextVersion(partitionMeta.getNext_version());
             physicalPartition.updateVisibleVersion(partitionMeta.getVisible_version(),

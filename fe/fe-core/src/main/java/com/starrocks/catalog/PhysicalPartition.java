@@ -109,6 +109,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private volatile long minRetainVersion = 0;
 
+    private PhysicalPartition() {
+
+    }
+
     public PhysicalPartition(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
         this.name = name;

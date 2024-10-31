@@ -1526,7 +1526,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             indexMap.put(indexId, rollup);
         }
 
-        Long id = GlobalStateMgr.getCurrentState().getNextId();
+        long id = GlobalStateMgr.getCurrentState().getNextId();
         // physical partitions in the same logical partition use the same shard_group_id,
         // so that the shards of this logical partition are more evenly distributed.
         long shardGroupId = partition.getDefaultPhysicalPartition().getShardGroupId();
@@ -1703,7 +1703,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 distributionInfo);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(
-                partitionId,
+                GlobalStateMgr.getCurrentState().getNextId(),
                 partitionName,
                 partitionId,
                 shardGroupId,
@@ -1711,7 +1711,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         logicalPartition.addSubPartition(physicalPartition);
 
-        //LogicalPartition partition = new LogicalPartition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo, shardGroupId);
         // version
         if (version != null) {
             physicalPartition.updateVisibleVersion(version);

@@ -845,7 +845,7 @@ public class OlapTable extends Table {
             partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
         }
 
-        // reset partiton info
+        // reset partition info
         partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
 
         // reset partitions
@@ -855,7 +855,7 @@ public class OlapTable extends Table {
         physicalPartitionNameToPartitionId.clear();
         for (Partition partition : partitions) {
             long newPartitionId = partitionOldIdToNewId.get(partition.getId());
-            partition.getDefaultPhysicalPartition().setIdForRestore(newPartitionId);
+            partition.setIdForRestore(newPartitionId);
             idToPartition.put(newPartitionId, partition);
             List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
             origPhysicalPartitions.forEach(physicalPartition -> {

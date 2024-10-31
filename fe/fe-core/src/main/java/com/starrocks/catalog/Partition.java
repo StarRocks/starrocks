@@ -38,7 +38,6 @@ import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
@@ -53,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Internal representation of partition-related metadata.
  */
-public class Partition extends MetaObject implements GsonPreProcessable, GsonPostProcessable {
+public class Partition extends MetaObject implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -121,9 +120,11 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
         this.distributionInfo = distributionInfo;
         this.shardGroupId = shardGroupId;
 
-        this.defaultPhysicalPartitionId = id;
-        PhysicalPartition physicalPartition = new PhysicalPartition(id, name, id, this.shardGroupId, baseIndex);
-        this.idToSubPartition.put(id, physicalPartition);
+        long physicalPartitionId = id;
+        this.defaultPhysicalPartitionId = physicalPartitionId;
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, name, id, this.shardGroupId, baseIndex);
+        this.idToSubPartition.put(physicalPartitionId, physicalPartition);
+        this.nameToSubPartition.put(name, physicalPartition);
     }
 
     public Partition shallowCopy() {
@@ -143,9 +144,14 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
         partition.versionTxnType = this.versionTxnType;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
+        partition.defaultPhysicalPartitionId = this.defaultPhysicalPartitionId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
+    }
+
+    public void setIdForRestore(long id) {
+        this.id = id;
     }
 
     public long getId() {
@@ -177,7 +183,7 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
     }
 
     public void addSubPartition(PhysicalPartition subPartition) {
-        if (defaultPhysicalPartitionId == 0) {
+        if (idToSubPartition.size() == 0) {
             defaultPhysicalPartitionId = subPartition.getId();
         }
         if (subPartition.getName() == null) {
@@ -271,28 +277,6 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
         buffer.append("partition_id: ").append(id).append("; ");
         buffer.append("name: ").append(name).append("; ");
         buffer.append("partition_state.name: ").append(state.name()).append("; ");
-
-        buffer.append("base_index: ").append(baseIndex.toString()).append("; ");
-
-        int rollupCount = (idToVisibleRollupIndex != null) ? idToVisibleRollupIndex.size() : 0;
-        buffer.append("rollup count: ").append(rollupCount).append("; ");
-
-        if (idToVisibleRollupIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                buffer.append("rollup_index: ").append(entry.getValue().toString()).append("; ");
-            }
-        }
-
-        buffer.append("visibleVersion: ").append(visibleVersion).append("; ");
-        buffer.append("committedVersion: ").append(this.nextVersion - 1).append("; ");
-        buffer.append("nextVersion: ").append(nextVersion).append("; ");
-
-        buffer.append("dataVersion: ").append(dataVersion).append("; ");
-        buffer.append("committedDataVersion: ").append(this.nextDataVersion - 1).append("; ");
-
-        buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
-        buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
-
         buffer.append("distribution_info.type: ").append(distributionInfo.getType().name()).append("; ");
         buffer.append("distribution_info: ").append(distributionInfo.toString());
 
@@ -301,38 +285,6 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
 
     public String generatePhysicalPartitionName(long physicalPartitionId) {
         return this.name + '_' + physicalPartitionId;
-    }
-
-    @Override
-    public void gsonPreProcess() throws IOException {
-        if (defaultPhysicalPartitionId != 0) {
-            PhysicalPartition physicalPartition = idToSubPartition.get(defaultPhysicalPartitionId);
-            this.shardGroupId = physicalPartition.getShardGroupId();
-            this.baseIndex = physicalPartition.getBaseIndex();
-            this.isImmutable.set(physicalPartition.isImmutable());
-            this.idToVisibleRollupIndex.clear();
-            for (MaterializedIndex materializedIndex
-                    : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                this.idToVisibleRollupIndex.put(materializedIndex.getId(), materializedIndex);
-            }
-
-            this.idToShadowIndex.clear();
-            for (MaterializedIndex materializedIndex
-                    : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW)) {
-                this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
-            }
-
-            this.visibleVersion = physicalPartition.getVisibleVersion();
-            this.visibleVersionTime = physicalPartition.getVisibleVersionTime();
-            this.nextVersion = physicalPartition.getNextVersion();
-            this.dataVersion = physicalPartition.getDataVersion();
-            this.nextDataVersion = physicalPartition.getNextDataVersion();
-            this.versionEpoch = physicalPartition.getVersionEpoch();
-            this.versionTxnType = physicalPartition.getVersionTxnType();
-
-            idToSubPartition.remove(defaultPhysicalPartitionId);
-            defaultPhysicalPartitionId = 0;
-        }
     }
 
     @Override
@@ -358,11 +310,13 @@ public class Partition extends MetaObject implements GsonPreProcessable, GsonPos
         }
 
         if (defaultPhysicalPartitionId == 0) {
-            defaultPhysicalPartitionId = id;
             String partitionJson = GsonUtils.GSON.toJson(this);
             PhysicalPartition physicalPartition = GsonUtils.GSON.fromJson(partitionJson, PhysicalPartition.class);
             physicalPartition.setParentId(id);
-            idToSubPartition.put(id, physicalPartition);
+
+            long nextId = GlobalStateMgr.getCurrentState().getNextId();
+            defaultPhysicalPartitionId = nextId;
+            idToSubPartition.put(nextId, physicalPartition);
             nameToSubPartition.put(name, physicalPartition);
         }
     }

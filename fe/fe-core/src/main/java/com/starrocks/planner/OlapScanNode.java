@@ -764,7 +764,7 @@ public class OlapScanNode extends ScanNode {
         long totalTabletsNum = 0;
         for (long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
-            List<PhysicalPartition> physicalPartitions = (List<PhysicalPartition>) partition.getSubPartitions();
+            Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
             totalPartitionNum += physicalPartitions.size();
             for (PhysicalPartition physicalPartition : physicalPartitions) {
                 final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);

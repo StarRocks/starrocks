@@ -1358,7 +1358,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) baseTable;
             for (String partitionName : refreshedPartitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
-                // it's ok to skip because only existed partitinos are updated in the version map.
+                // it's ok to skip because only existed partitions are updated in the version map.
                 if (partition == null) {
                     LOG.warn("Partition {} not found in base table {} in refreshing {}, refreshedPartitionNames:{}",
                             partitionName, baseTable.getName(), materializedView.getName(), refreshedPartitionNames);
