@@ -49,10 +49,6 @@ on:
         description: "WITH COV?"
         type: boolean
         default: false
-      RETAIN_ENV:
-        description: 'RETAIN THE ENVIRONMENT?'
-        type: boolean
-        default: false
 
 permissions:
   checks: write
