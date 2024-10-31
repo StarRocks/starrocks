@@ -23,9 +23,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -34,12 +32,9 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -55,8 +50,6 @@ import java.util.Set;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class LakeSyncMaterializedViewTest {
-    private static final Logger LOG = LogManager.getLogger(LakeSyncMaterializedViewTest.class);
-
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
