@@ -255,11 +255,19 @@ public class CachingMvPlanContextBuilder {
             if (CollectionUtils.isEmpty(astKeys)) {
                 return;
             }
-            for (AstKey astKey : astKeys) {
-                if (!AST_TO_MV_MAP.containsKey(astKey)) {
-                    return;
+            synchronized (AST_TO_MV_MAP) {
+                for (AstKey astKey : astKeys) {
+                    if (!AST_TO_MV_MAP.containsKey(astKey)) {
+                        continue;
+                    }
+                    // remove mv from ast cache
+                    Set<MaterializedView> relatedMVs = AST_TO_MV_MAP.get(astKey);
+                    relatedMVs.remove(mv);
+                    // remove ast key if no related mvs
+                    if (relatedMVs.isEmpty()) {
+                        AST_TO_MV_MAP.remove(astKey);
+                    }
                 }
-                AST_TO_MV_MAP.get(astKey).remove(mv);
             }
             LOG.info("Remove mv {} from ast cache", mv.getName());
         } catch (Exception e) {
@@ -275,14 +283,15 @@ public class CachingMvPlanContextBuilder {
             return;
         }
         try {
-            // cache by ast
-            List<AstKey> astKeys = getAstKeysOfMV(mv);
-            if (CollectionUtils.isEmpty(astKeys)) {
-                return;
-            }
-            for (AstKey astKey : astKeys) {
-                AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet())
-                        .add(mv);
+            synchronized (AST_TO_MV_MAP) {
+                // cache by ast
+                List<AstKey> astKeys = getAstKeysOfMV(mv);
+                if (CollectionUtils.isEmpty(astKeys)) {
+                    return;
+                }
+                for (AstKey astKey : astKeys) {
+                    AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet()).add(mv);
+                }
             }
             LOG.info("Add mv {} input ast cache", mv.getName());
         } catch (Exception e) {
@@ -317,6 +326,7 @@ public class CachingMvPlanContextBuilder {
         }
         return keys;
     }
+
     /**
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
