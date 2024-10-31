@@ -2695,7 +2695,7 @@ public class ShowExecutor {
             Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
             CredentialUtil.maskCredential(clonedConfig);
             // Properties
-            createCatalogSql.append("PROPERTIES (")
+            createCatalogSql.append("PROPERTIES (\n")
                     .append(new PrintableMap<>(clonedConfig, " = ", true, true))
                     .append("\n)");
             rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
