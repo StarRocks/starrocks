@@ -679,8 +679,12 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
+<<<<<<< HEAD
                 "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
                 ""));
+=======
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+>>>>>>> 47cf36c7a7 ([UT] Make ReplayFromDumpTest.testGroupByDistinctColumnSkewHint stable (#52483))
     }
 
     @Test
@@ -691,8 +695,12 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
+<<<<<<< HEAD
                 "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
                 ""));
+=======
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+>>>>>>> 47cf36c7a7 ([UT] Make ReplayFromDumpTest.testGroupByDistinctColumnSkewHint stable (#52483))
     }
 
     @Test
