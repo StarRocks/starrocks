@@ -225,7 +225,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             if (table.getState() != OlapTable.OlapTableState.ROLLUP) {
                 throw new IllegalStateException("Table State doesn't equal to ROLLUP, it is " + table.getState() + ".");
             }
-            Preconditions.checkState(table.getState().equals(OlapTable.OlapTableState.ROLLUP));
             watershedTxnId = getNextTransactionId();
             addRollIndexToCatalog(table);
         }
@@ -340,7 +339,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         if (!rollupBatchTask.isFinished()) {
             LOG.info("rollup tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = rollupBatchTask.getUnfinishedTasks(2000);
-            AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny().orElse(null);
+            AgentTask task = tasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny().orElse(null);
             if (task != null) {
                 throw new AlterCancelException(
                         "rollup task failed after try three times: " + task.getErrorMsg());

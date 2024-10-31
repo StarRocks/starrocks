@@ -146,7 +146,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                   << ", base_version: " << base_version << ", new_version: " << new_version;
         // means there is no txnlog and need to increase version number,
         // just return tablet metadata of base_version.
-        CHECK_EQ(new_version, base_version + 1);
+        DCHECK_EQ(new_version, base_version + 1);
         ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, base_version));
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
