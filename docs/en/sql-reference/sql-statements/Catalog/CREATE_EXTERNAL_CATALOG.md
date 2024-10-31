@@ -44,6 +44,7 @@ Example 1: Create a Hive catalog named `hive_metastore_catalog`. The correspondi
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_metastore_catalog
+COMMENT "External catalog to Hive"
 PROPERTIES(
    "type"="hive", 
    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -54,6 +55,7 @@ Example 2: Create a Hive catalog named `hive_glue_catalog`. The corresponding Hi
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_glue_catalog
+COMMENT "External catalog to Hive"
 PROPERTIES(
     "type"="hive", 
     "hive.metastore.type"="glue",
@@ -67,6 +69,7 @@ Example 3: Create an Iceberg catalog named `iceberg_metastore_catalog`. The corr
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_metastore_catalog
+COMMENT "External catalog to Iceberg"
 PROPERTIES(
     "type"="iceberg",
     "iceberg.catalog.type"="hive",
@@ -78,6 +81,7 @@ Example 4: Create an Iceberg catalog named `iceberg_glue_catalog`. The correspon
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_glue_catalog
+COMMENT "External catalog to Iceberg"
 PROPERTIES(
     "type"="iceberg", 
     "iceberg.catalog.type"="glue",
@@ -91,6 +95,7 @@ Example 5: Create a Hudi catalog named `hudi_metastore_catalog`. The correspondi
 
 ```SQL
 CREATE EXTERNAL CATALOG hudi_metastore_catalog
+COMMENT "External catalog to Hudi"
 PROPERTIES(
     "type"="hudi",
     "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -101,6 +106,7 @@ Example 6: Create a Hudi catalog named `hudi_glue_catalog`. The corresponding Hu
 
 ```SQL
 CREATE EXTERNAL CATALOG hudi_glue_catalog
+COMMENT "External catalog to Hudi"
 PROPERTIES(
     "type"="hudi", 
     "hive.metastore.type"="glue",
@@ -114,6 +120,7 @@ Example 7: Create a Delta Lake catalog named `delta_metastore_catalog`. The corr
 
 ```SQL
 CREATE EXTERNAL CATALOG delta_metastore_catalog
+COMMENT "External catalog to Delta"
 PROPERTIES(
     "type"="deltalake",
     "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -124,6 +131,7 @@ Example 8: Create a Delta Lake catalog named `delta_glue_catalog`. The correspon
 
 ```SQL
 CREATE EXTERNAL CATALOG delta_glue_catalog
+COMMENT "External catalog to Delta"
 PROPERTIES(
     "type"="deltalake", 
     "hive.metastore.type"="glue",
