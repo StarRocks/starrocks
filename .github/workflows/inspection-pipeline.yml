@@ -96,6 +96,7 @@ jobs:
       - name: CRON PARAM
         id: param
         run: |
+          echo ${TEST_ENV}
           BE_UT_LINUX=ubuntu
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [[ "${{ github.event.schedule }}" == "0 11 * * 1,3,5" ]]; then
