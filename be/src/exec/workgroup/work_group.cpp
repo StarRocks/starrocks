@@ -635,6 +635,29 @@ void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) con
 }
 
 Status WorkGroupManager::start() {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this] {
+        int64_t sum = 0;
+        for_each_executors([&sum](const auto& executors) { sum += executors.driver_executor()->schedule_count(); });
+        return sum;
+    });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this] {
+        int64_t sum = 0;
+        for_each_executors(
+                [&sum](const auto& executors) { sum += executors.driver_executor()->driver_execution_ns(); });
+        return sum;
+    });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this] {
+        int64_t sum = 0;
+        for_each_executors([&sum](const auto& executors) { sum += executors.driver_executor()->driver_queue_len(); });
+        return sum;
+    });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len, [this] {
+        int64_t sum = 0;
+        for_each_executors(
+                [&sum](const auto& executors) { sum += executors.driver_executor()->driver_poller_block_queue_len(); });
+        return sum;
+    });
+
     return _executors_manager.start_shared_executors_unlocked();
 }
 

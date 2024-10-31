@@ -65,6 +65,11 @@ public:
 
     virtual void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) = 0;
 
+    virtual int64_t schedule_count() const = 0;
+    virtual int64_t driver_execution_ns() const = 0;
+    virtual int64_t driver_queue_len() const = 0;
+    virtual int64_t driver_poller_block_queue_len() const = 0;
+
 protected:
     std::string _name;
 };
@@ -101,6 +106,11 @@ private:
                                                    ObjectPool* obj_pool);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
+
+    int64_t schedule_count() const override { return _schedule_count.load(); }
+    int64_t driver_execution_ns() const override { return _driver_execution_ns.load(); }
+    int64_t driver_queue_len() const override;
+    int64_t driver_poller_block_queue_len() const override;
 
 private:
     // The maximum duration that a driver could stay in local_driver_queue
