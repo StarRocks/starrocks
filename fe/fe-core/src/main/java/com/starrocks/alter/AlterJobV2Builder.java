@@ -52,8 +52,8 @@ public abstract class AlterJobV2Builder {
     protected long rollupIndexId;
     protected String rollupIndexName;
     protected Expr whereClause;
-    List<Column> mvColumns;
-    KeysType mvKeysType;
+    List<Column> rollupColumns;
+    KeysType rollupKeysType;
     short rollupShortKeyColumnCount;
     protected OriginStatement origStmt;
     protected String viewDefineSql;
@@ -68,8 +68,8 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withMvKeysType(KeysType mvKeysType) {
-        this.mvKeysType = mvKeysType;
+    public AlterJobV2Builder withMvKeysType(KeysType rollupKeysType) {
+        this.rollupKeysType = rollupKeysType;
         return this;
     }
 
@@ -88,8 +88,8 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withMvColumns(List<Column> mvColumns) {
-        this.mvColumns = mvColumns;
+    public AlterJobV2Builder withMvColumns(List<Column> rollupColumns) {
+        this.rollupColumns = rollupColumns;
         return this;
     }
 
@@ -98,12 +98,12 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withMvShortkeyColumnCoun(short mvShortKeyColumnCount) {
-        this.rollupShortKeyColumnCount = mvShortKeyColumnCount;
+    public AlterJobV2Builder withMvShortkeyColumnCoun(short rollupShortKeyColumnCount) {
+        this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
         return this;
     }
 
-    public AlterJobV2Builder withRrigStmt(OriginStatement origStmt) {
+    public AlterJobV2Builder withOriginStmt(OriginStatement origStmt) {
         this.origStmt = origStmt;
         return this;
     }

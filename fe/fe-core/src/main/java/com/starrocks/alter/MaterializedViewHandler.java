@@ -364,7 +364,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     .withMvColumns(mvColumns)
                     .withWhereClause(whereClause)
                     .withMvShortkeyColumnCoun(mvShortKeyColumnCount)
-                    .withRrigStmt(origStmt)
+                    .withOriginStmt(origStmt)
                     .withViewDefineSql(viewDefineSql)
                     .withMvKeysType(mvKeysType)
                     .withIsColocateMv(isColocateMv).build();
