@@ -40,7 +40,7 @@ on:
       ALL_LINUX:
         description: "ALL_LINUX? (⬜: Ubuntu && Release only)"
         type: boolean
-        default: true
+        default: false
       IS_REBUILD:
         description: 'REBUILD'
         type: boolean
