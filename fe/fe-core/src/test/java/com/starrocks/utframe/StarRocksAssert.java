@@ -39,9 +39,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -50,6 +53,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
@@ -87,6 +91,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -104,6 +109,7 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -119,6 +125,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.thrift.TFunctionBinaryType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -332,6 +339,24 @@ public class StarRocksAssert {
         }
     }
 
+    public static void utCreateFunctionMock(CreateFunctionStmt createFunctionStmt, ConnectContext ctx) throws Exception {
+        FunctionName functionName = createFunctionStmt.getFunctionName();
+        functionName.analyze(ctx.getDatabase());
+        FunctionArgsDef argsDef = createFunctionStmt.getArgsDef();
+        TypeDef returnType = createFunctionStmt.getReturnType();
+        // check argument
+        argsDef.analyze();
+        returnType.analyze();
+
+        Function function = ScalarFunction.createUdf(
+                functionName, argsDef.getArgTypes(),
+                returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
+                "", "", "", "", !"shared".equalsIgnoreCase(""));
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+        db.addFunction(function, true, false);
+    }
+
     public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
         executeWithRetry((retryTime) -> {
             CreateTableStmt createTableStmtCopied = createTableStmt;
@@ -352,6 +377,15 @@ public class StarRocksAssert {
             }
             GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmtCopied);
         }, "Drop Table", 3);
+    }
+
+    public StarRocksAssert withFunction(String sql) throws Exception {
+        Config.enable_udf = true;
+        CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Config.enable_udf = false;
+        utCreateFunctionMock(createFunctionStmt, ctx);
+        return this;
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {

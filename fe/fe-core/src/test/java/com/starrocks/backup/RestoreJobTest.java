@@ -37,6 +37,7 @@ package com.starrocks.backup;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -45,6 +46,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -53,6 +55,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -956,5 +959,19 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
+    }
+
+    @Test
+    public void testRestoreAddFunction() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+
+        backupMeta.setFunctions(Lists.newArrayList(f1));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                             new BackupJobInfo(), false, 3, 100000,
+                             globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        
+        job.addRestoredFunctions(db);
     }
 }

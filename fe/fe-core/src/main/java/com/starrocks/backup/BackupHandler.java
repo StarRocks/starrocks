@@ -40,12 +40,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -74,6 +76,7 @@ import com.starrocks.sql.ast.BackupStmt.BackupType;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.task.DirMoveTask;
@@ -98,6 +101,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
@@ -414,6 +418,11 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Create a backup job
         BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
+        List<Function> allFunctions = Lists.newArrayList();
+        for (FunctionRef fnRef : stmt.getFnRefs()) {
+            allFunctions.addAll(fnRef.getFunctions());
+        }
+        backupJob.setBackupFunctions(allFunctions);
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
@@ -437,13 +446,19 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Also remove all unrelated objs
         Preconditions.checkState(infos.size() == 1);
         BackupJobInfo jobInfo = infos.get(0);
-        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
-        // So, we should restore all table in current database.
-        if (stmt.getTableRefs().size() != 0) {
+        // If restore statement contains `ON` clause, check and filter the specified backup
+        // object is needed. 
+        if (stmt.withOnClause()) {
             checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
         }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+
+        // For UDFs restore, restore all functions in BackupMeta if statement does not contains `ON` clause.
+        // Otherwise, restore the functions specified after `ON` clause in restore statement.
+        if (stmt.withOnClause() && backupMeta != null) {
+            checkAndFilterRestoreFunctionsInBackupMeta(stmt, backupMeta);
+        }
 
         // Create a restore job
         RestoreJob restoreJob = null;
@@ -486,6 +501,26 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         }
         Preconditions.checkState(backupMetas.size() == 1);
         return backupMetas.get(0);
+    }
+
+    protected void checkAndFilterRestoreFunctionsInBackupMeta(RestoreStmt stmt, BackupMeta backupMeta) throws DdlException {
+        List<Function> functionsInBackupMeta = backupMeta.getFunctions();
+        List<Function> restoredFunctions = Lists.newArrayList();
+        for (FunctionRef fnRef : stmt.getFnRefs()) {
+            List<Function> hitFunc = functionsInBackupMeta.stream().filter(x -> fnRef.checkSameFunctionNameForRestore(x))
+                                     .collect(Collectors.toList());
+            if (hitFunc.isEmpty()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                               "Can not find restore function: " + fnRef.getFnName().toString());
+            }
+
+            if (fnRef.getAlias() != null && !fnRef.getAlias().isEmpty()) {
+                hitFunc.stream().forEach(fn -> fn.setFunctionName(
+                                         new FunctionName(fn.getFunctionName().getDb(), fnRef.getAlias())));
+            }
+            restoredFunctions.addAll(hitFunc);
+        }
+        backupMeta.setFunctions(restoredFunctions);
     }
 
     private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)

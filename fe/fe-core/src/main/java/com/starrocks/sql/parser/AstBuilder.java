@@ -265,6 +265,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
@@ -3323,22 +3324,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
-
     @Override
     public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         LabelName labelName = qualifiedNameToLabelName(qualifiedName);
         List<TableRef> tblRefs = new ArrayList<>();
-        for (StarRocksParser.TableDescContext tableDescContext : context.tableDesc()) {
-            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
-            qualifiedName = getQualifiedName(qualifiedNameContext);
-            TableName tableName = qualifiedNameToTableName(qualifiedName);
-            PartitionNames partitionNames = null;
-            if (tableDescContext.partitionNames() != null) {
-                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+        List<FunctionRef> fnRefs = new ArrayList<>();
+        for (StarRocksParser.BackupObjectDescContext backupObjectDescContext : context.backupObjectDesc()) {
+            if (backupObjectDescContext.FUNCTION() != null) {
+                String functionName = getQualifiedName(backupObjectDescContext.qualifiedName()).toString();
+                FunctionName fnName = FunctionName.createFnName(functionName);
+                FunctionRef fnRef = new FunctionRef(fnName, null, createPos(backupObjectDescContext));
+                fnRefs.add(fnRef);
+            } else {
+                StarRocksParser.TableDescContext tableDescContext = backupObjectDescContext.tableDesc();
+                StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+                qualifiedName = getQualifiedName(qualifiedNameContext);
+                TableName tableName = qualifiedNameToTableName(qualifiedName);
+                PartitionNames partitionNames = null;
+                if (tableDescContext.partitionNames() != null) {
+                    partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+                }
+                TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(tableDescContext));
+                tblRefs.add(tableRef);
             }
-            TableRef tableRef = new TableRef(tableName, null, partitionNames, createPos(tableDescContext));
-            tblRefs.add(tableRef);
         }
 
         Map<String, String> properties = null;
@@ -3351,7 +3360,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         String repoName = ((Identifier) visit(context.identifier())).getValue();
-        return new BackupStmt(labelName, repoName, tblRefs, properties, createPos(context));
+        return new BackupStmt(labelName, repoName, tblRefs, fnRefs, properties, createPos(context));
     }
 
     @Override
@@ -3378,23 +3387,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LabelName labelName = qualifiedNameToLabelName(qualifiedName);
 
         List<TableRef> tblRefs = new ArrayList<>();
-        for (StarRocksParser.RestoreTableDescContext tableDescContext : context.restoreTableDesc()) {
-            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
-            qualifiedName = getQualifiedName(qualifiedNameContext);
-            TableName tableName = qualifiedNameToTableName(qualifiedName);
-            PartitionNames partitionNames = null;
-            if (tableDescContext.partitionNames() != null) {
-                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+        List<FunctionRef> fnRefs = new ArrayList<>();
+        for (StarRocksParser.RestoreObjectDescContext restoreObjectDescContext : context.restoreObjectDesc()) {
+            if (restoreObjectDescContext.FUNCTION() != null) {
+                String functionName = getQualifiedName(restoreObjectDescContext.qualifiedName()).toString();
+                FunctionName fnName = FunctionName.createFnName(functionName);
+                String alias = null;
+                if (restoreObjectDescContext.identifier() != null) {
+                    alias = ((Identifier) visit(restoreObjectDescContext.identifier())).getValue();
+                }
+                FunctionRef fnRef = new FunctionRef(fnName, alias, createPos(restoreObjectDescContext));
+                fnRefs.add(fnRef);
+            } else {
+                StarRocksParser.RestoreTableDescContext tableDescContext = restoreObjectDescContext.restoreTableDesc();
+                StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+                qualifiedName = getQualifiedName(qualifiedNameContext);
+                TableName tableName = qualifiedNameToTableName(qualifiedName);
+                PartitionNames partitionNames = null;
+                if (tableDescContext.partitionNames() != null) {
+                    partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+                }
+    
+                String alias = null;
+                if (tableDescContext.identifier() != null) {
+                    alias = ((Identifier) visit(tableDescContext.identifier())).getValue();
+                }
+    
+                TableRef tableRef = new TableRef(tableName, alias, partitionNames, createPos(tableDescContext));
+                tblRefs.add(tableRef);
             }
-
-            String alias = null;
-            if (tableDescContext.identifier() != null) {
-                alias = ((Identifier) visit(tableDescContext.identifier())).getValue();
-            }
-
-            TableRef tableRef = new TableRef(tableName, alias, partitionNames, createPos(tableDescContext));
-            tblRefs.add(tableRef);
         }
+
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
             properties = new HashMap<>();
@@ -3405,7 +3428,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         String repoName = ((Identifier) visit(context.identifier())).getValue();
-        return new RestoreStmt(labelName, repoName, tblRefs, properties, createPos(context));
+        return new RestoreStmt(labelName, repoName, tblRefs, fnRefs, properties, createPos(context));
     }
 
     @Override

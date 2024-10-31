@@ -55,6 +55,9 @@ public class AnalyzeBackupRestoreTest {
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
         GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+
+        AnalyzeTestUtil.getStarRocksAssert().withFunction("CREATE FUNCTION Echostring(string) RETURNS string properties" +
+                        "(\"symbol\" = \"Echostring\", \"type\" = \"StarrocksJar\", \"file\" = \"xxx\");");
     }
 
     @Test
@@ -68,6 +71,8 @@ public class AnalyzeBackupRestoreTest {
         analyzeSuccess("BACKUP SNAPSHOT snapshot_pk_label TO `repo` ON ( tprimary ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t3, T3 ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( FUNCTION Echostring ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t0 ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
@@ -104,6 +109,10 @@ public class AnalyzeBackupRestoreTest {
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
         analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
+                "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
+                "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
+        analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_pk_label` FROM `repo` ON ( FUNCTION Echostring )" +
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
