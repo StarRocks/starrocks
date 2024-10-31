@@ -47,6 +47,16 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
             schema.CreateTable(tbl),
             "CREATE TABLE atable (id INTEGER)PROPERTIES(\"storage_medium\"=\"SSD\",\"storage_cooldown_time\"=\"2015-06-04 00:00:00\")")
 
+    def test_create_primary_key_table(self):
+        m = MetaData()
+        tbl = Table(
+            'btable', m, Column("id", Integer, primary_key=True),
+            starrocks_primary_key="id",
+            starrocks_distributed_by="id"
+            )
+        self.assert_compile(
+            schema.CreateTable(tbl),
+            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT)PRIMARY KEY(id) DISTRIBUTED BY HASH(id)")
 
 
 # Float test fixes below for "Data type of first column cannot be FLOAT" error given by starrocks
