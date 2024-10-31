@@ -35,6 +35,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
@@ -43,6 +45,7 @@ public class LakeRollupJobTest {
     private static StarRocksAssert starRocksAssert;
 
     private static LakeRollupJob lakeRollupJob;
+    private static LakeRollupJob lakeRollupJob2;
 
     private static Database db;
     private static Table table;
@@ -66,26 +69,47 @@ public class LakeRollupJobTest {
                 "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
                 "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
                 ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3")
+                .withTable("CREATE TABLE base_table2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3");
 
         String sql = "create materialized view mv1 as\n" +
                 "select k2, k1 from base_table order by k2;";
+        String sql2 = "create materialized view mv2 as\n" +
+                "select k2, k1 from base_table2 order by k2;";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assert.assertTrue(stmt instanceof CreateMaterializedViewStmt);
         CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
 
+        StatementBase stmt2 = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+        Assert.assertTrue(stmt2 instanceof CreateMaterializedViewStmt);
+        CreateMaterializedViewStmt createMaterializedViewStmt2 = (CreateMaterializedViewStmt) stmt2;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt2);
+
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         table = db.getTable("base_table");
 
-        List<AlterJobV2> alterJobV2List = GlobalStateMgr.getCurrentState().getRollupHandler().
-                getUnfinishedAlterJobV2ByTableId(table.getId());
-        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+        Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        Assert.assertEquals(2, alterJobV2Map.size());
+        List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
         lakeRollupJob = (LakeRollupJob) alterJobV2List.get(0);
+        lakeRollupJob2 = (LakeRollupJob) alterJobV2List.get(1);
     }
 
     @AfterClass
     public static void tearDown() {
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
     }
 
     @Test
@@ -125,4 +149,11 @@ public class LakeRollupJobTest {
         Assert.assertTrue(infos.get(0).get(10).equals(FeConstants.NULL_STRING));
     }
 
+    @Test
+    public void testCancelImpl() {
+        String errorMsg = "test cancel";
+        lakeRollupJob2.cancelImpl(errorMsg);
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, lakeRollupJob2.jobState);
+        Assert.assertEquals(errorMsg, lakeRollupJob2.errMsg);
+    }
 }
