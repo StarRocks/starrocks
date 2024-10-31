@@ -51,10 +51,12 @@ public class CachedPartitionTraits extends DefaultTraits {
     private final Cache<Object, Object> cache;
     private final ConnectorPartitionTraits delegate;
     private final QueryMaterializationContext.QueryCacheStats stats;
+    private final MaterializedView mv;
 
     public CachedPartitionTraits(Cache<Object, Object> cache,
                                  ConnectorPartitionTraits delegate,
-                                 QueryMaterializationContext.QueryCacheStats stats) {
+                                 QueryMaterializationContext.QueryCacheStats stats,
+                                 MaterializedView mv) {
         Objects.requireNonNull(cache);
         Objects.requireNonNull(delegate);
         Objects.requireNonNull(stats);
@@ -62,6 +64,7 @@ public class CachedPartitionTraits extends DefaultTraits {
         this.delegate = delegate;
         this.table = delegate.getTable();
         this.stats = stats;
+        this.mv = mv;
     }
 
     /**
@@ -70,7 +73,7 @@ public class CachedPartitionTraits extends DefaultTraits {
      * @return the cache key
      */
     private String buildCacheKey(String prefix) {
-        return String.format("cache_%s_%s", prefix, table.getId());
+        return String.format("cache_%s_%s_%s", prefix, (mv == null) ? "0" : mv.getId(), table.getId());
     }
 
     /**

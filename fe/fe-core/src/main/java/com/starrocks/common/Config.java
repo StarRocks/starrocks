@@ -3124,8 +3124,12 @@ public class Config extends ConfigBase {
     /**
      * mv plan cache expire interval in seconds
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
+    public static int mv_plan_cache_thread_pool_size = 3;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3289,4 +3293,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
+
+    @ConfField(mutable = true)
+    public static int batch_write_gc_check_interval_ms = 60000;
+
+    @ConfField(mutable = true)
+    public static int batch_write_idle_ms = 3600000;
+
+    public static int batch_write_executor_threads_num = 4096;
 }

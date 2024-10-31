@@ -963,6 +963,23 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
+struct TBatchWriteRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TBatchWriteResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
+}
+
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
     2: optional map<i32,i64> partitionCmtOffsetTimestamp
@@ -1903,6 +1920,8 @@ service FrontendService {
     TLoadTxnCommitResult loadTxnPrepare(1: TLoadTxnCommitRequest request)
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
+
+    TBatchWriteResult requestBatchWrite(1: TBatchWriteRequest request)
 
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
