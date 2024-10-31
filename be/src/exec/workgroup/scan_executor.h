@@ -41,6 +41,8 @@ public:
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
 
+    int64_t num_tasks() const;
+
 private:
     void worker_thread();
 

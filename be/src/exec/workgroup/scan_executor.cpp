@@ -99,4 +99,8 @@ void ScanExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<Cp
     _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
 }
 
+int64_t ScanExecutor::num_tasks() const {
+    return _task_queue->size();
+}
+
 } // namespace starrocks::workgroup
