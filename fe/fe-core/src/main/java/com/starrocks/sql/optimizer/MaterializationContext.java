@@ -17,8 +17,13 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -44,6 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class MaterializationContext {
@@ -357,6 +363,39 @@ public class MaterializationContext {
         }
 
         /**
+         * If mv is partitioned by time, prefer the one with the larger time granularity.
+         * eg: mv partitioned by date_trunc('day', ts) is preferred over mv partitioned by date_trunc('hour', ts)
+         */
+        private int orderingTimeGranularity(MaterializationContext materializationContext) {
+            if (materializationContext.getMvExpression().getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+                MaterializedView mv = materializationContext.getMv();
+                PartitionInfo partitionInfo = mv.getPartitionInfo();
+                if (!partitionInfo.isRangePartition()) {
+                    return LOWEST_ORDERING;
+                }
+                Expr mvPartitionExpr = mv.getPartitionExpr();
+                if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
+                    return LOWEST_ORDERING;
+                }
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
+                if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                    return LOWEST_ORDERING;
+                }
+                StringLiteral timeUnit = (StringLiteral) mvPartitionExpr.getChild(0);
+                if (timeUnit == null) {
+                    return LOWEST_ORDERING;
+                }
+                Integer priority = DATE_TRUNC_SUPPORTED_TIME_MAP.get(timeUnit.getStringValue());
+                if (priority == null) {
+                    return LOWEST_ORDERING;
+                }
+                return -priority;
+            } else {
+                return LOWEST_ORDERING;
+            }
+        }
+
+        /**
          * Prefer exact-intersecting than partial-intersecting
          */
         private static int orderingIntersectTables(MaterializationContext mvContext) {
@@ -380,6 +419,7 @@ public class MaterializationContext {
                         .comparing(this::orderingAggregation)
                         .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
+                        .thenComparing(this::orderingTimeGranularity)
                         .compare(o1, o2);
             } else if (o1Type == o2Type && o1Type == OperatorType.LOGICAL_JOIN) {
                 return Comparator.comparing(RewriteOrdering::orderingIntersectTables)

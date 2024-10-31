@@ -15,9 +15,12 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
@@ -38,6 +41,8 @@ import org.junit.runners.MethodSorters;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
@@ -344,7 +349,21 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2;");
 
         MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
-        Assert.assertEquals(Sets.newHashSet("p1", "p2", "p3"), mv.getPartitionNames());
+        Assert.assertEquals(3, mv.getPartitionNames().size());
+        Set<Range<PartitionKey>> ranges =
+                mv.getRangePartitionMap().values().stream().collect(Collectors.toSet());
+        Assert.assertEquals(3, ranges.size());
+        PartitionKey p0 = new PartitionKey(ImmutableList.of(new DateLiteral(0, 1, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p1 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 7, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p2 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 8, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        PartitionKey p3 = new PartitionKey(ImmutableList.of(new DateLiteral(2020, 9, 1)),
+                ImmutableList.of(PrimitiveType.DATE));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p0, p1)));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p1, p2)));
+        Assert.assertTrue(ranges.contains(Range.closedOpen(p2, p3)));
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
         starRocksAssert.dropMaterializedView("join_mv1");

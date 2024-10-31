@@ -47,9 +47,11 @@ public class MvTimeSeriesRewriteWithHiveTest extends MvRewriteTestBase {
                     "     PREDICATES: 26: dt >= '1998-01-02'\n" +
                     "     partitions=1/2");
             PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
-                    "     PARTITION PREDICATES: NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02'), " +
+                    "     PARTITION PREDICATES: (NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02')) OR " +
+                    "(NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02')), 35: l_shipdate >= '1998-01-02', " +
                     "35: l_shipdate >= '1998-01-02'\n" +
-                    "     NO EVAL-PARTITION PREDICATES: NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02')\n" +
+                    "     NO EVAL-PARTITION PREDICATES: (NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02')) OR " +
+                    "(NOT (date_trunc('month', 35: l_shipdate) >= '1998-01-02'))\n" +
                     "     partitions=4/6");
         }
 
