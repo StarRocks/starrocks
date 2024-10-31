@@ -109,6 +109,9 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalAnalytic(OptExpression optExpression, Void context) {
             PhysicalWindowOperator operator = (PhysicalWindowOperator) optExpression.getOp();
+            // if input is binary, which only happen with rank-pre-agg optimization
+            // in this case, The type of col -> aggCall in intermediate phase is a bit of messy, check it may
+            // lead to forbid normal plan.
             if (!operator.isInputIsBinary()) {
                 checkFuncCall(operator.getAnalyticCall());
             }
