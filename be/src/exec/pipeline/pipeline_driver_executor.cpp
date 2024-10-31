@@ -56,8 +56,8 @@ void GlobalDriverExecutor::initialize(int num_threads) {
 DriverExecutorMetrics GlobalDriverExecutor::metrics() const {
     return {.schedule_count = _schedule_count.load(),
             .driver_execution_ns = _driver_execution_ns.load(),
-            .driver_queue_len = _driver_queue->size(),
-            .driver_poller_block_queue_len = _blocked_driver_poller->num_drivers()};
+            .driver_queue_len = static_cast<int64_t>(_driver_queue->size()),
+            .driver_poller_block_queue_len = static_cast<int64_t>(_blocked_driver_poller->num_drivers())};
 }
 
 void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
