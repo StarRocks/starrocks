@@ -727,6 +727,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
 
+            // skip change storage_cooldown_ttl for shadow partition
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)
+                    && newDataProperty != null) {
+                continue;
+            }
+
             if (newDataProperty != null) {
                 // for storage_cooldown_ttl
                 if (periodDuration != null) {
