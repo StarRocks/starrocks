@@ -510,7 +510,7 @@ using ThreadMemoryMigratorPtr = std::unique_ptr<ThreadMemoryMigrator>;
 // Concept with a consume method
 template <typename T>
 concept MemoryConsumer = requires(T a, int64_t bytes) {
-    { a.consume(bytes) };
+    {a.consume(bytes)};
 };
 
 // Record the memory usage in a scope

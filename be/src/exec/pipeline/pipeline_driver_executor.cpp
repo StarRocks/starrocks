@@ -329,7 +329,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
     MemTracker* mem_tracker = GlobalEnv::GetInstance()->query_profile_mem_tracker();
     std::shared_ptr<TReportExecStatusParams> params;
-    auto migrator = ThreadMemoryMigrator::migrate_to(mem_tracker);
+    // Why not keep using unique_ptr ? The ThreadPool uses std::function, which requires CopyConstructable
+    std::shared_ptr<ThreadMemoryMigrator> migrator(ThreadMemoryMigrator::migrate_to(mem_tracker));
     {
         ScopeMemoryRecorder scope(*migrator);
         params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
@@ -339,7 +340,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
-    auto report_task = [ptr = std::move(migrator), params, exec_env, fe_addr, fragment_id]() {
+    auto report_task = [migrator, params, exec_env, fe_addr, fragment_id]() {
         int retry_times = 0;
         while (retry_times++ < 3) {
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
