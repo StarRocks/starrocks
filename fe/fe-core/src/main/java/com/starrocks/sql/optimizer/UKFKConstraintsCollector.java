@@ -53,6 +53,10 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         if (!ConnectContext.get().getSessionVariable().isEnableUKFKOpt()) {
             return;
         }
+        collectColumnConstraintsForce(root);
+    }
+
+    public static void collectColumnConstraintsForce(OptExpression root) {
         UKFKConstraintsCollector collector = new UKFKConstraintsCollector();
         root.getOp().accept(collector, root, null);
     }

@@ -81,6 +81,22 @@ public class TPCDSAggregateWithUKFKTest extends TPCDS1TTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "TABLE: item");
         assertContains(plan, "74: substr, 52: i_item_sk, 62: i_class, 26: d_date");
+
+        // Prune itemdesc and i_class in Aggregation, and then eliminate item table.
+        sql = "select item_sk, cnt from (\n" +
+                "  select substr(i_item_desc, 1, 30) itemdesc, i_item_sk item_sk, i_class, d_date solddate, count(*) cnt\n" +
+                "  from store_sales\n" +
+                "    , date_dim\n" +
+                "    , item\n" +
+                "  where ss_sold_date_sk = d_date_sk\n" +
+                "    and ss_item_sk = i_item_sk\n" +
+                "    and d_year in (2000, 2000 + 1, 2000 + 2, 2000 + 3)\n" +
+                "  group by substr(i_item_desc, 1, 30), i_item_sk, i_class, d_date_sk, d_date, d_current_month\n" +
+                "  having count(*) > 4\n" +
+                ")t;\n";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "TABLE: item");
+        assertContains(plan, "group by: 52: i_item_sk, 24: d_date_sk");
     }
 
     @Test

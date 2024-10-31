@@ -59,18 +59,24 @@ public class PruneUKFKGroupByKeysRule extends TransformationRule {
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
         List<ColumnRefOperator> groupBys = aggOp.getGroupingKeys();
 
-        // Retrieve non-UK columns from the first constraint that contains the UK column used in the GROUP BY clause.
+        // Retrieve non-UK columns from constraints that contains the UK column used in the GROUP BY clause.
         Set<ColumnRefOperator> groupBysToRemove = Sets.newHashSet();
+        Set<ColumnRefOperator> ukGroupBys = Sets.newHashSet();
         for (ColumnRefOperator groupBy : groupBys) {
+            if (groupBysToRemove.contains(groupBy)) {
+                continue;
+            }
+
             UKFKConstraints.UniqueConstraintWrapper constraint = constraints.getRelaxedUniqueConstraint(groupBy.getId());
 
             if (constraint == null) {
                 continue;
             }
 
-            groupBysToRemove = getGroupBysToRemoveByConstraint(constraint, requiredOutputColumns, aggOp, projectOp);
-            if (!groupBysToRemove.isEmpty()) {
-                break;
+            int prevSize = groupBysToRemove.size();
+            getGroupBysToRemoveByConstraint(constraint, requiredOutputColumns, aggOp, projectOp, ukGroupBys, groupBysToRemove);
+            if (groupBysToRemove.size() > prevSize) {
+                ukGroupBys.add(groupBy);
             }
         }
 
@@ -78,12 +84,11 @@ public class PruneUKFKGroupByKeysRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        Set<ColumnRefOperator> removedGroupBys = groupBysToRemove;
         List<ColumnRefOperator> newPartitionColumns = aggOp.getPartitionByColumns().stream()
-                .filter(columnRefOperator -> !removedGroupBys.contains(columnRefOperator))
+                .filter(columnRefOperator -> !groupBysToRemove.contains(columnRefOperator))
                 .collect(Collectors.toList());
         List<ColumnRefOperator> newGroupBys = aggOp.getGroupingKeys().stream()
-                .filter(columnRefOperator -> !removedGroupBys.contains(columnRefOperator))
+                .filter(columnRefOperator -> !groupBysToRemove.contains(columnRefOperator))
                 .collect(Collectors.toList());
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator.Builder().withOperator(aggOp)
@@ -99,19 +104,19 @@ public class PruneUKFKGroupByKeysRule extends TransformationRule {
     /**
      * Remove group by columns that are non-UK columns and not used in the parent project operator.
      */
-    private Set<ColumnRefOperator> getGroupBysToRemoveByConstraint(UKFKConstraints.UniqueConstraintWrapper constraint,
+    private void getGroupBysToRemoveByConstraint(UKFKConstraints.UniqueConstraintWrapper constraint,
                                                                    ColumnRefSet requiredOutputColumns,
                                                                    LogicalAggregationOperator aggOp,
-                                                                   LogicalProjectOperator projectOp) {
-        Set<ColumnRefOperator> groupBysToRemove = Sets.newHashSet();
-
+                                                                   LogicalProjectOperator projectOp,
+                                                                   Set<ColumnRefOperator> ukGroupBys,
+                                                                   Set<ColumnRefOperator> groupBysToRemove) {
         ColumnRefSet nonUKColumnRefs = constraint.nonUKColumnRefs;
         if (nonUKColumnRefs.isEmpty()) {
-            return groupBysToRemove;
+            return;
         }
 
         for (ColumnRefOperator groupBy : aggOp.getGroupingKeys()) {
-            if (requiredOutputColumns.contains(groupBy)) {
+            if (requiredOutputColumns.contains(groupBy) || ukGroupBys.contains(groupBy)) {
                 continue;
             }
 
@@ -130,7 +135,5 @@ public class PruneUKFKGroupByKeysRule extends TransformationRule {
                 }
             }
         }
-
-        return groupBysToRemove;
     }
 }
