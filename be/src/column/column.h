@@ -97,6 +97,8 @@ public:
 
     virtual bool is_array() const { return false; }
 
+    virtual bool is_array_view() const { return false; }
+
     virtual bool is_map() const { return false; }
 
     virtual bool is_struct() const { return false; }
