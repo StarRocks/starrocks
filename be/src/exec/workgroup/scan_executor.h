@@ -27,8 +27,7 @@ class ScanTaskQueue;
 
 class ScanExecutor {
 public:
-    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
-                          bool add_metrics = true);
+    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
     virtual ~ScanExecutor() = default;
 
     void initialize(int32_t num_threads);
