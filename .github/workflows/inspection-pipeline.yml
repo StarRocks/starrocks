@@ -79,6 +79,7 @@ jobs:
     env:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
+      TEST_ENV: ${IS_INSPECTION}/test
     outputs:
       BRANCH: ${{ steps.param.outputs.BRANCH }}
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}

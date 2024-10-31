@@ -43,7 +43,7 @@ jobs:
     runs-on: [ self-hosted, quick ]
     env:
       OSS_CMD: "ossutil64 --config-file ~/.ossutilconfig"
-      oss_path: "oss://${{env.bucket_prefix}}-ci-release/${{env.BASE_REF}}/Release/pr/UT-Report/${{env.COMMIT_ID}}"
+      oss_path: "oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}"
       JAVA_HOME: /var/local/env/jdk1.8.0_202
 
     steps:
