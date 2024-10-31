@@ -15,9 +15,11 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.RankingWindowUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -34,6 +36,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -62,6 +65,37 @@ import java.util.stream.Collectors;
  *       Window
  *         |
  *       TopN
+ *
+ * if window operator below rank window have same partition with rank window and
+ * without order by and window clause, we can  use pre-Agg optimization
+ * to reduce the amount of data to be exchanged and sorted.
+ * if cardinality is not super high,this can gain significant performance
+ * E.g.
+ *     select * from (
+ *        select *, rank() over (partition by v1 order by v2) as rk, sum(v1) over (partition by v1),
+ *        count(v1) over (partition by v1)from t0
+ *    ) sub_t0
+ *  order by rk  limit 5;
+ *
+ * Before:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window(rank)
+ *         |
+ *      window(sum, count)
+ *
+ * After:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window(rank)
+ *         |
+ *      window(sum,count)
+ *         |
+ *       TopN(preAgg:sum,count)
  */
 public class PushDownLimitRankingWindowRule extends TransformationRule {
     public PushDownLimitRankingWindowRule() {
@@ -80,29 +114,42 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         }
 
         OptExpression grandChildExpr = input.inputAt(0).inputAt(0);
-        LogicalWindowOperator windowOperator = grandChildExpr.getOp().cast();
+        LogicalWindowOperator firstWindowOperator = grandChildExpr.getOp().cast();
 
-        if (windowOperator.getWindowCall().size() != 1) {
+        // in window transform phase, if two window op in same sort group and have same partition exps, then rank-related window will be
+        // put on the top of the another window op
+        if (!RankingWindowUtils.isSingleRankRelatedAnalyticOperator(firstWindowOperator)) {
             return false;
         }
 
-        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
-        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
-
-        // TODO(hcf) we support dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equals(callOperator.getFnName())) {
-            return false;
+        // case 1:only one window op which is SingleRankRelatedAnalyticOperator, support rank<=N push down without preAgg
+        if (!(grandChildExpr.inputAt(0).getOp() instanceof LogicalWindowOperator)) {
+            return true;
         }
 
-        if (!grandChildExpr.getInputs().isEmpty() &&
-                grandChildExpr.inputAt(0).getOp() instanceof LogicalWindowOperator) {
-            OptExpression grandGrandChildExpr = grandChildExpr.inputAt(0);
-            LogicalWindowOperator nextWindowOperator = grandGrandChildExpr.getOp().cast();
+        OptExpression grandGrandChildExpr = grandChildExpr.inputAt(0);
+        LogicalWindowOperator secondWindowOperator = grandGrandChildExpr.getOp().cast();
+
+        if (!(RankingWindowUtils.satisfyRankingPreAggOptimization(secondWindowOperator, firstWindowOperator))) {
+            // case 2:two window ops, second one doesn't satisfy preAgg optimization, check whether we can support rank<=N push down without preAgg
             // There might be a negative gain if we add a partitionTopN between two window operators that
-            // share the same sort group
-            return !Objects.equals(windowOperator.getEnforceSortColumns(),
-                    nextWindowOperator.getEnforceSortColumns());
+            // share the same sort group, because extra enforcer will add
+            return !Objects.equals(firstWindowOperator.getEnforceSortColumns(),
+                    secondWindowOperator.getEnforceSortColumns());
+        }
+
+        if (!context.getSessionVariable().getEnablePushDownPreAggWithRank()) {
+            return false;
+        }
+
+        // case 3: two window ops, second one satisfy preAgg optimization, check whether we can support rank<=N push down with preAgg
+        if (grandGrandChildExpr.inputAt(0).inputAt(0) != null &&
+                grandGrandChildExpr.inputAt(0).inputAt(0).getOp() instanceof LogicalWindowOperator) {
+            LogicalWindowOperator thirdWindowOperator = grandGrandChildExpr.inputAt(0).inputAt(0).getOp().cast();
+            // There might be a negative gain if we add a partitionTopN between two window operators that
+            // share the same sort group, because extra enforcer will add
+            return !Objects.equals(secondWindowOperator.getEnforceSortColumns(),
+                    thirdWindowOperator.getEnforceSortColumns());
         }
 
         return true;
@@ -119,12 +166,12 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         LogicalProjectOperator projectOperator = childExpr.getOp().cast();
 
         OptExpression grandChildExpr = childExpr.inputAt(0);
-        LogicalWindowOperator windowOperator = grandChildExpr.getOp().cast();
+        LogicalWindowOperator rankRelatedWindowOperator = grandChildExpr.getOp().cast();
 
-        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
-        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
+        ColumnRefOperator windowCol = Lists.newArrayList(rankRelatedWindowOperator.getWindowCall().keySet()).get(0);
+        CallOperator callOperator = rankRelatedWindowOperator.getWindowCall().get(windowCol);
 
-        List<ColumnRefOperator> partitionByColumns = windowOperator.getPartitionExpressions().stream()
+        List<ColumnRefOperator> partitionByColumns = rankRelatedWindowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
@@ -145,16 +192,49 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         final SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
         final long limit = partitionByColumns.isEmpty() ? limitValue : Operator.DEFAULT_LIMIT;
         final long partitionLimit = partitionByColumns.isEmpty() ? Operator.DEFAULT_LIMIT : limitValue;
-        OptExpression newTopNOptExp = OptExpression.create(new LogicalTopNOperator.Builder()
+        LogicalTopNOperator.Builder topNBuilder = new LogicalTopNOperator.Builder()
                 .setPartitionByColumns(partitionByColumns)
                 .setPartitionLimit(partitionLimit)
-                .setOrderByElements(windowOperator.getEnforceSortColumns())
+                .setOrderByElements(rankRelatedWindowOperator.getEnforceSortColumns())
                 .setLimit(limit)
                 .setTopNType(topNType)
-                .setSortPhase(sortPhase)
-                .build(), grandChildExpr.getInputs());
+                .setSortPhase(sortPhase);
 
-        OptExpression newWindowOptExp = OptExpression.create(windowOperator, newTopNOptExp);
+        OptExpression grandgrandChildOptExpr = grandChildExpr.inputAt(0);
+        if (grandgrandChildOptExpr.getOp() instanceof LogicalWindowOperator) {
+            ColumnRefFactory columnFactory = context.getColumnRefFactory();
+            LogicalWindowOperator secondWindowOperator = grandgrandChildOptExpr.getOp().cast();
+            // push Down local topN with pre-agg optimization
+            if (RankingWindowUtils.satisfyRankingPreAggOptimization(secondWindowOperator, rankRelatedWindowOperator)) {
+                Pair<Map<ColumnRefOperator, CallOperator>, Map<ColumnRefOperator, CallOperator>> twoMaps =
+                        RankingWindowUtils.splitWindowCall(
+                                secondWindowOperator.getWindowCall(), columnFactory);
+                Map<ColumnRefOperator, CallOperator> globalWindowCall = twoMaps.first;
+                Map<ColumnRefOperator, CallOperator> localWindowCall = twoMaps.second;
+
+                // change rankRelated window call's input column and mark this window op's input is binary
+                secondWindowOperator = new LogicalWindowOperator.Builder().withOperator(secondWindowOperator)
+                        .setWindowCall(globalWindowCall)
+                        .setInputIsBinary(true)
+                        .build();
+
+                topNBuilder.setPartitionPreAggCall(localWindowCall);
+
+                OptExpression newTopNOptExp =
+                        OptExpression.create(topNBuilder.build(), grandgrandChildOptExpr.getInputs());
+                OptExpression secondWindowOptExp = OptExpression.create(secondWindowOperator, newTopNOptExp);
+                OptExpression rankRelatedOptExp = OptExpression.create(rankRelatedWindowOperator, secondWindowOptExp);
+
+                OptExpression newProjectOptExp = OptExpression.create(projectOperator, rankRelatedOptExp);
+
+                return Collections.singletonList(OptExpression.create(topNOperator, newProjectOptExp));
+            }
+        }
+
+        // push Down local topN without pre-agg optimization
+        OptExpression newTopNOptExp = OptExpression.create(topNBuilder.build(), grandChildExpr.getInputs());
+
+        OptExpression newWindowOptExp = OptExpression.create(rankRelatedWindowOperator, newTopNOptExp);
         OptExpression newProjectOptExp = OptExpression.create(projectOperator, newWindowOptExp);
         return Collections.singletonList(OptExpression.create(topNOperator, newProjectOptExp));
     }
