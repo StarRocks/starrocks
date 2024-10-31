@@ -533,7 +533,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void setActive() {
         LOG.info("set {} to active", name);
         // reset mv rewrite cache when it is active again
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, true);
+        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, true);
         this.active = true;
         this.inactiveReason = null;
     }
@@ -544,7 +544,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.inactiveReason = reason;
         // reset cached variables
         resetMetadataCache();
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
+        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
     }
 
     /**
@@ -715,7 +715,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return Sets.newHashSet();
         }
 
-        return ConnectorPartitionTraits.build(baseTable).getUpdatedPartitionNames(
+        return ConnectorPartitionTraits.build(this, baseTable).getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
                 this.getRefreshScheme().getAsyncRefreshContext());
     }
@@ -737,7 +737,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Optional.empty();
                 }
             }
-            Optional<Long> baseTableTs = ConnectorPartitionTraits.build(baseTable).maxPartitionRefreshTs();
+            Optional<Long> baseTableTs = ConnectorPartitionTraits.build(this, baseTable).maxPartitionRefreshTs();
             if (!baseTableTs.isPresent()) {
                 return Optional.empty();
             }
@@ -817,7 +817,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        return ConnectorPartitionTraits.build(baseTable).getUpdatedPartitionNames(
+        return ConnectorPartitionTraits.build(this, baseTable).getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
                 this.refreshScheme.getAsyncRefreshContext());
     }
@@ -891,7 +891,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
+        CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
 
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
