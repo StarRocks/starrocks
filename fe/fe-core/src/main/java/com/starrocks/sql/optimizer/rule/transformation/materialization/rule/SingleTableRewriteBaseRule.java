@@ -70,4 +70,37 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
     }
+<<<<<<< HEAD
+=======
+
+    private CandidateContext getMVContext(
+            OptExpression expression, boolean isAggregate, OptimizerContext optimizerContext) {
+        if (expression.getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scanOperator = expression.getOp().cast();
+            if (scanOperator.getTable().isMaterializedView()) {
+                CandidateContext candidateContext =
+                        new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
+                if (isAggregate) {
+                    MaterializedView mv = (MaterializedView) scanOperator.getTable();
+                    List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                            optimizerContext.getSessionVariable(), mv);
+                    for (MvPlanContext planContext : planContexts) {
+                        if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
+                            LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
+                            candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                        }
+                    }
+                }
+                return candidateContext;
+            }
+        }
+        for (OptExpression child : expression.getInputs()) {
+            CandidateContext context = getMVContext(child, isAggregate, optimizerContext);
+            if (context != null) {
+                return context;
+            }
+        }
+        return null;
+    }
+>>>>>>> 03e23c21d2 ([Enhancement] Refactor CachingMvPlanContextBuilder to support timeout in loading mv's plan cache (#52424))
 }
