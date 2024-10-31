@@ -49,9 +49,6 @@ public class Locker {
     /* The time when the current Locker starts to request for the lock. */
     private long lockRequestTimeMs;
 
-    /* The thread stack that created this locker. */
-    private final String lockerStackTrace;
-
     /* The thread that request lock. */
     private final Thread lockerThread;
 
@@ -60,7 +57,6 @@ public class Locker {
         this.waitingForType = null;
         /* Save the thread used to create the locker and thread stack. */
         this.lockerThread = Thread.currentThread();
-        this.lockerStackTrace = getStackTrace(this.lockerThread);
     }
 
     /**
@@ -79,9 +75,13 @@ public class Locker {
         }
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        LOG.debug(this + " | LockManager request lock : rid " + rid + ", lock type " + lockType);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} | LockManager request lock : rid {}, lock type {}", this, rid, lockType);
+        }
         lockManager.lock(rid, this, lockType, timeout);
-        LOG.debug(this + " | LockManager acquire lock : rid " + rid + ", lock type " + lockType);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} | LockManager acquire lock : rid {}, lock type {}", this, rid, lockType);
+        }
     }
 
     public void lock(long rid, LockType lockType) throws LockException {
@@ -96,7 +96,9 @@ public class Locker {
      */
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} | LockManager release lock : rid {}, lock type {}", this, rid, lockType);
+        }
         try {
             lockManager.release(rid, this, lockType);
         } catch (LockException e) {
@@ -543,10 +545,6 @@ public class Locker {
         return element.getClassName().substring(lastIdx + 1) + "." + element.getMethodName() + "():" + element.getLineNumber();
     }
 
-    public String getLockerStackTrace() {
-        return lockerStackTrace;
-    }
-
     public Thread getLockerThread() {
         return lockerThread;
     }
@@ -561,7 +559,7 @@ public class Locker {
 
     @Override
     public String toString() {
-        return ("(" + lockerThread.getName() + "|" + lockerThread.getId()) + ")" + " [" + lockerStackTrace + "]";
+        return ("(" + lockerThread.getName() + "|" + lockerThread.getId()) + ")";
     }
 
     @Override

@@ -105,10 +105,8 @@ public class MultiUserLock extends Lock {
                      */
 
                     if (lockOwnerLockType.isIntentionLock() && !lockRequestLockType.isIntentionLock()) {
-                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock ("
-                                + lockHolderRequest.getLocker().getLockerStackTrace() + ")"
-                                + " in the scope of Database " + lockOwnerLockType
-                                + " Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
+                        throw new NotSupportLockException(String.format("Can't request Database %s Lock"
+                                + " in the scope of Database %s Lock", lockRequestLockType, lockOwnerLockType));
                     }
 
                     /*
