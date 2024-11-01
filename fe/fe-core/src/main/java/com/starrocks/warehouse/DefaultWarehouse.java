@@ -16,6 +16,8 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.lake.StarOSAgent;
 
 import java.util.ArrayList;
@@ -64,5 +66,10 @@ public class DefaultWarehouse extends Warehouse {
     @Override
     public List<List<String>> getWarehouseNodesInfo() {
         return new ArrayList<>();
+    }
+
+    @Override
+    public ProcResult fetchResult() {
+        return new BaseProcResult();
     }
 }
