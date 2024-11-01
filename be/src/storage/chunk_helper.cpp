@@ -653,51 +653,38 @@ public:
 
         void deallocate(BT* p, std::size_t) noexcept { std::free(p); }
 
-        // 支持 rebind
         template <typename U>
         struct rebind {
             using other = aligned_allocator<U, Alignment>;
         };
     };
 
-    using aligned_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
+    using aligned_i32_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
 
-    void simd_copy_by_index(const int32_t* segment, const aligned_vector& source, const aligned_vector& target,
-                            int32_t* result) {
+    void simd_copy_int32_by_index(const int32_t* segment, const aligned_i32_vector& source,
+                                  const aligned_i32_vector& target, int32_t* result) {
         size_t i = 0;
         size_t size = source.size();
         for (; i + 16 <= size; i += 16) {
-            _mm_prefetch(reinterpret_cast<const char*>(&source[i + 8]), _MM_HINT_T0);
-            _mm_prefetch(reinterpret_cast<const char*>(&target[i + 8]), _MM_HINT_T0);
-            // _mm_prefetch(reinterpret_cast<const char*>(&segment[source[i + 8]]), _MM_HINT_T0);
-            // _mm_prefetch(reinterpret_cast<const char*>(&[i + 8]), _MM_HINT_T0);
-
             __m512i source_indices = _mm512_load_si512(&source[i]);
             __m512i gathered_values = _mm512_i32gather_epi32(source_indices, segment, 4);
             __m512i target_indices = _mm512_load_si512(&target[i]);
             _mm512_i32scatter_epi32(result, target_indices, gathered_values, 4);
         }
 
-        // Handle remaining elements
         for (; i < size; ++i) {
             result[target[i]] = segment[source[i]];
         }
     }
 
-    void simd_copy_by_index(const uint8_t* segment, const aligned_vector& source, const aligned_vector& target,
-                            uint8_t* result) {
+    void simd_copy_int8_by_index(const uint8_t* segment, const aligned_i32_vector& source,
+                                 const aligned_i32_vector& target, uint8_t* result) {
         size_t i = 0;
         size_t size = source.size();
         for (; i + 16 <= size; i += 16) {
-            // Gather source indices, treating int8_t data as int32_t for gathering
-
             __m512i source_indices = _mm512_loadu_si512(&source[i]);
-
-            // Gather values as int32_t, then extract the lower 8 bits for int8_t
             __m512i gathered_values_32 =
                     _mm512_i32gather_epi32(source_indices, reinterpret_cast<const int*>(segment), 1);
-
-            // Convert gathered int32 values to int8 by extracting the lower 8 bits
             __m128i gathered_values_8 = _mm512_cvtepi32_epi8(gathered_values_32);
 
             // Scatter each byte manually due to the lack of native 8-bit scatter support
@@ -708,7 +695,6 @@ public:
             }
         }
 
-        // Handle remaining elements
         for (; i < size; ++i) {
             result[target[i]] = segment[source[i]];
         }
@@ -734,17 +720,8 @@ public:
         constexpr size_t kTLBOutputSize = 512;
         size_t num_segments = buffers.size();
         std::vector<size_t> tlb_index(num_segments, 0);
-        // std::vector<std::vector<std::pair<int32_t, int32_t>>> tlb_buffer(num_segments, std::vector<std::pair<int32_t, int32_t>>(kTLBSize, {0, 0}));
-
-        using aligned_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
-
-        std::vector<aligned_vector> tlb_source(num_segments, aligned_vector(kTLBSize, 0));
-        std::vector<aligned_vector> tlb_target(num_segments, aligned_vector(kTLBSize, 0));
-        // std::vector<std::vector<std::pair<int32_t, int32_t>>> tlb_buffer;
-        // tlb_buffer.resize(num_segments);
-        // for (auto& buffer : tlb_buffer) {
-        // buffer.resize(kTLBSize, {0, 0});
-        // }
+        std::vector<aligned_i32_vector> tlb_source(num_segments, aligned_i32_vector(kTLBSize, 0));
+        std::vector<aligned_i32_vector> tlb_target(num_segments, aligned_i32_vector(kTLBSize, 0));
 
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
@@ -753,44 +730,41 @@ public:
             size_t idx = _indexes[from + i];
             size_t segment_id = idx / segment_size;
             size_t segment_offset = idx % segment_size;
-            // auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             DCHECK_LT(segment_id, num_segments);
             DCHECK_LT(segment_offset, columns[segment_id]->size());
             DCHECK_LE(tlb_index[segment_id], kTLBSize);
 
-            // tlb_buffer[segment_id][tlb_index[segment_id]].first = segment_offset;
-            // tlb_buffer[segment_id][tlb_index[segment_id]].second = i;
             tlb_source[segment_id][tlb_index[segment_id]] = segment_offset;
             tlb_target[segment_id][tlb_index[segment_id]] = i;
 
-            // tlb_buffer[segment_id].emplace_back(segment_offset, i);
+            // accumulate enough elements in a TLB buffer to reduce random page access
             if (++tlb_index[segment_id] >= kTLBSize) {
                 auto& segment = *buffers[segment_id];
+                auto source_data = segment.data();
+                auto source_indices = tlb_source[segment_id];
+                auto target_indices = tlb_target[segment_id];
+                auto output_data = output_items.data();
+                auto size = tlb_source[segment_id].size();
 
-                if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint8_t>) {
-                    simd_copy_by_index(segment.data(), tlb_source[segment_id], tlb_target[segment_id],
-                                       output_items.data());
+                if constexpr (std::is_same_v<T, int32_t>) {
+                    simd_copy_int32_by_index(source_data, source_indices, target_indices, output_data);
+                } else if constexpr (std::is_same_v<T, uint8_t>) {
+                    simd_copy_int8_by_index(source_data, source_indices, target_indices, output_data);
                 } else {
-                    for (size_t i = 0; i < tlb_source[segment_id].size(); i++) {
-                        size_t segment_offset = tlb_source[segment_id][i];
-                        size_t output_index = tlb_target[segment_id][i];
-                        output_items[output_index] = segment[segment_offset];
+                    for (size_t i = 0; i < size; i++) {
+                        size_t segment_offset = source_indices[i];
+                        size_t output_index = target_indices[i];
+                        output_data[output_index] = segment[segment_offset];
                     }
-                    // for (auto [segment_offset, output_index] : tlb_buffer[segment_id]) {
-                    // output_items[output_index] = segment[segment_offset];
-                    // }
                 }
                 tlb_index[segment_id] = 0;
                 continue;
-                // tlb_buffer[segment_id].clear();
             }
 
+            // flush the buffer to avoid scattered output index
             if ((i % kTLBOutputSize == 0) || (i == _size - 1)) {
                 for (size_t segment_id = 0; segment_id < num_segments; segment_id++) {
-                    // auto& segment_buffer = tlb_source[segment_id];
                     for (size_t i = 0; i < tlb_index[segment_id]; i++) {
-                        // for (auto [segment_offset, output_index] : segment_buffer) {
-                        // auto [segment_offset, output_index] = segment_buffer[i];
                         int32_t segment_offset = tlb_source[segment_id][i];
                         int32_t output_index = tlb_target[segment_id][i];
                         output_items[output_index] = (*buffers[segment_id])[segment_offset];
