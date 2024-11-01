@@ -820,6 +820,59 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     }
 }
 
+TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
+    starrocks::TabletMetadata metadata;
+    auto schema = metadata.mutable_schema();
+    schema->set_id(1);
+    metadata.set_id(12345);
+    metadata.set_version(1);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(2);
+    auto rowset_meta_pb2 = metadata.add_rowsets();
+    rowset_meta_pb2->set_id(2);
+    rowset_meta_pb2->set_overlapped(false);
+    rowset_meta_pb2->set_data_size(1024);
+    rowset_meta_pb2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(3);
+    auto rowset_meta_pb3 = metadata.add_rowsets();
+    rowset_meta_pb3->set_id(3);
+    rowset_meta_pb3->set_overlapped(false);
+    rowset_meta_pb3->set_data_size(1024);
+    rowset_meta_pb3->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 0, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 1, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 2, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 3, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(1, rowsets.size());
+    }
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks

@@ -27,6 +27,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+#include "storage/rowset/base_rowset.h"
 #include "util/bthreads/single_flight.h"
 
 namespace starrocks {
@@ -43,6 +44,7 @@ class MetadataIterator;
 class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
 
 class CompactionScheduler;
 class Metacache;
@@ -207,6 +209,7 @@ public:
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
 
     void stop();
 
