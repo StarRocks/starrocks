@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -145,8 +146,9 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         TStatus status = new TStatus();
         List<ComputeNode> backends = null;
         try {
-            backends = coordinatorBackendAssigner.getBackends(id);
-            if (!backends.isEmpty()) {
+            Optional<List<ComputeNode>> ret = coordinatorBackendAssigner.getBackends(id);
+            if (ret.isPresent() && !ret.get().isEmpty()) {
+                backends = ret.get();
                 status.setStatus_code(TStatusCode.OK);
             } else {
                 status.setStatus_code(TStatusCode.SERVICE_UNAVAILABLE);
@@ -154,7 +156,6 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
                         "Can't find available backends, db: %s, table: %s, warehouse: %s, load id: %s",
                         tableId.getDbName(), tableId.getTableName(), warehouseName, id);
                 status.setError_msgs(Collections.singletonList(errMsg));
-                backends = null;
                 LOG.error(errMsg);
             }
         } catch (Exception exception) {

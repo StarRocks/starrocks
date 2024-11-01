@@ -186,18 +186,27 @@ public class BatchWriteMgr extends FrontendDaemon {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
             status.setError_msgs(Collections.singletonList(
-                    "Bathc load parallel must be set positive, but is " + batchWriteParallel));
+                    "Batch write parallel must be set positive, but is " + batchWriteParallel));
             return new Pair<>(status, null);
         }
 
-        load = isomorphicBatchWriteMap.computeIfAbsent(uniqueId, uid -> {
-            long id = idGenerator.getAndIncrement();
-            IsomorphicBatchWrite newLoad = new IsomorphicBatchWrite(
-                    id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
-                    params.toMap(), new ConnectContext(), coordinatorBackendAssigner, threadPoolExecutor);
-            coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId, newLoad.getBatchWriteParallel());
-            return newLoad;
-        });
+        try {
+            load = isomorphicBatchWriteMap.computeIfAbsent(uniqueId, uid -> {
+                long id = idGenerator.getAndIncrement();
+                IsomorphicBatchWrite newLoad = new IsomorphicBatchWrite(
+                        id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
+                        params.toMap(), new ConnectContext(), coordinatorBackendAssigner, threadPoolExecutor);
+                coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getWarehouseId(), tableId,
+                        newLoad.getBatchWriteParallel());
+                return newLoad;
+            });
+        } catch (Exception e) {
+            TStatus status = new TStatus();
+            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Collections.singletonList(e.getMessage()));
+            LOG.error("Failed to create batch write for {}, params: {}", tableId, params, e);
+            return new Pair<>(status, null);
+        }
 
         return new Pair<>(new TStatus(TStatusCode.OK), load);
     }
