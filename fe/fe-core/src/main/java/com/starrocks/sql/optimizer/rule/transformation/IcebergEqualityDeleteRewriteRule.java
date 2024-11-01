@@ -258,33 +258,45 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scanOperator.getColRefToColumnMetaMap();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
 
-        Set<ColumnRefOperator> deleteColumns = deleteSchemas.stream()
+        Map<ColumnRefOperator, Column> deleteColumns = deleteSchemas.stream()
                 .map(IcebergDeleteSchema::equalityIds)
                 .flatMap(List::stream)
                 .distinct()
                 .map(fieldId -> nativeTable.schema().findColumnName(fieldId))
                 .map(withDeleteIcebergTable::getColumn)
-                .map(columnMetaToColRefMap::get)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toMap(columnMetaToColRefMap::get, column -> column));
 
         ImmutableMap.Builder<ColumnRefOperator, Column> newColRefToColBuilder =
                 ImmutableMap.builder();
         ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder =
                 ImmutableMap.builder();
 
+        // fill ImmutableMap.Builder<Column, ColumnRefOperator> newColToColRefBuilder
         Map<ColumnRefOperator, ColumnRefOperator> originToNewCols = new HashMap<>();
         for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
             Column originalCol = entry.getKey();
             ColumnRefOperator originalColRef = entry.getValue();
             ColumnRefOperator newColRef = buildNewColumnRef(originalCol, columnRefFactory, withDeleteIcebergTable);
-            if (colRefToColumnMetaMap.containsKey(originalColRef) || deleteColumns.contains(originalColRef)) {
-                if (colRefToColumnMetaMap.containsKey(originalColRef)) {
-                    projectForUnion.put(newColRef, newColRef);
-                }
-                newColRefToColBuilder.put(newColRef, originalCol);
-            }
             newColToColRefBuilder.put(originalCol, newColRef);
             originToNewCols.put(originalColRef, newColRef);
+        }
+
+        // fill newColRefToColBuilder and projectForUnion to guarantee column order.
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            ColumnRefOperator originRef = entry.getKey();
+            Column originCol = entry.getValue();
+            ColumnRefOperator newRef = originToNewCols.get(originRef);
+            projectForUnion.put(newRef, newRef);
+            newColRefToColBuilder.put(newRef, originCol);
+        }
+
+        // fill unselected delete columns
+        for (Map.Entry<ColumnRefOperator, Column> entry : deleteColumns.entrySet()) {
+            ColumnRefOperator deleteColRef = entry.getKey();
+            Column deleteCol = entry.getValue();
+            if (!colRefToColumnMetaMap.containsKey(deleteColRef)) {
+                newColRefToColBuilder.put(originToNewCols.get(deleteColRef), deleteCol);
+            }
         }
 
         fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, hasPartitionEvolution, noDeleteTable);

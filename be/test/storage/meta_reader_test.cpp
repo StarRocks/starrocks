@@ -68,7 +68,7 @@ TEST_F(SegmentMetaCollecterTest, test_init) {
     SegmentMetaCollecterParams params;
     EXPECT_FALSE(collecter.init(&params).ok());
 
-    params.fields.emplace_back("count");
+    params.fields.emplace_back("rows");
     EXPECT_FALSE(collecter.init(&params).ok());
 
     params.field_type.emplace_back(LogicalType::TYPE_INT);
@@ -91,7 +91,7 @@ TEST_F(SegmentMetaCollecterTest, test_open_and_collect) {
     EXPECT_FALSE(collecter.open().ok());
 
     SegmentMetaCollecterParams params;
-    params.fields.emplace_back("count");
+    params.fields.emplace_back("rows");
     params.field_type.emplace_back(LogicalType::TYPE_INT);
     params.cids.emplace_back(0);
     params.read_page.emplace_back(false);
