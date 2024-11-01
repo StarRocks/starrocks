@@ -45,6 +45,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -52,20 +53,28 @@ public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, String> columnIdToNames;
     private final OlapTable olapTable;
-    private List<Column> tableSchema = Lists.newArrayList();
+    private final List<Column> tableSchema;
+    private final List<String> selectPartitionNames;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, long warehouseId) {
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
+        this.selectPartitionNames = selectPartitionNames;
         this.warehouseId = warehouseId;
     }
 
     public void computeRangeLocations() {
-        Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
+        Collection<PhysicalPartition> partitions;
+        if (selectPartitionNames.isEmpty()) {
+            partitions = olapTable.getPhysicalPartitions();
+        } else {
+            partitions = selectPartitionNames.stream().map(olapTable::getPartition).collect(Collectors.toList());
+        }
+
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
@@ -175,6 +184,9 @@ public class MetaScanNode extends ScanNode {
                     append("> : ").
                     append(kv.getValue()).
                     append("\n");
+        }
+        if (!selectPartitionNames.isEmpty()) {
+            output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
         }
         return output.toString();
     }
