@@ -223,6 +223,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     } else {
         config.scheme = Aws::Http::Scheme::HTTP;
     }
+    config.verifySSL = aws_cloud_configuration.enable_ssl;
 
     if (!aws_cloud_credential.region.empty()) {
         config.region = aws_cloud_credential.region;

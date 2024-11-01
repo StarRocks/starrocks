@@ -47,6 +47,7 @@ private:
                              Aws::Utils::RateLimits::RateLimiterInterface* writeLimiter) const;
 
     ConnectionTimeouts timeouts;
+    bool enable_ssl;
 };
 
 } // namespace starrocks::poco

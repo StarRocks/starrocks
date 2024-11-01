@@ -38,7 +38,7 @@ PocoHttpClient::PocoHttpClient(const Aws::Client::ClientConfiguration& clientCon
                   Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000),     // connection timeout.
                   Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000), // send timeout.
                   Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000)  // receive timeout.
-                  )) {}
+                  )), enable_ssl(clientConfiguration.verifySSL) {}
 
 std::shared_ptr<Aws::Http::HttpResponse> PocoHttpClient::MakeRequest(
         const std::shared_ptr<Aws::Http::HttpRequest>& request,
@@ -59,6 +59,9 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
     try {
         for (int attempt = 0; attempt < MAX_REDIRECT_ATTEMPTS; ++attempt) {
             Poco::URI poco_uri(uri);
+            if (!enable_ssl && poco_uri.getScheme() == "https") {
+                poco_uri.setScheme("http");
+            }
 
             // URI may changed, because of redirection
             auto session = makeHTTPSession(poco_uri, timeouts, false);
