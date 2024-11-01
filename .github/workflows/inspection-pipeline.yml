@@ -537,7 +537,17 @@ jobs:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
       DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
-          
+
+  FEATURE-COV:
+    runs-on: [ self-hosted, normal ]
+    name: COV INFO
+    needs:
+      - FE-COV-REPORT
+    steps:
+      - name: info
+        run: |
+          echo "FE_COV_RES_FILE: ${{ needs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}"
+
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown

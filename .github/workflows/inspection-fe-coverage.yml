@@ -16,6 +16,11 @@ on:
         required: true
         type: string
 
+    outputs:
+      FE_COV_RES_FILE:
+        description: "FE COV RESULT FILE"
+        value: ${{ jobs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}
+
 permissions:
   checks: write
   actions: write
@@ -44,6 +49,8 @@ jobs:
     env:
       OSS_CMD: "ossutil64 --config-file /root/.ossutilconfig"
       JAVA_HOME: /var/local/env/jdk1.8.0_202
+    outputs:
+      FE_COV_RES_FILE: ${{ steps.incremental_cov_report.outputs.FE_COV_RES_FILE }}
 
     steps:
       - name: CLEAN & ENV
@@ -100,17 +107,19 @@ jobs:
           ${OSS_CMD} cp coverage.xml ${oss_path}/ -f
 
       # Incremental Total Coverage
-      - name: Publish Incremental Coverage Report - Total
+      - name: Incremental Coverage Report - Total
+        id: incremental_cov_report
         env:
           fe_path: ${{ github.workspace }}/fe
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export PATH=$JAVA_HOME/bin:$PATH;
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
-            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${COMMIT_ID} -type jacoco \
-            -d ${DIFF_FILE_PATH} -dt file
-
+            --cover ${{ github.workspace }}/result/ \
+            --threshold 80 -type jacoco \
+            -d ${DIFF_FILE_PATH} -dt file | tee "${DIFF_FILE_PATH}.cov"
+          
+          echo "FE_COV_RES_FILE=${DIFF_FILE_PATH}.cov" >> $GITHUB_OUTPUT
           rm -rf coverchecker
           rm -rf ci-tools
 
