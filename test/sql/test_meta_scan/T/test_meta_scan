@@ -1,0 +1,225 @@
+-- name: test_duplicate_table_on_meta_scan
+CREATE TABLE `duplicate_table_with_null_partition` (
+    `k1` date,
+    `k2` datetime,
+    `k3` char(20),
+    `k4` varchar(20),
+    `k5` boolean,
+    `k6` tinyint,
+    `k7` smallint,
+    `k8` int,
+    `k9` bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+)
+DUPLICATE KEY(`k1`, `k2`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+);
+
+INSERT INTO duplicate_table_with_null_partition VALUES
+("2020-06-01", "2020-06-01 12:00:00", null, "value1", true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+("2020-06-02", "2020-06-02 12:00:00", "value2", null, false, 2, 2, 2, 2, 2, 2.0, 2.0, 2.0),
+("2020-06-03", "2020-06-03 12:00:00", "value3", "value3", null, 3, 3, 3, 3, 3, 3.0, 3.0, 3.0),
+("2020-06-04", "2020-06-04 12:00:00", "value4", "value4", true, null, 4, 4, 4, 4, 4.0, 4.0, 4.0),
+("2020-06-05", "2020-06-05 12:00:00", "value5", "value5", false, 5, null, 5, 5, 5, 5.0, 5.0, 5.0),
+("2020-06-06", "2020-06-06 12:00:00", "value6", "value6", true, 6, 6, null, 6, 6, 6.0, 6.0, 6.0),
+("2020-06-07", "2020-06-07 12:00:00", "value7", "value7", false, 7, 7, 7, null, 7, 7.0, 7.0, 7.0),
+("2020-06-08", "2020-06-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
+("2020-06-09", "2020-06-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
+("2020-06-10", "2020-06-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
+("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null),
+("2020-06-12", null, "value12", "value12", true, 12, 12, 12, 12, 12, 12.0, 12.0, 12.0),
+(null, "2020-06-13 12:00:00", "value13", "value13", false, 13, 13, 13, 13, 13, 13.0, 13.0, 13.0);
+
+INSERT INTO duplicate_table_with_null_partition PARTITION (p202007) VALUES
+("2020-07-01", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+("2020-07-02", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k2), min(k2), count(k2) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k3), min(k3), count(k3) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k4), min(k4), count(k4) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k5), min(k5), count(k5) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k6), min(k6), count(k6) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k7), min(k7), count(k7) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k8), min(k8), count(k8) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k9), min(k9), count(k9) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k10), min(k10), count(k10) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k11), min(k11), count(k11) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k12), min(k12), count(k12) FROM duplicate_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k13), min(k13), count(k13) FROM duplicate_table_with_null_partition PARTITION (p202006);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k2), min(k2), count(k2) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k3), min(k3), count(k3) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k4), min(k4), count(k4) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k5), min(k5), count(k5) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k6), min(k6), count(k6) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k7), min(k7), count(k7) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k8), min(k8), count(k8) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k9), min(k9), count(k9) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k10), min(k10), count(k10) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k11), min(k11), count(k11) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k12), min(k12), count(k12) FROM duplicate_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k13), min(k13), count(k13) FROM duplicate_table_with_null_partition PARTITION (p202007);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k2), min(k2), count(k2) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k3), min(k3), count(k3) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k4), min(k4), count(k4) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k5), min(k5), count(k5) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k6), min(k6), count(k6) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k7), min(k7), count(k7) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k8), min(k8), count(k8) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k9), min(k9), count(k9) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k10), min(k10), count(k10) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k11), min(k11), count(k11) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k12), min(k12), count(k12) FROM duplicate_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k13), min(k13), count(k13) FROM duplicate_table_with_null_partition PARTITION (p202008);
+
+-- name: test_update_table_on_meta_scan
+CREATE TABLE `update_table_with_null_partition` (
+    `k1` date,
+    `k2` datetime,
+    `k3` char(20),
+    `k4` varchar(20),
+    `k5` boolean,
+    `k6` tinyint,
+    `k7` smallint,
+    `k8` int,
+    `k9` bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+)
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01"),
+    PARTITION `p202009` VALUES LESS THAN ("2020-10-01")
+);
+
+INSERT INTO update_table_with_null_partition VALUES
+("2020-06-01", "2020-06-01 12:00:00", null, "value1", true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+("2020-06-02", "2020-06-02 12:00:00", "value2", null, false, 2, 2, 2, 2, 2, 2.0, 2.0, 2.0),
+("2020-06-03", "2020-06-03 12:00:00", "value3", "value3", null, 3, 3, 3, 3, 3, 3.0, 3.0, 3.0),
+("2020-06-04", "2020-06-04 12:00:00", "value4", "value4", true, null, 4, 4, 4, 4, 4.0, 4.0, 4.0),
+("2020-06-05", "2020-06-05 12:00:00", "value5", "value5", false, 5, null, 5, 5, 5, 5.0, 5.0, 5.0),
+("2020-06-06", "2020-06-06 12:00:00", "value6", "value6", true, 6, 6, null, 6, 6, 6.0, 6.0, 6.0),
+("2020-06-07", "2020-06-07 12:00:00", "value7", "value7", false, 7, 7, 7, null, 7, 7.0, 7.0, 7.0),
+("2020-06-08", "2020-06-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
+("2020-06-09", "2020-06-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
+("2020-06-10", "2020-06-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
+("2020-06-11", "2020-06-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
+
+INSERT INTO update_table_with_null_partition PARTITION (p202007) VALUES
+("2020-07-01", "2020-07-12 12:00:00", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+("2020-07-02", "2020-07-13 12:00:00", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+INSERT INTO update_table_with_null_partition VALUES
+("2020-09-01", "2020-09-01 12:00:00", null, "value1", true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+("2020-09-02", "2020-09-02 12:00:00", "value2", null, false, 2, 2, 2, 2, 2, 2.0, 2.0, 2.0),
+("2020-09-03", "2020-09-03 12:00:00", "value3", "value3", null, 3, 3, 3, 3, 3, 3.0, 3.0, 3.0),
+("2020-09-04", "2020-09-04 12:00:00", "value4", "value4", true, null, 4, 4, 4, 4, 4.0, 4.0, 4.0),
+("2020-09-05", "2020-09-05 12:00:00", "value5", "value5", false, 5, null, 5, 5, 5, 5.0, 5.0, 5.0),
+("2020-09-06", "2020-09-06 12:00:00", "value6", "value6", true, 6, 6, null, 6, 6, 6.0, 6.0, 6.0),
+("2020-09-07", "2020-09-07 12:00:00", "value7", "value7", false, 7, 7, 7, null, 7, 7.0, 7.0, 7.0),
+("2020-09-08", "2020-09-08 12:00:00", "value8", "value8", true, 8, 8, 8, 8, null, 8.0, 8.0, 8.0),
+("2020-09-09", "2020-09-09 12:00:00", "value9", "value9", false, 9, 9, 9, 9, 9, null, 9.0, 9.0),
+("2020-09-10", "2020-09-10 12:00:00", "value10", "value10", true, 10, 10, 10, 10, 10, 10.0, null, 10.0),
+("2020-09-11", "2020-09-11 12:00:00", "value11", "value11", false, 11, 11, 11, 11, 11, 11.0, 11.0, null);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202006);
+SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202006);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202007);
+SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202007);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202008);
+SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202008);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202009);
+
+INSERT INTO update_table_with_null_partition VALUES
+("2020-09-01", "2020-09-01 12:00:00", "value40", "value40", true, 40, 40, 40, 40, 40, 40.0, 40.0, 40.0),
+("2020-09-02", "2020-09-02 12:00:00", "value41", "value41", false, 41, 41, 41, 41, 41, 41.0, 41.0, 41.0),
+("2020-09-03", "2020-09-03 12:00:00", "value42", "value42", null, 42, 42, 42, 42, 42, 42.0, 42.0, 42.0),
+("2020-09-04", "2020-09-04 12:00:00", "value43", "value43", true, null, 43, 43, 43, 43, 43.0, 43.0, 43.0),
+("2020-09-05", "2020-09-05 12:00:00", "value44", "value44", false, 44, null, 44, 44, 44, 44.0, 44.0, 44.0),
+("2020-09-06", "2020-09-06 12:00:00", "value45", "value45", true, 45, 45, null, 45, 45, 45.0, 45.0, 45.0),
+("2020-09-07", "2020-09-07 12:00:00", "value46", "value46", false, 46, 46, 46, null, 46, 46.0, 46.0, 46.0),
+("2020-09-08", "2020-09-08 12:00:00", "value47", "value47", true, 47, 47, 47, 47, null, 47.0, 47.0, 47.0),
+("2020-09-09", "2020-09-09 12:00:00", "value48", "value48", false, 48, 48, 48, 48, 48, null, 48.0, 48.0),
+("2020-09-10", "2020-09-10 12:00:00", "value49", "value49", true, 49, 49, 49, 49, 49, 49.0, null, 49.0),
+("2020-09-11", "2020-09-11 12:00:00", "value50", "value50", false, 50, 50, 50, 50, 50, 50.0, 50.0, null),
+("2020-09-12", "2020-09-12 12:00:00", "value51", "value51", true, 51, 51, 51, 51, 51, 51.0, 51.0, 51.0);
+
+SELECT count(*), max(k1), min(k1), count(k1) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k2), min(k2), count(k2) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k3), min(k3), count(k3) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k4), min(k4), count(k4) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k5), min(k5), count(k5) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k6), min(k6), count(k6) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k7), min(k7), count(k7) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k8), min(k8), count(k8) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k9), min(k9), count(k9) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k10), min(k10), count(k10) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k11), min(k11), count(k11) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k12), min(k12), count(k12) FROM update_table_with_null_partition PARTITION (p202009);
+SELECT count(*), max(k13), min(k13), count(k13) FROM update_table_with_null_partition PARTITION (p202009);

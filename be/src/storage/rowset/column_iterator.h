@@ -257,6 +257,8 @@ public:
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
 protected:
     ColumnIteratorOptions _opts;
     virtual ColumnReader* get_column_reader() { return nullptr; };
