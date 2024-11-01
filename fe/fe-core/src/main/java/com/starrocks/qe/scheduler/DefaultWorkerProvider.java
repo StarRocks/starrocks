@@ -307,7 +307,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         StringBuilder out = new StringBuilder("compute node: ");
 
         id2ComputeNode.forEach((backendID, backend) -> {
-            if (allowNormalNodes || !backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
                 out.append(
                         String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                                 backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
@@ -319,13 +319,21 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private String backendsToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> {
-            if (allowNormalNodes || !backend.isAlive() || SimpleScheduler.isInBlocklist(backendID)) {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
                 out.append(
-                        String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                                backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+                        formatNodeInfo(backend.getHost(), backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
             }
         });
         return out.toString();
+    }
+
+    private boolean shouldIncludeNode(ComputeNode node, Long nodeId, boolean allowNormalNodes) {
+        return allowNormalNodes || !node.isAlive() || SimpleScheduler.isInBlocklist(nodeId);
+    }
+
+    private String formatNodeInfo(String host, boolean isAlive, boolean isInBlacklist) {
+        return String.format("[%s alive: %b inBlacklist: %b] ",
+                host, isAlive, isInBlacklist);
     }
 
     @VisibleForTesting
