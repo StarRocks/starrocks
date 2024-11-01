@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 5
+keywords: ['iceberg']
 ---
 
 # Iceberg catalog
