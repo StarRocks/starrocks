@@ -48,6 +48,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Optional;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
 public class StreamLoadInfo {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadInfo.class);
@@ -100,7 +102,7 @@ public class StreamLoadInfo {
         this.stripOuterArray = false;
     }
 
-    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, int timeout) {
+    public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, Optional<Integer> timeout) {
         this.id = id;
         this.txnId = txnId;
         this.fileType = fileType;
@@ -108,7 +110,7 @@ public class StreamLoadInfo {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
-        this.timeout = timeout;
+        timeout.ifPresent(integer -> this.timeout = integer);
     }
 
     public String getConfluentSchemaRegistryUrl() {
@@ -271,12 +273,19 @@ public class StreamLoadInfo {
         return warehouseId;
     }
 
-    public static StreamLoadInfo fromHttpStreamLoadRequest(TUniqueId id, long txnId, int timeout, StreamLoadKvParams params)
+    public static StreamLoadInfo fromHttpStreamLoadRequest(
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
             throws UserException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
+        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new UserException(String.format("Warehouse [%s] does not exist", warehouseName));
+        }
+        streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }
 

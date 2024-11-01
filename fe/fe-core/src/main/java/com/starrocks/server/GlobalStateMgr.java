@@ -165,6 +165,7 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
@@ -320,6 +321,7 @@ public class GlobalStateMgr {
     private final LoadMgr loadMgr;
     private final RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
+    private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
 
@@ -657,8 +659,10 @@ public class GlobalStateMgr {
                 new SystemHandlerEPack());
 
         this.load = new Load();
+
         this.streamLoadMgr = new StreamLoadMgrEPack();
         this.routineLoadMgr = new RoutineLoadMgrEPack();
+        this.batchWriteMgr = new BatchWriteMgr();
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
 
@@ -1459,6 +1463,7 @@ public class GlobalStateMgr {
         // start routine load scheduler
         routineLoadScheduler.start();
         routineLoadTaskScheduler.start();
+        batchWriteMgr.start();
         // start dynamic partition task
         dynamicPartitionScheduler.start();
         // start daemon thread to update db used data quota for db txn manager periodically
@@ -2233,6 +2238,10 @@ public class GlobalStateMgr {
 
     public StreamLoadMgr getStreamLoadMgr() {
         return streamLoadMgr;
+    }
+
+    public BatchWriteMgr getBatchWriteMgr() {
+        return batchWriteMgr;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
