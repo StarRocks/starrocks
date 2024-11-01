@@ -107,7 +107,7 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           echo ${TAR_PATH}
-          if [[ "${WITH_COV} == "true" ]]; then
+          if [[ "${WITH_COV}" == "true" ]]; then
             ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage
           else
             ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH}
