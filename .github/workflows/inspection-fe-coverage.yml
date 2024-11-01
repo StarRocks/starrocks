@@ -19,7 +19,7 @@ on:
     outputs:
       FE_COV_RES_FILE:
         description: "FE COV RESULT FILE"
-        value: ${{ jobs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}
+        value: ${{ jobs.REPORT.outputs.FE_COV_RES_FILE }}
 
 permissions:
   checks: write
@@ -44,7 +44,7 @@ env:
 
 
 jobs:
-  FE-COV-REPORT:
+  REPORT:
     runs-on: [ self-hosted, quick ]
     env:
       OSS_CMD: "ossutil64 --config-file /root/.ossutilconfig"
