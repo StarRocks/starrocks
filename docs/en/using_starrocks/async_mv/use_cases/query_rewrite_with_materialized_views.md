@@ -742,15 +742,7 @@ During query rewrite, queries against `customer_view1` and `lineorder_view1` are
 
 ## External catalog-based materialized view rewrite
 
-<<<<<<< HEAD
-StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, and Iceberg catalogs, and transparently rewriting queries with them. External catalog-based materialized views support most of the query rewrite capabilities, but there are some limitations:
-
-- Hudi or JDBC catalog-based materialized views do not support Union rewrite.
-- Hudi or JDBC catalog-based materialized views do not support View Delta Join rewrite.
-- Hudi or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
-=======
 StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, Iceberg catalogs, and Paimon catalogs, and transparently rewriting queries with them.
->>>>>>> 3edc2cf424 ([Doc] Remove query rewrite limits of External MV (#52464))
 
 ## Configure query rewrite
 
