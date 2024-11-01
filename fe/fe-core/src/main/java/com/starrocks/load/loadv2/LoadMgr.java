@@ -75,6 +75,8 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -116,6 +118,9 @@ public class LoadMgr implements Writable, MemoryTrackable {
     private final LoadJobScheduler loadJobScheduler;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -386,6 +391,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
+
+        warehouseLoadInfoBuilder.withRemovedJob(job);
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -788,6 +795,15 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
             putLoadJob(loadJob);
         });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
+        } finally {
+            readUnlock();
+        }
     }
 
     private void putLoadJob(LoadJob loadJob) {

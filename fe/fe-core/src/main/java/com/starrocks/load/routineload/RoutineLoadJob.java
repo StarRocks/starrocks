@@ -101,6 +101,7 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -130,7 +131,7 @@ import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
  * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
 public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable {
+        implements Writable, GsonPostProcessable, LoadJobWithWarehouse {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
 
     public static final long DEFAULT_MAX_ERROR_NUM = 0;
@@ -337,6 +338,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(SessionVariable.DEFAULT_EXEC_MEM_LIMIT));
         }
+    }
+
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return state.isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return getEndTimestamp();
     }
 
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
@@ -1733,10 +1749,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return true;
         }
         return false;
-    }
-
-    public boolean isFinal() {
-        return state.isFinalState();
     }
 
     public static RoutineLoadJob read(DataInput in) throws IOException {

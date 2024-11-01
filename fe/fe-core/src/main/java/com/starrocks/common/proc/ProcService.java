@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.consistency.MetaRecoveryProdDir;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,6 +71,7 @@ public final class ProcService {
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
+        root.register("warehouses", new WarehouseProcDir());
         root.register("meta_recovery", new MetaRecoveryProdDir());
         root.register("replications", new ReplicationsProcNode());
     }
