@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class Locker {
     private static final Logger LOG = LogManager.getLogger(Locker.class);
@@ -357,7 +358,7 @@ public class Locker {
     /**
      * No need to release lock explicitly, it will be released automatically when the locker failed.
      */
-    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, 
+    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType,
                                                     long timeout, TimeUnit unit) {
         long timeoutMillis = timeout;
         if (!unit.equals(TimeUnit.MILLISECONDS)) {
@@ -518,6 +519,7 @@ public class Locker {
 
     /**
      * Try to lock multi database and tables with intensive db lock.
+     *
      * @return try if try lock success, false otherwise.
      */
     public boolean tryLockTableWithIntensiveDbLock(LockParams lockParams, LockType lockType, long timeout, TimeUnit unit) {
@@ -586,10 +588,15 @@ public class Locker {
     }
 
     private String getStackTrace(Thread thread) {
-        StackTraceElement[] stackTrace = thread.getStackTrace();
-        StackTraceElement element = stackTrace[3];
-        int lastIdx = element.getClassName().lastIndexOf(".");
-        return element.getClassName().substring(lastIdx + 1) + "." + element.getMethodName() + "():" + element.getLineNumber();
+        List<String> frames = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
+                .walk(stackFrame -> stackFrame.skip(2).limit(1)
+                        .map(frame -> frame.getClassName() + "." + frame.getMethodName() + "():" + frame.getLineNumber())
+                        .collect(Collectors.toList()));
+        if (frames.size() > 0) {
+            return frames.get(0);
+        } else {
+            return "";
+        }
     }
 
     public String getLockerStackTrace() {
