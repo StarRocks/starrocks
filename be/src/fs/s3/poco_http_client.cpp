@@ -38,7 +38,8 @@ PocoHttpClient::PocoHttpClient(const Aws::Client::ClientConfiguration& clientCon
                   Poco::Timespan(clientConfiguration.connectTimeoutMs * 1000),     // connection timeout.
                   Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000), // send timeout.
                   Poco::Timespan(clientConfiguration.httpRequestTimeoutMs * 1000)  // receive timeout.
-                  )), enable_ssl(clientConfiguration.verifySSL) {}
+                  )),
+          enable_ssl(clientConfiguration.verifySSL) {}
 
 std::shared_ptr<Aws::Http::HttpResponse> PocoHttpClient::MakeRequest(
         const std::shared_ptr<Aws::Http::HttpRequest>& request,
