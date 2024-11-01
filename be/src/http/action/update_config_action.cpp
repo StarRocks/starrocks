@@ -341,7 +341,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 
     Status s = config::set_config(name, value);
     if (s.ok()) {
-        LOG(INFO) << "set_config " << name << "=" << value << " success";
         if (_config_callback.count(name)) {
             s = _config_callback[name]();
             if (!s.ok()) {
@@ -349,6 +348,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 if (!rollback_status.ok()) {
                     LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
                 }
+            } else {
+                LOG(INFO) << "set_config " << name << "=" << value << " success";
             }
         }
     }
