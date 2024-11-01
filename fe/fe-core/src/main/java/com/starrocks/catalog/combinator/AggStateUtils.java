@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -165,13 +166,13 @@ public class AggStateUtils {
                 result = AggStateCombinator.of(aggFunc);
             }
         } else if (func instanceof AggStateUnionCombinator) {
-            AggregateFunction argFn = getAggStateFunction(session, argumentTypes, pos);
+            AggregateFunction argFn = getAggStateFunction(session, func, argumentTypes, pos);
             if (argFn == null) {
                 return null;
             }
             result = AggStateUnionCombinator.of(argFn);
         } else if (func instanceof AggStateMergeCombinator) {
-            AggregateFunction argFn = getAggStateFunction(session, argumentTypes, pos);
+            AggregateFunction argFn = getAggStateFunction(session, func, argumentTypes, pos);
             if (argFn == null) {
                 return null;
             }
@@ -185,14 +186,16 @@ public class AggStateUtils {
     }
 
     private static AggregateFunction getAggStateFunction(ConnectContext session,
+                                                         Function inputFunc,
                                                          Type[] argumentTypes,
                                                          NodePosition pos) {
         Preconditions.checkArgument(argumentTypes.length == 1,
                 "AggState's AggFunc should have only one argument");
         Type arg0Type = argumentTypes[0];
-        Preconditions.checkArgument(arg0Type.getAggStateDesc() != null,
-                String.format("AggState's agg state desc is null"));
-
+        if (arg0Type.getAggStateDesc() == null) {
+            throw new SemanticException(String.format("AggState's AggFunc should have AggStateDesc: %s",
+                    inputFunc), pos);
+        }
         AggStateDesc aggStateDesc = arg0Type.getAggStateDesc();
         List<Type> argTypes = aggStateDesc.getArgTypes();
         String argFnName = aggStateDesc.getFunctionName();

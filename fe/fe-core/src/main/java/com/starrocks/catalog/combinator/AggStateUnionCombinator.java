@@ -50,10 +50,9 @@ public final class AggStateUnionCombinator extends AggregateFunction {
 
     public static Optional<AggStateUnionCombinator> of(AggregateFunction aggFunc) {
         try {
-            Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
+            Type intermediateType = aggFunc.getIntermediateTypeOrReturnType().clone();
             FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_UNION_SUFFIX);
-            AggStateUnionCombinator aggStateUnionFunc =
-                    new AggStateUnionCombinator(functionName, intermediateType);
+            AggStateUnionCombinator aggStateUnionFunc = new AggStateUnionCombinator(functionName, intermediateType);
             aggStateUnionFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateUnionFunc.setPolymorphic(aggFunc.isPolymorphic());
             AggStateDesc aggStateDesc;
@@ -63,6 +62,8 @@ public final class AggStateUnionCombinator extends AggregateFunction {
                 aggStateDesc = new AggStateDesc(aggFunc);
             }
             aggStateUnionFunc.setAggStateDesc(aggStateDesc);
+            // set agg state desc for the function's result type so can be used as the later agg state functions.
+            intermediateType.setAggStateDesc(aggStateDesc);
             // use agg state desc's nullable as `agg_state` function's nullable
             aggStateUnionFunc.setIsNullable(aggStateDesc.getResultNullable());
             LOG.info("Register agg state function: {}", aggStateUnionFunc.functionName());
