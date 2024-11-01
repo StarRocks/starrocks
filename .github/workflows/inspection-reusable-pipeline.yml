@@ -201,7 +201,7 @@ jobs:
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/restart-fe.sh --repository ${{ github.repository }}
+          ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build Release
 
       - name: Clean ENV
         if: always()

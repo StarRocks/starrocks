@@ -42,8 +42,7 @@ jobs:
   FE-COV-REPORT:
     runs-on: [ self-hosted, quick ]
     env:
-      OSS_CMD: "ossutil64 --config-file ~/.ossutilconfig"
-
+      OSS_CMD: "ossutil64 --config-file /root/.ossutilconfig"
       JAVA_HOME: /var/local/env/jdk1.8.0_202
 
     steps:
