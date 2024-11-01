@@ -197,7 +197,7 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
-        if (isBuildFromColocateGroup) {
+        if (isBuildFromColocateGroup && !isBroadcastJoin()) {
             int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
