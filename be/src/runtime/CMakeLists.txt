@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
+    buffer_control_result_writer.cpp
     client_cache.cpp
     local_pass_through_buffer.cpp
     data_stream_mgr.cpp

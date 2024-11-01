@@ -40,6 +40,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/defer_op.h"
+#include "util/race_detect.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -160,44 +161,23 @@ void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRe
     }
 }
 
-StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResult>& result) {
+Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
-    std::unique_lock<std::mutex> l(_lock);
-    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
-        return false;
-    }
-    l.unlock();
-    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
-    l.lock();
-    _process_batch_without_lock(ser_res);
-    return true;
-}
-
-StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results) {
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    std::unique_lock<std::mutex> l(_lock);
-    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
-        return false;
-    }
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    l.unlock();
-    // serialize first
     for (auto& result : results) {
-        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()))
-        l.lock();
-        _buffer_bytes += ser_res->attachment.length();
-        _batch_queue.push_back(std::move(ser_res));
-        _data_arriaval.notify_one();
-        l.unlock();
+        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()));
+        result.reset();
+        {
+            std::unique_lock<std::mutex> l(_lock);
+            _buffer_bytes += ser_res->attachment.length();
+            _batch_queue.push_back(std::move(ser_res));
+            l.unlock();
+            _data_arriaval.notify_one();
+        }
     }
 
-    l.lock();
+    std::unique_lock<std::mutex> l(_lock);
     if (!_waiting_rpc.empty() && !_batch_queue.empty()) {
         std::unique_ptr<SerializeRes> ser = std::move(_batch_queue.front());
         _batch_queue.pop_front();
@@ -209,7 +189,30 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         l.unlock();
         ctx->on_data(ser.get(), packet_num);
     }
-    return true;
+
+    return Status::OK();
+}
+
+bool BufferControlBlock::is_full() const {
+    if (_is_cancelled) {
+        return false;
+    }
+    std::unique_lock<std::mutex> l(_lock);
+    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
+        return true;
+    }
+    if (_is_cancelled) {
+        return false;
+    }
+    return false;
+}
+
+void BufferControlBlock::cancel_pending_rpc() {
+    std::unique_lock<std::mutex> l(_lock);
+    while (!_batch_queue.empty()) {
+        _buffer_bytes -= _batch_queue.front()->attachment.length();
+        _batch_queue.pop_front();
+    }
 }
 
 // seems no use?
