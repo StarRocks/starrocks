@@ -630,6 +630,89 @@ public:
               _from(from),
               _size(size) {}
 
+    template <typename BT, std::size_t Alignment = 64>
+    struct aligned_allocator {
+        using value_type = BT;
+
+        aligned_allocator() noexcept = default;
+
+        template <typename U>
+        aligned_allocator(const aligned_allocator<U, Alignment>&) noexcept {}
+
+        BT* allocate(std::size_t n) {
+            if (n == 0) {
+                return nullptr;
+            }
+            void* ptr = std::aligned_alloc(Alignment, n * sizeof(BT));
+            if (!ptr) {
+                throw std::bad_alloc();
+            }
+            return static_cast<BT*>(ptr);
+        }
+
+        void deallocate(BT* p, std::size_t) noexcept { std::free(p); }
+
+        // 支持 rebind
+        template <typename U>
+        struct rebind {
+            using other = aligned_allocator<U, Alignment>;
+        };
+    };
+
+    using aligned_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
+
+    void simd_copy_by_index(const int32_t* segment, const aligned_vector& source, const aligned_vector& target,
+                            int32_t* result) {
+        size_t i = 0;
+        size_t size = source.size();
+        for (; i + 16 <= size; i += 16) {
+            _mm_prefetch(reinterpret_cast<const char*>(&source[i + 8]), _MM_HINT_T0);
+            _mm_prefetch(reinterpret_cast<const char*>(&target[i + 8]), _MM_HINT_T0);
+            // _mm_prefetch(reinterpret_cast<const char*>(&segment[source[i + 8]]), _MM_HINT_T0);
+            // _mm_prefetch(reinterpret_cast<const char*>(&[i + 8]), _MM_HINT_T0);
+
+            __m512i source_indices = _mm512_load_si512(&source[i]);
+            __m512i gathered_values = _mm512_i32gather_epi32(source_indices, segment, 4);
+            __m512i target_indices = _mm512_load_si512(&target[i]);
+            _mm512_i32scatter_epi32(result, target_indices, gathered_values, 4);
+        }
+
+        // Handle remaining elements
+        for (; i < size; ++i) {
+            result[target[i]] = segment[source[i]];
+        }
+    }
+
+    void simd_copy_by_index(const uint8_t* segment, const aligned_vector& source, const aligned_vector& target,
+                            uint8_t* result) {
+        size_t i = 0;
+        size_t size = source.size();
+        for (; i + 16 <= size; i += 16) {
+            // Gather source indices, treating int8_t data as int32_t for gathering
+
+            __m512i source_indices = _mm512_loadu_si512(&source[i]);
+
+            // Gather values as int32_t, then extract the lower 8 bits for int8_t
+            __m512i gathered_values_32 =
+                    _mm512_i32gather_epi32(source_indices, reinterpret_cast<const int*>(segment), 1);
+
+            // Convert gathered int32 values to int8 by extracting the lower 8 bits
+            __m128i gathered_values_8 = _mm512_cvtepi32_epi8(gathered_values_32);
+
+            // Scatter each byte manually due to the lack of native 8-bit scatter support
+            int8_t values[16];
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(values), gathered_values_8);
+            for (int j = 0; j < 16; ++j) {
+                result[target[i + j]] = values[j];
+            }
+        }
+
+        // Handle remaining elements
+        for (; i < size; ++i) {
+            result[target[i]] = segment[source[i]];
+        }
+    }
+
     template <class T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnT = FixedLengthColumnBase<T>;
@@ -637,7 +720,7 @@ public:
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
-        const size_t segment_size = _segment_column->segment_size();
+        constexpr size_t segment_size = 1 << 20;
 
         std::vector<ContainerT*> buffers;
         auto columns = _segment_column->columns();
@@ -645,17 +728,77 @@ public:
             buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
         }
 
+        // use a small buffer to avoid random access to segments
+        constexpr size_t kTLBSize = 64;
+        constexpr size_t kTLBOutputSize = 512;
+        size_t num_segments = buffers.size();
+        std::vector<size_t> tlb_index(num_segments, 0);
+        // std::vector<std::vector<std::pair<int32_t, int32_t>>> tlb_buffer(num_segments, std::vector<std::pair<int32_t, int32_t>>(kTLBSize, {0, 0}));
+
+        using aligned_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
+
+        std::vector<aligned_vector> tlb_source(num_segments, aligned_vector(kTLBSize, 0));
+        std::vector<aligned_vector> tlb_target(num_segments, aligned_vector(kTLBSize, 0));
+        // std::vector<std::vector<std::pair<int32_t, int32_t>>> tlb_buffer;
+        // tlb_buffer.resize(num_segments);
+        // for (auto& buffer : tlb_buffer) {
+        // buffer.resize(kTLBSize, {0, 0});
+        // }
+
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
         size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            DCHECK_LT(segment_id, columns.size());
+            size_t segment_id = idx / segment_size;
+            size_t segment_offset = idx % segment_size;
+            // auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+            DCHECK_LT(segment_id, num_segments);
             DCHECK_LT(segment_offset, columns[segment_id]->size());
+            DCHECK_LE(tlb_index[segment_id], kTLBSize);
 
-            output_items[i] = (*buffers[segment_id])[segment_offset];
+            // tlb_buffer[segment_id][tlb_index[segment_id]].first = segment_offset;
+            // tlb_buffer[segment_id][tlb_index[segment_id]].second = i;
+            tlb_source[segment_id][tlb_index[segment_id]] = segment_offset;
+            tlb_target[segment_id][tlb_index[segment_id]] = i;
+
+            // tlb_buffer[segment_id].emplace_back(segment_offset, i);
+            if (++tlb_index[segment_id] >= kTLBSize) {
+                auto& segment = *buffers[segment_id];
+
+                if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint8_t>) {
+                    simd_copy_by_index(segment.data(), tlb_source[segment_id], tlb_target[segment_id],
+                                       output_items.data());
+                } else {
+                    for (size_t i = 0; i < tlb_source[segment_id].size(); i++) {
+                        size_t segment_offset = tlb_source[segment_id][i];
+                        size_t output_index = tlb_target[segment_id][i];
+                        output_items[output_index] = segment[segment_offset];
+                    }
+                    // for (auto [segment_offset, output_index] : tlb_buffer[segment_id]) {
+                    // output_items[output_index] = segment[segment_offset];
+                    // }
+                }
+                tlb_index[segment_id] = 0;
+                continue;
+                // tlb_buffer[segment_id].clear();
+            }
+
+            if ((i % kTLBOutputSize == 0) || (i == _size - 1)) {
+                for (size_t segment_id = 0; segment_id < num_segments; segment_id++) {
+                    // auto& segment_buffer = tlb_source[segment_id];
+                    for (size_t i = 0; i < tlb_index[segment_id]; i++) {
+                        // for (auto [segment_offset, output_index] : segment_buffer) {
+                        // auto [segment_offset, output_index] = segment_buffer[i];
+                        int32_t segment_offset = tlb_source[segment_id][i];
+                        int32_t output_index = tlb_target[segment_id][i];
+                        output_items[output_index] = (*buffers[segment_id])[segment_offset];
+                    }
+                    tlb_index[segment_id] = 0;
+                }
+            }
         }
+
         return {};
     }
 
