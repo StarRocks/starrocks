@@ -59,7 +59,11 @@
 namespace starrocks {
 
 class Tablet;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
 class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
 class MetadataCache;
 

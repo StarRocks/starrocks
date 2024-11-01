@@ -40,6 +40,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
@@ -331,6 +332,10 @@ public class FragmentNormalizer {
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
