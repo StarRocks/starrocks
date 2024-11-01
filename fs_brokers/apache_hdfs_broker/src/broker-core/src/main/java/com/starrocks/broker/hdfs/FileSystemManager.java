@@ -983,8 +983,12 @@ public class FileSystemManager {
 
     public void renamePath(String srcPath, String destPath, Map<String, String> properties) {
         WildcardURI srcPathUri = new WildcardURI(srcPath);
+        String srcAuthority = srcPathUri.getAuthority();
         WildcardURI destPathUri = new WildcardURI(destPath);
-        if (!srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
+        String destAuthority = destPathUri.getAuthority();
+        // the authority of local file path is null, like file:///xxx.
+        // skip check when the authority is null.
+        if (srcAuthority != null && destAuthority != null && !srcAuthority.trim().equals(destAuthority.trim())) {
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     "only allow rename in same file system");
         }
