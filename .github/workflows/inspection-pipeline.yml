@@ -528,6 +528,7 @@ jobs:
 
   FE-COV-REPORT:
     uses: ./.github/workflows/inspection-fe-coverage.yml
+    name: 'FE Coverage'
     if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_COV == 'true'
     needs:
       - info
