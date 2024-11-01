@@ -276,6 +276,7 @@ configuration properties will be detailed after the command.
 
 ```sql
 CREATE EXTERNAL CATALOG 'iceberg'
+COMMENT "External catalog to Apache Iceberg on MinIO"
 PROPERTIES
 (
   "type"="iceberg",
@@ -286,7 +287,7 @@ PROPERTIES
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
   "aws.s3.enable_path_style_access"="true",
-  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"
+  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"  
 );
 ```
 
@@ -313,7 +314,7 @@ SHOW CATALOGS;
 | Catalog         | Type     | Comment                                                          |
 +-----------------+----------+------------------------------------------------------------------+
 | default_catalog | Internal | An internal catalog contains this cluster's self-managed tables. |
-| iceberg         | Iceberg  | NULL                                                             |
+| iceberg         | Iceberg  | External catalog to Apache Iceberg on MinIO                      |
 +-----------------+----------+------------------------------------------------------------------+
 2 rows in set (0.03 sec)
 ```
@@ -333,12 +334,13 @@ database `nyc` became visible in StarRocks.
 :::
 
 ```plaintext
-+----------+
-| Database |
-+----------+
-| nyc      |
-+----------+
-1 row in set (0.07 sec)
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| nyc                |
++--------------------+
+2 rows in set (0.07 sec)
 ```
 
 ```sql
@@ -374,31 +376,31 @@ Compare the schema that StarRocks uses with the output of `df.printSchema()` fro
 :::
 
 ```plaintext
-+-----------------------+------------------+------+-------+---------+-------+
-| Field                 | Type             | Null | Key   | Default | Extra |
-+-----------------------+------------------+------+-------+---------+-------+
-| VendorID              | INT              | Yes  | false | NULL    |       |
-| lpep_pickup_datetime  | DATETIME         | Yes  | false | NULL    |       |
-| lpep_dropoff_datetime | DATETIME         | Yes  | false | NULL    |       |
-| store_and_fwd_flag    | VARCHAR(1048576) | Yes  | false | NULL    |       |
-| RatecodeID            | BIGINT           | Yes  | false | NULL    |       |
-| PULocationID          | INT              | Yes  | false | NULL    |       |
-| DOLocationID          | INT              | Yes  | false | NULL    |       |
-| passenger_count       | BIGINT           | Yes  | false | NULL    |       |
-| trip_distance         | DOUBLE           | Yes  | false | NULL    |       |
-| fare_amount           | DOUBLE           | Yes  | false | NULL    |       |
-| extra                 | DOUBLE           | Yes  | false | NULL    |       |
-| mta_tax               | DOUBLE           | Yes  | false | NULL    |       |
-| tip_amount            | DOUBLE           | Yes  | false | NULL    |       |
-| tolls_amount          | DOUBLE           | Yes  | false | NULL    |       |
-| ehail_fee             | DOUBLE           | Yes  | false | NULL    |       |
-| improvement_surcharge | DOUBLE           | Yes  | false | NULL    |       |
-| total_amount          | DOUBLE           | Yes  | false | NULL    |       |
-| payment_type          | BIGINT           | Yes  | false | NULL    |       |
-| trip_type             | BIGINT           | Yes  | false | NULL    |       |
-| congestion_surcharge  | DOUBLE           | Yes  | false | NULL    |       |
-+-----------------------+------------------+------+-------+---------+-------+
-20 rows in set (0.04 sec)
++-----------------------+---------------------+------+-------+---------+-------+---------+
+| Field                 | Type                | Null | Key   | Default | Extra | Comment |
++-----------------------+---------------------+------+-------+---------+-------+---------+
+| VendorID              | INT                 | Yes  | false | NULL    |       | NULL    |
+| lpep_pickup_datetime  | DATETIME            | Yes  | false | NULL    |       | NULL    |
+| lpep_dropoff_datetime | DATETIME            | Yes  | false | NULL    |       | NULL    |
+| store_and_fwd_flag    | VARCHAR(1073741824) | Yes  | false | NULL    |       | NULL    |
+| RatecodeID            | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| PULocationID          | INT                 | Yes  | false | NULL    |       | NULL    |
+| DOLocationID          | INT                 | Yes  | false | NULL    |       | NULL    |
+| passenger_count       | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| trip_distance         | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| fare_amount           | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| extra                 | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| mta_tax               | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| tip_amount            | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| tolls_amount          | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| ehail_fee             | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| improvement_surcharge | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| total_amount          | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| payment_type          | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| trip_type             | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| congestion_surcharge  | DOUBLE              | Yes  | false | NULL    |       | NULL    |
++-----------------------+---------------------+------+-------+---------+-------+---------+
+20 rows in set (0.03 sec)
 ```
 
 :::tip
