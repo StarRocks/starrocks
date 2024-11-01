@@ -618,7 +618,11 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         if (node.getTable().isNativeTableOrMaterializedView()) {
             DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
-                scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
+                scanOperator = LogicalMetaScanOperator.builder().setTable(node.getTable())
+                        .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                        .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
+                                node.getPartitionNames().getPartitionNames())
+                        .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setTable(node.getTable())
