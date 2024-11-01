@@ -158,7 +158,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         // The retries may be caused by some tablets failing to publish in a partition
         // set the following log as debug log to prevent excessive logging
         VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
-                  << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
         return std::move(cached_new_metadata);
     }
 
