@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
@@ -899,10 +900,19 @@ public:
         auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());
         SegmentedColumnSelectiveCopy copy_data(segmented_data_column, _indexes, _from, _size);
         (void)data_columns[0]->accept(&copy_data);
-        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
-        SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
-        (void)null_columns[0]->accept(&copy_null);
-        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
+
+        ColumnPtr null_column;
+        if (_segment_column->has_null()) {
+            auto segmented_null_column =
+                    std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
+            SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
+            (void)null_columns[0]->accept(&copy_null);
+            null_column = copy_null.result();
+        } else {
+            null_column = NullColumn::create(_size, 0);
+        }
+
+        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(null_column));
 
         return {};
     }
