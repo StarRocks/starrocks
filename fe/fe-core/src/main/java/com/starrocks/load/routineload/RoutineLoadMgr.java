@@ -74,6 +74,8 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -108,6 +110,9 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
@@ -662,6 +667,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         if (dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId()).isEmpty()) {
             dbToNameToRoutineLoadJob.remove(routineLoadJob.getDbId());
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
     public void updateRoutineLoadJob() throws UserException {
@@ -808,6 +815,15 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
             putJob(routineLoadJob);
         });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToRoutineLoadJob.values());
+        } finally {
+            readUnlock();
+        }
     }
 
     @Override
