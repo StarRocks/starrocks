@@ -14,8 +14,7 @@
 
 #pragma once
 
-#include "runtime/result_writer.h"
-#include "runtime/runtime_state.h"
+#include "runtime/buffer_control_result_writer.h"
 
 namespace starrocks {
 
@@ -24,7 +23,7 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
-class VariableResultWriter final : public ResultWriter {
+class VariableResultWriter final : public BufferControlResultWriter {
 public:
     VariableResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                          RuntimeProfile* parent_profile);
@@ -37,27 +36,11 @@ public:
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
 
-    StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
-
-    Status close() override;
-
 private:
-    void _init_profile();
-
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
 private:
-    BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
-
-    // parent profile from result sink. not owned
-    RuntimeProfile* _parent_profile;
-    // total time
-    RuntimeProfile::Counter* _total_timer = nullptr;
-    // serialize time
-    RuntimeProfile::Counter* _serialize_timer = nullptr;
-    // number of sent rows
-    RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 };
 
 } // namespace starrocks

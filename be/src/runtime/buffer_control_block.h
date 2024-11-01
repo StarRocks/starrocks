@@ -46,6 +46,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
 namespace google::protobuf {
@@ -97,8 +98,10 @@ public:
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
 
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(std::unique_ptr<TFetchDataResult>& result);
-    StatusOr<bool> try_add_batch(std::vector<std::unique_ptr<TFetchDataResult>>& results);
+    Status add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results);
+    bool is_full() const;
+    // cancel all pending rpc. this is called from pipeline->cancelled
+    void cancel_pending_rpc();
 
     // get result from batch, use timeout?
     Status get_batch(TFetchDataResult* result);
@@ -145,7 +148,7 @@ private:
     // blocking queue for batch
     ResultQueue _batch_queue;
     // protects all subsequent data in this block
-    std::mutex _lock;
+    mutable std::mutex _lock;
     // signal arrival of new batch or the eos/cancelled condition
     std::condition_variable _data_arriaval;
     // signal removal of data by stream consumer

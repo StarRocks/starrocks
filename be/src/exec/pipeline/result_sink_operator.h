@@ -56,7 +56,7 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished && _fetch_data_result.empty(); }
+    bool is_finished() const override { return _is_finished; }
 
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
@@ -82,9 +82,6 @@ private:
     std::atomic<int64_t>& _num_written_rows;
 
     std::shared_ptr<ResultWriter> _writer;
-    mutable TFetchDataResultPtrs _fetch_data_result;
-
-    std::unique_ptr<RuntimeProfile> _profile = nullptr;
 
     mutable Status _last_error;
     bool _is_finished = false;
