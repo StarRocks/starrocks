@@ -120,6 +120,12 @@ public:
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
+    bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
+
+    // no practical significance, just compatible interface
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
+
 private:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
