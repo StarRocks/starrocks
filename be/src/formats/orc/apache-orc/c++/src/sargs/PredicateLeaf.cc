@@ -706,7 +706,7 @@ TruthValue PredicateLeaf::evaluate(const WriterVersion writerVersion, const prot
     }
 
     // files written by trino may lack of hasnull field.
-    if (!colStats.has_has_null()) return TruthValue::YES_NO_NULL;
+    if (!colStats.has_hasnull()) return TruthValue::YES_NO_NULL;
 
     bool allNull = colStats.hasnull() && colStats.numberofvalues() == 0;
     if (mOperator == Operator::IS_NULL ||
