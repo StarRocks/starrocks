@@ -42,6 +42,10 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
+        if (_finished) {
+            return Status::CapacityLimitExceed("Stream load pipe is finished");
+        }
+
         if (_cancelled) {
             return _err_st;
         }
@@ -49,6 +53,10 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
+
+        if (_finished) {
+            return Status::CapacityLimitExceed("Stream load pipe is finished");
+        }
 
         if (_cancelled) {
             return _err_st;
@@ -110,7 +118,7 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 StatusOr<ByteBufferPtr> StreamLoadPipe::no_block_read() {
     std::unique_lock<std::mutex> l(_lock);
 
-    _get_cond.wait_for(l, std::chrono::milliseconds(100),
+    _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
                        [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
     // cancelled
@@ -177,7 +185,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
         if (_read_buf == nullptr || !_read_buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
 
-            _get_cond.wait_for(l, std::chrono::milliseconds(100),
+            _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
                                [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
             // cancelled
@@ -242,7 +250,7 @@ void StreamLoadPipe::cancel(const Status& status) {
         std::lock_guard<std::mutex> l(_lock);
         _cancelled = true;
         if (_err_st.ok()) {
-            _err_st = status;
+            _err_st = status.ok() ? status : Status::Cancelled("Cancelled with ok status");
         }
     }
     _get_cond.notify_all();
@@ -342,12 +350,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     return _decompressed_buffer;
 }
 
-StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read)
-        : _pipe(std::move(file)) {
-    if (non_blocking_read) {
-        _pipe->set_non_blocking_read();
-    }
-}
+StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file) : _pipe(std::move(file)) {}
 
 StreamLoadPipeInputStream::~StreamLoadPipeInputStream() {
     _pipe->close();

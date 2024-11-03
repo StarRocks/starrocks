@@ -47,12 +47,27 @@
 
 namespace starrocks {
 
+static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES = 1024 * 1024;
+static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE = 64 * 1024;
+static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS = 50;
+
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
 class StreamLoadPipe : public MessageBodySink {
 public:
-    StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
-            : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
+    StreamLoadPipe(size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                   size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
+            : StreamLoadPipe(false, DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS, max_buffered_bytes, min_chunk_size) {
+    }
+
+    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
+                   size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                   size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
+            : _non_blocking_read(non_blocking_read),
+              _non_blocking_wait_ms(non_blocking_wait_ms),
+              _max_buffered_bytes(max_buffered_bytes),
+              _min_chunk_size(min_chunk_size) {}
+
     ~StreamLoadPipe() override = default;
 
     Status append(ByteBufferPtr&& buf) override;
@@ -68,20 +83,18 @@ public:
 
     StatusOr<ByteBufferPtr> no_block_read();
 
-    Status read(uint8_t* data, size_t* data_size, bool* eof);
+    virtual Status read(uint8_t* data, size_t* data_size, bool* eof);
 
     Status no_block_read(uint8_t* data, size_t* data_size, bool* eof);
 
     // called when consumer finished
-    void close() { cancel(Status::OK()); }
+    void close() { cancel(Status::Cancelled("Close the pipe")); }
 
     // called when producer finished
     Status finish() override;
 
     // called when producer/consumer failed
     void cancel(const Status& status) override;
-
-    void set_non_blocking_read() { _non_blocking_read = true; }
 
 private:
     Status _append(const ByteBufferPtr& buf);
@@ -95,12 +108,13 @@ private:
     // Blocking queue
     std::mutex _lock;
     size_t _buffered_bytes{0};
+    bool _non_blocking_read{false};
+    int32_t _non_blocking_wait_ms;
     size_t _max_buffered_bytes;
     size_t _min_chunk_size;
     std::deque<ByteBufferPtr> _buf_queue;
     std::condition_variable _put_cond;
     std::condition_variable _get_cond;
-    bool _non_blocking_read{false};
 
     bool _finished{false};
     bool _cancelled{false};
@@ -137,7 +151,7 @@ private:
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.
 class StreamLoadPipeInputStream : public io::InputStream {
 public:
-    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read);
+    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file);
     ~StreamLoadPipeInputStream() override;
 
     StatusOr<int64_t> read(void* data, int64_t size) override;

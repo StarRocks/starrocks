@@ -174,6 +174,12 @@ public:
 
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
+    static void release(StreamLoadContext* context) {
+        if (context->unref()) {
+            delete context;
+        }
+    }
+
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
     // At this time, mem_tracker may have been destructed,
@@ -277,6 +283,10 @@ public:
 
     int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
+
+    // for batch write
+    bool enable_batch_write = false;
+    std::map<std::string, std::string> load_parameters;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

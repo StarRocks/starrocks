@@ -180,6 +180,9 @@ public:
                                   const PProcessDictionaryCacheRequest* request,
                                   PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
 
+    void batch_write_load(google::protobuf::RpcController* controller, const PBatchWriteLoadRequest* request,
+                          PBatchWriteLoadResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

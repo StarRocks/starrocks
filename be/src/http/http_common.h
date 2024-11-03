@@ -77,4 +77,12 @@ static const std::string HTTP_100_CONTINUE = "100-continue";
 static const std::string HTTP_CHANNEL_ID = "channel_id";
 static const std::string HTTP_COMPRESSION = "compression";
 
+// Headers for batch write ==========================
+static const std::string HTTP_ENABLE_BATCH_WRITE = "enable_batch_write";
+static const std::string HTTP_BATCH_WRITE_ASYNC = "batch_write_async";
+static const std::string HTTP_BATCH_WRITE_INTERVAL_MS = "batch_write_interval_ms";
+static const std::string HTTP_BATCH_WRITE_PARALLEL = "batch_write_parallel";
+
+static const std::string HTTP_WAREHOUSE = "warehouse";
+
 } // namespace starrocks

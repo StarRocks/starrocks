@@ -1489,4 +1489,9 @@ CONF_mInt32(max_committed_without_schema_rowset, "1000");
 
 CONF_mInt32(apply_version_slow_log_sec, "30");
 
+CONF_mInt32(batch_write_thread_pool_num_min, "0");
+CONF_mInt32(batch_write_thread_pool_num_max, "512");
+CONF_mInt32(batch_write_retry_num, "10");
+CONF_mInt32(batch_write_request_interval_ms, "500");
+CONF_mInt32(batch_write_reqeust_timeout_ms, "10000");
 } // namespace starrocks::config
