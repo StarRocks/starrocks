@@ -111,7 +111,7 @@ public:
                                       TGetPartitionsMetaResponse* var_result);
 
     static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
-                                      TListRecycleBinCatalogsResult* res);
+                                         TListRecycleBinCatalogsResult* res);
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,

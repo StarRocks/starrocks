@@ -67,12 +67,7 @@ Status SchemaRecycleBinCatalogs::get_next(ChunkPtr* chunk, bool* eos) {
 DatumArray SchemaRecycleBinCatalogs::_build_row() {
     auto& info = _recyclebin_catalogs_result.recyclebin_catalogs.at(_cur_row++);
     return {
-            Slice(info.type),
-            Slice(info.name),
-            info.dbid,
-            info.tableid,
-            info.partitionid,
-            Slice(info.droptime),
+            Slice(info.type), Slice(info.name), info.dbid, info.tableid, info.partitionid, Slice(info.droptime),
     };
 }
 
