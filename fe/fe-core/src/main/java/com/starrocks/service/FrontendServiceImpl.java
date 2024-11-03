@@ -3024,12 +3024,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (List<String> record : rowSet) {
             TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();
-            info.setType("1");
-            info.setName("2");
-            info.setDbid("3");
-            info.setTableid("4");
-            info.setPartitionid("5");
-            info.setDroptime("6");
+            info.setType(record.get(0));
+            info.setName(record.get(1));
+            info.setDbid(Long.parseLong(record.get(2).isEmpty() ? "-1" : record.get(2)));
+            info.setTableid(Long.parseLong(record.get(3).isEmpty() ? "-1" : record.get(3)));
+            info.setPartitionid(Long.parseLong(record.get(4).isEmpty() ? "-1" : record.get(4)));
+            info.setDroptime(record.get(5));
 
             result.addToRecyclebin_catalogs(info);
         }

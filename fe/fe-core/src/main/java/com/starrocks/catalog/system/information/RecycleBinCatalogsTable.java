@@ -29,9 +29,9 @@ public class RecycleBinCatalogsTable {
                 SystemTable.builder()
                         .column("TYPE", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("DBID", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("TABLEID", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("PARTID", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("DBID", ScalarType.BIGINT)
+                        .column("TABLEID", ScalarType.BIGINT)
+                        .column("PARTID", ScalarType.BIGINT)
                         .column("DROPTIME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SCH_RECYCLEBIN_CATALOGS);

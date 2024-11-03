@@ -26,9 +26,9 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SchemaRecycleBinCatalogs::_s_columns[] = {
         {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DBID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLEID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PARTID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DBID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLEID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PARTID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"DROPTIME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
@@ -36,7 +36,6 @@ SchemaRecycleBinCatalogs::SchemaRecycleBinCatalogs()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaRecycleBinCatalogs::start(RuntimeState* state) {
-    // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     return SchemaScanner::start(state);
 }
@@ -44,7 +43,7 @@ Status SchemaRecycleBinCatalogs::start(RuntimeState* state) {
 Status SchemaRecycleBinCatalogs::_listRecycleBinCatalogs() {
     RETURN_IF(_param->ip == nullptr || _param->port == 0, Status::InternalError("unknown frontend address"));
 
-    TListPipeFilesParams params;
+    TListRecycleBinCatalogsParams params;
     if (_param->current_user_ident) {
         params.__set_user_ident(*_param->current_user_ident);
     }
@@ -52,9 +51,8 @@ Status SchemaRecycleBinCatalogs::_listRecycleBinCatalogs() {
 }
 
 Status SchemaRecycleBinCatalogs::get_next(ChunkPtr* chunk, bool* eos) {
-    while (_cur_row >= _recyclebin_catalogs_result.pipe_files.size()) {
+    while (_cur_row >= _recyclebin_catalogs_result.recyclebin_catalogs.size()) {
         if (!_fetched) {
-            // send RPC
             _fetched = true;
             RETURN_IF_ERROR(_listRecycleBinCatalogs());
         } else {
@@ -71,9 +69,9 @@ DatumArray SchemaRecycleBinCatalogs::_build_row() {
     return {
             Slice(info.type),
             Slice(info.name),
-            Slice(info.dbid),
-            Slice(info.tableid),
-            Slice(info.partitionid),
+            info.dbid,
+            info.tableid,
+            info.partitionid,
             Slice(info.droptime),
     };
 }

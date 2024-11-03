@@ -1896,9 +1896,9 @@ struct TListRecycleBinCatalogsParams {
 struct TListRecycleBinCatalogsInfo {
     1: optional string type
     2: optional string name
-    3: optional string dbid
-    4: optional string tableid
-    5: optional string partitionid
+    3: optional i64 dbid
+    4: optional i64 tableid
+    5: optional i64 partitionid
     6: optional string droptime
 }
 
