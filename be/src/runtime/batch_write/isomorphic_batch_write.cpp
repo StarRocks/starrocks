@@ -25,6 +25,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -43,6 +44,53 @@ std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
     out << "}";
     return out;
 }
+
+class AsyncAppendDataContext {
+public:
+    AsyncAppendDataContext(StreamLoadContext* data_ctx) : _data_ctx(data_ctx), _latch(1) { data_ctx->ref(); }
+
+    ~AsyncAppendDataContext() { StreamLoadContext::release(_data_ctx); }
+
+    AsyncAppendDataContext(const AsyncAppendDataContext&) = delete;
+    void operator=(const AsyncAppendDataContext&) = delete;
+    AsyncAppendDataContext(AsyncAppendDataContext&&) = delete;
+    void operator=(AsyncAppendDataContext&&) = delete;
+
+    const BThreadCountDownLatch& latch() const { return _latch; }
+
+    StreamLoadContext* data_ctx() { return _data_ctx; }
+
+    // called after async process finishes
+    void finish(const Status& status) {
+        if (!status.ok()) {
+            std::lock_guard l(_result_lock);
+            _status = status;
+        }
+        _latch.count_down();
+    }
+
+    Status get_status() {
+        std::lock_guard l(_result_lock);
+        return _status;
+    }
+
+    void ref() { _refs.fetch_add(1); }
+    // If unref() returns true, this object should be delete
+    bool unref() { return _refs.fetch_sub(1) == 1; }
+
+    static void release(AsyncAppendDataContext* ctx) {
+        if (ctx != nullptr && ctx->unref()) {
+            delete ctx;
+        }
+    }
+
+private:
+    StreamLoadContext* const _data_ctx;
+    BThreadCountDownLatch _latch;
+    std::atomic<int> _refs;
+    mutable bthread::Mutex _result_lock;
+    Status _status;
+};
 
 IsomorphicBatchWrite::IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads::ThreadPoolExecutor* executor)
         : _batch_write_id(std::move(batch_write_id)), _executor(executor) {}
@@ -92,9 +140,6 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
     bool find = false;
     {
         std::unique_lock<std::mutex> lock(_mutex);
-        if (_stopped.load(std::memory_order_relaxed)) {
-            return;
-        }
         find = _alive_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
         if (!find) {
             find = _dead_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
@@ -106,22 +151,36 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
     VLOG(1) << "Unregister stream load pipe, " << _batch_write_id << ", txn_id: " << pipe_ctx->txn_id;
 }
 
+bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {
+    std::unique_lock<std::mutex> lock(_mutex);
+    auto it = _alive_stream_load_pipe_ctxs.find(pipe_ctx);
+    if (it != _alive_stream_load_pipe_ctxs.end()) {
+        return true;
+    }
+    return _dead_stream_load_pipe_ctxs.find(pipe_ctx) != _dead_stream_load_pipe_ctxs.end();
+}
+
 Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     if (_stopped.load(std::memory_order_relaxed)) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
-    Status result;
-    auto count_down_latch = BThreadCountDownLatch(1);
-    Task task{.create_time_ns = MonotonicNanos(), .data_ctx = data_ctx, .latch = &count_down_latch, .result = &result};
+    AsyncAppendDataContext* ctx = new AsyncAppendDataContext(data_ctx);
+    ctx->ref();
+    DeferOp defer([&] { AsyncAppendDataContext::release(ctx); });
+
+    Task task{.context = ctx};
+    // this reference is for async task
+    ctx->ref();
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
+        ctx->unref();
         LOG(ERROR) << "Fail to add task to execution queue, db: " << data_ctx->db << ", table: " << data_ctx->table
                    << ", id: " << data_ctx->id;
         return Status::InternalError("Failed to add task to execution queue");
     }
     // TODO timeout
-    count_down_latch.wait();
-    return result;
+    ctx->latch().wait();
+    return ctx->get_status();
 }
 
 int IsomorphicBatchWrite::_execute_bthread_tasks(void* meta, bthread::TaskIterator<Task>& iter) {
@@ -131,8 +190,10 @@ int IsomorphicBatchWrite::_execute_bthread_tasks(void* meta, bthread::TaskIterat
 
     auto batch_write = static_cast<IsomorphicBatchWrite*>(meta);
     for (; iter; ++iter) {
-        *iter->result = batch_write->_execute_write(iter->data_ctx);
-        iter->latch->count_down();
+        AsyncAppendDataContext* ctx = iter->context;
+        auto st = batch_write->_execute_write(ctx->data_ctx());
+        ctx->finish(st);
+        AsyncAppendDataContext::release(ctx);
     }
     return 0;
 }
@@ -176,9 +237,6 @@ Status IsomorphicBatchWrite::_write_data(StreamLoadContext* data_ctx) {
 
 Status IsomorphicBatchWrite::_wait_for_stream_load_pipe() {
     std::unique_lock<std::mutex> lock(_mutex);
-    if (!_alive_stream_load_pipe_ctxs.empty()) {
-        return Status::OK();
-    }
     _cv.wait_for(lock, std::chrono::milliseconds(config::batch_write_request_interval_ms),
                  [&]() { return !_alive_stream_load_pipe_ctxs.empty(); });
     if (!_alive_stream_load_pipe_ctxs.empty()) {
@@ -203,10 +261,19 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* context) {
     request.__set_params(_batch_write_id.load_params);
 
     TBatchWriteResult response;
-    Status st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+    Status st;
+
+#ifndef BE_TEST
+    st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &response](FrontendServiceConnection& client) { client->requestBatchWrite(response, request); },
             config::batch_write_reqeust_timeout_ms);
+#else
+    TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::send_rpc_request::request", &request);
+    TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::send_rpc_request::status", &st);
+    TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::send_rpc_request::response", &response);
+#endif
+
     return st.ok() ? Status(response.status) : st;
 }
 

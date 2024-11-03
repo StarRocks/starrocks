@@ -82,15 +82,21 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
 }
 
 void BatchWriteMgr::stop() {
-    std::unique_lock<std::shared_mutex> lock(_mutex);
-    if (_stopped) {
-        return;
+    std::vector<IsomorphicBatchWriteSharedPtr> stop_writes;
+    {
+        std::unique_lock<std::shared_mutex> lock(_mutex);
+        if (_stopped) {
+            return;
+        }
+        _stopped = true;
+        for (auto& [_, batch_write] : _batch_write_map) {
+            stop_writes.emplace_back(batch_write);
+        }
+        _batch_write_map.clear();
     }
-    _stopped = true;
-    for (auto& [_, batch_write] : _batch_write_map) {
+    for (auto& batch_write : stop_writes) {
         batch_write->stop();
     }
-    _batch_write_map.clear();
 }
 
 StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_context(

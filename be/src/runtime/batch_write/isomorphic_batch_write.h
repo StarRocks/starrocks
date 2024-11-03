@@ -70,11 +70,9 @@ struct BatchWriteIdEqual {
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
+class AsyncAppendDataContext;
 struct Task {
-    int64_t create_time_ns;
-    StreamLoadContext* data_ctx;
-    BThreadCountDownLatch* latch;
-    Status* result;
+    AsyncAppendDataContext* context;
 };
 
 class IsomorphicBatchWrite {
@@ -85,6 +83,8 @@ public:
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);
+    // For testing
+    bool contain_pipe(StreamLoadContext* pipe_ctx);
 
     Status append_data(StreamLoadContext* data_ctx);
 

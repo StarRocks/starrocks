@@ -172,13 +172,11 @@ public:
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
+    int num_refs() { return _refs.load(); }
+
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
-    static void release(StreamLoadContext* context) {
-        if (context->unref()) {
-            delete context;
-        }
-    }
+    static void release(StreamLoadContext* context);
 
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
