@@ -3015,12 +3015,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         LOG.info("listRecycleBinCatalogs params={}", params);
-        // TODO: check privilege
         UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
         TListRecycleBinCatalogsResult result = new TListRecycleBinCatalogsResult();
         List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo();
-
-
 
         for (List<String> record : rowSet) {
             TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();

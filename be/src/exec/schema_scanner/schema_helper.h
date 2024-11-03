@@ -110,8 +110,8 @@ public:
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
 
-	static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
-								  TListRecycleBinCatalogsResult* res);
+    static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                      TListRecycleBinCatalogsResult* res);
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
