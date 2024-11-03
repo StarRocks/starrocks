@@ -1866,6 +1866,7 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+<<<<<<< HEAD
 struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
@@ -1886,6 +1887,23 @@ struct TFinishCheckpointRequest {
 
 struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
+}
+
+struct TListRecycleBinCatalogsParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListRecycleBinCatalogsInfo {
+    1: optional string type
+    2: optional string name
+    3: optional string dbid
+    4: optional string tableid
+    5: optional string partitionid
+    6: optional string droptime
+}
+
+struct TListRecycleBinCatalogsResult {
+    1: optional list<TListRecycleBinCatalogsInfo> recyclebin_catalogs
 }
 
 service FrontendService {
@@ -2004,8 +2022,12 @@ service FrontendService {
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
 
+<<<<<<< HEAD
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+=======
+    TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
+>>>>>>> 0df9e55cac ([Enhancement] support show catalog recycle bin)
 }
 

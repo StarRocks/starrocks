@@ -256,6 +256,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
+import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
+import com.starrocks.thrift.TListRecycleBinCatalogsParams;
+import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListSessionsOptions;
 import com.starrocks.thrift.TListSessionsRequest;
 import com.starrocks.thrift.TListSessionsResponse;
@@ -2955,6 +2958,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+<<<<<<< HEAD
     public TStartCheckpointResponse startCheckpoint(TStartCheckpointRequest request) throws TException {
         CheckpointWorker worker;
         if (request.is_global_state_mgr) {
@@ -3005,5 +3009,31 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+    public TListRecycleBinCatalogsResult listRecycleBinCatalogs(TListRecycleBinCatalogsParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        LOG.info("listRecycleBinCatalogs params={}", params);
+        // TODO: check privilege
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        TListRecycleBinCatalogsResult result = new TListRecycleBinCatalogsResult();
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo();
+
+
+
+        for (List<String> record : rowSet) {
+            TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();
+            info.setType("1");
+            info.setName("2");
+            info.setDbid("3");
+            info.setTableid("4");
+            info.setPartitionid("5");
+            info.setDroptime("6");
+
+            result.addToRecyclebin_catalogs(info);
+        }
+
+        return result;
     }
 }

@@ -213,6 +213,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_RECYCLEBIN_CATALOGS:
+        return std::make_unique<SchemaTablePipeFiles>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
