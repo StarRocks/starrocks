@@ -96,6 +96,11 @@ public:
     // called when producer/consumer failed
     void cancel(const Status& status) override;
 
+    int32_t num_waiting_append() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _num_waiting_append;
+    }
+
 private:
     Status _append(const ByteBufferPtr& buf);
 
@@ -115,6 +120,7 @@ private:
     std::deque<ByteBufferPtr> _buf_queue;
     std::condition_variable _put_cond;
     std::condition_variable _get_cond;
+    int32_t _num_waiting_append{0};
 
     bool _finished{false};
     bool _cancelled{false};

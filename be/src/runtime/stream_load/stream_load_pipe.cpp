@@ -42,17 +42,14 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
-        if (_finished) {
-            return Status::CapacityLimitExceed("Stream load pipe is finished");
-        }
 
-        if (_cancelled) {
-            return _err_st;
-        }
+        _num_waiting_append += 1;
         // if _buf_queue is empty, we append this buf without size check
         _put_cond.wait(l, [&]() {
-            return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+            return _cancelled || _finished || _buf_queue.empty() ||
+                   _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
+        _num_waiting_append -= 1;
 
         if (_finished) {
             return Status::CapacityLimitExceed("Stream load pipe is finished");
@@ -241,6 +238,7 @@ Status StreamLoadPipe::finish() {
         std::lock_guard<std::mutex> l(_lock);
         _finished = true;
     }
+    _put_cond.notify_all();
     _get_cond.notify_all();
     return Status::OK();
 }

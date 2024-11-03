@@ -15,6 +15,7 @@
 #pragma once
 
 #include "runtime/stream_load/stream_load_pipe.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -24,9 +25,11 @@ public:
                               int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
                               size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES)
             : StreamLoadPipe(true, non_blocking_wait_ms, max_buffered_bytes, DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE) {
-        _start_time_ns = MonotonicNanos();
+        _start_time_ns = _get_current_ns();
         _active_time_ns = active_time_ms * 1000000;
     }
+
+    Status append(ByteBufferPtr&& buf) override { return StreamLoadPipe::append(std::move(buf)); }
 
     Status append(const char* data, size_t size) override {
         return Status::NotSupported("TimeBoundedStreamLoadPipe does not support input with char array");
@@ -37,6 +40,12 @@ public:
     Status read(uint8_t* data, size_t* data_size, bool* eof) override;
 
 private:
+    int64_t _get_current_ns() {
+        int64_t current_ts = MonotonicNanos();
+        TEST_SYNC_POINT_CALLBACK("TimeBoundedStreamLoadPipe::get_current_ns", &current_ts);
+        return current_ts;
+    }
+
     Status _finish_pipe_if_needed();
 
     int _start_time_ns;

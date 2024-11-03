@@ -27,7 +27,7 @@ Status TimeBoundedStreamLoadPipe::read(uint8_t* data, size_t* data_size, bool* e
 }
 
 Status TimeBoundedStreamLoadPipe::_finish_pipe_if_needed() {
-    auto current_ts = MonotonicNanos();
+    auto current_ts = _get_current_ns();
     if (_start_time_ns + _active_time_ns <= current_ts) {
         return StreamLoadPipe::finish();
     }

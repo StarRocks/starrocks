@@ -281,4 +281,79 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
     producer.join();
 }
 
+PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
+    StreamLoadPipe pipe(66, 64);
+
+    auto buf1 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf1->put_bytes(&c, sizeof(c));
+    }
+    buf1->flip();
+    ASSERT_OK(pipe.append(std::move(buf1)));
+
+    auto appender = [&pipe] {
+        while (pipe.num_waiting_append() == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(1));
+        }
+        ASSERT_OK(pipe.finish());
+    };
+    std::thread t1(appender);
+
+    auto buf2 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf2->put_bytes(&c, sizeof(c));
+    }
+    buf2->flip();
+    ASSERT_TRUE(pipe.append(std::move(buf1)).is_capacity_limit_exceeded());
+    t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, cancel_with_ok_status) {
+    StreamLoadPipe pipe(66, 64);
+
+    auto appender = [&pipe] {
+        int k = 0;
+        for (int i = 0; i < 10; ++i) {
+            char buf = '0' + (k++ % 10);
+            pipe.append(&buf, 1);
+        }
+        SleepFor(MonoDelta::FromMilliseconds(100));
+        pipe.cancel(Status::OK());
+    };
+    std::thread t1(appender);
+
+    char buf[128];
+    size_t buf_len = 128;
+    bool eof = false;
+    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
+    ASSERT_FALSE(st.ok());
+    t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, non_blocking_read) {
+    StreamLoadPipe pipe(true, 50);
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+
+    auto buf = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf->put_bytes(&c, sizeof(c));
+    }
+    buf->flip();
+    ASSERT_OK(pipe.append(std::move(buf)));
+
+    auto ret = pipe.read();
+    ASSERT_TRUE(ret.ok());
+    auto read_buf = ret.value();
+    ASSERT_EQ(64, read_buf->limit);
+    for (int i = 0; i < read_buf->pos; ++i) {
+        ASSERT_EQ('0' + i, *(read_buf->ptr + i));
+    }
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+}
+
 } // namespace starrocks
