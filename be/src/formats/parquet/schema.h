@@ -91,7 +91,7 @@ struct LevelInfo {
 
 enum ColumnType { SCALAR = 0, ARRAY, MAP, STRUCT };
 
-static std::string column_type_to_string(const ColumnType& column_type) {
+inline std::string column_type_to_string(const ColumnType& column_type) {
     switch (column_type) {
     case SCALAR:
         return "scalar";
@@ -145,7 +145,6 @@ struct ParquetField {
         } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
             return true;
         } else {
-            // defense code
             return false;
         }
     }

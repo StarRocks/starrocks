@@ -196,7 +196,7 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
         return true;
     }
 
-    if (!_check_has_same_complex_type(parquet_field->type, type_descriptor->type)) {
+    if (!parquet_field->has_same_complex_type(*type_descriptor)) {
         return false;
     }
 

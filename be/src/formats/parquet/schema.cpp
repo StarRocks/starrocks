@@ -34,7 +34,7 @@ std::string LevelInfo::debug_string() const {
 
 std::string ParquetField::debug_string() const {
     std::stringstream ss;
-    ss << "ParquetField(name=" << name << ",type=" << type << ",physical_type=" << physical_type
+    ss << "ParquetField(name=" << name << ",type=" << column_type_to_string(type) << ",physical_type=" << physical_type
        << ",physical_column_index=" << physical_column_index << ",levels_info=" << level_info.debug_string();
     if (children.size() > 0) {
         ss << ",children=[";
@@ -79,6 +79,7 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
                                        bool is_nullable, ParquetField* field) {
     field->name = t_schema->name;
     field->schema_element = *t_schema;
+    field->type = ColumnType::SCALAR;
     field->is_nullable = is_nullable;
     field->physical_type = t_schema->type;
     field->type_length = t_schema->type_length;
