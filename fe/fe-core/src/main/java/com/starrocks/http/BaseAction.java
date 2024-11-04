@@ -138,8 +138,12 @@ public abstract class BaseAction implements IAction {
         writeCustomHeaders(response, responseObj);
         writeCookies(response, responseObj);
 
-        boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest());
+        // Connection can be keep-alive only when
+        // - The client requests to keep-alive and,
+        // - The action doesn't close the connection forcibly.
+        boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest()) && !response.isForceCloseConnection();
         if (!keepAlive) {
+            responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.CLOSE.toString());
             request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
         } else {
             responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.KEEP_ALIVE.toString());
