@@ -3150,7 +3150,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         stmt.getDbMvName().getTbl());
             }
 
-            db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            db.dropTable(table.getName(), stmt.isSetIfExists(), stmt.isForceDrop());
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
