@@ -52,6 +52,7 @@ class SegmentReadOptions {
 public:
     std::shared_ptr<FileSystem> fs;
 
+    // Specified ranges outside the segment, is used to support parallel-reading within a tablet
     std::vector<SeekRange> ranges;
 
     PredicateTree pred_tree;
@@ -108,6 +109,11 @@ public:
     bool has_preaggregation = true;
 
     bool use_vector_index = false;
+    
+    // Data sampling by block-level, which is a core-component of TABLE-SAMPLE feature
+    // 1. Regular block smapling: Bernoulli sampling on page-id
+    // 2. Partial-Sorted block: leverage data ordering to improve the evenness
+    bool enable_block_sampling = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 

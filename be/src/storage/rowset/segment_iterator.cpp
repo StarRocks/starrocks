@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <random>
 #include <stack>
 #include <unordered_map>
 
@@ -267,6 +268,8 @@ private:
     bool _can_using_global_dict(const FieldPtr& field) const;
 
     Status _apply_bitmap_index();
+    
+    Status _apply_data_sampling();
 
     Status _apply_del_vector();
 
@@ -512,6 +515,8 @@ Status SegmentIterator::_init() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+    
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -2056,6 +2061,31 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
             },
             &new_root, &useless_root);
     pred_tree = PredicateTree::create(std::move(new_root));
+}
+
+Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    
+    // Generate a uniformly distributed random number
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<int> dist(1, 100); // Generates a random number between 1 and 100
+    
+    size_t rows_per_block = _segment->num_rows_per_block();
+    size_t total_rows = _segment->num_rows();
+    RowIdSparseRange sampled_ranges;
+    for (size_t i = 0; i < total_rows; i+= rows_per_block) {
+        int rnd = dist(mt);
+        if (rnd < 1) {
+            sampled_ranges.add(RowIdRange(i, i+rows_per_block));
+        }
+    }
+    
+    // shrink current scan range
+    _scan_range = _scan_range.intersection(sampled_ranges);
+    
+    return {};
 }
 
 // filter rows by evaluating column predicates using bitmap indexes.
