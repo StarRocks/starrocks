@@ -5610,6 +5610,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "as \n" +
                 "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;");
         {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2) t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    " UNION ALL" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    ") t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+
+        {
             String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;";
             String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
             PlanTestBase.assertContains(plan, "test_mv1");
