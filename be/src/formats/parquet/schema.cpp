@@ -25,6 +25,21 @@
 
 namespace starrocks::parquet {
 
+std::string column_type_to_string(const ColumnType& column_type) {
+    switch (column_type) {
+    case SCALAR:
+        return "scalar";
+    case ARRAY:
+        return "array";
+    case MAP:
+        return "map";
+    case STRUCT:
+        return "struct";
+    default:
+        return "unknown";
+    }
+}
+
 std::string LevelInfo::debug_string() const {
     std::stringstream ss;
     ss << "LevelInfo(max_def_level=" << max_def_level << ",max_rep_level=" << max_rep_level
@@ -48,6 +63,23 @@ std::string ParquetField::debug_string() const {
     }
     ss << ")";
     return ss.str();
+}
+
+bool ParquetField::is_complex_type() const {
+    return type == ARRAY || type == MAP || type == STRUCT;
+}
+
+bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) const {
+    // check the complex type is matched
+    if (type == ColumnType::ARRAY && type_descriptor.type == LogicalType::TYPE_ARRAY) {
+        return true;
+    } else if (type == ColumnType::MAP && type_descriptor.type == LogicalType::TYPE_MAP) {
+        return true;
+    } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 static bool is_group(const tparquet::SchemaElement* schema) {
