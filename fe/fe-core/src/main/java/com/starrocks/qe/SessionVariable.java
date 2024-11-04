@@ -4293,10 +4293,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableGeneratedColumnRewrite;
     }
 
-    public void setDisableGeneratedColumnRewrite(boolean disableGeneratedColumnRewrite) {
-        this.disableGeneratedColumnRewrite = disableGeneratedColumnRewrite;
-    }
-
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
