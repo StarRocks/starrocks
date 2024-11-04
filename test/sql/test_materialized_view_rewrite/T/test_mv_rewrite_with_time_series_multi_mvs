@@ -47,6 +47,11 @@ PROPERTIES (
 from t0 group by date_trunc('month', ts);
 refresh materialized view test_mv3 with sync mode;
 
+-- analyze mvs to make this case more stable
+[UC]analyze table test_mv1 WITH SYNC MODE;
+[UC]analyze table test_mv2 WITH SYNC MODE;
+[UC]analyze table test_mv3 WITH SYNC MODE;
+
 set enable_materialized_view_rewrite=true;
 
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
@@ -97,6 +102,11 @@ PROPERTIES (
 from test_mv2 group by date_trunc('month', dt);
 
 refresh materialized view test_mv3 with sync mode;
+
+-- analyze mvs to make this case more stable
+[UC]analyze table test_mv1 WITH SYNC MODE;
+[UC]analyze table test_mv2 WITH SYNC MODE;
+[UC]analyze table test_mv3 WITH SYNC MODE;
 
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
 function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;")
