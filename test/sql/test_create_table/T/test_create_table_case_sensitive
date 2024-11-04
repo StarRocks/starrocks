@@ -1,0 +1,4 @@
+-- name: test_create_table_sensitive
+create table t1(k int) order by (K);
+create table t2(K int) order by (k);
+create table t3 order by (k) as select * from t2;
