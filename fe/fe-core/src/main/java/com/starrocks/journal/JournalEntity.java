@@ -68,7 +68,6 @@ import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -476,7 +475,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_UPDATE_LOAD_JOB: {
-                data = LoadJobStateUpdateInfo.read(in);
+                data = LoadJob.LoadJobStateUpdateInfo.read(in);
                 break;
             }
             case OperationType.OP_CREATE_RESOURCE: {
@@ -811,15 +810,6 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
                 break;
             }
-            case OperationTypeEPack.OP_CREATE_WAREHOUSE:
-            case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), Warehouse.class);
-                break;
-            }
-            case OperationTypeEPack.OP_DROP_WAREHOUSE: {
-                data = DropWarehouseLog.read(in);
-                break;
-            }
             case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP: {
                 data = CreateFailoverGroupLog.read(in);
                 break;
@@ -846,6 +836,14 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_KEY: {
                 data = new Text(Text.readBinary(in));
+                break;
+            }
+            case OperationType.OP_CREATE_WAREHOUSE:
+            case OperationType.OP_ALTER_WAREHOUSE:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), Warehouse.class);
+                break;
+            case OperationType.OP_DROP_WAREHOUSE: {
+                data = DropWarehouseLog.read(in);
                 break;
             }
             default: {

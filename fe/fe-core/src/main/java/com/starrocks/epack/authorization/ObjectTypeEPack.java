@@ -20,8 +20,6 @@ public class ObjectTypeEPack extends ObjectType {
             return "MASKING POLICY";
         } else if (id == ROW_ACCESS_POLICY.id) {
             return "ROW ACCESS POLICY";
-        } else if (id == WAREHOUSE.id) {
-            return "WAREHOUSE";
         } else if (id == FAILOVER_GROUP.id) {
             return "FAILOVER GROUP";
         } else {
@@ -37,8 +35,6 @@ public class ObjectTypeEPack extends ObjectType {
             return "MASKING POLICIES";
         } else if (id == ROW_ACCESS_POLICY.id) {
             return "ROW ACCESS POLICIES";
-        } else if (id == WAREHOUSE.id) {
-            return "WAREHOUSES";
         } else if (id == FAILOVER_GROUP.id) {
             return "FAILOVER GROUPS";
         } else {
@@ -48,14 +44,12 @@ public class ObjectTypeEPack extends ObjectType {
 
     public static final ObjectTypeEPack MASKING_POLICY = new ObjectTypeEPack(20001);
     public static final ObjectTypeEPack ROW_ACCESS_POLICY = new ObjectTypeEPack(20002);
-    public static final ObjectTypeEPack WAREHOUSE = new ObjectTypeEPack(20003);
     public static final ObjectTypeEPack FAILOVER_GROUP = new ObjectTypeEPack(20004);
 
     public static final Map<String, ObjectType> NAME_TO_OBJECT = new ImmutableMap.Builder<String, ObjectType>()
             .putAll(ObjectType.NAME_TO_OBJECT)
             .put(MASKING_POLICY.name(), MASKING_POLICY)
             .put(ROW_ACCESS_POLICY.name(), ROW_ACCESS_POLICY)
-            .put(WAREHOUSE.name(), WAREHOUSE)
             .put(FAILOVER_GROUP.name(), FAILOVER_GROUP)
             .build();
 
@@ -63,7 +57,6 @@ public class ObjectTypeEPack extends ObjectType {
             .putAll(ObjectType.PLURAL_TO_OBJECT)
             .put(MASKING_POLICY.plural(), MASKING_POLICY)
             .put(ROW_ACCESS_POLICY.plural(), ROW_ACCESS_POLICY)
-            .put(WAREHOUSE.plural(), WAREHOUSE)
             .put(FAILOVER_GROUP.plural(), FAILOVER_GROUP)
             .build();
 }

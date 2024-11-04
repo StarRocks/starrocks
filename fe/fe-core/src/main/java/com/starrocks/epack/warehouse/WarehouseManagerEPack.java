@@ -72,7 +72,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     private void checkWarehouseState(LocalWarehouse warehouse) {
         if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-            ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
         }
     }
 
@@ -179,7 +179,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
-            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
@@ -339,12 +339,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
     @Override
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        int nameToWhSize = reader.readInt();
-        for (int i = 0; i != nameToWhSize; ++i) {
-            Warehouse warehouse = reader.readJson(Warehouse.class);
+        reader.readCollection(Warehouse.class, warehouse -> {
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);
-        }
+        });
     }
 
     @Override

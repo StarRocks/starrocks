@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.load;
+package com.starrocks.warehouse;
 
 public interface LoadJobWithWarehouse {
     long getCurrentWarehouseId();

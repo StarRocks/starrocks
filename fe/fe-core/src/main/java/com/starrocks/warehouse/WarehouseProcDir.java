@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.warehouse;
+package com.starrocks.warehouse;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -22,7 +22,6 @@ import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.warehouse.Warehouse;
 
 import java.util.List;
 
@@ -62,7 +61,9 @@ public class WarehouseProcDir implements ProcDirInterface {
         if (warehouse == null) {
             throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");
         }
-        return new WarehouseClusterProcNode(warehouse);
+
+        Warehouse finalWarehouse = warehouse;
+        return finalWarehouse::fetchResult;
     }
 
     @Override
@@ -71,9 +72,8 @@ public class WarehouseProcDir implements ProcDirInterface {
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
         List<Warehouse> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
         warehouseIds.forEach(x -> {
-            LocalWarehouse wh = (LocalWarehouse) x;
-            if (wh != null) {
-                result.addRow(wh.getWarehouseInfo());
+            if (x != null) {
+                result.addRow(x.getWarehouseInfo());
             }
         });
         return result;

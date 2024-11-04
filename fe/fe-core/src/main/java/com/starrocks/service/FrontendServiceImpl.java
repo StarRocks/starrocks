@@ -103,7 +103,6 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
-import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
@@ -337,6 +336,7 @@ import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -557,7 +557,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
                                 Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                            .getTable(db.getFullName(), tableName.getTbl());
+                                        .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
@@ -1162,7 +1162,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
     }
-
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
@@ -2297,7 +2296,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
-                            "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
+                                    "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
                             olapTable.getName(), Config.max_partitions_in_one_batch)));
             result.setStatus(errorStatus);
             return result;

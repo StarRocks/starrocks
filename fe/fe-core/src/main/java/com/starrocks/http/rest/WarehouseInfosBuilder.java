@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.http.rest;
+package com.starrocks.http.rest;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;

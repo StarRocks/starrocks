@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,6 +39,8 @@ import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+
+import static com.starrocks.warehouse.WarehouseProcDir.WAREHOUSE_PROC_NODE_TITLE_NAMES;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
@@ -218,5 +222,17 @@ public class LocalWarehouse extends Warehouse {
         }
 
         return rows;
+    }
+
+    public ProcResult fetchResult() {
+        BaseProcResult result = new BaseProcResult();
+        result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
+        List<Warehouse> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
+        warehouseIds.forEach(x -> {
+            if (x != null) {
+                result.addRow(x.getWarehouseInfo());
+            }
+        });
+        return result;
     }
 }

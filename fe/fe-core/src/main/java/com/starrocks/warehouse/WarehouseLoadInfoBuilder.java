@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.warehouse;
+package com.starrocks.warehouse;
 
 import com.google.common.collect.Maps;
-import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.warehouse.Warehouse;
 
 import java.util.Collection;
 import java.util.Map;

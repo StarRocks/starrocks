@@ -14,13 +14,13 @@
 
 package com.starrocks.epack.http.rest;
 
-import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.WarehouseInfo;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.Collection;

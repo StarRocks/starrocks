@@ -49,7 +49,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
-import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
@@ -88,6 +87,7 @@ import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
