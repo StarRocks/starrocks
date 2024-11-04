@@ -79,7 +79,7 @@ public class ThreadPoolManager {
 
     private static Map<String, ThreadPoolExecutor> nameToThreadPoolMap = Maps.newConcurrentMap();
 
-    private static final String[] poolMerticTypes = {"pool_size", "active_thread_num", "task_in_queue",
+    private static final String[] POOL_METRIC_TYPES = {"pool_size", "active_thread_num", "task_in_queue",
             "completed_task_count"};
 
     private static final long KEEP_ALIVE_TIME = 60L;
@@ -92,7 +92,7 @@ public class ThreadPoolManager {
     }
 
     public static void registerThreadPoolMetric(String poolName, ThreadPoolExecutor threadPool) {
-        for (String poolMetricType : poolMerticTypes) {
+        for (String poolMetricType : POOL_METRIC_TYPES) {
             GaugeMetric<Integer> gauge =
                     new GaugeMetric<Integer>("thread_pool", MetricUnit.NOUNIT, "thread_pool statistics") {
                         @Override
