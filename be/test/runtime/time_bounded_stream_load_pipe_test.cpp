@@ -91,10 +91,18 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_data_finish) {
         ASSERT_EQ('0' + i, *(read_buf + i));
     }
 
+    buf_len = 128;
+    eof = false;
     ASSERT_TRUE(pipe.read((uint8_t*)read_buf, &buf_len, &eof).is_time_out());
+    ASSERT_EQ(0, buf_len);
+    ASSERT_FALSE(eof);
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 2000000000; });
+
+    buf_len = 128;
+    eof = false;
     ASSERT_OK(pipe.read((uint8_t*)read_buf, &buf_len, &eof));
+    ASSERT_EQ(0, buf_len);
     ASSERT_TRUE(eof);
 }
 

@@ -19,14 +19,16 @@
 
 namespace starrocks {
 
+static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS = 50;
+
 class TimeBoundedStreamLoadPipe : public StreamLoadPipe {
 public:
-    TimeBoundedStreamLoadPipe(int active_time_ms,
+    TimeBoundedStreamLoadPipe(int32_t active_time_ms,
                               int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
                               size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES)
             : StreamLoadPipe(true, non_blocking_wait_ms, max_buffered_bytes, DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE) {
         _start_time_ns = _get_current_ns();
-        _active_time_ns = active_time_ms * 1000000;
+        _active_time_ns = active_time_ms * (int64_t)1000000;
     }
 
     Status append(ByteBufferPtr&& buf) override { return StreamLoadPipe::append(std::move(buf)); }
@@ -48,8 +50,8 @@ private:
 
     Status _finish_pipe_if_needed();
 
-    int _start_time_ns;
-    int _active_time_ns;
+    int64_t _start_time_ns;
+    int64_t _active_time_ns;
 };
 
 } // namespace starrocks

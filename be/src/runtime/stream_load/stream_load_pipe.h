@@ -49,7 +49,6 @@ namespace starrocks {
 
 static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES = 1024 * 1024;
 static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE = 64 * 1024;
-static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS = 50;
 
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
@@ -57,12 +56,10 @@ class StreamLoadPipe : public MessageBodySink {
 public:
     StreamLoadPipe(size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
                    size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
-            : StreamLoadPipe(false, DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS, max_buffered_bytes, min_chunk_size) {
-    }
+            : StreamLoadPipe(false, -1, max_buffered_bytes, min_chunk_size) {}
 
-    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
-                   size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
-                   size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
+    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_ms, size_t max_buffered_bytes,
+                   size_t min_chunk_size)
             : _non_blocking_read(non_blocking_read),
               _non_blocking_wait_ms(non_blocking_wait_ms),
               _max_buffered_bytes(max_buffered_bytes),
@@ -103,12 +100,6 @@ public:
 
 private:
     Status _append(const ByteBufferPtr& buf);
-
-    // Called when `no_block_read(uint8_t* data, size_t* data_size, bool* eof)`
-    // timeout in the mid of read, we will push the read data back to the _buf_queue.
-    // The lock is already acquired before calling this function
-    // and there is no need to acquire the lock again in the function
-    Status _push_front_unlocked(const ByteBufferPtr& buf);
 
     // Blocking queue
     std::mutex _lock;
