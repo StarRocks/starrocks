@@ -231,7 +231,7 @@ public class ConnectProcessor {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                 }
             }
-            if (Config.enable_sql_digest) {
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
                 ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
