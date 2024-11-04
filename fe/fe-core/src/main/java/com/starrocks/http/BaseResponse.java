@@ -34,12 +34,24 @@ public class BaseResponse {
     protected Map<String, List<String>> customHeaders = Maps.newHashMap();
     private Set<Cookie> cookies = Sets.newHashSet();
 
+    // whether the connection needs to be closed forcibly.
+    // Default: no, allow the client to reuse the connection whenever possible.
+    private boolean forceCloseConnection = false;
+
     public String getContentType() {
         return contentType;
     }
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public boolean isForceCloseConnection() {
+        return forceCloseConnection;
+    }
+
+    public void setForceCloseConnection(boolean closeConnection) {
+        this.forceCloseConnection = closeConnection;
     }
 
     public StringBuilder getContent() {
