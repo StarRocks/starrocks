@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
  * check will also be executed in the same thread. Currently, We think there won't be too many loads that need to be
  * scheduled, so the single thread will not be the bottleneck.
  */
-public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigner {
+public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigner {
 
     private static final Logger LOG = LoggerFactory.getLogger(CoordinatorBackendAssignerImpl.class);
 
@@ -78,11 +78,6 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
 
     // Warehouse metas. warehouse id -> WarehouseMeta. Only read/write in the singleExecutor
     private final Map<Long, WarehouseMeta> warehouseMetas;
-
-    // The loads that need to deallocate the nodes. load id -> LoadMeta. If fail to submit
-    // EventType.UNREGISTER_LOAD task in unregisterBatchWrite(), the load will be put into
-    // this map, and retry in the periodical check
-    private final ConcurrentHashMap<Long, LoadMeta> needDeallocateLoads;
 
     // The number of tasks to be executed triggered by EventType.DETECT_UNAVAILABLE_NODES.
     // It's used to avoid submitting too many similar tasks when there are unavailable nodes.
@@ -102,7 +97,6 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
                 1, "coordinator-be-assigner", true);
         this.registeredLoadMetas = new ConcurrentHashMap<>();
         this.warehouseMetas = new HashMap<>();
-        this.needDeallocateLoads = new ConcurrentHashMap<>();
         this.numPendingTasksForDetectUnavailableNodes = new AtomicLong(0);
         this.numExecutedTasks = new AtomicLong(0);
         this.isPeriodicalCheckRunning = new AtomicBoolean(false);
@@ -139,7 +133,10 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
             }
 
             if (task == null) {
-                runPeriodicalCheck();
+                if (isPeriodicalCheckRunning.compareAndSet(false, true)) {
+                    runPeriodicalCheck();
+                    isPeriodicalCheckRunning.set(false);
+                }
                 continue;
             }
 
@@ -181,22 +178,15 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
                     EventType.REGISTER_LOAD,
                     () -> this.runRegisterLoadTask(loadMeta)
             );
-            boolean ret = taskPriorityQueue.add(task);
-            if (!ret) {
-                LOG.error("Failed to submit task to assign coordinator backends, load id: {}, warehouse: {}, {}, " +
-                        "queue size: {}", loadMeta.loadId, warehouseId, tableId, taskPriorityQueue.size());
-                throw new RejectedExecutionException(
-                        String.format("Failed to submit task %s, load id: %s", EventType.REGISTER_LOAD,
-                                loadMeta.loadId));
-            }
+            taskPriorityQueue.add(task);
+
             long startTime = System.currentTimeMillis();
             try {
                 task.future.get(30, TimeUnit.SECONDS);
             } catch (Exception e) {
                 LOG.warn("Failed to wait for assigning coordinator backends, load id: {}", loadId, e);
                 throw new RejectedExecutionException(
-                        String.format("Failed to wait for assigning coordinator backends, load id: %s, error: %s",
-                                loadId, e.getMessage()));
+                        String.format("Failed to wait for assigning coordinator backends, load id: %s", loadId), e);
             }
             sucess = true;
             LOG.info("Finish to wait for assigning coordinator backends, load id: {}, cost: {} ms",
@@ -221,15 +211,9 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
                 taskIdAllocator.incrementAndGet(),
                 EventType.UNREGISTER_LOAD,
                 () -> this.runUnregisterLoadTask(loadMeta));
-        boolean ret = taskPriorityQueue.add(task);
-        if (!ret) {
-            needDeallocateLoads.put(loadMeta.loadId, loadMeta);
-            LOG.error("Failed to submit task to deallocate nodes, load id: {}, queue size: {}",
-                    loadMeta.loadId, taskPriorityQueue.size());
-        } else {
-            LOG.info("Success to submit task to deallocate nodes, load id: {}, task id: {}",
-                    loadMeta.loadId, task.getTaskId());
-        }
+        taskPriorityQueue.add(task);
+        LOG.info("Success to submit task to deallocate nodes, load id: {}, task id: {}",
+                loadMeta.loadId, task.getTaskId());
     }
 
     // Returns the coordinator backends for a load
@@ -265,17 +249,10 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
                         taskIdAllocator.incrementAndGet(),
                         EventType.DETECT_UNAVAILABLE_NODES,
                         () -> this.runDetectUnavailableNodesTask(loadMeta));
-                boolean ret = taskPriorityQueue.add(task);
-                if (!ret) {
-                    numPendingTasksForDetectUnavailableNodes.decrementAndGet();
-                    LOG.error("Failed to submit task after finding unavailable nodes, load id {}, " +
-                                    "unavailable node ids: {}, queue size: {}", loadMeta.loadId,
-                                            unavailableNodes, taskPriorityQueue.size());
-                } else {
-                    LOG.info("Submit task after finding unavailable nodes, load id: {}, task id: {}, " +
-                            "pending task num: {}", loadMeta.loadId, task.getTaskId(),
-                                numPendingTasksForDetectUnavailableNodes.get());
-                }
+                taskPriorityQueue.add(task);
+                LOG.info("Submit task after finding unavailable nodes, load id: {}, task id: {}, " +
+                        "pending task num: {}", loadMeta.loadId, task.getTaskId(),
+                            numPendingTasksForDetectUnavailableNodes.get());
             }
         }
 
@@ -283,7 +260,7 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
     }
 
     // Execute EventType.REGISTER_LOAD task which assigns nodes to the load
-    private void runRegisterLoadTask(LoadMeta loadMeta) {
+    void runRegisterLoadTask(LoadMeta loadMeta) {
         long warehouseId = loadMeta.warehouseId;
         WarehouseMeta warehouseMeta =
                 warehouseMetas.computeIfAbsent(warehouseId, WarehouseMeta::new);
@@ -389,41 +366,27 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
         checkNodeStatusAndReassignment(warehouseMeta);
     }
 
-    private void runPeriodicalCheck() {
+    void runPeriodicalCheck() {
         long startTime = System.currentTimeMillis();
-        if (!isPeriodicalCheckRunning.compareAndSet(false, true)) {
-            return;
-        }
         try {
-            Iterator<Map.Entry<Long, LoadMeta>> iterator = needDeallocateLoads.entrySet().iterator();
-            while (iterator.hasNext()) {
-                runUnregisterLoadTask(iterator.next().getValue());
-                iterator.remove();
+            List<Long> warehouseIds = new ArrayList<>(warehouseMetas.keySet());
+            for (long warehouseId : warehouseIds) {
+                WarehouseMeta warehouseMeta = warehouseMetas.get(warehouseId);
+                if (warehouseMeta.loadMetas.isEmpty()) {
+                    warehouseMetas.remove(warehouseMeta.warehouseId);
+                    LOG.info("Remove empty warehouse {}", warehouseMeta.warehouseId);
+                } else {
+                    checkNodeStatusAndReassignment(warehouseMeta);
+                    doBalanceIfNeeded(warehouseMeta, Config.batch_write_be_assigner_balance_factor_threshold);
+                    if (LOG.isDebugEnabled()) {
+                        logStatistics(warehouseMeta);
+                    }
+                }
             }
-            checkNodeStatusAndBalance();
             LOG.debug("Success to execute periodical schedule, cost: {} ms", System.currentTimeMillis() - startTime);
         } catch (Throwable throwable) {
             LOG.error("Failed to execute periodical schedule, cost: {} ms",
                     System.currentTimeMillis() - startTime, throwable);
-        } finally {
-            isPeriodicalCheckRunning.compareAndSet(true, false);
-        }
-    }
-
-    void checkNodeStatusAndBalance() {
-        List<Long> warehouseIds = new ArrayList<>(warehouseMetas.keySet());
-        for (long warehouseId : warehouseIds) {
-            WarehouseMeta warehouseMeta = warehouseMetas.get(warehouseId);
-            if (warehouseMeta.loadMetas.isEmpty()) {
-                warehouseMetas.remove(warehouseMeta.warehouseId);
-                LOG.info("Remove empty warehouse {}", warehouseMeta.warehouseId);
-            } else {
-                checkNodeStatusAndReassignment(warehouseMeta);
-                doBalanceIfNeeded(warehouseMeta, Config.batch_write_be_assigner_balance_factor_threshold);
-                if (LOG.isDebugEnabled()) {
-                    logStatistics(warehouseMeta);
-                }
-            }
         }
     }
 
@@ -718,7 +681,7 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
     }
 
     // Note that warehouse id may be invalid after the warehouse is dropped, and an exception can be thrown
-    private List<ComputeNode> getAvailableNodes(long warehouseId) throws Exception {
+    List<ComputeNode> getAvailableNodes(long warehouseId) throws Exception {
         List<ComputeNode> nodes = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
             List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
@@ -732,6 +695,11 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
             nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
         }
         return nodes;
+    }
+
+    @VisibleForTesting
+    boolean containLoad(long loadId) {
+        return registeredLoadMetas.containsKey(loadId);
     }
 
     @VisibleForTesting
@@ -822,14 +790,14 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
 
     // The event type that trigger an assignment
     enum EventType {
-        // unregister a load
-        UNREGISTER_LOAD(0),
+        // register a load
+        REGISTER_LOAD(0),
         // detect unavailable nodes
         DETECT_UNAVAILABLE_NODES(1),
-        // register a load
-        REGISTER_LOAD(2);
+        // unregister a load
+        UNREGISTER_LOAD(2);
 
-        // a larger number is with a higher priority
+        // a smaller number is with a higher priority
         private final int priority;
 
         EventType(int priority) {
@@ -890,7 +858,7 @@ public class CoordinatorBackendAssignerImpl implements CoordinatorBackendAssigne
             }
 
             // a smaller task id is with high priority
-            return Long.compare(task2.getTaskId(), task1.getTaskId());
+            return Long.compare(task1.getTaskId(), task2.getTaskId());
         }
     }
 }

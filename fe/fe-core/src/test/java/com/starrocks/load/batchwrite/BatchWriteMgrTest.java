@@ -16,6 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.thrift.TStatusCode;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Before;
@@ -172,6 +173,24 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
             }
         };
         batchWriteMgr.cleanupInactiveBatchWrite();
+        assertEquals(0, batchWriteMgr.numBatchWrites());
+    }
+
+    @Test
+    public void testAssignerRegisterBatchWriteFail() {
+        StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {{
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            }});
+        CoordinatorBackendAssigner assigner = batchWriteMgr.getCoordinatorBackendAssigner();
+        new Expectations(assigner) {
+            {
+                assigner.registerBatchWrite(anyLong, anyLong, (TableId) any, anyInt);
+                result = new Exception("registerBatchWrite failed");
+            }
+        };
+        RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
+        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
         assertEquals(0, batchWriteMgr.numBatchWrites());
     }
 }

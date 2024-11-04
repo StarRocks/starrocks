@@ -17,6 +17,7 @@ package com.starrocks.load.batchwrite;
 import com.starrocks.common.Config;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.awaitility.Awaitility;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,13 +26,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
 
@@ -155,7 +162,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
     }
 
     @Test
-    public void testBalance() throws Exception {
+    public void testPeriodicalCheck() throws Exception {
         Set<Long> backendIds = new HashSet<>();
         for (int i = 1; i <= 100; i++) {
             assigner.registerBatchWrite(
@@ -168,13 +175,26 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         assertEquals(5, backendIds.size());
         assertTrue(assigner.currentLoadDiffRatio(1) < Config.batch_write_be_assigner_balance_factor_threshold);
 
+
+        // create empty warehouse meta
+        assigner.registerBatchWrite(
+                201, 2, new TableId(DB_NAME_1, TABLE_NAME_1_1), 4);
+        long expectNumScheduledTask = assigner.numScheduledTasks() + 1;
+        assigner.unregisterBatchWrite(201);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> assigner.numScheduledTasks() == expectNumScheduledTask);
+        CoordinatorBackendAssignerImpl.WarehouseMeta whMeta = assigner.getWarehouseMeta(2);
+        assertNotNull(whMeta);
+        assertTrue(whMeta.loadMetas.isEmpty());
+
         assigner.disablePeriodicalScheduleForTest();
         for (int i = 10006; i <= 10010; i++) {
             UtFrameUtils.addMockBackend(i);
         }
         try {
             backendIds.clear();
-            assigner.checkNodeStatusAndBalance();
+            assigner.runPeriodicalCheck();
+            assertNull(assigner.getWarehouseMeta(2));
             assertTrue(assigner.currentLoadDiffRatio(1) < Config.batch_write_be_assigner_balance_factor_threshold);
             for (int i = 1; i <= 100; i++) {
                 Optional<List<ComputeNode>> nodes = assigner.getBackends(i);
@@ -189,6 +209,54 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
                 UtFrameUtils.dropMockBackend(i);
             }
         }
+    }
+
+    @Test
+    public void testRegisterBatchWriteFailure() throws Exception {
+        new Expectations(assigner) {
+            {
+                assigner.getAvailableNodes(anyLong);
+                result = new RuntimeException("can't find warehouse");
+            }
+        };
+
+        try {
+            assigner.registerBatchWrite(
+                    1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
+            fail();
+        } catch (Exception e) {
+            assertTrue(e instanceof RejectedExecutionException);
+            assertTrue(e.getCause().getCause() instanceof RuntimeException);
+        }
+        assertFalse(assigner.containLoad(1));
+    }
+
+    @Test
+    public void testTaskComparator() {
+        CoordinatorBackendAssignerImpl.Task task1 =
+                new CoordinatorBackendAssignerImpl.Task(1,
+                        CoordinatorBackendAssignerImpl.EventType.REGISTER_LOAD, () -> {});
+        CoordinatorBackendAssignerImpl.Task task2 =
+                new CoordinatorBackendAssignerImpl.Task(2,
+                        CoordinatorBackendAssignerImpl.EventType.DETECT_UNAVAILABLE_NODES, () -> {});
+        CoordinatorBackendAssignerImpl.Task task3 =
+                new CoordinatorBackendAssignerImpl.Task(3,
+                        CoordinatorBackendAssignerImpl.EventType.UNREGISTER_LOAD, () -> {});
+        CoordinatorBackendAssignerImpl.Task task4 =
+                new CoordinatorBackendAssignerImpl.Task(4,
+                        CoordinatorBackendAssignerImpl.EventType.UNREGISTER_LOAD, () -> {});
+
+        PriorityBlockingQueue<CoordinatorBackendAssignerImpl.Task> queue =
+                new PriorityBlockingQueue<>(1, CoordinatorBackendAssignerImpl.TaskComparator.INSTANCE);
+        assertTrue(queue.add(task1));
+        assertTrue(queue.add(task2));
+        assertTrue(queue.add(task3));
+        assertTrue(queue.add(task4));
+
+        assertSame(task1, queue.poll());
+        assertSame(task2, queue.poll());
+        assertSame(task3, queue.poll());
+        assertSame(task4, queue.poll());
     }
 
     private boolean containsLoadMeta(long loadId, long warehouseId) {

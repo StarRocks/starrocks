@@ -220,8 +220,7 @@ public class BatchWriteMgr extends FrontendDaemon {
         return isomorphicBatchWriteMap.size();
     }
 
-    @VisibleForTesting
-    Map<BatchWriteId, IsomorphicBatchWrite> getIsomorphicBatchWriteMap() {
-        return isomorphicBatchWriteMap;
+    public CoordinatorBackendAssigner getCoordinatorBackendAssigner() {
+        return coordinatorBackendAssigner;
     }
 }
