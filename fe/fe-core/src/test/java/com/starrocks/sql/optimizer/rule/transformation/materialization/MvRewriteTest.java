@@ -1746,6 +1746,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
     }
 
+    private List<MvPlanContext> getPlanContext(MaterializedView mv, boolean useCache) {
+        boolean prev = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache);
+        List<MvPlanContext> result = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                connectContext.getSessionVariable(), mv);
+        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(prev);
+        return result;
+    }
+
     @Test
     public void testPlanCache() throws Exception {
         {
@@ -1758,15 +1767,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "agg_join_mv_1");
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            List<MvPlanContext> planContexts = getPlanContext(mv, false);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            planContexts = getPlanContext(mv, true);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            planContexts = getPlanContext(mv, false);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             starRocksAssert.dropMaterializedView("agg_join_mv_1");
@@ -1780,7 +1789,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "mv_with_window");
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
@@ -1800,7 +1809,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 starRocksAssert.withMaterializedView(mvSql);
 
                 MaterializedView mv = getMv("test", mvName);
-                List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                List<MvPlanContext> planContexts = getPlanContext(mv, true);
                 Assert.assertNotNull(planContexts);
                 Assert.assertNotNull(planContexts.size() == 1);
             }
@@ -1828,10 +1837,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 }
             };
             // build cache
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assert.assertEquals(Lists.newArrayList(), planContexts);
             // hit cache
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            planContexts = getPlanContext(mv, true);
             Assert.assertEquals(Lists.newArrayList(), planContexts);
         }
     }
