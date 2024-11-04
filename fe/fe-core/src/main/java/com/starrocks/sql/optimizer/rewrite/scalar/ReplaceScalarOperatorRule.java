@@ -29,11 +29,10 @@ public class ReplaceScalarOperatorRule extends BottomUpScalarOperatorRewriteRule
 
     @Override
     public ScalarOperator visit(ScalarOperator scalarOperator, ScalarOperatorRewriteContext context) {
-        for (Map.Entry<ScalarOperator, ColumnRefOperator> m : translateMap.entrySet()) {
-            if (m.getKey().equals(scalarOperator)) {
-                return m.getValue();
-            }
+        if (translateMap.containsKey(scalarOperator)) {
+            return translateMap.get(scalarOperator);
         }
+
         return scalarOperator;
     }
 }
