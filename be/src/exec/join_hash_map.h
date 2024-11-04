@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #define JOIN_HASH_MAP_H
 
@@ -100,7 +99,8 @@ struct HashTableSlotDescriptor {
 };
 
 struct JoinHashTableItems {
-    SegmentedChunkPtr build_chunk = nullptr;
+    //TODO: memory continues problem?
+    ChunkPtr build_chunk = nullptr;
     Columns key_columns;
     std::vector<HashTableSlotDescriptor> build_slots;
     std::vector<HashTableSlotDescriptor> probe_slots;
@@ -294,9 +294,6 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
     bool mor_reader_mode = false;
-
-    // TODO: optimize this according to chunk width
-    size_t build_chunk_segment_size = 1 << 20;
 };
 
 template <class T>
@@ -691,10 +688,9 @@ private:
 
     void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
-    void _copy_build_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
-                            bool to_nullable);
+    void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
-    void _copy_build_nullable_column(const SegmentedColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+    void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
     void _probe_index_output(ChunkPtr* chunk);
     void _build_index_output(ChunkPtr* chunk);
@@ -842,7 +838,7 @@ public:
     // convert input column to spill schema order
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
 
-    const SegmentedChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
+    const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
     const Columns& get_key_columns() const { return _table_items->key_columns; }
     uint32_t get_row_count() const { return _table_items->row_count; }
