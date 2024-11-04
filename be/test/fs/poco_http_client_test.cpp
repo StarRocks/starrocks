@@ -142,7 +142,6 @@ TEST_F(PocoHttpClientTest, TestDisableSSL) {
     // Create a client configuration object and set the custom retry strategy
     config.retryStrategy = retryStrategy;
 
-
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
 
     auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
