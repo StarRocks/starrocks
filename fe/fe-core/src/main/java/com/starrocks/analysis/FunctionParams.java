@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.common.io.Writable;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -112,7 +113,7 @@ public class FunctionParams implements Writable {
     }
 
     public String getOrderByStringToSql() {
-        if (orderByElements != null && !orderByElements.isEmpty()) {
+        if (!CollectionUtils.isEmpty(orderByElements)) {
             StringBuilder sb = new StringBuilder();
             sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
                     collect(Collectors.joining(" ")));
@@ -123,7 +124,7 @@ public class FunctionParams implements Writable {
     }
 
     public String getOrderByStringToExplain() {
-        if (orderByElements != null && !orderByElements.isEmpty()) {
+        if (!CollectionUtils.isEmpty(orderByElements)) {
             StringBuilder sb = new StringBuilder();
             sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
                     collect(Collectors.joining(" ")));

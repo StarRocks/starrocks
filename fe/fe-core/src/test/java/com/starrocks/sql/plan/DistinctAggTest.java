@@ -72,7 +72,7 @@ public class DistinctAggTest extends PlanTestBase {
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(1, 2, 3, 4), multi_distinct_sum(1), avg(1), " +
-                "group_concat(DISTINCT '1', '2', ','), array_agg_distinct(1)");
+                "group_concat2(DISTINCT '1', '2', ','), array_agg_distinct(1)");
         sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
@@ -91,7 +91,7 @@ public class DistinctAggTest extends PlanTestBase {
         sql = "select group_concat(distinct 1.33) from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: group_concat(DISTINCT '1.33', ',')");
+                "  |  output: group_concat2(DISTINCT '1.33', ',')");
 
         sql = "select  distinct 111 as id, 111 as id from t0 order by id + 1";
         plan = getFragmentPlan(sql);
@@ -111,7 +111,7 @@ public class DistinctAggTest extends PlanTestBase {
                         "  |  group by:"));
         argumentsList.add(Arguments.of("select group_concat(distinct v1, v2) from (select * from t0 limit 2) t",
                 "4:AGGREGATE (merge finalize)\n" +
-                        "  |  output: group_concat(4: group_concat, ',')\n" +
+                        "  |  output: group_concat2(4: group_concat2, ',')\n" +
                         "  |  group by: "));
         argumentsList.add(Arguments.of("select count(distinct v1, v2) from (select * from t0 limit 2) t group by 1 + 1",
                 "5:AGGREGATE (merge finalize)\n" +
@@ -119,7 +119,7 @@ public class DistinctAggTest extends PlanTestBase {
                         "  |  group by: 4: expr"));
         argumentsList.add(Arguments.of("select group_concat(distinct v1, v2) from (select * from t0 limit 2) t group by v3",
                 "3:AGGREGATE (update finalize)\n" +
-                        "  |  output: group_concat(CAST(1: v1 AS VARCHAR), CAST(2: v2 AS VARCHAR), ',')\n" +
+                        "  |  output: group_concat2(CAST(1: v1 AS VARCHAR), CAST(2: v2 AS VARCHAR), ',')\n" +
                         "  |  group by: 3: v3"));
 
         argumentsList.add(Arguments.of("select count(distinct v1, v2), sum(v1) + max(v2) " +
@@ -130,7 +130,7 @@ public class DistinctAggTest extends PlanTestBase {
         argumentsList.add(Arguments.of("select group_concat(distinct v1, v2), sum(v2) + max(v1)" +
                         " from (select * from t0 limit 2) t",
                 "4:AGGREGATE (merge finalize)\n" +
-                        "  |  output: group_concat(4: group_concat, ','), sum(5: sum), max(6: max)\n" +
+                        "  |  output: group_concat2(4: group_concat2, ','), sum(5: sum), max(6: max)\n" +
                         "  |  group by: "));
         argumentsList.add(Arguments.of("select count(distinct v1, v2), sum(v1) - min(v2) " +
                         "from (select * from t0 limit 2) t group by 1 + 1",
@@ -140,9 +140,7 @@ public class DistinctAggTest extends PlanTestBase {
         argumentsList.add(Arguments.of("select group_concat(distinct v1, v2), sum(v2) - min(v1) " +
                         "from (select * from t0 limit 2) t group by v3",
                 "3:AGGREGATE (update finalize)\n" +
-                        "  |  output: group_concat(CAST(1: v1 AS VARCHAR), CAST(2: v2 AS VARCHAR), ',')"));
-
-
+                        "  |  output: group_concat2(CAST(1: v1 AS VARCHAR), CAST(2: v2 AS VARCHAR), ',')"));
 
         argumentsList.add(Arguments.of("select array_agg(distinct v1 order by 1, v3), sum(v2) from t0 " +
                         "group by rollup(v3, abs(v1 + v2))",
@@ -173,24 +171,25 @@ public class DistinctAggTest extends PlanTestBase {
         argumentsList.add(Arguments.of("select group_concat(distinct v1 order by 1, v3), sum(v2) from t0 " +
                         "group by rollup(v3, abs(v1 + v2))",
                 "6:AGGREGATE (update finalize)\n" +
-                        "  |  output: group_concat(CAST(1: v1 AS VARCHAR), ',', 1: v1, 5: expr), sum(7: sum)\n" +
+                        "  |  output: group_concat2(CAST(1: v1 AS VARCHAR), ',', 1: v1, 5: expr), sum(7: sum)\n" +
                         "  |  group by: 3: v3, 4: abs, 8: GROUPING_ID"));
 
         argumentsList.add(Arguments.of("select /*+set_var(new_planner_agg_stage = 4) */" +
                         "if(length(group_concat(distinct v1, v2 order by 2, v3)) > 10, " +
                         "max(v1), min(v1)), sum(v2) from t0 group by rollup(v3, abs(v1 + v2))",
                 "8:AGGREGATE (merge finalize)\n" +
-                        "  |  output: group_concat(6: group_concat, ','), max(7: max), min(8: min), sum(9: sum)\n" +
+                        "  |  output: group_concat2(6: group_concat2, ','), max(7: max), min(8: min), sum(9: sum)\n" +
                         "  |  group by: 3: v3, 4: abs, 10: GROUPING_ID"));
 
         argumentsList.add(Arguments.of("select group_concat(distinct v2), array_agg(distinct v2), " +
                         "count(distinct v2), sum(v3 + v1) from t0 group by rollup(v3, v1);",
                 "6:AGGREGATE (update finalize)\n" +
-                        "  |  output: group_concat(CAST(2: v2 AS VARCHAR), ','), array_agg(2: v2), count(2: v2), sum(8: sum)"));
+                        "  |  output: group_concat2(CAST(2: v2 AS VARCHAR), ','), array_agg(2: v2), count(2: v2), sum(8: sum)"));
+
         argumentsList.add(Arguments.of("select group_concat(distinct 1), array_agg(distinct 2), sum(v3) from t0 " +
                         "group by v2, v3",
                 "3:AGGREGATE (merge finalize)\n" +
-                        "  |  output: group_concat(4: group_concat, '1', ','), array_agg_distinct(5: array_agg), sum(6: sum)"));
+                        "  |  output: group_concat2(4: group_concat2, '1', ','), array_agg_distinct(5: array_agg), sum(6: sum)"));
 
         return argumentsList.stream();
     }

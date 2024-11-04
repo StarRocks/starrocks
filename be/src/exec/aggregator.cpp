@@ -177,7 +177,9 @@ void AggregatorParams::init() {
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
             agg_fn_types[i].is_always_nullable_result =
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
-            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
+            // To be compatible with old versions, check group_concat/group_concat2 both.
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat" ||
+                fn.name.function_name == "group_concat2") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
@@ -469,8 +471,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         _agg_fn_ctxs[i] =
                 FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_types, agg_fn_type.is_distinct,
                                                 agg_fn_type.is_asc_order, agg_fn_type.nulls_first);
+        auto& ctx_query_options = _agg_fn_ctxs[i]->get_ctx_query_options();
         if (state->query_options().__isset.group_concat_max_len) {
-            _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
+            ctx_query_options.set_group_concat_max_len(state->query_options().group_concat_max_len);
+        }
+        if (state->query_options().__isset.default_group_concat_separator) {
+            ctx_query_options.set_default_group_concat_separator(state->query_options().default_group_concat_separator);
         }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
@@ -511,7 +517,7 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
     }
 
     // check whether it's _merge/_union combinator if it contains agg state type
-    auto& func_name = fn.name.function_name;
+    auto func_name = fn.name.function_name;
     if (fn.__isset.agg_state_desc) {
         if (arg_types.size() != 1) {
             return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 with (arg type $1)",
@@ -558,6 +564,11 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             TypeDescriptor arg_type = arg_types[0];
+
+            // To be compatible with old versions, change group_concat to group_concat2 if the intermediate type is struct.
+            if (fn.name.function_name == "group_concat" && serde_type.type == TYPE_STRUCT) {
+                func_name = "group_concat2";
+            }
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
                                                 state->func_version());
             if (func == nullptr) {

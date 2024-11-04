@@ -208,7 +208,7 @@ public class FunctionAnalyzer {
             throw new SemanticException("COUNT_IF does not support DISTINCT", functionCallExpr.getPos());
         }
 
-        if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
+        if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT_V2)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
                         "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
@@ -886,7 +886,7 @@ public class FunctionAnalyzer {
         Type[] argsTypes = new Type[argumentTypes.length];
         for (int i = 0; i < argumentTypes.length; ++i) {
             argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
-            if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argumentTypes.length - isAscOrder.size()) {
+            if (fnName.equals(FunctionSet.GROUP_CONCAT_V2) && i < argumentTypes.length - isAscOrder.size()) {
                 argsTypes[i] = Type.VARCHAR;
             }
         }
@@ -928,7 +928,7 @@ public class FunctionAnalyzer {
             fn = fn.copy();
             fn.setArgsType(argumentTypes); // as accepting various types
             fn.setIsNullable(false);
-        } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+        } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT_V2)) {
             // move order by expr to node child, and extract is_asc and null_first information.
             fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -945,6 +945,7 @@ public class FunctionAnalyzer {
             Pair<Type[], Type> argsAndIntermediateTypes =
                     getArrayAggGroupConcatIntermediateType(fnName, argumentTypes, isAscOrder);
             Type[] argsTypes = argsAndIntermediateTypes.first;
+
             fn.setArgsType(argsTypes); // as accepting various types
             ((AggregateFunction) fn).setIntermediateType(argsAndIntermediateTypes.second);
             ((AggregateFunction) fn).setIsAscOrder(isAscOrder);

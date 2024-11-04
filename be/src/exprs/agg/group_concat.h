@@ -102,17 +102,18 @@ public:
             std::string& result = this->data(state).intermediate_string;
 
             Slice val = column_val->get_slice(row_num);
+            auto separator = ctx->get_ctx_query_options().default_group_concat_separator;
             //DEFAULT sep_length.
             if (!this->data(state).initial) {
                 this->data(state).initial = true;
 
                 // separator's length;
-                uint32_t size = 2;
+                uint32_t size = separator.size();
                 result.append(reinterpret_cast<const char*>(&size), sizeof(uint32_t))
-                        .append(", ")
+                        .append(separator)
                         .append(val.get_data(), val.get_size());
             } else {
-                result.append(", ").append(val.get_data(), val.get_size());
+                result.append(separator).append(val.get_data(), val.get_size());
             }
         }
     }
@@ -258,8 +259,9 @@ public:
             const auto* column_value = down_cast<BinaryColumn*>(src[0].get());
 
             if (chunk_size > 0) {
-                const char* sep = ", ";
-                const uint32_t size_sep = 2;
+                auto separator = ctx->get_ctx_query_options().default_group_concat_separator;
+                auto sep = separator.data();
+                const uint32_t size_sep = separator.size();
 
                 size_t old_size = bytes.size();
                 CHECK_EQ(old_size, 0);
@@ -666,7 +668,7 @@ public:
 
         bytes.resize(offset + length);
         bool overflow = false;
-        size_t limit = ctx->get_group_concat_max_len() + offset;
+        size_t limit = ctx->get_ctx_query_options().group_concat_max_len + offset;
         auto last_unique_row_id = elem_size - 1;
         for (auto i = elem_size - 1; i >= 0; i--) {
             auto idx = i;

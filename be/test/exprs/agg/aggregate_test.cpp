@@ -1336,7 +1336,7 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     ASSERT_EQ(50, result_data.get_data()[0]);
 }
 
-TEST_F(AggregateTest, test_group_concat) {
+TEST_F(AggregateTest, test_group_concat1) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
     auto state = ManagedAggrState::create(ctx, group_concat_function);
@@ -1352,12 +1352,40 @@ TEST_F(AggregateTest, test_group_concat) {
     const Column* row_column = data_column.get();
 
     // test update
+    auto& query_options = ctx->get_ctx_query_options();
+    query_options.set_default_group_concat_separator(", ");
     group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
     auto result_column = BinaryColumn::create();
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_group_concat2) {
+    const AggregateFunction* group_concat_function =
+            get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
+
+    auto data_column = BinaryColumn::create();
+
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        data_column->append(val);
+    }
+
+    const Column* row_column = data_column.get();
+
+    // test update
+    auto& query_options = ctx->get_ctx_query_options();
+    query_options.set_default_group_concat_separator(",");
+    group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
+
+    auto result_column = BinaryColumn::create();
+    group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
+
+    ASSERT_EQ("starrocks0,starrocks1,starrocks2,starrocks3,starrocks4,starrocks5", result_column->get_data()[0]);
 }
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {

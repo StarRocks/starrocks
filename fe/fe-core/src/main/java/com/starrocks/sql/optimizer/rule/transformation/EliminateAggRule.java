@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -69,6 +70,18 @@ import java.util.stream.Collectors;
 
 public class EliminateAggRule extends TransformationRule {
 
+    private static final Set<String> SUPPORTED_AGGREGATION_FUNCTIONS =
+            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.COUNT)
+                    .add(FunctionSet.SUM)
+                    .add(FunctionSet.AVG)
+                    .add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.MAX)
+                    .add(FunctionSet.MIN)
+                    .add(FunctionSet.GROUP_CONCAT)
+                    .add(FunctionSet.GROUP_CONCAT_V2)
+                    .build();
+
     private EliminateAggRule() {
         super(RuleType.TF_ELIMINATE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
@@ -90,11 +103,7 @@ public class EliminateAggRule extends TransformationRule {
                 return false;
             }
             String fnName = entry.getValue().getFnName();
-            if (!(fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.COUNT) ||
-                    fnName.equals(FunctionSet.AVG) ||
-                    fnName.equals(FunctionSet.FIRST_VALUE) ||
-                    fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN) ||
-                    fnName.equals(FunctionSet.GROUP_CONCAT))) {
+            if (!SUPPORTED_AGGREGATION_FUNCTIONS.contains(fnName)) {
                 return false;
             }
         }
@@ -151,9 +160,7 @@ public class EliminateAggRule extends TransformationRule {
     private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator) {
         if (fnName.equals(FunctionSet.COUNT)) {
             return rewriteCountFunction(callOperator);
-        } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
-                fnName.equals(FunctionSet.FIRST_VALUE) || fnName.equals(FunctionSet.MAX) ||
-                fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+        } else if (SUPPORTED_AGGREGATION_FUNCTIONS.contains(fnName)) {
             return rewriteCastFunction(callOperator);
         }
         return callOperator;

@@ -185,7 +185,12 @@ public class FunctionSet {
     public static final String CONCAT_WS = "concat_ws";
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
+    // multi version of group_concat:
+    // group_concat : no distinct or order by arguments
+    // group_concat2: with distinct or order by arguments
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String GROUP_CONCAT_V2 = "group_concat2";
+
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
     public static final String LEFT = "left";
@@ -579,6 +584,12 @@ public class FunctionSet {
             ImmutableSet.<Type>builder()
                     .addAll(Type.INTEGER_TYPES)
                     .build();
+
+    public static final Set<String> GROUP_CONCAT_FUNCS =
+            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .add(GROUP_CONCAT)
+                    .add(GROUP_CONCAT_V2)
+                    .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -773,7 +784,7 @@ public class FunctionSet {
     public static final Set<String> UNSUPPORTED_AGG_STATE_FUNCTIONS =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     // TODO: Add unsupported functions here.
-                    .add(GROUP_CONCAT) // Unsupported function
+                    .add(GROUP_CONCAT_V2) // Unsupported function
                     // UNSUPPORTED functions
                     .add(COUNT_IF) // count_if is a syntax sugar in fe
                     .add(HLL_RAW) // hll_raw use `hll` as input, use existed `hll_union` instead
@@ -1053,7 +1064,16 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
                 true, false, false));
 
+        // group_concat(string)
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARBINARY,
+                false, false, false));
+        // group_concat(string, string)
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARBINARY,
+                false, false, false));
+        // group_concat with distinct or order by arguments
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT_V2,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
                 false, false, false));
 
