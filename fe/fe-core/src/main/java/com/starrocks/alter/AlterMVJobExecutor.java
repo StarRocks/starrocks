@@ -248,29 +248,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
-<<<<<<< HEAD
-=======
-        // enable_query_rewrite
-        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
-            materializedView.getTableProperty().getProperties()
-                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
-            materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
-            if (!materializedView.isEnableRewrite()) {
-                // invalidate caches for mv rewrite when disable mv rewrite.
-                CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(materializedView, false);
-            } else {
-                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
-            }
-            isChanged = true;
-        }
-        // transparent_mv_rewrite_mode
-        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
-            materializedView.getTableProperty().getProperties()
-                    .put(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mvTransparentRewriteMode));
-            materializedView.getTableProperty().setMvTransparentRewriteMode(mvTransparentRewriteMode);
-            isChanged = true;
-        }
->>>>>>> 03e23c21d2 ([Enhancement] Refactor CachingMvPlanContextBuilder to support timeout in loading mv's plan cache (#52424))
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (!properties.isEmpty()) {
             // set properties if there are no exceptions

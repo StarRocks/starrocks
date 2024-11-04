@@ -521,26 +521,8 @@ public class MvRewritePreprocessor {
         SessionVariable sessionVariable  = connectContext == null ? SessionVariable.DEFAULT_SESSION_VARIABLE
                 : connectContext.getSessionVariable();
         // if mv is in plan cache(avoid building plan), check whether it's valid
-<<<<<<< HEAD
-        if (connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
-                    .getPlanContextFromCacheIfPresent(mv);
-            if (planContexts != null && !planContexts.isEmpty() &&
-                    planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
-                logMVPrepare(connectContext, "MV {} has not a valid plan from {} plan contexts",
-                        mv.getName(), planContexts.size());
-                String message = planContexts.stream()
-                        .map(MvPlanContext::getInvalidReason)
-                        .collect(Collectors.joining(";"));
-                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-                return false;
-            }
-=======
-        List<MvPlanContext> planContexts = force ?
-                CachingMvPlanContextBuilder.getInstance()
-                        .getOrLoadPlanContext(sessionVariable, mv) :
-                CachingMvPlanContextBuilder.getInstance()
-                        .getPlanContextIfPresent(sessionVariable, mv);
+        List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContextIfPresent(sessionVariable, mv);
         if (CollectionUtils.isNotEmpty(planContexts) &&
                 planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
             logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
@@ -549,8 +531,7 @@ public class MvRewritePreprocessor {
                     .map(MvPlanContext::getInvalidReason)
                     .collect(Collectors.joining(";"));
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return Pair.create(false, "no valid plan: " + message);
->>>>>>> 03e23c21d2 ([Enhancement] Refactor CachingMvPlanContextBuilder to support timeout in loading mv's plan cache (#52424))
+            return false;
         }
         return true;
     }
@@ -588,19 +569,9 @@ public class MvRewritePreprocessor {
     public Set<MaterializedView> chooseBestRelatedMVs(Set<Table> queryTables,
                                                       Set<MaterializedView> relatedMVs,
                                                       OptExpression queryOptExpression) {
-<<<<<<< HEAD
-        // 1. filter mvs which is set by config: including/excluding mvs
-        Set<MaterializedView> validMVs = getRelatedMVsByConfig(relatedMVs);
-        logMVPrepare(connectContext, "Choose {}/{} mvs after user config", validMVs.size(), relatedMVs.size());
-
-        // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
-        validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, queryTables))
-=======
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         Set<MaterializedView> validMVs = relatedMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables).first)
->>>>>>> 03e23c21d2 ([Enhancement] Refactor CachingMvPlanContextBuilder to support timeout in loading mv's plan cache (#52424))
+                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, queryTables))
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());

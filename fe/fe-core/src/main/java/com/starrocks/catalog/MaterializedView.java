@@ -504,13 +504,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
-<<<<<<< HEAD
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
-=======
         // reset cached variables
-        resetMetadataCache();
         CachingMvPlanContextBuilder.getInstance().updateMvPlanContextCache(this, false);
->>>>>>> 03e23c21d2 ([Enhancement] Refactor CachingMvPlanContextBuilder to support timeout in loading mv's plan cache (#52424))
     }
 
     public String getInactiveReason() {
