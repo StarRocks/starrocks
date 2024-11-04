@@ -139,22 +139,27 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
     DCHECK(aligned_offsets != nullptr);
 
+
+    // XXX
+    // we have already evaluated _outer_common_exprs in step 1
+    // it does not seems to be necessary to add all referenced columns here again
+
     // 4. prepare outer common exprs
-    for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        auto column = chunk->get_column_by_slot_id(slot_id);
-        column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-        if constexpr (independent_lambda_expr) {
-            // if lambda expr doesn't rely on arguments, we don't need to align offset
-            cur_chunk->append_column(column, slot_id);
-        } else {
-            if (column->is_array()) {
-                auto view_column = ArrayViewColumn::from_array_column(column);
-                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
-            } else {
-                cur_chunk->append_column(column->replicate(aligned_offsets->get_data()), slot_id);
-            }
-        }
-    }
+    //for (const auto& [slot_id, expr] : _outer_common_exprs) {
+    //    auto column = chunk->get_column_by_slot_id(slot_id);
+    //    column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
+    //    if constexpr (independent_lambda_expr) {
+    //        // if lambda expr doesn't rely on arguments, we don't need to align offset
+    //        cur_chunk->append_column(column, slot_id);
+    //    } else {
+    //        if (column->is_array()) {
+    //            auto view_column = ArrayViewColumn::from_array_column(column);
+    //            cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+    //        } else {
+    //            cur_chunk->append_column(column->replicate(aligned_offsets->get_data()), slot_id);
+    //        }
+    //    }
+    //}
 
     // 5. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
