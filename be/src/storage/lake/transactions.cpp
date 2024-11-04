@@ -38,7 +38,7 @@ ParallelSet<int64_t> tablet_txns;
 // publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
 // and need to increase version number of the tablet,
 // the situation happens in create rollup.
-const int EMPTY_TXNLOG_TXNID = -1;
+const int64_t EMPTY_TXNLOG_TXNID = -1;
 
 bool add_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
