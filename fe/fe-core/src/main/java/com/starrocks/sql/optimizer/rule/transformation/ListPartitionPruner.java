@@ -589,7 +589,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     } else {
                         Set<Long> partitionIds = partitionValueMap.get(literal);
                         for (Long id : partitionIds) {
-                            if (listPartitionInfo.pruneById(id)) {
+                            if (listPartitionInfo.isSingleValuePartition(id)) {
                                 matches.remove(id);
                             }
                         }
@@ -706,7 +706,18 @@ public class ListPartitionPruner implements PartitionPruner {
             Set<Long> partitions = partitionValueMap.get(literal);
             if (partitions != null) {
                 if (inPredicate.isNotIn()) {
-                    matches.removeAll(partitions);
+                    // external table, one partition column for one partition can only have one value
+                    if (listPartitionInfo == null) {
+                        matches.removeAll(partitions);
+                    } else {
+                        // for olap table, if one partition is multi value partition like PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego")
+                        // and we have a not in predicate like city not in ("Los Angeles"), it's not safe to remove this partition
+                        for (Long id : partitions) {
+                            if (listPartitionInfo.isSingleValuePartition(id)) {
+                                matches.remove(id);
+                            }
+                        }
+                    }
                 } else {
                     matches.addAll(partitions);
                 }
