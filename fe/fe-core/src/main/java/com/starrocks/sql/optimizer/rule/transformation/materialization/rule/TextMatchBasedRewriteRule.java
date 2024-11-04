@@ -89,8 +89,6 @@ public class TextMatchBasedRewriteRule extends Rule {
     // limit for mvs which matched input query(default 64)
     private final long mvRewriteRelatedMVsLimit;
 
-    private int subQueryTextMatchCount = 1;
-
     public TextMatchBasedRewriteRule(ConnectContext connectContext,
                                      StatementBase stmt,
                                      MVTransformerContext mvTransformerContext) {
@@ -99,10 +97,11 @@ public class TextMatchBasedRewriteRule extends Rule {
         this.connectContext = connectContext;
         this.stmt = stmt;
         this.mvTransformerContext = mvTransformerContext;
-        this.mvSubQueryTextMatchMaxCount =
-                connectContext.getSessionVariable().getMaterializedViewSubQueryTextMatchMaxCount();
         this.mvRewriteRelatedMVsLimit =
                 connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        this.mvSubQueryTextMatchMaxCount =
+                connectContext.getSessionVariable().getMaterializedViewSubQueryTextMatchMaxCount();
+
     }
 
     @Override
@@ -360,10 +359,17 @@ public class TextMatchBasedRewriteRule extends Rule {
     class TextBasedRewriteVisitor extends OptExpressionVisitor<OptExpression, ConnectContext> {
         private final OptimizerContext optimizerContext;
         private final MVTransformerContext mvTransformerContext;
+        // sub-query text match count
+        private int subQueryTextMatchCount = 0;
+
         public TextBasedRewriteVisitor(OptimizerContext optimizerContext,
                                        MVTransformerContext mvTransformerContext) {
             this.optimizerContext = optimizerContext;
             this.mvTransformerContext = mvTransformerContext;
+        }
+
+        private boolean isReachLimit() {
+            return subQueryTextMatchCount > mvSubQueryTextMatchMaxCount;
         }
 
         private List<OptExpression> visitChildren(OptExpression optExpression, ConnectContext connectContext) {
@@ -374,17 +380,10 @@ public class TextMatchBasedRewriteRule extends Rule {
             return children;
         }
 
-        private boolean isReachLimit() {
-            return subQueryTextMatchCount++ > mvSubQueryTextMatchMaxCount;
-        }
-
         @Override
         public OptExpression visit(OptExpression optExpression, ConnectContext connectContext) {
             LogicalOperator op = (LogicalOperator) optExpression.getOp();
             if (SUPPORTED_REWRITE_OPERATOR_TYPES.contains(op.getOpType())) {
-                if (isReachLimit()) {
-                    return optExpression;
-                }
                 OptExpression rewritten = doRewrite(optExpression);
                 if (rewritten != null) {
                     return rewritten;
@@ -396,9 +395,14 @@ public class TextMatchBasedRewriteRule extends Rule {
 
         private OptExpression doRewrite(OptExpression input) {
             Operator op = input.getOp();
-            if (!mvTransformerContext.hasOpAST(op)) {
+            if (!mvTransformerContext.hasOpAST(op) || isReachLimit()) {
                 return null;
             }
+
+            // if op is in the AST map, which means op is a sub-query, then rewrite it.
+            subQueryTextMatchCount += 1;
+
+            // try to rewrite by text match
             ParseNode parseNode = mvTransformerContext.getOpAST(op);
             OptExpression rewritten = rewriteByTextMatch(input, optimizerContext,
                     new CachingMvPlanContextBuilder.AstKey(parseNode));
