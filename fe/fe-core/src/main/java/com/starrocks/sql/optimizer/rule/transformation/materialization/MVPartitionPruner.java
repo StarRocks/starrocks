@@ -53,22 +53,6 @@ public class MVPartitionPruner {
         return queryExpression.getOp().accept(new MVPartitionPrunerVisitor(), queryExpression, null);
     }
 
-<<<<<<< HEAD
-    /**
-     * For input query expression, reset/clear pruned partitions and return new query expression to be pruned again.
-     */
-    public static LogicalOlapScanOperator resetSelectedPartitions(LogicalOlapScanOperator olapScanOperator) {
-        final LogicalOlapScanOperator.Builder mvScanBuilder = OperatorBuilderFactory.build(olapScanOperator);
-        // reset original partition predicates to prune partitions/tablets again
-        mvScanBuilder.withOperator(olapScanOperator)
-                .setSelectedPartitionId(null)
-                .setPrunedPartitionPredicates(Lists.newArrayList())
-                .setSelectedTabletId(Lists.newArrayList());
-        return mvScanBuilder.build();
-    }
-
-=======
->>>>>>> 0b3f6c8575 ([Refactor] Refactor MV Rewrite partition prune (#52234))
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
         private boolean isAddMVPrunePredicate(LogicalOlapScanOperator olapScanOperator) {
             if (mvRewriteContext == null) {

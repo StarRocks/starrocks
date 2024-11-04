@@ -26,13 +26,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.OptimizerContext;
-=======
->>>>>>> 0b3f6c8575 ([Refactor] Refactor MV Rewrite partition prune (#52234))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -60,18 +58,12 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-<<<<<<< HEAD
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.genRollupProject;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.getRollupFunctionName;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getQuerySplitPredicate;
-=======
-import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.isSupportedAggFunctionPushDown;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.doRewritePushDownAgg;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregatePushDownUtils.getPushDownRollupFinalAggregateOpt;
->>>>>>> 0b3f6c8575 ([Refactor] Refactor MV Rewrite partition prune (#52234))
 
 /**
  * A mv rewriter that supports to push down aggregate functions below join operator and rewrite the query by mv transparently.
@@ -106,19 +98,11 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             Optional<OptExpression> res = rewriteInfo.getOp();
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite success");
             OptExpression result = res.get();
-<<<<<<< HEAD
-            setOptScanOpsHavePushDown(result);
-            return result;
-        } else {
-            logMVRewrite(mvContext, "AggregateJoin pushdown rewrite failed");
-            setOpHasPushDown(input);
-=======
             result.getOp().setOpRuleBit(OP_MV_AGG_PUSH_DOWN_REWRITE);
             return result;
         } else {
             logMVRewrite(mvContext, "AggregateJoin pushdown rewrite failed");
             input.getOp().setOpRuleBit(OP_MV_AGG_PUSH_DOWN_REWRITE);
->>>>>>> 0b3f6c8575 ([Refactor] Refactor MV Rewrite partition prune (#52234))
             return null;
         }
     }
@@ -156,15 +140,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
         }
         deriveLogicalProperty(newQueryInput);
         return newQueryInput;
-    }
-
-    public static void setOptScanOpsHavePushDown(OptExpression input) {
-        List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
-        scanOps.stream().forEach(op -> op.setOpRuleMask(op.getOpRuleMask() | Operator.OP_PUSH_DOWN_BIT));
-    }
-
-    public static void setOpHasPushDown(OptExpression input) {
-        input.getOp().setOpRuleMask(input.getOp().getOpRuleMask() | Operator.OP_PUSH_DOWN_BIT);
     }
 
     @VisibleForTesting
