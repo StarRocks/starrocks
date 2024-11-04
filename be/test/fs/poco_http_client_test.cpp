@@ -29,6 +29,7 @@
 #include "fs/s3/poco_http_client_factory.h"
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
+#include "util/slice.h"
 
 namespace starrocks::poco {
 
@@ -110,6 +111,37 @@ TEST_F(PocoHttpClientTest, TestNormalAccess) {
 
     // Create a client configuration object and set the custom retry strategy
     config.retryStrategy = retryStrategy;
+
+    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
+
+    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
+                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
+
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, kObjectName);
+    char buf[6];
+    ASSIGN_OR_ABORT(auto r, stream->read(buf, sizeof(buf)));
+    ASSERT_EQ("012345", std::string_view(buf, r));
+}
+
+TEST_F(PocoHttpClientTest, TestDisableSSL) {
+    Aws::Client::ClientConfiguration config;
+    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
+                                                                      : config::object_storage_endpoint;
+    Slice end_point(config.endpointOverride);
+    if (!end_point.starts_with("https") && end_point.starts_with("http")) {
+        config.endpointOverride = "https" + config.endpointOverride.substr(4);
+    }
+    config.verifySSL = false;
+
+    // Create a custom retry strategy
+    int maxRetries = 2;
+    long scaleFactor = 25;
+    std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
+            std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);
+
+    // Create a client configuration object and set the custom retry strategy
+    config.retryStrategy = retryStrategy;
+
 
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
 
