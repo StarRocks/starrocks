@@ -53,7 +53,7 @@ public class CachingMvPlanContextBuilder {
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
     private static final AsyncCacheLoader<MaterializedView, List<MvPlanContext>> MV_PLAN_CACHE_LOADER =
-            new AsyncCacheLoader<>() {
+            new AsyncCacheLoader<MaterializedView, List<MvPlanContext>>() {
                 @Override
                 public @NonNull CompletableFuture<List<MvPlanContext>> asyncLoad(@NonNull MaterializedView mv,
                                                                                  @NonNull Executor executor) {
