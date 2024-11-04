@@ -1086,6 +1086,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD_DEPTH, flag = VariableMgr.INVISIBLE)
     private int cboPruneJsonSubfieldDepth = 20;
 
+    // Deprecated by fe.conf/enable_sql_digest
+    @Deprecated
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -3493,10 +3495,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboPushDownDistinctBelowWindow() {
         return this.cboPushDownDistinctBelowWindow;
-    }
-
-    public boolean isEnableSQLDigest() {
-        return enableSQLDigest;
     }
 
     public void enableJoinReorder(boolean value) {
