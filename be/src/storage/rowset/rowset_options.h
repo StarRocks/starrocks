@@ -92,6 +92,7 @@ public:
     bool has_preaggregation = true;
 
     bool use_vector_index = false;
+    bool enable_sample = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 };

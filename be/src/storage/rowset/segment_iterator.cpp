@@ -2064,6 +2064,7 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
 }
 
 Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(!_opts.enable_block_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     
@@ -2077,11 +2078,13 @@ Status SegmentIterator::_apply_data_sampling() {
     RowIdSparseRange sampled_ranges;
     for (size_t i = 0; i < total_rows; i+= rows_per_block) {
         int rnd = dist(mt);
-        if (rnd < 1) {
+        if (rnd < 10) {
             sampled_ranges.add(RowIdRange(i, i+rows_per_block));
         }
     }
-    
+
+    VLOG(2) << "sample data range: " << sampled_ranges;
+
     // shrink current scan range
     _scan_range = _scan_range.intersection(sampled_ranges);
     
