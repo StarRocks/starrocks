@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
@@ -29,6 +30,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -89,7 +93,6 @@ public class CachingMvPlanContextBuilder {
 
         /**
          * Create a AstKey with parseNode(sub parse node)
-         * @param parseNode
          */
         public AstKey(ParseNode parseNode) {
             this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
@@ -248,15 +251,25 @@ public class CachingMvPlanContextBuilder {
 
     public void invalidateAstFromCache(MaterializedView mv) {
         try {
-            ParseNode parseNode = mv.getDefineQueryParseNode();
-            if (parseNode == null) {
+            List<AstKey> astKeys = getAstKeysOfMV(mv);
+            if (CollectionUtils.isEmpty(astKeys)) {
                 return;
             }
-            AstKey astKey = new AstKey(parseNode);
-            if (!AST_TO_MV_MAP.containsKey(astKey)) {
-                return;
+            synchronized (AST_TO_MV_MAP) {
+                for (AstKey astKey : astKeys) {
+                    if (!AST_TO_MV_MAP.containsKey(astKey)) {
+                        continue;
+                    }
+                    // remove mv from ast cache
+                    Set<MaterializedView> relatedMVs = AST_TO_MV_MAP.get(astKey);
+                    relatedMVs.remove(mv);
+
+                    // remove ast key if no related mvs
+                    if (relatedMVs.isEmpty()) {
+                        AST_TO_MV_MAP.remove(astKey);
+                    }
+                }
             }
-            AST_TO_MV_MAP.get(astKey).remove(mv);
             LOG.info("Remove mv {} from ast cache", mv.getName());
         } catch (Exception e) {
             LOG.warn("invalidateAstFromCache failed: {}", mv.getName(), e);
@@ -272,16 +285,47 @@ public class CachingMvPlanContextBuilder {
         }
         try {
             // cache by ast
-            ParseNode parseNode = mv.getDefineQueryParseNode();
-            if (parseNode == null) {
+            List<AstKey> astKeys = getAstKeysOfMV(mv);
+            if (CollectionUtils.isEmpty(astKeys)) {
                 return;
             }
-            AST_TO_MV_MAP.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
-                    .add(mv);
+            synchronized (AST_TO_MV_MAP) {
+                for (AstKey astKey : astKeys) {
+                    AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet()).add(mv);
+                }
+            }
             LOG.info("Add mv {} input ast cache", mv.getName());
         } catch (Exception e) {
             LOG.warn("putAstIfAbsent failed: {}", mv.getName(), e);
         }
+    }
+
+    private List<AstKey> getAstKeysOfMV(MaterializedView mv) {
+        List<AstKey> keys = Lists.newArrayList();
+        ParseNode parseNode = mv.getDefineQueryParseNode();
+        if (parseNode == null) {
+            return keys;
+        }
+        // add the complete ast tree
+        keys.add(new AstKey(parseNode));
+        if (!(parseNode instanceof QueryStatement)) {
+            return keys;
+        }
+
+        // add the ast tree without an order by clause
+        QueryStatement queryStatement = (QueryStatement) parseNode;
+        QueryRelation queryRelation = queryStatement.getQueryRelation();
+        if (!queryRelation.hasLimit() && queryRelation.hasOrderByClause()) {
+            // it's fine to change query relation directly since it's not used anymore.
+            List<OrderByElement> orderByElements = Lists.newArrayList(queryRelation.getOrderBy());
+            try {
+                queryRelation.clearOrder();
+                keys.add(new AstKey(parseNode));
+            } finally {
+                queryRelation.setOrderBy(orderByElements);
+            }
+        }
+        return keys;
     }
 
     /**
