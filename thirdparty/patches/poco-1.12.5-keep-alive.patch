@@ -1,0 +1,27 @@
+diff --git a/Net/src/HTTPClientSession.cpp b/Net/src/HTTPClientSession.cpp
+index b9591f0..f5ac624 100644
+--- a/Net/src/HTTPClientSession.cpp
++++ b/Net/src/HTTPClientSession.cpp
+@@ -465,7 +465,7 @@ int HTTPClientSession::write(const char* buffer, std::streamsize length)
+ 		_reconnect = false;
+ 		return rc;
+ 	}
+-	catch (IOException&)
++	catch (Poco::Exception&)
+ 	{
+ 		if (_reconnect)
+ 		{
+diff --git a/Net/src/HTTPStream.cpp b/Net/src/HTTPStream.cpp
+index 61fce2b..9a801e5 100644
+--- a/Net/src/HTTPStream.cpp
++++ b/Net/src/HTTPStream.cpp
+@@ -43,7 +43,8 @@ void HTTPStreamBuf::close()
+ 	if (_mode & std::ios::out)
+ 	{
+ 		sync();
+-		_session.socket().shutdownSend();
++		if (!_session.getKeepAlive())
++			_session.socket().shutdownSend();
+ 	}
+ }
+ 
