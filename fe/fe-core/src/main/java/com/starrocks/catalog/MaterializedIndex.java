@@ -116,7 +116,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     private long visibleTxnId;
 
     public MaterializedIndex() {
-        this(0, IndexState.NORMAL);
+        this(0, IndexState.NORMAL, PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID);
     }
 
     public MaterializedIndex(long id) {
@@ -124,7 +124,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public MaterializedIndex(long id, @Nullable IndexState state) {
-        this(id, state, 0);
+        this(id, state, 0, PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long shardGroupId) {
+        this(id, state, 0, shardGroupId);
     }
 
     /**
@@ -136,13 +140,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
         this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
         this.rowCount = 0;
         this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+        this.shardGroupId = shardGroupId;
     }
 
     /**

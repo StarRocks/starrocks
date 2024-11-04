@@ -2049,7 +2049,7 @@ public class OlapTable extends Table {
 
                 // Every partition has a ShardGroup previously,
                 // and now every Materialized index has a shardGroup.
-                // So the original partition's shardGroup is moved to the base materialized index for compatibility,
+                // So the original partition's shardGroup is moved to the base materialized index for compatibility
                 if (partition.getShardGroupId() != PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
                     partition.getBaseIndex().setShardGroupId(partition.getShardGroupId());
                 }
