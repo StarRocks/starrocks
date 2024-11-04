@@ -941,6 +941,10 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("Short Circuit Scan: true\n");
         }
 
+        if (sample != null) {
+            output.append(prefix).append("Sample: true\n");
+        }
+
         return output.toString();
     }
 
