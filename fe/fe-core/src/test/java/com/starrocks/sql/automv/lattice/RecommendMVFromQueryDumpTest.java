@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.starrocks.sql.automv.util.AutoMVUtil;
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -49,7 +50,8 @@ public class RecommendMVFromQueryDumpTest {
         File queryDumpFile = new File(getRootPath() + "/" + groupName + "/" + queryDumpPath);
         String jsonStr = IOUtils.toString(new FileReader(queryDumpFile));
         QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
-        String mv = recommender.recommend(jsonStr);
+
+        String mv = recommender.recommend(jsonStr, AutoMVUtil::configDefaultAutoMV);
         String testName = groupName + "." + queryDumpPath;
         Set<String> noMVs = Set.of(
                 "tpch.tpch_1g_q02.json",

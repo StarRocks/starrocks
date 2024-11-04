@@ -170,6 +170,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
@@ -945,10 +946,12 @@ public class UtFrameUtils {
     }
 
     public static <T> T execInMockedEnv(StarRocksAssert starRocksAssert, QueryDumpInfo dumpInfo,
+                                        Consumer<SessionVariable> svSetter,
                                         BiFunction<StarRocksAssert, QueryDumpInfo, T> cb) throws Exception {
         ConnectContext context = starRocksAssert.getCtx();
         initMockEnv(context, dumpInfo);
         try {
+            svSetter.accept(context.getSessionVariable());
             return cb.apply(starRocksAssert, dumpInfo);
         } finally {
             tearMockEnv();

@@ -139,18 +139,20 @@ public class QueryDumpMVRecommender {
     private List<String> recommendMV(StarRocksAssert starRocksAssert, QueryDumpInfo dumpInfo) {
         String query = dumpInfo.getOriginStmt();
         List<String> mvList = Lists.newArrayList();
-        recommendAndValidate(starRocksAssert, query, AutoMVUtil::configDefaultAutoMV, results -> {
-            results.forEach(row -> mvList.add(row.get(2)));
-        });
+        recommendAndValidate(starRocksAssert, query,
+                sv -> {
+                },
+                results -> {
+                    results.forEach(row -> mvList.add(row.get(2)));
+                });
         return mvList;
     }
 
-    public String recommend(String dumpJson) throws Exception {
+    public String recommend(String dumpJson, Consumer<SessionVariable> svSetter) throws Exception {
         dumpJson = rectifyQueryDump(dumpJson);
         QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
         System.out.println(dumpInfo.getOriginStmt());
-        starRocksAssert.getCtx().getSessionVariable().setAutoMVEnableComplexDerivedMetrics(true);
-        List<String> mvs = UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, this::recommendMV);
+        List<String> mvs = UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV);
         if (!mvs.isEmpty()) {
             return mvs.get(0);
         } else {

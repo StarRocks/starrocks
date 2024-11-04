@@ -72,6 +72,16 @@ echo \$basedir
 java -javaagent:\${basedir}/jmockit-1.49.4.jar -cp \${basedir}/automv_recommender-${version}.jar com.starrocks.sql.automv.lattice.QueryDumpMVRecommenderCmd \$*
 DONE
 chmod a+x automv_recommender/automv_recommender
+
+cat >automv_recommender/automv_recommender_httpserver <<DONE
+#!/bin/bash
+set -e -o pipefail
+basedir=\$(cd \$(dirname \${BASH_SOURCE:-\$0});pwd)
+echo \$basedir
+java -javaagent:\${basedir}/jmockit-1.49.4.jar -cp \${basedir}/automv_recommender-${version}.jar com.starrocks.sql.automv.lattice.AutoMVRecommendHttpServerMain \$*
+DONE
+chmod a+x automv_recommender/automv_recommender_httpserver
+
 cp  -r fe-core/src/test/resources/sql/query_dump/automv automv_recommender/queryDump
 mvnRepo=$(mvn help:evaluate -Dexpression=settings.localRepository -q -DforceStdout)
 cp ${mvnRepo}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar automv_recommender/
