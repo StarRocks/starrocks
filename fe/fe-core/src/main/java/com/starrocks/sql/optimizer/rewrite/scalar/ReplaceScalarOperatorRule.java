@@ -30,7 +30,7 @@ public class ReplaceScalarOperatorRule extends BottomUpScalarOperatorRewriteRule
     @Override
     public ScalarOperator visit(ScalarOperator scalarOperator, ScalarOperatorRewriteContext context) {
         for (Map.Entry<ScalarOperator, ColumnRefOperator> m : translateMap.entrySet()) {
-            if (ScalarOperator.isEquivalent(m.getKey(), scalarOperator)) {
+            if (m.getKey().equals(scalarOperator)) {
                 return m.getValue();
             }
         }
