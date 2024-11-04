@@ -1,0 +1,4 @@
+-- name: test_alter_partition_name
+create table t(k datetime) partition by date_trunc('day',k);
+insert into t values('2020-01-01');
+alter table t rename partition p20200101 pp;
