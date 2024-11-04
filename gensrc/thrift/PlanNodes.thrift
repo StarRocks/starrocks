@@ -581,6 +581,7 @@ struct TOlapScanNode {
   37: optional i64 schema_id
 
   40: optional TVectorSearchOptions vector_search_options
+  41: optional bool data_sample;
 }
 
 struct TJDBCScanNode {
