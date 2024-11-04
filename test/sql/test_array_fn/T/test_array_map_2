@@ -69,3 +69,5 @@ select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> a
 select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_length(arg2) + arg3, arg2), arg1), arg0), [[[[1,2]]]]);
 select array_map(arg0 -> array_map(arg1 -> array_map(arg2 -> array_map(arg3 -> array_map(arg4->array_length(arg2) + arg4, arg3), arg2), arg1), arg0), [[[[[1,2]]]]] );
 
+set @arr=array_generate(1,10000);
+select /*+ SET_VAR(query_mem_limit=104857600)*/array_sum(array_map(x->array_contains(@arr,x), array_generate(1,100000)));

@@ -67,7 +67,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
 
         RETURN_IF_ERROR(extract_outer_common_exprs(state, child, ctx));
         // if child is a slotref or a lambda function or a literal, we can't replace it.
-        if (child->is_slotref() || child->is_lambda_function() || child->is_literal()) {
+        if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant()) {
             continue;
         }
 
