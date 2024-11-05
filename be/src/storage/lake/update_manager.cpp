@@ -32,6 +32,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
 #include "util/pretty_printer.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
