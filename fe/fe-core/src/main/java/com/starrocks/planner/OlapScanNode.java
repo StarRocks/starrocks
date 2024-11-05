@@ -942,7 +942,7 @@ public class OlapScanNode extends ScanNode {
         }
 
         if (sample != null) {
-            output.append(prefix).append("Sample: true\n");
+            output.append(prefix).append(sample.explain()).append("\n");
         }
 
         return output.toString();
@@ -1111,7 +1111,7 @@ public class OlapScanNode extends ScanNode {
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
             if (sample != null && sample.isUseSampling()) {
-                msg.olap_scan_node.setData_sample(true);
+                sample.toThrift(msg.olap_scan_node.sample_options);
             }
         }
     }

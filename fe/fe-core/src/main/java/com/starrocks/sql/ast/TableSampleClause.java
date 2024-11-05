@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TTableSampleOptions;
 import org.apache.commons.lang3.EnumUtils;
 
 import java.util.Map;
@@ -34,14 +36,14 @@ public class TableSampleClause implements ParseNode {
     private static final String SAMPLE_PROPERTY_PROBABILITY = "PROBABILITY";
 
     // Default values for sampling
-    private static final SampleMethod DEFAULT_SAMPLE_METHOD = SampleMethod.BLOCK;
-    private static final double DEFAULT_RANDOM_PROBABILITY = 0.01;
+    private static final SampleMethod DEFAULT_SAMPLE_METHOD = SampleMethod.BY_BLOCK;
+    private static final long DEFAULT_RANDOM_PROBABILITY_PERCENT = 1;
 
     private final NodePosition pos;
     private boolean useSampling = true;
-    private SampleMethod method = DEFAULT_SAMPLE_METHOD;
+    private SampleMethod sampleMethod = DEFAULT_SAMPLE_METHOD;
     private long randomSeed = ThreadLocalRandom.current().nextLong();
-    private double randomProbability = DEFAULT_RANDOM_PROBABILITY;
+    private long randomProbabilityPercent = DEFAULT_RANDOM_PROBABILITY_PERCENT;
 
     public TableSampleClause(NodePosition pos) {
         this.pos = pos;
@@ -51,12 +53,12 @@ public class TableSampleClause implements ParseNode {
         return useSampling;
     }
 
-    public SampleMethod getMethod() {
-        return method;
+    public SampleMethod getSampleMethod() {
+        return sampleMethod;
     }
 
-    public void setMethod(SampleMethod method) {
-        this.method = method;
+    public void setSampleMethod(SampleMethod sampleMethod) {
+        this.sampleMethod = sampleMethod;
     }
 
     public long getRandomSeed() {
@@ -65,14 +67,6 @@ public class TableSampleClause implements ParseNode {
 
     public void setRandomSeed(long randomSeed) {
         this.randomSeed = randomSeed;
-    }
-
-    public double getRandomProbability() {
-        return randomProbability;
-    }
-
-    public void setRandomProbability(double randomProbability) {
-        this.randomProbability = randomProbability;
     }
 
     @Override
@@ -85,10 +79,15 @@ public class TableSampleClause implements ParseNode {
             String value = entry.getValue();
             switch (entry.getKey().toUpperCase()) {
                 case SAMPLE_PROPERTY_METHOD:
-                    this.method = SampleMethod.mustParse(value);
+                    this.sampleMethod = SampleMethod.mustParse(value);
                     break;
                 case SAMPLE_PROPERTY_PROBABILITY:
-                    this.randomProbability = ParseUtil.analyzeDoubleValue(value);
+                    long percent = ParseUtil.analyzeLongValue(value);
+                    if (!(0 <= percent && percent <= 100)) {
+                        throw new AnalysisException("invalid " + SAMPLE_PROPERTY_PROBABILITY + " which should in " +
+                                "[0, 100]");
+                    }
+                    this.randomProbabilityPercent = percent;
                     break;
                 case SAMPLE_PROPERTY_SEED:
                     this.randomSeed = ParseUtil.analyzeLongValue(value);
@@ -99,19 +98,38 @@ public class TableSampleClause implements ParseNode {
         }
     }
 
+    public void toThrift(TTableSampleOptions msg) {
+        msg.setEnable_sampling(true);
+        msg.setProbability_percent(randomProbabilityPercent);
+        msg.setSample_method(sampleMethod.toThrift());
+        msg.setRandom_seed(randomSeed);
+    }
+
     @Override
     public String toString() {
         final StringBuffer sb = new StringBuffer("TableSample{");
-        sb.append("method=").append(method);
+        sb.append("method=").append(sampleMethod);
         sb.append(", randomSeed=").append(randomSeed);
-        sb.append(", randomProbability=").append(randomProbability);
+        sb.append(", randomProbability=").append(randomProbabilityPercent);
         sb.append('}');
         return sb.toString();
     }
 
-    enum SampleMethod {
-        ROW,
-        BLOCK;
+    public String explain() {
+        StringBuffer sb = new StringBuffer("SAMPLE: ");
+        sb.append("method=").append(sampleMethod);
+        sb.append(" seed=").append(randomSeed);
+        sb.append(" probability=").append(randomProbabilityPercent);
+        return sb.toString();
+    }
+
+    public enum SampleMethod {
+        BY_ROW,
+        BY_BLOCK;
+
+        private static final Map<SampleMethod, com.starrocks.thrift.SampleMethod> THRIFT_MAPPING =
+                ImmutableMap.of(BY_ROW, com.starrocks.thrift.SampleMethod.BY_ROW,
+                        BY_BLOCK, com.starrocks.thrift.SampleMethod.BY_BLOCK);
 
         public static SampleMethod mustParse(String value) throws AnalysisException {
             SampleMethod result = EnumUtils.getEnumIgnoreCase(SampleMethod.class, value);
@@ -120,7 +138,9 @@ public class TableSampleClause implements ParseNode {
             }
             return result;
         }
-    }
 
-    ;
+        public com.starrocks.thrift.SampleMethod toThrift() {
+            return THRIFT_MAPPING.get(this);
+        }
+    }
 }
