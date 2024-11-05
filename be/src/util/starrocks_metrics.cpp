@@ -96,6 +96,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_column_group_get_hit_cache);
     REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
     REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
+    REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
 
     // push request
     _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
