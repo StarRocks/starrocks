@@ -49,6 +49,8 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::get_batch_write(const Bat
 }
 
 Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
+    TEST_SYNC_POINT_CALLBACK("BatchWriteMgr::append_data::cb", &data_ctx);
+    TEST_SUCC_POINT("BatchWriteMgr::append_data::success");
     BatchWriteId batch_write_id = {
             .db = data_ctx->db, .table = data_ctx->table, .load_params = data_ctx->load_parameters};
     ASSIGN_OR_RETURN(IsomorphicBatchWriteSharedPtr batch_write, _get_batch_write(batch_write_id, true));
