@@ -54,7 +54,7 @@ public class FeNameFormat {
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
-    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+    public static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
     static {
         FORBIDDEN_COLUMN_NAMES = new HashSet<>();
@@ -121,7 +121,7 @@ public class FeNameFormat {
             if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
                 throw new SemanticException(
                         "Column name [" + columnName + "] is a system reserved name. " +
-                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+                                "Please choose a different one.");
             }
         }
     }
