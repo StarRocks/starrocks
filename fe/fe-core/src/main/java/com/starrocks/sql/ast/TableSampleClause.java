@@ -15,12 +15,33 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.lang3.EnumUtils;
 
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * SQL Clause of: TABLE SAMPLE (...)
+ */
 public class TableSampleClause implements ParseNode {
+
+    // Properties supported by sampling
+    private static final String SAMPLE_PROPERTY_METHOD = "METHOD";
+    private static final String SAMPLE_PROPERTY_SEED = "SEED";
+    private static final String SAMPLE_PROPERTY_PROBABILITY = "PROBABILITY";
+
+    // Default values for sampling
+    private static final SampleMethod DEFAULT_SAMPLE_METHOD = SampleMethod.BLOCK;
+    private static final double DEFAULT_RANDOM_PROBABILITY = 0.01;
 
     private final NodePosition pos;
     private boolean useSampling = true;
+    private SampleMethod method = DEFAULT_SAMPLE_METHOD;
+    private long randomSeed = ThreadLocalRandom.current().nextLong();
+    private double randomProbability = DEFAULT_RANDOM_PROBABILITY;
 
     public TableSampleClause(NodePosition pos) {
         this.pos = pos;
@@ -30,8 +51,76 @@ public class TableSampleClause implements ParseNode {
         return useSampling;
     }
 
+    public SampleMethod getMethod() {
+        return method;
+    }
+
+    public void setMethod(SampleMethod method) {
+        this.method = method;
+    }
+
+    public long getRandomSeed() {
+        return randomSeed;
+    }
+
+    public void setRandomSeed(long randomSeed) {
+        this.randomSeed = randomSeed;
+    }
+
+    public double getRandomProbability() {
+        return randomProbability;
+    }
+
+    public void setRandomProbability(double randomProbability) {
+        this.randomProbability = randomProbability;
+    }
+
     @Override
     public NodePosition getPos() {
         return pos;
     }
+
+    public void analyzeProperties(Map<String, String> properties) throws AnalysisException {
+        for (var entry : properties.entrySet()) {
+            String value = entry.getValue();
+            switch (entry.getKey().toUpperCase()) {
+                case SAMPLE_PROPERTY_METHOD:
+                    this.method = SampleMethod.mustParse(value);
+                    break;
+                case SAMPLE_PROPERTY_PROBABILITY:
+                    this.randomProbability = ParseUtil.analyzeDoubleValue(value);
+                    break;
+                case SAMPLE_PROPERTY_SEED:
+                    this.randomSeed = ParseUtil.analyzeLongValue(value);
+                    break;
+                default:
+                    throw new AnalysisException("unrecognized property: " + entry.getKey());
+            }
+        }
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("TableSample{");
+        sb.append("method=").append(method);
+        sb.append(", randomSeed=").append(randomSeed);
+        sb.append(", randomProbability=").append(randomProbability);
+        sb.append('}');
+        return sb.toString();
+    }
+
+    enum SampleMethod {
+        ROW,
+        BLOCK;
+
+        public static SampleMethod mustParse(String value) throws AnalysisException {
+            SampleMethod result = EnumUtils.getEnumIgnoreCase(SampleMethod.class, value);
+            if (result == null) {
+                throw new AnalysisException("unrecognized sample-method: " + value);
+            }
+            return result;
+        }
+    }
+
+    ;
 }

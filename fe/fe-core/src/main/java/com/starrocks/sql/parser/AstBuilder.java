@@ -5564,7 +5564,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public TableSampleClause visitSampleClause(StarRocksParser.SampleClauseContext context) {
-        return new TableSampleClause(createPos(context));
+        TableSampleClause result = new TableSampleClause(createPos(context));
+        if (context.propertyList() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            try {
+                result.analyzeProperties(properties);
+            } catch (AnalysisException e) {
+                throw new ParsingException(e.getMessage(), createPos(context));
+            }
+        }
+        return result;
     }
 
     @Override
