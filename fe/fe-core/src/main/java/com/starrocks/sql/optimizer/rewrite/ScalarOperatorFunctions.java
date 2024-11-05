@@ -386,7 +386,6 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
                     returnType = VARCHAR, isMonotonic = true)
     })
-
     public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
