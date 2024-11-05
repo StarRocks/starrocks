@@ -381,6 +381,28 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATETIME, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+        String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        // unix style
+        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
+            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
+            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
+        } else {
+            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
+            return ConstantOperator.createVarchar(result);
+        }
+    }
+
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
             @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR, isMonotonic = true)
     })
