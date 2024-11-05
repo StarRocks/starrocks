@@ -137,11 +137,11 @@ public class GeneratedColumnTest extends PlanTestBase {
         assertContains(plan, "OUTPUT EXPRS:5: expr");
         assertContains(plan, " group by: 1: v1, 2: v2");
 
-        sql = " select tmc.v1 + 1 from tmc as v,tmc2 as tmc";
+        sql = " select v.v1 + 1 from tmc as v,tmc2 as tmc";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 3> : 3: v3");
 
-        sql = " select tmc.v1 + 1 from tmc as v,tmc2 as tmc";
+        sql = " select v.v1 + 1 from tmc as v,tmc2 as tmc";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 3> : 3: v3");
 
