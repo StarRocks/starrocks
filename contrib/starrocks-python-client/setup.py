@@ -57,7 +57,7 @@ setup(
         "sqlalchemy>=2.0",
         "sqlalchemy-utils>=0.41.2",
         "pymysql>=1.1.0",
-        "alembic @ git+https://github.com/Cledar/alembic.git@alembic_starrocks"
+        "alembic>=1.4.0"
     ],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "mock"],
