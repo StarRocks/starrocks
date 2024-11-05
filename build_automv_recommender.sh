@@ -46,7 +46,7 @@ sed -e '/^\s*<finalName>starrocks-fe<\/finalName>\s*$/{n; /^\s*<plugins>\s*$/a\
 
 version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
 PROGUARD=${basedir}/build-support/proguard-java11.cfg
-PYTHON=python3 mvn package -DskipTests=true -Dproguard-cfg=${PROGUARD} -f assembly-pom.xml
+PYTHON=python3 mvn package -Dcheckstyle.skip=true -DskipTests=true -Dproguard-cfg=${PROGUARD} -f assembly-pom.xml
 rm assembly-pom.xml
 mvn install:install-file \
     -Dfile=target/fe-core-jar-with-dependencies-${version}.jar \
