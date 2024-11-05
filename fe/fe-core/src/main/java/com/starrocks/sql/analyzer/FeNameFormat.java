@@ -23,7 +23,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.RunMode;
 
-import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
 
