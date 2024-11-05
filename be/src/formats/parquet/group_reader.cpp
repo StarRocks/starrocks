@@ -27,7 +27,6 @@
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/function_context.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
 #include "formats/parquet/schema.h"
