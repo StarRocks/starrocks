@@ -212,7 +212,7 @@ void BatchWriteMgr::receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cnt
         }
     }
 
-    auto ret = get_batch_write_load_parameters(parameters);
+    auto ret = get_load_parameters_from_brpc(parameters);
     if (!ret.ok()) {
         ctx->status = ret.status();
         return;

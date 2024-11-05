@@ -14,15 +14,48 @@
 
 #pragma once
 
-#include "runtime/batch_write/isomorphic_batch_write.h"
+#include <map>
+#include <optional>
+
+#include "common/statusor.h"
 
 namespace starrocks {
 
+using BatchWriteLoadParams = std::map<std::string, std::string>;
+
+struct BatchWriteId {
+    std::string db;
+    std::string table;
+    BatchWriteLoadParams load_params;
+};
+
+// Hash function for BatchWriteId
+struct BatchWriteIdHash {
+    std::size_t operator()(const BatchWriteId& id) const {
+        std::size_t hash = std::hash<std::string>{}(id.db);
+        hash ^= std::hash<std::string>{}(id.table) << 1;
+
+        for (const auto& param : id.load_params) {
+            hash ^= std::hash<std::string>{}(param.first) << 1;
+            hash ^= std::hash<std::string>{}(param.second) << 1;
+        }
+
+        return hash;
+    }
+};
+
+// Equality function for BatchWriteId
+struct BatchWriteIdEqual {
+    bool operator()(const BatchWriteId& lhs, const BatchWriteId& rhs) const {
+        return lhs.db == rhs.db && lhs.table == rhs.table && lhs.load_params == rhs.load_params;
+    }
+};
+
+std::ostream& operator<<(std::ostream& out, const BatchWriteId& id);
+
 class HttpRequest;
-class StreamLoadContext;
 
-StatusOr<LoadParams> get_batch_write_load_parameters(HttpRequest* http_req, StreamLoadContext* ctx);
-
-StatusOr<LoadParams> get_batch_write_load_parameters(const std::map<std::string, std::string>& input_params);
+StatusOr<BatchWriteLoadParams> get_load_parameters_from_http(HttpRequest* http_req);
+StatusOr<BatchWriteLoadParams> get_load_parameters_from_brpc(const std::map<std::string, std::string>& input_params);
 
 } // namespace starrocks

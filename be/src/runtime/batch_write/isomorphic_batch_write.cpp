@@ -31,20 +31,6 @@
 
 namespace starrocks {
 
-std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
-    out << "db: " << id.db << ", table: " << id.table << ", load_params: {";
-    bool first = true;
-    for (const auto& [key, value] : id.load_params) {
-        if (!first) {
-            out << ",";
-        }
-        first = false;
-        out << key << ":" << value;
-    }
-    out << "}";
-    return out;
-}
-
 class AsyncAppendDataContext {
 public:
     AsyncAppendDataContext(StreamLoadContext* data_ctx) : _data_ctx(data_ctx), _latch(1) { data_ctx->ref(); }

@@ -26,6 +26,7 @@
 #include <unordered_set>
 
 #include "common/statusor.h"
+#include "runtime/batch_write/batch_write_util.h"
 #include "util/countdown_latch.h"
 
 namespace starrocks {
@@ -35,38 +36,6 @@ class ThreadPoolExecutor;
 }
 
 class StreamLoadContext;
-
-using LoadParams = std::map<std::string, std::string>;
-
-struct BatchWriteId {
-    std::string db;
-    std::string table;
-    LoadParams load_params;
-};
-
-std::ostream& operator<<(std::ostream& out, const BatchWriteId& id);
-
-// Hash function for BatchWriteId
-struct BatchWriteIdHash {
-    std::size_t operator()(const BatchWriteId& id) const {
-        std::size_t hash = std::hash<std::string>{}(id.db);
-        hash ^= std::hash<std::string>{}(id.table) << 1;
-
-        for (const auto& param : id.load_params) {
-            hash ^= std::hash<std::string>{}(param.first) << 1;
-            hash ^= std::hash<std::string>{}(param.second) << 1;
-        }
-
-        return hash;
-    }
-};
-
-// Equality function for BatchWriteId
-struct BatchWriteIdEqual {
-    bool operator()(const BatchWriteId& lhs, const BatchWriteId& rhs) const {
-        return lhs.db == rhs.db && lhs.table == rhs.table && lhs.load_params == rhs.load_params;
-    }
-};
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 

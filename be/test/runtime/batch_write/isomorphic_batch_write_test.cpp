@@ -99,26 +99,6 @@ void verify_data(std::string expected, ByteBufferPtr actual) {
     }
 }
 
-TEST_F(IsomorphicBatchWriteTest, batch_write_id_hash) {
-    BatchWriteId id1{"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    BatchWriteId id2{"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    BatchWriteId id3{"db2", "table2", {{"param3", "value3"}}};
-
-    BatchWriteIdHash hash_fn;
-    ASSERT_EQ(hash_fn(id1), hash_fn(id2));
-    ASSERT_NE(hash_fn(id1), hash_fn(id3));
-}
-
-TEST_F(IsomorphicBatchWriteTest, batch_write_id_equal) {
-    BatchWriteId id1{"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    BatchWriteId id2{"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    BatchWriteId id3{"db2", "table2", {{"param3", "value3"}}};
-
-    BatchWriteIdEqual equal_fn;
-    ASSERT_TRUE(equal_fn(id1, id2));
-    ASSERT_FALSE(equal_fn(id1, id3));
-}
-
 TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {

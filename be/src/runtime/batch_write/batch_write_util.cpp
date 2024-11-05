@@ -14,113 +14,92 @@
 
 #include "runtime/batch_write/batch_write_util.h"
 
+#include <vector>
+
+#include "http/http_common.h"
 #include "http/http_request.h"
-#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks {
 
-#define POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, param_name) \
-    do {                                                                     \
-        if (!http_req->header(param_name).empty()) {                         \
-            load_params.emplace(param_name, http_req->header(param_name));   \
-        }                                                                    \
-    } while (0);
+const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
+                                                       HTTP_COLUMNS,
+                                                       HTTP_WHERE,
+                                                       HTTP_MAX_FILTER_RATIO,
+                                                       HTTP_TIMEOUT,
+                                                       HTTP_PARTITIONS,
+                                                       HTTP_TEMP_PARTITIONS,
+                                                       HTTP_NEGATIVE,
+                                                       HTTP_STRICT_MODE,
+                                                       HTTP_TIMEZONE,
+                                                       HTTP_LOAD_MEM_LIMIT,
+                                                       HTTP_EXEC_MEM_LIMIT,
+                                                       HTTP_PARTIAL_UPDATE,
+                                                       HTTP_PARTIAL_UPDATE_MODE,
+                                                       HTTP_TRANSMISSION_COMPRESSION_TYPE,
+                                                       HTTP_LOAD_DOP,
+                                                       HTTP_MERGE_CONDITION,
+                                                       HTTP_LOG_REJECTED_RECORD_NUM,
+                                                       HTTP_COMPRESSION,
+                                                       HTTP_WAREHOUSE,
+                                                       HTTP_ENABLE_BATCH_WRITE,
+                                                       HTTP_BATCH_WRITE_ASYNC,
+                                                       HTTP_BATCH_WRITE_INTERVAL_MS,
+                                                       HTTP_BATCH_WRITE_PARALLEL,
+                                                       HTTP_COLUMN_SEPARATOR,
+                                                       HTTP_ROW_DELIMITER,
+                                                       HTTP_TRIM_SPACE,
+                                                       HTTP_ENCLOSE,
+                                                       HTTP_ESCAPE,
+                                                       HTTP_JSONPATHS,
+                                                       HTTP_JSONROOT,
+                                                       HTTP_STRIP_OUTER_ARRAY};
 
-StatusOr<LoadParams> get_batch_write_load_parameters(HttpRequest* http_req, StreamLoadContext* ctx) {
+std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
+    out << "db: " << id.db << ", table: " << id.table << ", load_params: {";
+    bool first = true;
+    for (const auto& [key, value] : id.load_params) {
+        if (!first) {
+            out << ",";
+        }
+        first = false;
+        out << key << ":" << value;
+    }
+    out << "}";
+    return out;
+}
+
+StatusOr<BatchWriteLoadParams> get_load_parameters(
+        const std::function<std::optional<std::string>(const std::string&)>& getter_func) {
     std::map<std::string, std::string> load_params;
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_FORMAT_KEY);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_COLUMNS);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_WHERE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_MAX_FILTER_RATIO);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_TIMEOUT);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_PARTITIONS);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_TEMP_PARTITIONS);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_NEGATIVE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_STRICT_MODE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_TIMEZONE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_LOAD_MEM_LIMIT);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_EXEC_MEM_LIMIT);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_PARTIAL_UPDATE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_PARTIAL_UPDATE_MODE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_TRANSMISSION_COMPRESSION_TYPE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_LOAD_DOP);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_MERGE_CONDITION);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_LOG_REJECTED_RECORD_NUM);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_COMPRESSION);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_WAREHOUSE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_ENABLE_BATCH_WRITE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_BATCH_WRITE_ASYNC);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_BATCH_WRITE_INTERVAL_MS);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_BATCH_WRITE_PARALLEL);
-
-    // csv format parameters
-    if (ctx->format != TFileFormatType::FORMAT_JSON) {
-        if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
-            return Status::NotSupported("Csv format not support skip header when enable batch write");
+    for (const auto& name : LOAD_PARAMETER_NAMES) {
+        auto value_opt = getter_func(name);
+        if (value_opt) {
+            load_params.emplace(name, *value_opt);
         }
     }
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_COLUMN_SEPARATOR);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_ROW_DELIMITER);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_TRIM_SPACE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_ENCLOSE);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_ESCAPE);
-
-    // json format parameters
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_JSONPATHS);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_JSONROOT);
-    POPULATE_LOAD_PARAMETER_FROM_HTTP(http_req, load_params, HTTP_STRIP_OUTER_ARRAY);
-
     return load_params;
 }
 
-#define POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, param_name) \
-    do {                                                                        \
-        auto it = input_params.find(param_name);                                \
-        if (it != input_params.end()) {                                         \
-            load_params.emplace(param_name, it->second);                        \
-        }                                                                       \
-    } while (0);
+StatusOr<BatchWriteLoadParams> get_load_parameters_from_brpc(const std::map<std::string, std::string>& input_params) {
+    return get_load_parameters([&input_params](const std::string& param_name) -> std::optional<std::string> {
+        auto it = input_params.find(param_name);
+        if (it != input_params.end()) {
+            return it->second;
+        } else {
+            return std::nullopt;
+        }
+    });
+}
 
-StatusOr<LoadParams> get_batch_write_load_parameters(const std::map<std::string, std::string>& input_params) {
-    std::map<std::string, std::string> load_params;
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_FORMAT_KEY);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_COLUMNS);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_WHERE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_MAX_FILTER_RATIO);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_TIMEOUT);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_PARTITIONS);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_TEMP_PARTITIONS);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_NEGATIVE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_STRICT_MODE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_TIMEZONE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_LOAD_MEM_LIMIT);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_EXEC_MEM_LIMIT);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_PARTIAL_UPDATE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_PARTIAL_UPDATE_MODE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_TRANSMISSION_COMPRESSION_TYPE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_LOAD_DOP);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_MERGE_CONDITION);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_LOG_REJECTED_RECORD_NUM);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_COMPRESSION);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_WAREHOUSE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_ENABLE_BATCH_WRITE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_BATCH_WRITE_ASYNC);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_BATCH_WRITE_INTERVAL_MS);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_BATCH_WRITE_PARALLEL);
-
-    // csv format parameters
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_COLUMN_SEPARATOR);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_ROW_DELIMITER);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_TRIM_SPACE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_ENCLOSE);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_ESCAPE);
-
-    // json format parameters
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_JSONPATHS);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_JSONROOT);
-    POPULATE_LOAD_PARAMETER_FROM_MAP(input_params, load_params, HTTP_STRIP_OUTER_ARRAY);
-
-    return load_params;
+StatusOr<BatchWriteLoadParams> get_load_parameters_from_http(HttpRequest* http_req) {
+    return get_load_parameters([http_req](const std::string& param_name) -> std::optional<std::string> {
+        std::string value = http_req->header(param_name);
+        if (!value.empty()) {
+            return value;
+        } else {
+            return std::nullopt;
+        }
+    });
 }
 
 } // namespace starrocks
