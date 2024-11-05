@@ -720,6 +720,19 @@ public class CreateTableTest {
                                 "\"replication_num\" = \"1\"\n" +
                                 ");"));
 
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__ROW' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__ROW INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
         Config.allow_system_reserved_names = false;
     }
 

@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -57,7 +58,7 @@ public class FeNameFormat {
     public static final Set<String> FORBIDDEN_COLUMN_NAMES;
 
     static {
-        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
         String allowedSpecialCharacters = "";
