@@ -1266,15 +1266,15 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
 
-        starRocksAssert.createDatabaseIfNotExists("mv_db")
-                .useDatabase("mv_db")
+        starRocksAssert.createDatabaseIfNotExists("drop_mv_db")
+                .useDatabase("drop_mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k2`)\n"
                         + "REFRESH ASYNC\n"
                         + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
 
         executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
-        MaterializedView mv1 = getMv("mv_db", "test_mv");
+        MaterializedView mv1 = getMv("drop_mv_db", "test_mv");
         MaterializedViewMetricsEntity mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
         long count = mvEntity.histRefreshJobDuration.getCount();
