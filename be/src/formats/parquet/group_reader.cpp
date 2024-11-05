@@ -499,9 +499,9 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
     // and it may not be equal to col_idx_in_chunk. For array type, the physical_column_index is 0,
     // we need to iterate the children and collect their io ranges.
     // 3. For subfield pruning, we collect io range based on col_type which is pruned by fe.
-    if (field.type.type == LogicalType::TYPE_ARRAY) {
+    if (field.type == ColumnType::ARRAY) {
         _collect_field_io_range(field.children[0], col_type.children[0], active, ranges, end_offset);
-    } else if (field.type.type == LogicalType::TYPE_STRUCT) {
+    } else if (field.type == ColumnType::STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, subfield_pos);
 
@@ -511,7 +511,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             }
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
-    } else if (field.type.type == LogicalType::TYPE_MAP) {
+    } else if (field.type == ColumnType::MAP) {
         for (size_t i = 0; i < field.children.size(); i++) {
             if ((!col_type.children[i].is_unknown_type())) {
                 _collect_field_io_range(field.children[i], col_type.children[i], active, ranges, end_offset);
@@ -536,10 +536,10 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
                                           std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // Logically same with _collect_filed_io_range, just support schema change.
-    if (field.type.type == LogicalType::TYPE_ARRAY) {
+    if (field.type == ColumnType::ARRAY) {
         _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], active,
                                 ranges, end_offset);
-    } else if (field.type.type == LogicalType::TYPE_STRUCT) {
+    } else if (field.type == ColumnType::STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
         ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, iceberg_schema_field,
@@ -552,7 +552,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], iceberg_schema_subfield[i],
                                     active, ranges, end_offset);
         }
-    } else if (field.type.type == LogicalType::TYPE_MAP) {
+    } else if (field.type == ColumnType::MAP) {
         for (size_t i = 0; i < field.children.size(); i++) {
             if ((!col_type.children[i].is_unknown_type())) {
                 _collect_field_io_range(field.children[i], col_type.children[i], &iceberg_schema_field->children[i],
