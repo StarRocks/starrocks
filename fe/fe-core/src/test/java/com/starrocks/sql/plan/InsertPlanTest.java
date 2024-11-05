@@ -675,7 +675,9 @@ public class InsertPlanTest extends PlanTestBase {
                     "  1:Project\n" +
                     "  |  <slot 1> : 1: pk\n" +
                     "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
-                    "  |  <slot 5> : 3: v2\n");
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         }
         {
             // KesType is AGG_KEYS
