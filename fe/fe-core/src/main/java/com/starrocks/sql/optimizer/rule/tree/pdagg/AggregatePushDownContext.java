@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.collect.Lists;
@@ -20,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -53,6 +53,12 @@ public class AggregatePushDownContext {
     // count's column ref operator.
     public final Map<CallOperator, Pair<ColumnRefOperator, ColumnRefOperator>> avgToSumCountMapping = Maps.newHashMap();
 
+    // Aggregator will be pushed down to the position above targetPosition.
+    public OptExpression targetPosition = null;
+    // Whether targetPosition is an immediate left child of a small broadcast join.
+    public boolean immediateChildOfSmallBroadcastJoin = false;
+    public int rootToLeafPathIndex = 0;
+
     public boolean hasWindow = false;
 
     // record push down path
@@ -64,6 +70,11 @@ public class AggregatePushDownContext {
         aggregations = Maps.newHashMap();
         groupBys = Maps.newHashMap();
         pushPaths = Lists.newArrayList();
+    }
+
+    public AggregatePushDownContext(int rootToLeafPathIndex) {
+        this();
+        this.rootToLeafPathIndex = rootToLeafPathIndex;
     }
 
     public void setAggregator(LogicalAggregationOperator aggregator) {
@@ -116,7 +127,7 @@ public class AggregatePushDownContext {
     }
 
     public void registerOrigAggRewriteInfo(CallOperator aggFunc,
-                                       CallOperator origAgg) {
+                                           CallOperator origAgg) {
         aggToOrigAggMap.put(aggFunc, origAgg);
     }
 
@@ -132,5 +143,9 @@ public class AggregatePushDownContext {
 
     public boolean isRewrittenByEquivalent(CallOperator aggCall) {
         return aggToFinalAggMap.containsKey(aggCall);
+    }
+
+    public OptExpression getTargetPosition() {
+        return targetPosition;
     }
 }
