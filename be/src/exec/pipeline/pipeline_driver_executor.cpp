@@ -37,13 +37,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
-          _audit_statistics_reporter(new AuditStatisticsReporter()) {
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
-                                    [this] { return _blocked_driver_poller->num_drivers(); });
-}
+          _audit_statistics_reporter(new AuditStatisticsReporter()) {}
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
@@ -57,6 +51,13 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     for (auto i = 0; i < num_threads; ++i) {
         (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
+}
+
+DriverExecutorMetrics GlobalDriverExecutor::metrics() const {
+    return {.schedule_count = _schedule_count.load(),
+            .driver_execution_ns = _driver_execution_ns.load(),
+            .driver_queue_len = static_cast<int64_t>(_driver_queue->size()),
+            .driver_poller_block_queue_len = static_cast<int64_t>(_blocked_driver_poller->num_drivers())};
 }
 
 void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
