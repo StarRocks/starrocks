@@ -954,8 +954,9 @@ public class RuntimeProfile {
             reorderedChildNames.addAll(minMaxChildNames);
             reorderedChildNames.addAll(otherChildNames);
 
+            Map<String, Counter> counterMap1 = profile.getCounterMap();
             for (String childName : reorderedChildNames) {
-                Counter childCounter = profile.getCounterMap().get(childName);
+                Counter childCounter = counterMap1.get(childName);
                 Preconditions.checkState(childCounter != null);
                 builder.append(prefix).append("   - ").append(childName).append(": ")
                         .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
