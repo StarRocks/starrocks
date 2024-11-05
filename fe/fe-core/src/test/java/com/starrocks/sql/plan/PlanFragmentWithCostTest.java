@@ -1549,7 +1549,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
 
         boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean prevEliminateAgg = connectContext.getSessionVariable().isEnableEliminateAgg();
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
 
         String sql;
         String plan;
@@ -1728,6 +1730,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+            connectContext.getSessionVariable().setEnableEliminateAgg(prevEliminateAgg);
         }
     }
 

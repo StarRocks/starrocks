@@ -213,6 +213,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_UKFK_JOIN_REORDER = "enable_ukfk_join_reorder";
     public static final String MAX_UKFK_JOIN_REORDER_SCALE_RATIO = "max_ukfk_join_reorder_scale_ratio";
     public static final String MAX_UKFK_JOIN_REORDER_FK_ROWS = "max_ukfk_join_reorder_fk_rows";
+    public static final String ENABLE_ELIMINATE_AGG = "enable_eliminate_agg";
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
@@ -1241,6 +1242,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
     private int maxUKFKJoinReorderFKRows = 100000000;
+
+    @VarAttr(name = ENABLE_ELIMINATE_AGG)
+    private boolean enableEliminateAgg = true;
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -2863,6 +2867,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableTablePruneOnUpdate() {
         return enableTablePruneOnUpdate;
+    }
+
+    public boolean isEnableEliminateAgg() {
+        return enableEliminateAgg;
+    }
+
+    public void setEnableEliminateAgg(boolean enableEliminateAgg) {
+        this.enableEliminateAgg = enableEliminateAgg;
     }
 
     public boolean isEnableUKFKOpt() {
