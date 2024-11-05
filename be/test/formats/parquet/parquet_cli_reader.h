@@ -113,20 +113,20 @@ private:
 
     StatusOr<TypeDescriptor> _build_type(const ParquetField& field) {
         TypeDescriptor type;
-        if (field.type.type == TYPE_STRUCT) {
+        if (field.type == ColumnType::STRUCT) {
             type.type = TYPE_STRUCT;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
                 type.field_names.emplace_back(i.name);
             }
-        } else if (field.type.type == TYPE_MAP) {
+        } else if (field.type == ColumnType::MAP) {
             type.type = TYPE_MAP;
             for (const auto& i : field.children) {
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
             }
-        } else if (field.type.type == TYPE_ARRAY) {
+        } else if (field.type == ColumnType::ARRAY) {
             type.type = TYPE_ARRAY;
             ASSIGN_OR_RETURN(auto child_type, _build_type(field.children[0]));
             type.children.emplace_back(child_type);

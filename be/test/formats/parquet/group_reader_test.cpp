@@ -442,7 +442,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
 TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
     ParquetField field;
     field.name = "col0";
-    field.type.type = LogicalType::TYPE_ARRAY;
+    field.type = ColumnType::ARRAY;
 
     TypeDescriptor col_type;
     col_type.type = LogicalType::TYPE_VARCHAR;
