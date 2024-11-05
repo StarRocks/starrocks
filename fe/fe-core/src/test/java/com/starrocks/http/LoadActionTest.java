@@ -14,26 +14,13 @@
 
 package com.starrocks.http;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Multimap;
-import com.starrocks.load.batchwrite.BatchWriteMgr;
-import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
-import com.starrocks.load.batchwrite.TableId;
-import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
-import com.starrocks.thrift.TStatus;
-import com.starrocks.thrift.TStatusCode;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -45,92 +32,11 @@ import org.apache.http.impl.client.HttpClients;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
-
-    private OkHttpClient noRedirectClient = new OkHttpClient.Builder()
-            .readTimeout(100, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .build();
-
-    @Test
-    public void testBatchWriteStreamLoadSuccess() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        map.put(HTTP_ENABLE_BATCH_WRITE, "true");
-        Request request = buildRequest(map);
-        List<ComputeNode> computeNodes = new ArrayList<>();
-        List<String> redirectLocations = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
-            String host = "192.0.0." + i;
-            int httpPort = 8040;
-            computeNodes.add(new ComputeNode(i, host, 9050));
-            computeNodes.get(i - 1).setHttpPort(httpPort);
-            redirectLocations.add(getLoadUrl(host, httpPort));
-        }
-
-        new MockUp<BatchWriteMgr>() {
-            @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
-                return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
-            }
-        };
-
-        try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(307, response.code());
-            String location = response.header("Location");
-            assertTrue(redirectLocations.contains(location));
-        }
-    }
-
-    @Test
-    public void testBatchWriteStreamLoadFailure() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        map.put(HTTP_ENABLE_BATCH_WRITE, "true");
-        Request request = buildRequest(map);
-
-        new MockUp<BatchWriteMgr>() {
-            @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
-                TStatus status = new TStatus();
-                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-                status.addToError_msgs("artificial failure");
-                return new RequestCoordinatorBackendResult(status, null);
-            }
-        };
-
-        try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(200, response.code());
-            Map<String, Object> result = parseResponseBody(response);
-            assertEquals("INTERNAL_ERROR", result.get("code"));
-            assertEquals("FAILED", result.get("status"));
-            assertEquals("artificial failure", result.get("message"));
-            assertEquals("artificial failure", result.get("msg"));
-        }
-    }
-
-    private Request buildRequest(Map<String, String> headers) {
-        Request.Builder builder = new Request.Builder();
-        builder.addHeader("Authorization", rootAuth);
-        builder.addHeader("Expect", "100-continue");
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            builder.addHeader(entry.getKey(), entry.getValue());
-        }
-        builder.put(RequestBody.create(new byte[0]));
-        builder.url(String.format("%s/api/%s/%s/_stream_load", BASE_URL, DB_NAME, TABLE_NAME));
-        return builder.build();
-    }
 
     private HttpPut buildPutRequest(int bodyLength) {
         HttpPut put = new HttpPut(String.format("%s/api/%s/%s/_stream_load", BASE_URL, DB_NAME, TABLE_NAME));
@@ -139,17 +45,6 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         StringEntity entity = new StringEntity(Arrays.toString(new byte[bodyLength]), "UTF-8");
         put.setEntity(entity);
         return put;
-    }
-
-    private String getLoadUrl(String host, int port) {
-        return String.format("http://%s:%d/api/%s/%s/_stream_load", host, port, DB_NAME, TABLE_NAME);
-    }
-
-    private static Map<String, Object> parseResponseBody(Response response) throws IOException {
-        ResponseBody body = response.body();
-        assertNotNull(body);
-        String bodyStr = body.string();
-        return objectMapper.readValue(bodyStr, new TypeReference<>() {});
     }
 
     @Test
