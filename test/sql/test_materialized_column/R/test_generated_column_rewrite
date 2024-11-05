@@ -35,7 +35,6 @@ PLAN FRAGMENT 0
 DROP DATABASE test_generated_column_rewrite;
 -- result:
 -- !result
-
 -- name: test_generated_column_complex_rewrite
 CREATE TABLE `t_generated_column_complex_rewrite_1` (
   `id` bigint(20) NOT NULL COMMENT "",
