@@ -170,4 +170,30 @@ TEST_F(PocoHttpClientTest, TestErrorAkSk) {
     EXPECT_TRUE(r.status().message().find("SdkResponseCode=403") != std::string::npos);
 }
 
+TEST_F(PocoHttpClientTest, TestNotFoundKey) {
+    Aws::Client::ClientConfiguration config;
+    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
+                                                                      : config::object_storage_endpoint;
+    // Create a custom retry strategy
+    int maxRetries = 2;
+    long scaleFactor = 25;
+    std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
+            std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);
+
+    // Create a client configuration object and set the custom retry strategy
+    config.retryStrategy = retryStrategy;
+
+    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
+
+    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
+                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
+
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, "not_found_key");
+    char buf[6];
+    auto r = stream->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
+}
+
 } // namespace starrocks::poco
