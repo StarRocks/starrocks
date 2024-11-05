@@ -18,10 +18,6 @@ StarRocks 依靠 AVX2 指令集充分发挥其矢量化能力。因此，在生�
 cat /proc/cpuinfo | grep avx2
 ```
 
-> **说明**
->
-> ARM 架构不支持 SIMD 指令集，因此在某些场景下的性能不及 x86 架构。我们只推荐您在开发环境中部署 ARM 架构下的 StarRocks。
-
 ### 内存
 
 StarRocks 对内存没有特定要求。关于推荐的内存大小，请参考 [规划 StarRocks 集群 - CPU 和内存](../deployment/plan_cluster.md#cpu-和内存)。
