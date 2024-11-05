@@ -38,17 +38,17 @@ public:
     BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor) : _executor(std::move(executor)){};
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
-
     void unregister_stream_load_pipe(StreamLoadContext* pipe_ctx);
+    StatusOr<IsomorphicBatchWriteSharedPtr> get_batch_write(const BatchWriteId& batch_write_id);
 
-    Status append_data(const BatchWriteId& batch_write_id, StreamLoadContext* data_ctx);
+    Status append_data(StreamLoadContext* data_ctx);
 
     void stop();
 
-    static StatusOr<StreamLoadContext*> create_and_register_context(
-            ExecEnv* exec_env, const string& db, const string& table, const string& label, long txn_id,
-            const TUniqueId& load_id, int32_t batch_write_interval_ms,
-            const std::map<std::string, std::string>& load_parameters);
+    static StatusOr<StreamLoadContext*> create_and_register_pipe(
+            ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const string& db, const string& table,
+            const std::map<std::string, std::string>& load_parameters, const string& label, long txn_id,
+            const TUniqueId& load_id, int32_t batch_write_interval_ms);
 
     static void receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cntl, const PBatchWriteLoadRequest* request,
                                     PBatchWriteLoadResponse* response);

@@ -217,9 +217,8 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
-    ASSIGN_OR_RETURN(auto load_params, get_batch_write_load_parameters(http_req, ctx));
-    BatchWriteId batch_write_id{.db = ctx->db, .table = ctx->table, .load_params = std::move(load_params)};
-    return _exec_env->batch_write_mgr()->append_data(batch_write_id, ctx);
+    ASSIGN_OR_RETURN(ctx->load_parameters, get_batch_write_load_parameters(http_req, ctx));
+    return _exec_env->batch_write_mgr()->append_data(ctx);
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {

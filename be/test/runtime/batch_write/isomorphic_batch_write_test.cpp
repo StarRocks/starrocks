@@ -44,6 +44,7 @@ public:
                           .build(&thread_pool));
         _executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
         _batch_write = std::make_shared<IsomorphicBatchWrite>(_batch_write_id, _executor.get());
+        ASSERT_OK(_batch_write->init());
     }
 
     void TearDown() override {
@@ -118,7 +119,7 @@ TEST_F(IsomorphicBatchWriteTest, batch_write_id_equal) {
     ASSERT_FALSE(equal_fn(id1, id3));
 }
 
-TEST_F(IsomorphicBatchWriteTest, register_unregister_pipe) {
+TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("StreamLoadContext::release");
@@ -129,21 +130,18 @@ TEST_F(IsomorphicBatchWriteTest, register_unregister_pipe) {
     StreamLoadContext* pipe_ctx2 = build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
 
     ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx1));
-    ASSERT_EQ(1, pipe_ctx1->num_refs());
+    ASSERT_EQ(2, pipe_ctx1->num_refs());
     ASSERT_TRUE(_batch_write->contain_pipe(pipe_ctx1));
     ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx2));
-    ASSERT_EQ(1, pipe_ctx2->num_refs());
+    ASSERT_EQ(2, pipe_ctx2->num_refs());
     ASSERT_TRUE(_batch_write->contain_pipe(pipe_ctx2));
-
-    int num_context_release = 0;
-    SyncPoint::GetInstance()->SetCallBack("StreamLoadContext::release", [&](void* arg) { num_context_release += 1; });
 
     _batch_write->unregister_stream_load_pipe(pipe_ctx1);
     ASSERT_FALSE(_batch_write->contain_pipe(pipe_ctx1));
-    ASSERT_EQ(1, num_context_release);
+    ASSERT_EQ(1, pipe_ctx1->num_refs());
     _batch_write->unregister_stream_load_pipe(pipe_ctx2);
     ASSERT_FALSE(_batch_write->contain_pipe(pipe_ctx2));
-    ASSERT_EQ(2, num_context_release);
+    ASSERT_EQ(1, pipe_ctx2->num_refs());
 }
 
 TEST_F(IsomorphicBatchWriteTest, append_data) {
@@ -212,9 +210,23 @@ TEST_F(IsomorphicBatchWriteTest, append_data) {
 }
 
 TEST_F(IsomorphicBatchWriteTest, stop_write) {
+    StreamLoadContext* pipe_ctx1 = build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx2 = build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx1));
+    ASSERT_EQ(2, pipe_ctx1->num_refs());
+    ASSERT_TRUE(_batch_write->contain_pipe(pipe_ctx1));
+    ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx2));
+    ASSERT_EQ(2, pipe_ctx2->num_refs());
+    ASSERT_TRUE(_batch_write->contain_pipe(pipe_ctx2));
+
     _batch_write->stop();
-    StreamLoadContext* pipe_ctx = build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
-    ASSERT_TRUE(_batch_write->register_stream_load_pipe(pipe_ctx).is_service_unavailable());
+    ASSERT_EQ(1, pipe_ctx1->num_refs());
+    ASSERT_FALSE(_batch_write->contain_pipe(pipe_ctx1));
+    ASSERT_EQ(1, pipe_ctx2->num_refs());
+    ASSERT_FALSE(_batch_write->contain_pipe(pipe_ctx2));
+
+    StreamLoadContext* pipe_ctx3 = build_pipe_context("label3", 3, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    ASSERT_TRUE(_batch_write->register_stream_load_pipe(pipe_ctx3).is_service_unavailable());
     StreamLoadContext* data_ctx = build_data_context("data");
     ASSERT_TRUE(_batch_write->append_data(data_ctx).is_service_unavailable());
 }

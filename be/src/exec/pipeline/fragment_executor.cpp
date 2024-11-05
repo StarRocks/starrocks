@@ -655,10 +655,10 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                         broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
                 if (is_batch_write) {
-                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_context(
-                                                  exec_env, db_name, table_name, label, txn_id, load_id,
-                                                  broker_scan_range.batch_write_interval_ms,
-                                                  broker_scan_range.batch_write_parameters));
+                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
+                                                  exec_env, exec_env->batch_write_mgr(), db_name, table_name,
+                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
+                                                  broker_scan_range.batch_write_interval_ms));
                 } else {
                     RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
                             exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));

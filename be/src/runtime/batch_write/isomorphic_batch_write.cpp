@@ -96,6 +96,7 @@ IsomorphicBatchWrite::IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads
         : _batch_write_id(std::move(batch_write_id)), _executor(executor) {}
 
 Status IsomorphicBatchWrite::init() {
+    TEST_ERROR_POINT("IsomorphicBatchWrite::init::error");
     bthread::ExecutionQueueOptions opts;
     opts.executor = _executor;
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute_bthread_tasks, this); r != 0) {
@@ -120,6 +121,21 @@ void IsomorphicBatchWrite::stop() {
         r = bthread::execution_queue_join(_queue_id);
         LOG_IF(WARNING, r != 0) << "Fail to join execution queue, " << _batch_write_id << ", result: " << r;
     }
+
+    std::vector<StreamLoadContext*> release_contexts;
+    {
+        std::unique_lock<std::mutex> lock(_mutex);
+        release_contexts.insert(release_contexts.end(), _alive_stream_load_pipe_ctxs.begin(),
+                                _alive_stream_load_pipe_ctxs.end());
+        release_contexts.insert(release_contexts.end(), _dead_stream_load_pipe_ctxs.begin(),
+                                _dead_stream_load_pipe_ctxs.end());
+        _alive_stream_load_pipe_ctxs.clear();
+        _dead_stream_load_pipe_ctxs.clear();
+    }
+    for (StreamLoadContext* ctx : release_contexts) {
+        StreamLoadContext::release(ctx);
+    }
+
     LOG(INFO) << "Stop batch write, " << _batch_write_id;
 }
 

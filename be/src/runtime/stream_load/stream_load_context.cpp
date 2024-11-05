@@ -36,8 +36,6 @@
 
 #include <fmt/format.h>
 
-#include "testutil/sync_point.h"
-
 namespace starrocks {
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
@@ -248,7 +246,6 @@ bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
 }
 
 void StreamLoadContext::release(StreamLoadContext* context) {
-    TEST_SYNC_POINT_CALLBACK("StreamLoadContext::release", nullptr);
     if (context != nullptr && context->unref()) {
         delete context;
     }

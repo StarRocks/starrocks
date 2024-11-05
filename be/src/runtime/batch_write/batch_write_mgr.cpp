@@ -23,6 +23,7 @@
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -43,7 +44,13 @@ void BatchWriteMgr::unregister_stream_load_pipe(StreamLoadContext* pipe_ctx) {
     batch_write.value()->unregister_stream_load_pipe(pipe_ctx);
 }
 
-Status BatchWriteMgr::append_data(const BatchWriteId& batch_write_id, StreamLoadContext* data_ctx) {
+StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::get_batch_write(const BatchWriteId& batch_write_id) {
+    return _get_batch_write(batch_write_id, false);
+}
+
+Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
+    BatchWriteId batch_write_id = {
+            .db = data_ctx->db, .table = data_ctx->table, .load_params = data_ctx->load_parameters};
     ASSIGN_OR_RETURN(IsomorphicBatchWriteSharedPtr batch_write, _get_batch_write(batch_write_id, true));
     return batch_write->append_data(data_ctx);
 }
@@ -74,7 +81,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::_get_batch_write(const st
     Status st = batch_write->init();
     if (!st.ok()) {
         LOG(ERROR) << "Fail to init batch write, " << batch_write_id << ", status: " << st;
-        return Status::InternalError("Fail to init batch write, " + st.to_string());
+        return Status::InternalError("Fail to init batch write, error: " + st.to_string());
     }
     _batch_write_map.emplace(batch_write_id, batch_write);
     LOG(INFO) << "Create batch write, " << batch_write_id;
@@ -99,10 +106,10 @@ void BatchWriteMgr::stop() {
     }
 }
 
-StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_context(
-        ExecEnv* exec_env, const std::string& db, const std::string& table, const std::string& label, long txn_id,
-        const TUniqueId& load_id, int32_t batch_write_interval_ms,
-        const std::map<std::string, std::string>& load_parameters) {
+StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
+        ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const std::string& db, const std::string& table,
+        const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
+        const TUniqueId& load_id, int32_t batch_write_interval_ms) {
     auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(batch_write_interval_ms);
     RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
     StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id);
@@ -111,15 +118,17 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_context(
     ctx->table = table;
     ctx->label = label;
     ctx->txn_id = txn_id;
-    ctx->body_sink = pipe;
     ctx->enable_batch_write = true;
     ctx->load_parameters = load_parameters;
+    ctx->body_sink = pipe;
+
     DeferOp op([&] {
         // batch write manager will hold a reference if register success.
         // need to release the reference to delete the context if register failed
         StreamLoadContext::release(ctx);
     });
-    return exec_env->batch_write_mgr()->register_stream_load_pipe(ctx);
+    RETURN_IF_ERROR(batch_write_mgr->register_stream_load_pipe(ctx));
+    return ctx;
 }
 
 static std::string s_empty;
@@ -208,6 +217,7 @@ void BatchWriteMgr::receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cnt
         ctx->status = ret.status();
         return;
     }
+    ctx->load_parameters = std::move(ret.value());
 
     butil::IOBuf& io_buf = cntl->request_attachment();
     size_t max_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
@@ -236,8 +246,7 @@ void BatchWriteMgr::receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cnt
     ctx->buffer->pos += io_buf.size();
     ctx->buffer->flip();
 
-    BatchWriteId batch_write_id{.db = ctx->db, .table = ctx->table, .load_params = std::move(ret.value())};
-    ctx->status = exec_env->batch_write_mgr()->append_data(batch_write_id, ctx);
+    ctx->status = exec_env->batch_write_mgr()->append_data(ctx);
 }
 
 } // namespace starrocks

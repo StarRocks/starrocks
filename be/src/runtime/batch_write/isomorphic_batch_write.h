@@ -89,6 +89,7 @@ public:
     Status append_data(StreamLoadContext* data_ctx);
 
     void stop();
+    bool is_stopped() const { return _stopped.load(std::memory_order_relaxed); }
 
 private:
     static int _execute_bthread_tasks(void* meta, bthread::TaskIterator<Task>& iter);
