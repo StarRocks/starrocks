@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
@@ -771,6 +772,20 @@ public class Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
+            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+                // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
+                // For example, do not push down a not very efficient aggregator below a very small broadcast join.
+                ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+                ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+                ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+                CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+                deriveLogicalProperty(tree);
+                tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+                tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+                deriveLogicalProperty(tree);
+                Utils.calculateStatistics(tree, context);
+            }
+
             PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
             rule.getRewriter().collectRewriteContext(tree);
             if (rule.getRewriter().isNeedRewrite()) {
