@@ -489,10 +489,6 @@ public class StmtExecutor {
         }
 
         try {
-            boolean isQuery = parsedStmt instanceof QueryStatement;
-            // set isQuery before `forwardToLeader` to make it right for audit log.
-            context.getState().setIsQuery(isQuery);
-
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -585,7 +581,7 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if ((isQuery || parsedStmt instanceof InsertStmt)
+            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {

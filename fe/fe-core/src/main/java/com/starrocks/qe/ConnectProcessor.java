@@ -304,6 +304,8 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
+        // set isQuery before `forwardToLeader` to make it right for audit log.
+        ctx.getState().setIsQuery(true);
 
         // execute this query.
         StatementBase parsedStmt = null;
