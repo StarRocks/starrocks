@@ -132,6 +132,9 @@ public class QueryAnalyzer {
         }
 
         public Void process(ParseNode node, Scope scope) {
+            if (session.getSessionVariable().isDisableGeneratedColumnRewrite()) {
+                return null;
+            }
             return node.accept(this, scope);
         }
 
