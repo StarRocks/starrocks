@@ -1931,7 +1931,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testProjectAggregate() throws Exception {
-        String sql = "SELECT DISTINCT x1, x2 from (" +
+        String sql = "SELECT /*+SET_VAR(enable_eliminate_agg=false)*/ DISTINCT x1, x2 from (" +
                 "   SELECT lower(t_a_0.`c`) AS x1, t_a_0.`c` AS x2 " +
                 "   FROM (select distinct upper(S_ADDRESS) c from supplier) t_a_0) t_a_1;";
 
