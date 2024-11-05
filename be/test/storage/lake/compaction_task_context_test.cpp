@@ -43,7 +43,7 @@ public:
 protected:
     // Implement a mock version of CompactionTaskCallback if needed
     std::shared_ptr<CompactionTaskCallback> callback;
-    CompactionTaskContext context{123, 456, 789, false, callback};
+    CompactionTaskContext context{123, 456, 789, false, false, callback};
 
     void SetUp() override {
         // Initialize your context or mock callback here if necessary

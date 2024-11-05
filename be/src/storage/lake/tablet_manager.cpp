@@ -666,7 +666,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;

@@ -185,7 +185,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               is_checker, cb);
+                                                               request->force_base_compaction(), is_checker, cb);
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
