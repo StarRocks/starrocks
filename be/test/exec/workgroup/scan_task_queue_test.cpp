@@ -39,7 +39,7 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
                       .set_max_threads(4)
                       .set_max_queue_size(100)
                       .build(&thread_pool));
-    auto executor = std::make_unique<ScanExecutor>(std::move(thread_pool), std::move(queue), false);
+    auto executor = std::make_unique<ScanExecutor>(std::move(thread_pool), std::move(queue));
     DeferOp op([&]() { executor->close(); });
     executor->initialize(4);
 

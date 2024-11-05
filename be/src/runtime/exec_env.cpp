@@ -447,6 +447,27 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
 
+    StarRocksMetrics::instance()->metrics()->register_hook("pipe_execution_hook", [this] {
+        int64_t driver_schedule_count = 0;
+        int64_t driver_execution_ns = 0;
+        int64_t driver_queue_len = 0;
+        int64_t driver_poller_block_queue_len = 0;
+        int64_t scan_executor_queuing = 0;
+        _workgroup_manager->for_each_executors([&](const workgroup::PipelineExecutorSet& executors) {
+            const auto metrics = executors.driver_executor()->metrics();
+            driver_schedule_count += metrics.schedule_count;
+            driver_execution_ns += metrics.driver_execution_ns;
+            driver_queue_len += metrics.driver_queue_len;
+            driver_poller_block_queue_len += metrics.driver_poller_block_queue_len;
+            scan_executor_queuing += executors.scan_executor()->num_tasks();
+        });
+        StarRocksMetrics::instance()->pipe_driver_schedule_count.set_value(driver_schedule_count);
+        StarRocksMetrics::instance()->pipe_driver_execution_time.set_value(driver_execution_ns);
+        StarRocksMetrics::instance()->pipe_driver_queue_len.set_value(driver_queue_len);
+        StarRocksMetrics::instance()->pipe_poller_block_queue_len.set_value(driver_poller_block_queue_len);
+        StarRocksMetrics::instance()->pipe_scan_executor_queuing.set_value(scan_executor_queuing);
+    });
+
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     if (store_paths.empty() && as_cn) {
