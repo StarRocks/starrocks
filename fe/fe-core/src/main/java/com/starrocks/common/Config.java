@@ -876,7 +876,7 @@ public class Config extends ConfigBase {
      * global variable version.
      */
     @ConfField(mutable = true)
-    public static String mysql_server_version = "5.1.0";
+    public static String mysql_server_version = "8.0.33";
 
     /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
