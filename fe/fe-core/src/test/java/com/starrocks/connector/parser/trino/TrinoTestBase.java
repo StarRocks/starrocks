@@ -94,6 +94,10 @@ public class TrinoTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "`day` int NULL COMMENT \"\") \n" +
+                "PROPERTIES ('replication_num' = '1')");
+
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
                 "  `ta` varchar(20) NULL COMMENT \"\",\n" +
                 "  `tb` smallint(6) NULL COMMENT \"\",\n" +

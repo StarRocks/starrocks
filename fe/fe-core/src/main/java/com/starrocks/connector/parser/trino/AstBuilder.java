@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaArgument;
@@ -133,6 +134,7 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
+import io.trino.sql.tree.Insert;
 import io.trino.sql.tree.Intersect;
 import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
@@ -193,6 +195,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
@@ -1221,6 +1224,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
     }
+
+    @Override
+    protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
+        List<String> parts  = node.getTarget().getParts();
+        String tableName = parts.get(parts.size() - 1);
+        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+                tableName.concat(UUID.randomUUID().toString()), null,
+                (QueryStatement) visit(node.getQuery(), context), true);
+    }
+
 
     @Override
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
