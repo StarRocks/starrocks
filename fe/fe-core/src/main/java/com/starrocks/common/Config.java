@@ -606,16 +606,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
-    /**
-     * num of thread to handle profile processing
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Number of thread to handle profile processing")
+    @Deprecated
     public static int profile_process_threads_num = 2;
 
-    /**
-     * blocking queue size to store profile process task
-     */
-    @ConfField
+    @ConfField(comment = "[DEPRECATED] Size of blocking queue to store profile process task")
+    @Deprecated
     public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
 
     /**

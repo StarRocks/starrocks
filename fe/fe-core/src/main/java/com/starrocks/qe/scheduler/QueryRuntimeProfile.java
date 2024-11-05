@@ -71,11 +71,13 @@ public class QueryRuntimeProfile {
      * Set the queue size to a large value. The decision to execute the profile process task asynchronously
      * occurs when a listener is added to {@link QueryRuntimeProfile#profileDoneSignal}. The function
      * {@link QueryRuntimeProfile#addListener} will then determine if the size of the queued task exceeds
-     * {@link Config#profile_process_blocking_queue_size}.
+     * queue size.
      */
     private static final ThreadPoolExecutor EXECUTOR =
-            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
-                    Integer.MAX_VALUE, "profile-worker", false);
+            ThreadPoolManager.newDaemonCacheThreadPool(
+                    ThreadPoolManager.cpuIntensiveThreadPoolSize(),
+                    ThreadPoolManager.cpuIntensiveThreadPoolSize() * 4,
+                    "profile-worker", true);
 
     /**
      * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
@@ -256,7 +258,7 @@ public class QueryRuntimeProfile {
     }
 
     public boolean addListener(Consumer<Boolean> task) {
-        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+        if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
         }
 
