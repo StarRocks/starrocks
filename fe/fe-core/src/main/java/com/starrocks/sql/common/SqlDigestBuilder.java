@@ -53,7 +53,7 @@ public class SqlDigestBuilder {
         @Override
         public String visitValues(ValuesRelation node, Void scope) {
             if (node.isNullValues()) {
-                return "";
+                return "VALUES(NULL)";
             }
 
             StringBuilder sqlBuilder = new StringBuilder("VALUES");
