@@ -49,11 +49,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
-import io.netty.handler.codec.http.HttpHeaders;
-=======
->>>>>>> 67e45033b3 ([BugFix] properly handle 100-continue in load action (#52582))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpUtil;
 import org.apache.commons.collections.CollectionUtils;
