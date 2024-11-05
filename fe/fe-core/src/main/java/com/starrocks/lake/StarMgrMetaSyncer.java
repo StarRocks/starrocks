@@ -322,10 +322,18 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     return false;
                 }
 
+                // no need to check db/table/partition again, everything still works
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    List<Long> starmgrShardIds = starOSAgent.listShard(materializedIndex.getShardGroupId());
-                    Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                    long groupId = materializedIndex.getShardGroupId();
+                    Set<Long> starmgrShardIdsSet = null;
+                    if (redundantGroupToShards.get(groupId) != null) {
+                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    } else {
+                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                    }
+
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }

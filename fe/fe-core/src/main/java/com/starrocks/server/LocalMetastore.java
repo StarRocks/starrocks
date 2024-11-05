@@ -1574,7 +1574,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long shardGroupId = partition.getBaseIndex().getShardGroupId();
         for (long indexId : olapTable.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
-            rollup.setShardGroupId(shardGroupId);
             indexMap.put(indexId, rollup);
         }
 
@@ -1609,9 +1608,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (index.getId() != olapTable.getBaseIndexId()) {
                 // add rollup index to partition
                 physicalPartition.createRollupIndex(index);
-            } else {
-                // base index set ShardGroupId for rollback to old version
-                physicalPartition.setShardGroupId(index.getShardGroupId());
             }
         }
 
