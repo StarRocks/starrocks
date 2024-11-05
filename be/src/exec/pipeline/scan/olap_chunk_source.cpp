@@ -236,7 +236,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
-    _params.enable_sampling = thrift_olap_scan_node.data_sample;
+    _params.sample_options = thrift_olap_scan_node.sample_options;
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }

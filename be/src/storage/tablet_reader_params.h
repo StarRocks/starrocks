@@ -100,8 +100,7 @@ struct TabletReaderParams {
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
-    // Data sampling
-    bool enable_sampling = false;
+    TTableSampleOptions sample_options;
 
 public:
     std::string to_string() const;

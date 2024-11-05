@@ -2064,21 +2064,27 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
 }
 
 Status SegmentIterator::_apply_data_sampling() {
-    RETURN_IF(!_opts.enable_block_sampling, Status::OK());
+    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-    
+
+    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.random_seed);
+    DCHECK(_opts.sample_options.__isset.sample_method);
+
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+
     // Generate a uniformly distributed random number
-    std::random_device rd;
-    std::mt19937 mt(rd());
-    std::uniform_int_distribution<int> dist(1, 100); // Generates a random number between 1 and 100
-    
+    std::mt19937 mt(random_seed);
+    std::uniform_int_distribution<int> dist(0, 100);
+
     size_t rows_per_block = _segment->num_rows_per_block();
     size_t total_rows = _segment->num_rows();
     RowIdSparseRange sampled_ranges;
     for (size_t i = 0; i < total_rows; i+= rows_per_block) {
         int rnd = dist(mt);
-        if (rnd < 10) {
+        if (rnd < probability_percent) {
             sampled_ranges.add(RowIdRange(i, i+rows_per_block));
         }
     }
