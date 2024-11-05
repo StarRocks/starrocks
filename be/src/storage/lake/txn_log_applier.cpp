@@ -133,6 +133,7 @@ private:
                 LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
                 // release and remove index entry's reference
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+                _guard.reset(nullptr);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
                 LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
