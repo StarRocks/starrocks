@@ -124,6 +124,10 @@ CONF_Int32(check_consistency_worker_count, "1");
 CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
 CONF_mInt32(download_worker_count, "0");
+// The buffer size to upload.
+CONF_mInt32(upload_buffer_size, "4194304");
+// The buffer size to download.
+CONF_mInt32(download_buffer_size, "4194304");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
