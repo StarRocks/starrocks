@@ -202,7 +202,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
         throw new NonRecoverableException(
-                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + this);
+                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
     }
 
     @Override
@@ -242,11 +242,21 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
+        return computeNodesToString(true);
+    }
+
+    private String computeNodesToString(boolean allowNormalNodes) {
         StringBuilder out = new StringBuilder("compute node: ");
-        id2ComputeNode.forEach((backendID, backend) -> out.append(
-                String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
-                        SimpleScheduler.isInBlocklist(backendID))));
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (allowNormalNodes || !backend.isAlive() || !availableID2ComputeNode.containsKey(backendID) ||
+                    SimpleScheduler.isInBlocklist(backendID)) {
+                out.append(
+                        String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
+                                SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
         return out.toString();
     }
 
