@@ -102,6 +102,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TTableSampleOptions;
 import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
@@ -1111,7 +1112,9 @@ public class OlapScanNode extends ScanNode {
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
             if (sample != null && sample.isUseSampling()) {
-                sample.toThrift(msg.olap_scan_node.sample_options);
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.olap_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
             }
         }
     }
