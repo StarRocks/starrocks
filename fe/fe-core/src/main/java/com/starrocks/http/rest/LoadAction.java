@@ -47,8 +47,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpUtil;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -86,10 +86,14 @@ public class LoadAction extends RestBaseAction {
 
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
 
-        // A 'Load' request must have 100-continue header
-        if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {
+        // A 'Load' request must have "Expect: 100-continue" header
+        if (!HttpUtil.is100ContinueExpected(request.getRequest())) {
+            // TODO: should respond "HTTP 417 Expectation Failed"
             throw new DdlException("There is no 100-continue header");
         }
+        // close the connection forcibly after the request, so the `Expect: 100-Continue` won't
+        // affect subsequent requests processing.
+        response.setForceCloseConnection(true);
 
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
