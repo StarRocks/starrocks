@@ -693,6 +693,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+<<<<<<< HEAD
+=======
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+    public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
+    public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
+
+    public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
+
+    public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+
+    public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+
+>>>>>>> af20339fc0 ([BugFix] Fix incorrect execution plan when generated column rewrite in join relation if left table and right table has the same column name (#52584))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1344,6 +1358,55 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PLAN_ANALYZER, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanAnalyzer = false;
+
+    @VarAttr(name = ENABLE_PLAN_ADVISOR)
+    private boolean enablePlanAdvisor = true;
+
+    @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
+    private String countDistinctImplementation = "default";
+
+    // By default, we always use the created mv's bitmap/hll to rewrite count distinct, but result is not
+    // exactly matched with the original result.
+    // If we want to get the exactly matched result, we can disable this.
+    @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
+    private boolean enableCountDistinctRewriteByHllBitmap = true;
+
+    @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean disableGeneratedColumnRewrite = false;
+
+    public int getCboPruneJsonSubfieldDepth() {
+        return cboPruneJsonSubfieldDepth;
+    }
+
+    public void setCboPruneJsonSubfieldDepth(int cboPruneJsonSubfieldDepth) {
+        this.cboPruneJsonSubfieldDepth = cboPruneJsonSubfieldDepth;
+    }
+
+    public boolean isEnableExecutionOnly() {
+        return enableExecutionOnly;
+    }
+
+    public boolean isCboPruneJsonSubfield() {
+        return cboPruneJsonSubfield;
+    }
+
+    public void setCboPruneJsonSubfield(boolean cboPruneJsonSubfield) {
+        this.cboPruneJsonSubfield = cboPruneJsonSubfield;
+    }
+
+    public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
+        this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;
+    }
+
+    public boolean isEnableArrayLowCardinalityOptimize() {
+        return enableArrayLowCardinalityOptimize;
+    }
+
+>>>>>>> af20339fc0 ([BugFix] Fix incorrect execution plan when generated column rewrite in join relation if left table and right table has the same column name (#52584))
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
 
@@ -3530,8 +3593,77 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.likePredicateConsolidateMin = value;
     }
 
+<<<<<<< HEAD
     public void setEnableConnectorSplitIoTasks(boolean v) {
         enableConnectorSplitIoTasks = v;
+=======
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+    public void setCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+    }
+
+    public int getConnectorRemoteFileAsyncQueueSize() {
+        return connectorRemoteFileAsyncQueueSize;
+    }
+
+    public int getConnectorRemoteFileAsyncTaskSize() {
+        return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public boolean isEnablePlanAnalyzer() {
+        return enablePlanAnalyzer;
+    }
+
+    public void setEnablePlanAnalyzer(boolean enablePlanAnalyzer) {
+        this.enablePlanAnalyzer = enablePlanAnalyzer;
+    }
+
+    public boolean isEnablePlanAdvisor() {
+        return enablePlanAdvisor;
+    }
+
+    public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
+        this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
+    public void setCountDistinctImplementation(String countDistinctImplementation) {
+        this.countDistinctImplementation = countDistinctImplementation;
+    }
+
+    public SessionVariableConstants.CountDistinctImplMode getCountDistinctImplementation() {
+        return SessionVariableConstants.CountDistinctImplMode.parse(countDistinctImplementation);
+    }
+
+    public boolean isEnableCountDistinctRewriteByHllBitmap() {
+        return enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
+        this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
+    }
+
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
+>>>>>>> af20339fc0 ([BugFix] Fix incorrect execution plan when generated column rewrite in join relation if left table and right table has the same column name (#52584))
     }
 
     // Serialize to thrift object
