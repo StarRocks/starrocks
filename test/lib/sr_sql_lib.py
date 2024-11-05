@@ -2567,6 +2567,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             else:
                 break
 
+    def assert_is_identical_explain_plan(self, query1, query2):
+        """
+        assert whether two plans from query1 and query2 are identical
+        """
+        sql1 = "explain %s" % query1
+        sql2 = "explain %s" % query2
+        res1 = self.execute_sql(sql1, True)
+        res2 = self.execute_sql(sql2, True)
+        tools.assert_true(res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"]))
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
