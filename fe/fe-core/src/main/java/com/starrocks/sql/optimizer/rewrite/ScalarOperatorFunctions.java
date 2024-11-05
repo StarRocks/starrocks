@@ -386,18 +386,24 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
                     returnType = VARCHAR, isMonotonic = true)
     })
+
     public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        // unix style
-        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
-            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
-        } else {
-            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
-            return ConstantOperator.createVarchar(result);
+        try {
+            // unix style
+            if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
+                DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
+                return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
+            } else {
+                String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
+                return ConstantOperator.createVarchar(result);
+            }
+        } catch (IllegalArgumentException e) {
+            // Handle invalid datetime format pattern
+            return ConstantOperator.createNull(Type.VARCHAR);
         }
     }
 
