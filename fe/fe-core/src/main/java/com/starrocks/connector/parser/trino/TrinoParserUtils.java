@@ -27,6 +27,7 @@ import io.trino.sql.tree.CreateTableAsSelect;
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Query;
+import io.trino.sql.tree.ShowSchemas;
 import io.trino.sql.tree.Statement;
 
 import java.time.format.DateTimeParseException;
@@ -40,7 +41,7 @@ public class TrinoParserUtils {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
-                || statement instanceof CreateTableAsSelect) {
+                || statement instanceof CreateTableAsSelect || statement instanceof ShowSchemas) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
