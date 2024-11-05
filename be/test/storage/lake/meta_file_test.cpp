@@ -32,6 +32,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -571,6 +572,32 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
     EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+}
+
+TEST_F(MetaFileTest, test_error_state) {
+    // generate metadata
+    const int64_t tablet_id = 10001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    // add rowset with segment
+    RowsetMetadataPB rowset_metadata;
+    rowset_metadata.set_id(110);
+    rowset_metadata.add_segments("aaa.dat");
+    rowset_metadata.add_segments("bbb.dat");
+    metadata->add_rowsets()->CopyFrom(rowset_metadata);
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
+    for (int i = 0; i < 10; i++) {
+        segment_id_to_add_dels[i] = 100;
+    }
+    // generate error state
+    MetaFileBuilder builder(*tablet, metadata);
+    Status st = builder.update_num_del_stat(segment_id_to_add_dels);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
 } // namespace starrocks::lake
