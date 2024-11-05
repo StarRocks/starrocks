@@ -22,12 +22,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.FileTableFunctionRelation;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
@@ -38,8 +35,6 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.ast.pipe.CreatePipeStmt;
-import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -395,83 +390,6 @@ public class AstToSQLBuilder {
         }
 
         @Override
-        public String visitInsertStatement(InsertStmt insert, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("INSERT ");
-
-            // add hint
-            if (insert.getHintNodes() != null) {
-                sb.append(extractHintStr(insert.getHintNodes()));
-            }
-
-
-            if (insert.isOverwrite()) {
-                sb.append("OVERWRITE ");
-            } else {
-                sb.append("INTO ");
-            }
-
-            // target
-            if (insert.useTableFunctionAsTargetTable()) {
-                sb.append(visitFileTableFunction(
-                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO), context));
-            } else if (insert.useBlackHoleTableAsTargetTable()) {
-                sb.append("blackhole()");
-            } else {
-                sb.append(insert.getTableName().toSql());
-            }
-            sb.append(" ");
-
-            // target partition
-            if (insert.getTargetPartitionNames() != null &&
-                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
-                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
-                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
-            }
-
-            // label
-            if (StringUtils.isNotEmpty(insert.getLabel())) {
-                sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
-            }
-
-            // target column
-            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
-                String columns = insert.getTargetColumnNames().stream()
-                        .map(x -> '`' + x + '`')
-                        .collect(Collectors.joining(","));
-                sb.append("(").append(columns).append(") ");
-            }
-
-            // source
-            if (insert.getQueryStatement() != null) {
-                sb.append(visit(insert.getQueryStatement()));
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public String visitCreatePipeStatement(CreatePipeStmt stmt, Void context) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ");
-            if (stmt.isReplace()) {
-                sb.append("OR REPLACE ");
-            }
-            sb.append("PIPE ");
-            if (stmt.isIfNotExists()) {
-                sb.append("IF NOT EXISTS ");
-            }
-            sb.append(stmt.getPipeName()).append(" ");
-
-            Map<String, String> properties = stmt.getProperties();
-            if (properties != null && !properties.isEmpty()) {
-                sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false, hideCredential)).append(") ");
-            }
-
-            sb.append("AS ").append(visitInsertStatement(stmt.getInsertStmt(), context));
-            return sb.toString();
-        }
-
-        @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
             Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
@@ -497,5 +415,6 @@ public class AstToSQLBuilder {
             sb.append("}");
             return sb.toString();
         }
+
     }
 }
