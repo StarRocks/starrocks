@@ -24,6 +24,10 @@
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+<<<<<<< HEAD
+=======
+#include "formats/parquet/metadata.h"
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
 #include "formats/parquet/page_index_reader.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
