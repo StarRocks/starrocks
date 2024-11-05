@@ -101,7 +101,7 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
-    private static long testBackendId1 = 1000;
+    protected static long testBackendId1 = 1000;
     private static long testBackendId2 = 1001;
     private static long testBackendId3 = 1002;
 
