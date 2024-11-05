@@ -36,6 +36,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -83,7 +84,7 @@ public class Pipe implements GsonPostProcessable {
 
     private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
             ImmutableMap.<String, String>builder()
-                    .put("query_timeout", "3600")
+                    .put(SessionVariable.INSERT_TIMEOUT, "3600")
                     .build();
 
     @SerializedName(value = "name")

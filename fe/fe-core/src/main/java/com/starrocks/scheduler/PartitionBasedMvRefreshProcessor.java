@@ -115,13 +115,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
     // session.enable_spill
-    public static final String MV_SESSION_ENABLE_SPILL =
+    private static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
-    // session.query_timeout
-    public static final String MV_SESSION_TIMEOUT =
+    // session.query_timeout. Deprecated, only for compatibility with old version
+    private static final String MV_SESSION_QUERY_TIMEOUT =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.QUERY_TIMEOUT;
-    // default query timeout for mv: 1 hour
-    private static final int MV_DEFAULT_QUERY_TIMEOUT = 3600;
+    // session.insert_timeout
+    private static final String MV_SESSION_INSERT_TIMEOUT =
+            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.INSERT_TIMEOUT;
+    // default insert timeout for mv: 1 hour
+    private static final int MV_DEFAULT_INSERT_TIMEOUT = 3600;
 
 
     private Database db;
@@ -580,9 +583,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setEnableSpill(true);
         }
 
-        // change `query_timeout` to 1 hour by default for better user experience.
-        if (!mvProperty.getProperties().containsKey(MV_SESSION_TIMEOUT)) {
-            mvSessionVariable.setInsertTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
+        if (!mvProperty.getProperties().containsKey(MV_SESSION_INSERT_TIMEOUT)) {
+            if (!mvProperty.getProperties().containsKey(MV_SESSION_QUERY_TIMEOUT)) {
+                // change `insert_timeout` to 1 hour by default for better user experience.
+                mvSessionVariable.setInsertTimeoutS(MV_DEFAULT_INSERT_TIMEOUT);
+            } else {
+                // for compatibility
+                mvProperty.getProperties().put(MV_SESSION_INSERT_TIMEOUT,
+                        mvProperty.getProperties().remove(MV_SESSION_QUERY_TIMEOUT));
+            }
         }
 
         // set insert_max_filter_ratio by default
