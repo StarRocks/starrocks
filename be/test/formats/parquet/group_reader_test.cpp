@@ -443,4 +443,21 @@ TEST_F(GroupReaderTest, TestGetNext) {
     _check_chunk(param, chunk, 8, 4);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
+    ParquetField field;
+    field.name = "col0";
+    field.type = ColumnType::ARRAY;
+
+    TypeDescriptor col_type;
+    col_type.type = LogicalType::TYPE_VARCHAR;
+
+    ColumnReaderOptions options;
+    Status st = ColumnReader::create(options, &field, col_type, nullptr);
+    ASSERT_FALSE(st.ok()) << st;
+    std::cout << st.message() << "\n";
+}
+
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
 } // namespace starrocks::parquet

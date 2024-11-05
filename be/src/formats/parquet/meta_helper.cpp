@@ -36,6 +36,34 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
                 break;
             }
         }
+<<<<<<< HEAD
+=======
+
+        // After the column is added, there is no new column when querying the previously
+        // imported parquet file. It is skipped here, and this column will be set to NULL
+        // in the FileReader::_read_min_max_chunk.
+        if (field == nullptr) continue;
+        // For field which type is complex, the filed physical_column_index in file meta is not same with the column index
+        // in row_group's column metas
+        // For example:
+        // table schema :
+        //  -- col_tinyint tinyint
+        //  -- col_struct  struct
+        //  ----- name     string
+        //  ----- age      int
+        // file metadata schema :
+        //  -- ParquetField(name=col_tinyint, physical_column_index=0)
+        //  -- ParquetField(name=col_struct,physical_column_index=0,
+        //                  children=[ParquetField(name=name, physical_column_index=1),
+        //                            ParquetField(name=age, physical_column_index=2)])
+        // row group column metas:
+        //  -- ColumnMetaData(path_in_schema=[col_tinyint])
+        //  -- ColumnMetaData(path_in_schema=[col_struct, name])
+        //  -- ColumnMetaData(path_in_schema=[col_struct, age])
+        if (field->is_complex_type()) continue;
+        // Put SlotDescriptor's origin column name here!
+        column_name_2_pos_in_meta.emplace(slot->col_name(), field->physical_column_index);
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
     }
 }
 
@@ -66,24 +94,25 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     }
     // only check for complex type now
     // if complex type has none valid subfield, we will treat this struct type as invalid type.
-    if (!parquet_field->type.is_complex_type()) {
+    if (!parquet_field->is_complex_type()) {
         return true;
     }
 
-    if (parquet_field->type.type != type_descriptor->type) {
-        // complex type mismatched
+    // check the complex type is matched
+    if (!parquet_field->has_same_complex_type(*type_descriptor)) {
         return false;
     }
 
     bool has_valid_child = false;
 
-    if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
+    if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
         for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &type_descriptor->children[idx])) {
                 has_valid_child = true;
                 break;
             }
         }
+<<<<<<< HEAD
     } else if (parquet_field->type.is_struct_type()) {
         std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
         for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
@@ -96,6 +125,13 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
             if (it == field_name_2_type.end()) {
                 continue;
+=======
+    } else if (parquet_field->type == ColumnType::STRUCT) {
+        if (!type_descriptor->field_ids.empty()) {
+            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
+            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
             }
 
             if (_is_valid_type(&child_parquet_field, it->second)) {
@@ -122,18 +158,17 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
                                        const TypeDescriptor* type_descriptor) const {
     // only check for complex type now
     // if complex type has none valid subfield, we will treat this struct type as invalid type.
-    if (!parquet_field->type.is_complex_type()) {
+    if (!parquet_field->is_complex_type()) {
         return true;
     }
 
-    if (parquet_field->type.type != type_descriptor->type) {
-        // complex type mismatched
+    if (!parquet_field->has_same_complex_type(*type_descriptor)) {
         return false;
     }
 
     bool has_valid_child = false;
 
-    if (parquet_field->type.is_array_type() || parquet_field->type.is_map_type()) {
+    if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
         for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
                                &type_descriptor->children[idx])) {
@@ -141,7 +176,7 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
                 break;
             }
         }
-    } else if (parquet_field->type.is_struct_type()) {
+    } else if (parquet_field->type == ColumnType::STRUCT) {
         std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_iceberg_schema{};
         std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
         for (const auto& field : field_schema->children) {

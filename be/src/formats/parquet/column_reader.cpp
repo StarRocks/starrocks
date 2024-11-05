@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+<<<<<<< HEAD
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -25,6 +26,26 @@
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "gutil/strings/substitute.h"
+=======
+#include <algorithm>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <map>
+#include <ostream>
+#include <unordered_map>
+#include <utility>
+
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "common/compiler_util.h"
+#include "exec/exec_node.h"
+#include "exec/hdfs_scanner.h"
+#include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "formats/utils.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"
@@ -1035,7 +1056,16 @@ private:
 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                      bool case_sensitive, std::vector<int32_t>& pos) {
+<<<<<<< HEAD
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
+=======
+    DCHECK(field.type == ColumnType::STRUCT);
+    if (!col_type.field_ids.empty()) {
+        std::unordered_map<int32_t, size_t> field_id_2_pos;
+        for (size_t i = 0; i < field.children.size(); i++) {
+            field_id_2_pos.emplace(field.children[i].field_id, i);
+        }
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
 
     // build tmp mapping for ParquetField
     std::unordered_map<std::string, size_t> field_name_2_pos;
@@ -1118,11 +1148,18 @@ bool ColumnReader::_has_valid_subfield_column_reader(
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
+<<<<<<< HEAD
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
         return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
                                                          field->type.type, col_type.type));
+=======
+    if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
+        return Status::InternalError(
+                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
+                                    column_type_to_string(field->type), logical_type_to_string(col_type.type)));
+>>>>>>> 1028b6ac2c ([Enhancement] Use more clear type description in ParquetField (#52575))
     }
-    if (field->type.type == LogicalType::TYPE_ARRAY) {
+    if (field->type == ColumnType::ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         if (child_reader != nullptr) {
@@ -1132,7 +1169,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         } else {
             *output = nullptr;
         }
-    } else if (field->type.type == LogicalType::TYPE_MAP) {
+    } else if (field->type == ColumnType::MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
@@ -1150,7 +1187,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         } else {
             *output = nullptr;
         }
-    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
+    } else if (field->type == ColumnType::STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
@@ -1186,12 +1223,13 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
-    if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
-                                                         field->type.type, col_type.type));
+    if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
+        return Status::InternalError(
+                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
+                                    column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
     DCHECK(iceberg_schema_field != nullptr);
-    if (field->type.type == LogicalType::TYPE_ARRAY) {
+    if (field->type == ColumnType::ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         const TIcebergSchemaField* element_schema = &iceberg_schema_field->children[0];
         RETURN_IF_ERROR(
@@ -1203,7 +1241,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         } else {
             *output = nullptr;
         }
-    } else if (field->type.type == LogicalType::TYPE_MAP) {
+    } else if (field->type == ColumnType::MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
@@ -1226,7 +1264,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         } else {
             *output = nullptr;
         }
-    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
+    } else if (field->type == ColumnType::STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
