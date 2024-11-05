@@ -70,6 +70,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `part_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY list(v4) ( partition p1 values in ('1'), partition p2 values in ('2')) \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `t2` (\n" +
                 "  `v7` bigint NULL COMMENT \"\",\n" +
                 "  `v8` bigint NULL COMMENT \"\",\n" +

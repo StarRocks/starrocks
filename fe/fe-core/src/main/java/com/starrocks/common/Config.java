@@ -2438,6 +2438,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true,
+            comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
+    public static boolean enable_sql_digest = false;
+
     @ConfField(mutable = true, comment = "explain level of query plan in this detail")
     public static String query_detail_explain_level = "COSTS";
 
