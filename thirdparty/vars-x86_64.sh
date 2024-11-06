@@ -28,10 +28,10 @@ HADOOP_SOURCE="hadoop-3.4.0"
 HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
 
 # OPEN JDK
-JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
-JDK_NAME="java-se-8u41-ri.tar.gz"
-JDK_SOURCE="java-se-8u41-ri"
-JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
+JDK_DOWNLOAD="https://builds.openlogic.com/downloadJDK/openlogic-openjdk/11.0.25+9/openlogic-openjdk-11.0.25+9-linux-x64.tar.gz"
+JDK_NAME="openjdk-11.0.25+9-linux-x64.tar.gz"
+JDK_SOURCE="openjdk-11.0.25+9-linux-x64"
+JDK_MD5SUM="e58c241505fda12bb6e70e1ddc8b8fae"
 
 # HYPERSCAN
 HYPERSCAN_DOWNLOAD="https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz"
