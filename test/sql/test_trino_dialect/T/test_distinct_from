@@ -1,0 +1,10 @@
+-- name: testDistinctFrom
+
+set sql_dialect='trino';
+
+select 1 is distinct from 1;
+select 1 is distinct from null;
+select null is distinct from null;
+select 1 is not distinct from 1;
+select 1 is not distinct from null;
+select null is not distinct from null;
