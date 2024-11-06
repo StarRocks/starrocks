@@ -230,6 +230,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     .put(ComparisonExpression.Operator.GREATER_THAN, BinaryType.GT)
                     .put(ComparisonExpression.Operator.GREATER_THAN_OR_EQUAL, BinaryType.GE)
                     .put(ComparisonExpression.Operator.NOT_EQUAL, BinaryType.NE)
+                    .put(ComparisonExpression.Operator.IS_DISTINCT_FROM, BinaryType.EQ_FOR_NULL)
                     .build();
 
     private static final ImmutableMap<ArithmeticBinaryExpression.Operator, ArithmeticExpr.Operator> BINARY_OPERATOR_MAP =
@@ -1047,6 +1048,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (binaryOp == null) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support the comparison type %s",
                     node.getOperator()));
+        }
+        if (node.getOperator() == ComparisonExpression.Operator.IS_DISTINCT_FROM) {
+            return new CompoundPredicate(CompoundPredicate.Operator.NOT, new BinaryPredicate(binaryOp,
+                    (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(), context)), null);
         }
         return new BinaryPredicate(binaryOp, (Expr) visit(node.getLeft(), context), (Expr) visit(node.getRight(),
                 context));
