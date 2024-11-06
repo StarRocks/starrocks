@@ -41,6 +41,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -321,8 +322,10 @@ public class Util {
                                          int readTimeoutMs) {
         StringBuilder sb = new StringBuilder();
         InputStream stream = null;
+        String safeUrl = urlStr;
         try {
             URL url = new URL(urlStr);
+            safeUrl = WebUtils.sanitizeHttpReqUri(urlStr);
             URLConnection conn = url.openConnection();
             if (encodedAuthInfo != null) {
                 conn.setRequestProperty("Authorization", "Basic " + encodedAuthInfo);
@@ -338,14 +341,14 @@ public class Util {
                 sb.append(line);
             }
         } catch (Exception e) {
-            LOG.warn("failed to get result from url: {}. {}", urlStr, e.getMessage());
+            LOG.warn("failed to get result from url: {}. {}", safeUrl, e.getMessage());
             return null;
         } finally {
             if (stream != null) {
                 try {
                     stream.close();
                 } catch (IOException e) {
-                    LOG.warn("failed to close stream when get result from url: {}", urlStr, e);
+                    LOG.warn("failed to close stream when get result from url: {}", safeUrl, e);
                 }
             }
         }
