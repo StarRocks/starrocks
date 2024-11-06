@@ -97,6 +97,8 @@ public:
 
     void update_exec_stats(RuntimeState* state) override;
 
+    virtual int chunk_source_profile_count() const { return _io_tasks_per_scan_operator; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
