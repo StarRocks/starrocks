@@ -160,7 +160,7 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
 }
 
 Status LocalPartitionTopnContext::compute_agg_state(Chunk* chunk, size_t partition_idx) {
-    if (!_enable_pre_agg) return Status::OK();
+    DCHECK(_enable_pre_agg);
 
     RETURN_IF_ERROR(_evaluate_agg_input_columns(chunk));
 
@@ -190,7 +190,9 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-                (void)compute_agg_state(chunk.get(), partition_idx);
+                if (_enable_pre_agg) {
+                    (void)compute_agg_state(chunk.get(), partition_idx);
+                }
             }));
     if (_chunks_partitioner->is_passthrough()) {
         RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
@@ -215,7 +217,9 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
-                (void)compute_agg_state(chunk.get(), partition_idx);
+                if (_enable_pre_agg) {
+                    (void)compute_agg_state(chunk.get(), partition_idx);
+                }
                 return true;
             }));
 

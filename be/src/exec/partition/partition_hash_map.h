@@ -150,9 +150,9 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
-        size_t partition_num_upper = enable_pre_agg ? 32768 : 512;
+        size_t partition_num_hwm = enable_pre_agg ? 32768 : 512;
 
-        if (enable_pre_agg && partition_num > partition_num_upper && total_num_rows < 10000 * partition_num) {
+        if (enable_pre_agg && partition_num > partition_num_hwm && total_num_rows < 10000 * partition_num) {
             is_passthrough = true;
         }
     }
