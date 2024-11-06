@@ -104,6 +104,11 @@ public class ErrorReport {
         throw new TimeoutException(reportCommon(null, errorCode, objs));
     }
 
+    public static void reportNoAliveBackendException(ErrorCode errorCode, Object... objs)
+            throws NoAliveBackendException {
+        throw new NoAliveBackendException(reportCommon(null, errorCode, objs));
+    }
+
     public interface DdlExecutor {
         void apply() throws UserException;
     }

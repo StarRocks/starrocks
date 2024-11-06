@@ -68,6 +68,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
 import com.starrocks.common.Status;
@@ -754,6 +755,8 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
             } else if (e instanceof TimeoutException) {
                 context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
+            } else if (e instanceof NoAliveBackendException) {
+                context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             } else {
                 // TODO: some UserException doesn't belong to analysis error
                 // we should set such error type to internal error
@@ -2322,7 +2325,7 @@ public class StmtExecutor {
                     }
 
                     coord.cancel(ErrorCode.ERR_QUERY_EXCEPTION.formatErrorMsg());
-                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
+                    ErrorReport.reportNoAliveBackendException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
                     coord.cancel(ErrorCode.ERR_QUERY_TIMEOUT.formatErrorMsg());
                     if (coord.isThriftServerHighLoad()) {
