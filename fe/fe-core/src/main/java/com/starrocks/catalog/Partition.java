@@ -661,6 +661,9 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
             if (subPartition.getName() == null) {
                 subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
             }
+            if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                subPartition.getBaseIndex().setShardGroupId(baseIndex.getShardGroupId());
+            }
             nameToSubPartition.put(subPartition.getName(), subPartition);
         }
     }

@@ -333,7 +333,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
-
+        buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
