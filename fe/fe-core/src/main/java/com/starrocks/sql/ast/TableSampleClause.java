@@ -31,9 +31,14 @@ import java.util.concurrent.ThreadLocalRandom;
 public class TableSampleClause implements ParseNode {
 
     // Properties supported by sampling
+    // sample method: by_row/by_block/by_page
     private static final String SAMPLE_PROPERTY_METHOD = "METHOD";
+    // random seed: default value is a random number
     private static final String SAMPLE_PROPERTY_SEED = "SEED";
+    // probability of sampling: (0,100)
     private static final String SAMPLE_PROPERTY_PROBABILITY = "PROBABILITY";
+    // same as probability
+    private static final String SAMPLE_PROPERTY_PERCENT = "PERCENT";
 
     // Default values for sampling
     private static final SampleMethod DEFAULT_SAMPLE_METHOD = SampleMethod.BY_BLOCK;
@@ -66,10 +71,10 @@ public class TableSampleClause implements ParseNode {
                     this.sampleMethod = SampleMethod.mustParse(value);
                     break;
                 case SAMPLE_PROPERTY_PROBABILITY:
+                case SAMPLE_PROPERTY_PERCENT:
                     long percent = ParseUtil.analyzeLongValue(value);
-                    if (!(0 <= percent && percent <= 100)) {
-                        throw new AnalysisException("invalid " + SAMPLE_PROPERTY_PROBABILITY + " which should in " +
-                                "[0, 100]");
+                    if (!(0 < percent && percent < 100)) {
+                        throw new AnalysisException("invalid " + entry.getKey() + " which should in (0, 100)");
                     }
                     this.randomProbabilityPercent = percent;
                     break;
