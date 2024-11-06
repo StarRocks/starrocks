@@ -181,7 +181,7 @@ jobs:
 
       - name: Upload Log
         uses: actions/upload-artifact@v4
-        if: always() && steps.run_ut.outcome == 'failure'
+        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -245,7 +245,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        if: always()
+        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
@@ -254,7 +254,7 @@ jobs:
           overwrite: true
 
       - name: Download FE UT XML
-        if: always()
+        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         id: download-ut-xml
         env:
           oss_path: ${{ steps.run_ut.outputs.oss_path }}
@@ -265,7 +265,7 @@ jobs:
 
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
-        if: always()
+        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         id: publish_report
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -277,7 +277,7 @@ jobs:
           report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 
       - name: Clean ENV
-        if: always()
+        if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         run: |
           rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
