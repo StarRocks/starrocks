@@ -29,8 +29,8 @@ class Controller;
 namespace starrocks {
 
 class ExecEnv;
-class PBatchWriteLoadRequest;
-class PBatchWriteLoadResponse;
+class PStreamLoadRequest;
+class PStreamLoadResponse;
 class StreamLoadContext;
 
 class BatchWriteMgr {
@@ -50,8 +50,8 @@ public:
             const std::map<std::string, std::string>& load_parameters, const string& label, long txn_id,
             const TUniqueId& load_id, int32_t batch_write_interval_ms);
 
-    static void receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cntl, const PBatchWriteLoadRequest* request,
-                                    PBatchWriteLoadResponse* response);
+    static void receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl, const PStreamLoadRequest* request,
+                                        PStreamLoadResponse* response);
 
 private:
     StatusOr<IsomorphicBatchWriteSharedPtr> _get_batch_write(const BatchWriteId& batch_write_id,

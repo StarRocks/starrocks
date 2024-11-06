@@ -1252,12 +1252,12 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::batch_write_load(google::protobuf::RpcController* cntl_base,
-                                                   const PBatchWriteLoadRequest* request,
-                                                   PBatchWriteLoadResponse* response, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    BatchWriteMgr::receive_rpc_request(_exec_env, cntl, request, response);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

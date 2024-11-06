@@ -57,8 +57,9 @@ std::string encode_basic_auth(const std::string& user, const std::string& passwd
     return s_prefix + encoded_auth;
 }
 
-bool parse_basic_auth(const std::string& auth, std::string* user, std::string* passwd) {
+bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* passwd) {
     const char k_basic[] = "Basic ";
+    auto& auth = req.header(HttpHeaders::AUTHORIZATION);
     if (auth.compare(0, sizeof(k_basic) - 1, k_basic, sizeof(k_basic) - 1) != 0) {
         return false;
     }
@@ -75,11 +76,6 @@ bool parse_basic_auth(const std::string& auth, std::string* user, std::string* p
     passwd->assign(decoded_auth.c_str() + pos + 1);
 
     return true;
-}
-
-bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* passwd) {
-    auto& auth = req.header(HttpHeaders::AUTHORIZATION);
-    return parse_basic_auth(auth, user, passwd);
 }
 
 bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth) {

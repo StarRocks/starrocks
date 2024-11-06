@@ -512,7 +512,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
                             .set_min_threads(config::batch_write_thread_pool_num_min)
                             .set_max_threads(config::batch_write_thread_pool_num_max)
-                            .set_max_queue_size(2048)
+                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                             .build(&batch_write_thread_pool));
     auto batch_write_executor =

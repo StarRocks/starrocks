@@ -217,7 +217,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
-    ASSIGN_OR_RETURN(ctx->load_parameters, get_load_parameters_from_http(http_req));
+    ctx->load_parameters = get_load_parameters_from_http(http_req);
     return _exec_env->batch_write_mgr()->append_data(ctx);
 }
 

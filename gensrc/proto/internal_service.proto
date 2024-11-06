@@ -644,15 +644,16 @@ message PKeyValue {
     optional string value = 2;
 };
 
-// data is sent as an attachment
-message PBatchWriteLoadRequest {
-    optional string db = 1;
-    optional string table = 2;
-    repeated PKeyValue parameters = 3;
+message PStreamLoadRequest {
+  optional string db = 1;
+  optional string table = 2;
+  optional string user = 3;
+  optional string passwd = 4;
+  repeated PKeyValue parameters = 5;
 }
 
-message PBatchWriteLoadResponse {
-    optional string json_result = 1;
+message PStreamLoadResponse {
+  optional string json_result = 1;
 }
 
 // NOTE(zc): If you want to add new method here,
@@ -699,5 +700,5 @@ service PInternalService {
 
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 
-    rpc batch_write_load(PBatchWriteLoadRequest)returns (PBatchWriteLoadResponse);
+    rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 };

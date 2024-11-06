@@ -15,8 +15,13 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 
 #include <gtest/gtest.h>
+#include <rapidjson/document.h>
 
+#include "brpc/controller.h"
 #include "gen_cpp/FrontendService.h"
+#include "gen_cpp/internal_service.pb.h"
+#include "http/http_common.h"
+#include "http/http_headers.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 #include "testutil/assert.h"
@@ -194,6 +199,154 @@ TEST_F(BatchWriteMgrTest, stop) {
     ASSERT_TRUE(status_or_ctx3.status().is_service_unavailable());
     StreamLoadContext* data_ctx = build_data_context(batch_write_id1, "data1");
     ASSERT_TRUE(_batch_write_mgr->append_data(data_ctx).is_service_unavailable());
+}
+
+#define ADD_KEY_VALUE(request, key, value)        \
+    {                                             \
+        PKeyValue* kv = request.add_parameters(); \
+        kv->set_key(key);                         \
+        kv->set_value(value);                     \
+    }
+
+TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::cb");
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::success");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    brpc::Controller cntl;
+    PStreamLoadRequest request;
+    PStreamLoadResponse response;
+    request.set_db("db");
+    request.set_table("tbl");
+    request.set_user("root");
+    request.set_passwd("123456");
+    ADD_KEY_VALUE(request, "label", "test1");
+    ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
+    ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+    ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+    ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
+    std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    cntl.request_attachment().append(data);
+
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb", [&](void* arg) {
+        StreamLoadContext* ctx = *(StreamLoadContext**)arg;
+        EXPECT_EQ("db", ctx->db);
+        EXPECT_EQ("tbl", ctx->table);
+        EXPECT_EQ("test1", ctx->label);
+        EXPECT_EQ("root", ctx->auth.user);
+        EXPECT_EQ("123456", ctx->auth.passwd);
+        EXPECT_TRUE(ctx->enable_batch_write);
+        std::map<std::string, std::string> load_params = {{HTTP_ENABLE_BATCH_WRITE, "true"},
+                                                          {HTTP_BATCH_WRITE_INTERVAL_MS, "1000"},
+                                                          {HTTP_BATCH_WRITE_ASYNC, "true"},
+                                                          {HTTP_FORMAT_KEY, "json"}};
+        EXPECT_EQ(load_params, ctx->load_parameters);
+        EXPECT_NE(nullptr, ctx->buffer);
+        EXPECT_EQ(data, std::string(ctx->buffer->ptr, ctx->buffer->limit));
+    });
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+    ASSERT_TRUE(response.has_json_result());
+    rapidjson::Document doc;
+    doc.Parse(response.json_result().c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
+    std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    // HTTP_ENABLE_BATCH_WRITE is invalid
+    {
+        brpc::Controller cntl;
+        cntl.request_attachment().append(data);
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, "label", "test1");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "abc");
+        PStreamLoadResponse response;
+        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_batch_write"));
+    }
+
+    // HTTP_ENABLE_BATCH_WRITE is false
+    {
+        brpc::Controller cntl;
+        cntl.request_attachment().append(data);
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, "label", "test1");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "false");
+        PStreamLoadResponse response;
+        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "RPC interface only support batch write currently"));
+    }
+
+    // data is empty
+    {
+        brpc::Controller cntl;
+        cntl.request_attachment().append("");
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, "label", "test1");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
+        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+        ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
+        PStreamLoadResponse response;
+        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "The data can not be empty"));
+    }
+
+    // append data fail
+    {
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::fail");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        brpc::Controller cntl;
+        cntl.request_attachment().append(data);
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, "label", "test1");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
+        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+        ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
+        PStreamLoadResponse response;
+        SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::fail", [](void* arg) {
+            *(Status*)arg = Status::InternalError("Artificial failure");
+        });
+        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Artificial failure"));
+    }
 }
 
 } // namespace starrocks

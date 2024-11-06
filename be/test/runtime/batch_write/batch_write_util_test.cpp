@@ -44,9 +44,7 @@ TEST(BatchWriteUtilTest, batch_write_id_equal) {
 TEST(BatchWriteUtilTest, get_load_parameters_from_brpc) {
     std::map<std::string, std::string> input_params = {
             {HTTP_FORMAT_KEY, "json"}, {HTTP_COLUMNS, "col1,col2"}, {HTTP_TIMEOUT, "30"}};
-    auto result = get_load_parameters_from_brpc(input_params);
-    ASSERT_TRUE(result.ok());
-    auto load_params = result.value();
+    auto load_params = get_load_parameters_from_brpc(input_params);
     ASSERT_EQ(load_params[HTTP_FORMAT_KEY], "json");
     ASSERT_EQ(load_params[HTTP_COLUMNS], "col1,col2");
     ASSERT_EQ(load_params[HTTP_TIMEOUT], "30");
@@ -58,9 +56,7 @@ TEST(BatchWriteUtilTest, get_load_parameters_from_http) {
     http_req._headers.emplace(HTTP_COLUMNS, "col1,col2");
     http_req._headers.emplace(HTTP_TIMEOUT, "30");
 
-    auto result = get_load_parameters_from_http(&http_req);
-    ASSERT_TRUE(result.ok());
-    auto load_params = result.value();
+    auto load_params = get_load_parameters_from_http(&http_req);
     ASSERT_EQ(load_params[HTTP_FORMAT_KEY], "json");
     ASSERT_EQ(load_params[HTTP_COLUMNS], "col1,col2");
     ASSERT_EQ(load_params[HTTP_TIMEOUT], "30");

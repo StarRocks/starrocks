@@ -68,7 +68,7 @@ std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
     return out;
 }
 
-StatusOr<BatchWriteLoadParams> get_load_parameters(
+BatchWriteLoadParams get_load_parameters(
         const std::function<std::optional<std::string>(const std::string&)>& getter_func) {
     std::map<std::string, std::string> load_params;
     for (const auto& name : LOAD_PARAMETER_NAMES) {
@@ -80,7 +80,7 @@ StatusOr<BatchWriteLoadParams> get_load_parameters(
     return load_params;
 }
 
-StatusOr<BatchWriteLoadParams> get_load_parameters_from_brpc(const std::map<std::string, std::string>& input_params) {
+BatchWriteLoadParams get_load_parameters_from_brpc(const std::map<std::string, std::string>& input_params) {
     return get_load_parameters([&input_params](const std::string& param_name) -> std::optional<std::string> {
         auto it = input_params.find(param_name);
         if (it != input_params.end()) {
@@ -91,7 +91,7 @@ StatusOr<BatchWriteLoadParams> get_load_parameters_from_brpc(const std::map<std:
     });
 }
 
-StatusOr<BatchWriteLoadParams> get_load_parameters_from_http(HttpRequest* http_req) {
+BatchWriteLoadParams get_load_parameters_from_http(HttpRequest* http_req) {
     return get_load_parameters([http_req](const std::string& param_name) -> std::optional<std::string> {
         std::string value = http_req->header(param_name);
         if (!value.empty()) {

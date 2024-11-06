@@ -51,6 +51,7 @@ StatusOr<IsomorphicBatchWriteSharedPtr> BatchWriteMgr::get_batch_write(const Bat
 Status BatchWriteMgr::append_data(StreamLoadContext* data_ctx) {
     TEST_SYNC_POINT_CALLBACK("BatchWriteMgr::append_data::cb", &data_ctx);
     TEST_SUCC_POINT("BatchWriteMgr::append_data::success");
+    TEST_ERROR_POINT("BatchWriteMgr::append_data::fail");
     BatchWriteId batch_write_id = {
             .db = data_ctx->db, .table = data_ctx->table, .load_params = data_ctx->load_parameters};
     ASSIGN_OR_RETURN(IsomorphicBatchWriteSharedPtr batch_write, _get_batch_write(batch_write_id, true));
@@ -138,31 +139,16 @@ static std::string s_empty;
 #define GET_PARAMETER_OR_EMPTY(parameters, key) \
     (parameters.find(key) != parameters.end() ? parameters.at(key) : s_empty)
 
-bool parse_basic_auth(const std::map<std::string, std::string>& parameters, const std::string& remote_host,
-                      AuthInfo* auth) {
-    std::string full_user;
-    auto& auth_str = GET_PARAMETER_OR_EMPTY(parameters, HttpHeaders::AUTHORIZATION);
-    if (!parse_basic_auth(auth_str, &full_user, &auth->passwd)) {
-        return false;
-    }
-    auto pos = full_user.find('@');
-    if (pos != std::string::npos) {
-        auth->user.assign(full_user.data(), pos);
-        auth->cluster.assign(full_user.data() + pos + 1);
-    } else {
-        auth->user = full_user;
-    }
-    auth->user_ip.assign(remote_host);
-    return true;
-}
+#define ASSIGN_AND_RETURN(lhs, rhs) \
+    lhs = rhs;                      \
+    return
 
-void BatchWriteMgr::receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cntl,
-                                        const PBatchWriteLoadRequest* request, PBatchWriteLoadResponse* response) {
+void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl,
+                                            const PStreamLoadRequest* request, PStreamLoadResponse* response) {
     auto* ctx = new StreamLoadContext(exec_env);
     ctx->ref();
     DeferOp defer([&]() {
         response->set_json_result(ctx->to_json());
-        ctx->buffer = nullptr;
         StreamLoadContext::release(ctx);
     });
     ctx->db = request->db();
@@ -174,80 +160,57 @@ void BatchWriteMgr::receive_rpc_request(ExecEnv* exec_env, brpc::Controller* cnt
 
     {
         auto value = GET_PARAMETER_OR_EMPTY(parameters, HTTP_ENABLE_BATCH_WRITE);
-        if (value.empty()) {
-            ctx->status = Status::InvalidArgument("RPC request must set parameter " + HTTP_ENABLE_BATCH_WRITE);
-            return;
-        }
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         ctx->enable_batch_write = StringParser::string_to_bool(value.c_str(), value.length(), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-            ctx->status = Status::InvalidArgument(fmt::format(
-                    "Invalid parameter {}. The value must be be bool type, but is {}", HTTP_ENABLE_BATCH_WRITE, value));
-            return;
+            ASSIGN_AND_RETURN(ctx->status, Status::InvalidArgument(fmt::format(
+                                                   "Invalid parameter {}. The value must be be bool type, but is {}",
+                                                   HTTP_ENABLE_BATCH_WRITE, value)));
+        }
+        if (!ctx->enable_batch_write) {
+            ASSIGN_AND_RETURN(ctx->status,
+                              Status::InvalidArgument(fmt::format(
+                                      "RPC interface only support batch write currently. Must set {} to true",
+                                      HTTP_ENABLE_BATCH_WRITE, value)));
         }
     }
-
     ctx->label = GET_PARAMETER_OR_EMPTY(parameters, HTTP_LABEL_KEY);
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
     }
-
     std::string remote_host;
     butil::ip2hostname(cntl->remote_side().ip, &remote_host);
-    bool auth_ret = parse_basic_auth(parameters, remote_host, &ctx->auth);
-    if (!auth_ret) {
-        ctx->status = Status::InternalError("no valid basic authorization");
-        return;
-    }
-
-    {
-        auto value = GET_PARAMETER_OR_EMPTY(parameters, HTTP_TIMEOUT);
-        if (!value.empty()) {
-            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            auto timeout_second =
-                    StringParser::string_to_unsigned_int<int32_t>(value.c_str(), value.length(), &parse_result);
-            if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                ctx->status = Status::InvalidArgument("Invalid timeout format: " + value);
-                return;
-            }
-            ctx->timeout_second = timeout_second;
-        }
-    }
-
-    auto ret = get_load_parameters_from_brpc(parameters);
-    if (!ret.ok()) {
-        ctx->status = ret.status();
-        return;
-    }
-    ctx->load_parameters = std::move(ret.value());
+    ctx->auth.user = request->user();
+    ctx->auth.passwd = request->passwd();
+    ctx->auth.user_ip = remote_host;
+    ctx->load_parameters = get_load_parameters_from_brpc(parameters);
 
     butil::IOBuf& io_buf = cntl->request_attachment();
     size_t max_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-    if (io_buf.size() > max_bytes) {
-        ctx->status =
-                Status::InternalError(fmt::format("The data size {} exceed the max size {}. You can change the max size"
-                                                  " by modify config::streaming_load_max_batch_size_mb on BE",
-                                                  io_buf.size(), max_bytes));
-        return;
+    if (io_buf.empty()) {
+        ASSIGN_AND_RETURN(ctx->status, Status::InternalError(fmt::format("The data can not be empty")));
+    } else if (io_buf.size() > max_bytes) {
+        ASSIGN_AND_RETURN(ctx->status, Status::InternalError(fmt::format(
+                                               "The data size {} exceed the max size {}. You can change the max size"
+                                               " by modify config::streaming_load_max_batch_size_mb on BE",
+                                               io_buf.size(), max_bytes)));
     }
-
     auto st_or = ByteBuffer::allocate_with_tracker(io_buf.size());
     if (st_or.ok()) {
-        ctx->buffer = st_or.value();
+        ctx->buffer = std::move(st_or.value());
     } else {
-        ctx->status = Status::InternalError(fmt::format("Can't allocate buffer, data size: {}, error: {}",
-                                                        io_buf.size(), st_or.status().to_string()));
-        return;
+        ASSIGN_AND_RETURN(ctx->status,
+                          Status::InternalError(fmt::format("Can't allocate buffer, data size: {}, error: {}",
+                                                            io_buf.size(), st_or.status().to_string())));
     }
     auto copy_size = io_buf.copy_to(ctx->buffer->ptr, io_buf.size());
     if (copy_size != io_buf.size()) {
-        ctx->status = Status::InternalError(
-                fmt::format("Failed to copy buffer, data size: {}, copied size: {}", io_buf.size(), copy_size));
-        return;
+        ASSIGN_AND_RETURN(ctx->status,
+                          Status::InternalError(fmt::format("Failed to copy buffer, data size: {}, copied size: {}",
+                                                            io_buf.size(), copy_size)));
     }
     ctx->buffer->pos += io_buf.size();
     ctx->buffer->flip();
-
     ctx->status = exec_env->batch_write_mgr()->append_data(ctx);
 }
 

@@ -804,7 +804,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
     DCHECK(common_request.__isset.fragment);
-    LOG(INFO) << "run FragmentExecutor::prepare";
 
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
@@ -904,7 +903,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
-    LOG(INFO) << "run FragmentExecutor::execute";
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
