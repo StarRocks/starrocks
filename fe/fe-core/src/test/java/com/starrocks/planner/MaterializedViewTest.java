@@ -5562,8 +5562,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String query = "select distinct lo_orderkey from lineorder where lo_shipmode in (upper('a'), lower('a')) and " +
                 "lo_linenumber = 1";
         String plan = testRewriteOK(mv, query).geRewritePlan();
-        PlanTestBase.assertContains(plan, "   TABLE: mv0\n" +
+        PlanTestBase.assertContains(plan, "     TABLE: mv0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 20: lo_linenumber = 1, 21: lo_shipmode IN ('A', 'a')");
+                "     PREDICATES: 20: lo_linenumber = 1, (21: lo_shipmode = lower('a')) OR (21: lo_shipmode = upper('a'))\n" +
+                "     partitions=1/1");
     }
 }
