@@ -126,8 +126,8 @@ public:
                 int num_unpacked = arrow::internal::unpack32_neon(reinterpret_cast<const uint32_t*>(in), unpack_buffer,
                                                                   size, BIT_WIDTH);
 #else
-                int num_unpacked = arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in), unpack_buffer,
-                                                             size, BIT_WIDTH);
+                int num_unpacked = arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in), unpack_buffer, size,
+                                                             BIT_WIDTH);
 #endif
                 DCHECK(num_unpacked == size);
                 for (int k = 0; k < size; ++k) {
