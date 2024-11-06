@@ -130,4 +130,4 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}/*
           eci rm ${{ steps.merge_report.outputs.ECI_ID }} || true
-          rm -rf ${{ steps.merge_report.outputs.COV_XML }}
+          rm -rf ${{ steps.merge_report.outputs.COV_XML }} ${{ steps.merge_report.outputs.COV_LOG }} ${{ steps.merge_report.outputs.RES_FILE }}
