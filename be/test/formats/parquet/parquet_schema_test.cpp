@@ -75,12 +75,12 @@ public:
         element.__set_num_children(num_children);
         return element;
     }
-    static ParquetField make_field(const std::string& name, bool is_nullable, LogicalType type,
+    static ParquetField make_field(const std::string& name, bool is_nullable, ColumnType type,
                                    std::vector<ParquetField> children) {
         ParquetField field;
         field.name = name;
         field.is_nullable = is_nullable;
-        field.type.type = type;
+        field.type = type;
         field.children = std::move(children);
         return field;
     }
@@ -148,7 +148,7 @@ protected:
                 // Is group node
                 ASSERT_EQ(expected[i].name, actual[i].name);
                 ASSERT_EQ(expected[i].is_nullable, actual[i].is_nullable);
-                ASSERT_EQ(expected[i].type.type, actual[i].type.type);
+                ASSERT_EQ(expected[i].type, actual[i].type);
             } else {
                 // is primitive node
                 ASSERT_EQ(expected[i].name, actual[i].name);
@@ -324,7 +324,7 @@ TEST_F(ParquetSchemaTest, NestedType) {
     // Check col2
     {
         auto field = desc.get_stored_column_by_column_name("col2");
-        ASSERT_EQ(TYPE_ARRAY, field->type.type);
+        ASSERT_EQ(ColumnType::ARRAY, field->type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
         ASSERT_EQ(0, field->level_info.immediate_repeated_ancestor_def_level);
@@ -341,7 +341,7 @@ TEST_F(ParquetSchemaTest, NestedType) {
     // Check col3
     {
         auto field = desc.get_stored_column_by_column_name("col3");
-        ASSERT_EQ(TYPE_STRUCT, field->type.type);
+        ASSERT_EQ(ColumnType::STRUCT, field->type);
         ASSERT_EQ(1, field->max_def_level());
         ASSERT_EQ(0, field->max_rep_level());
         ASSERT_EQ(true, field->is_nullable);
@@ -579,7 +579,7 @@ TEST_F(ParquetSchemaTest, SimpleArray) {
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.get_stored_column_by_column_name("col2");
-        ASSERT_EQ(TYPE_ARRAY, field->type.type);
+        ASSERT_EQ(ColumnType::ARRAY, field->type);
         ASSERT_EQ(1, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
         ASSERT_EQ(false, field->is_nullable);
@@ -632,7 +632,7 @@ TEST_F(ParquetSchemaTest, TwoLevelArray) {
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.get_stored_column_by_column_name("col2");
-        ASSERT_EQ(TYPE_ARRAY, field->type.type);
+        ASSERT_EQ(ColumnType::ARRAY, field->type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
         ASSERT_EQ(true, field->is_nullable);
@@ -701,7 +701,7 @@ TEST_F(ParquetSchemaTest, MapNormal) {
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.get_stored_column_by_column_name("col2");
-        ASSERT_EQ(TYPE_MAP, field->type.type);
+        ASSERT_EQ(ColumnType::MAP, field->type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
         ASSERT_EQ(true, field->is_nullable);
@@ -1045,7 +1045,7 @@ TEST_F(ParquetSchemaTest, ParquetMaps) {
                                                    ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("my_map", false, LogicalType::TYPE_MAP,
+                GroupNode::make_field("my_map", false, ColumnType::MAP,
                                       {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY),
                                        PrimitiveNode::make_field("value", true, Type::type::BYTE_ARRAY)}));
     }
@@ -1057,9 +1057,8 @@ TEST_F(ParquetSchemaTest, ParquetMaps) {
         t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
                                                    ConvertedType::type::UTF8));
 
-        expected_fields.emplace_back(
-                GroupNode::make_field("my_set", false, LogicalType::TYPE_ARRAY,
-                                      {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY)}));
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_set", false, ColumnType::ARRAY, {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY)}));
     }
     // Two column map with non-standard field names.
     {
@@ -1072,7 +1071,7 @@ TEST_F(ParquetSchemaTest, ParquetMaps) {
                                                    Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("items", false, LogicalType::TYPE_MAP,
+                GroupNode::make_field("items", false, ColumnType::MAP,
                                       {PrimitiveNode::make_field("int_key", false, Type::type::INT32),
                                        PrimitiveNode::make_field("str_value", true, Type::type::BYTE_ARRAY)}));
     }
@@ -1104,7 +1103,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("my_list_1", false, LogicalType::TYPE_ARRAY,
+                GroupNode::make_field("my_list_1", false, ColumnType::ARRAY,
                                       {PrimitiveNode::make_field("string", true, Type::type::BYTE_ARRAY)}));
     }
 
@@ -1122,7 +1121,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    Type::type::BYTE_ARRAY, ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("my_list_2", true, LogicalType::TYPE_ARRAY,
+                GroupNode::make_field("my_list_2", true, ColumnType::ARRAY,
                                       {PrimitiveNode::make_field("string", false, Type::type::BYTE_ARRAY)}));
     }
 
@@ -1148,8 +1147,8 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::INT_32));
 
         expected_fields.emplace_back(GroupNode::make_field(
-                "array_of_arrays", true, LogicalType::TYPE_ARRAY,
-                {GroupNode::make_field("element", false, LogicalType::TYPE_ARRAY,
+                "array_of_arrays", true, ColumnType::ARRAY,
+                {GroupNode::make_field("element", false, ColumnType::ARRAY,
                                        {PrimitiveNode::make_field("int32", false, Type::type::INT32)})}));
     }
 
@@ -1167,7 +1166,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("my_list_3", true, LogicalType::TYPE_ARRAY,
+                GroupNode::make_field("my_list_3", true, ColumnType::ARRAY,
                                       {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY)}));
     }
 
@@ -1182,7 +1181,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::INT_32));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("my_list_4", true, LogicalType::TYPE_ARRAY,
+                GroupNode::make_field("my_list_4", true, ColumnType::ARRAY,
                                       {PrimitiveNode::make_field("element", false, Type::type::INT32)}));
     }
 
@@ -1203,8 +1202,8 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::INT_32));
 
         expected_fields.emplace_back(GroupNode::make_field(
-                "my_list_5", true, LogicalType::TYPE_ARRAY,
-                {GroupNode::make_field("element", false, LogicalType::TYPE_STRUCT,
+                "my_list_5", true, ColumnType::ARRAY,
+                {GroupNode::make_field("element", false, ColumnType::STRUCT,
                                        {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY),
                                         PrimitiveNode::make_field("num", false, Type::type::INT32)})}));
     }
@@ -1224,8 +1223,8 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(GroupNode::make_field(
-                "my_list_6", true, LogicalType::TYPE_ARRAY,
-                {GroupNode::make_field("array", false, LogicalType::TYPE_STRUCT,
+                "my_list_6", true, ColumnType::ARRAY,
+                {GroupNode::make_field("array", false, ColumnType::STRUCT,
                                        {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY)})}));
     }
 
@@ -1244,8 +1243,8 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                                                    ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(GroupNode::make_field(
-                "my_list_7", true, LogicalType::TYPE_ARRAY,
-                {GroupNode::make_field("my_list_tuple", false, LogicalType::TYPE_STRUCT,
+                "my_list_7", true, ColumnType::ARRAY,
+                {GroupNode::make_field("my_list_tuple", false, ColumnType::STRUCT,
                                        {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY)})}));
     }
 
@@ -1254,7 +1253,7 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
     {
         t_schemas.emplace_back(PrimitiveNode::make("name", FieldRepetitionType::REPEATED, Type::type::INT32));
         expected_fields.emplace_back(GroupNode::make_field(
-                "name", false, LogicalType::TYPE_ARRAY, {PrimitiveNode::make_field("name", false, Type::type::INT32)}));
+                "name", false, ColumnType::ARRAY, {PrimitiveNode::make_field("name", false, Type::type::INT32)}));
     }
 
     SchemaDescriptor desc;
@@ -1281,7 +1280,7 @@ TEST_F(ParquetSchemaTest, ParquetNestedSchema) {
         t_schemas.emplace_back(PrimitiveNode::make("leaf3", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("group1", false, LogicalType::TYPE_STRUCT,
+                GroupNode::make_field("group1", false, ColumnType::STRUCT,
                                       {PrimitiveNode::make_field("leaf1", false, Type::type::BOOLEAN),
                                        PrimitiveNode::make_field("leaf2", false, Type::type::INT32)}));
         expected_fields.emplace_back(PrimitiveNode::make_field("leaf3", false, Type::type::INT64));
@@ -1320,11 +1319,11 @@ TEST_F(ParquetSchemaTest, ParquetNestedSchema2) {
         t_schemas.emplace_back(PrimitiveNode::make("leaf5", FieldRepetitionType::type::REQUIRED, Type::type::INT64));
 
         expected_fields.emplace_back(
-                GroupNode::make_field("group1", false, LogicalType::TYPE_STRUCT,
+                GroupNode::make_field("group1", false, ColumnType::STRUCT,
                                       {PrimitiveNode::make_field("leaf1", false, Type::type::INT64),
                                        PrimitiveNode::make_field("leaf2", false, Type::type::INT64)}));
         expected_fields.emplace_back(
-                GroupNode::make_field("group2", false, LogicalType::TYPE_STRUCT,
+                GroupNode::make_field("group2", false, ColumnType::STRUCT,
                                       {PrimitiveNode::make_field("leaf3", false, Type::type::INT64),
                                        PrimitiveNode::make_field("leaf4", false, Type::type::INT64)}));
         expected_fields.emplace_back(PrimitiveNode::make_field("leaf5", false, Type::type::INT64));
@@ -1359,11 +1358,11 @@ TEST_F(ParquetSchemaTest, ParquetRepeatedNestedSchema) {
 
         auto leaf2_field = PrimitiveNode::make_field("leaf2", true, Type::type::INT32);
         auto leaf3_field = PrimitiveNode::make_field("leaf3", true, Type::type::INT32);
-        auto inner_group_struct = GroupNode::make_field("innerGroup", false, LogicalType::TYPE_STRUCT, {leaf3_field});
-        auto inner_group = GroupNode::make_field("innerGroup", false, LogicalType::TYPE_ARRAY, {inner_group_struct});
+        auto inner_group_struct = GroupNode::make_field("innerGroup", false, ColumnType::STRUCT, {leaf3_field});
+        auto inner_group = GroupNode::make_field("innerGroup", false, ColumnType::ARRAY, {inner_group_struct});
         auto outer_group_struct =
-                GroupNode::make_field("outerGroup", false, LogicalType::TYPE_STRUCT, {leaf2_field, inner_group});
-        auto outer_group = GroupNode::make_field("outerGroup", false, LogicalType::TYPE_ARRAY, {outer_group_struct});
+                GroupNode::make_field("outerGroup", false, ColumnType::STRUCT, {leaf2_field, inner_group});
+        auto outer_group = GroupNode::make_field("outerGroup", false, ColumnType::ARRAY, {outer_group_struct});
         expected_fields.emplace_back(outer_group);
     }
 
