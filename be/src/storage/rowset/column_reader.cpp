@@ -63,6 +63,7 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
@@ -582,6 +583,24 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
     return Status::OK();
+}
+
+StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+    DCHECK(_zonemap_index);
+    DCHECK(_zonemap_index->loaded());
+
+    LogicalType type = _encoding_info->type();
+    int32_t num_pages = _zonemap_index->num_pages();
+    std::vector<ZoneMapDetail> result(num_pages);
+
+    for (auto& zm : _zonemap_index->page_zone_maps()) {
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
+        result.emplace_back(detail);
+    }
+
+    return result;
 }
 
 template <CompoundNodeType PredRelation>

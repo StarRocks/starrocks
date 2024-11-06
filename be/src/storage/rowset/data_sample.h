@@ -16,10 +16,13 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "common/statusor.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "storage/zone_map_detail.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -28,6 +31,7 @@ using PageIndexer = std::function<std::pair<ordinal_t, ordinal_t>(size_t page_in
 
 class BlockDataSample;
 class PageDataSample;
+class SortableZoneMap;
 
 class DataSample {
 public:
@@ -65,6 +69,28 @@ private:
     size_t _total_rows;
 };
 
+struct SortableZoneMap {
+    using Pages = std::vector<size_t>;
+    using PagesWithZoneMap = std::pair<ZoneMapDetail, Pages>;
+
+    SortableZoneMap(LogicalType type, std::vector<ZoneMapDetail>&& zonemap) : type(type), zonemap(std::move(zonemap)) {}
+
+    double diversity_threshold = 0.5;
+    const LogicalType type;
+    std::vector<ZoneMapDetail> zonemap;
+    std::vector<size_t> page_indices;        // Keep zonemap immutable, sort by this page_indices
+    std::vector<PagesWithZoneMap> histogram; // Only exist if the zonemap is diverse enough
+
+    void sort();
+    bool is_diverse();
+    void build_histogram(size_t buckets);
+
+    size_t ith_zone(size_t idx) { return page_indices[idx]; }
+    double width(const Datum& lhs, const Datum& rhs);
+    double width(const ZoneMapDetail& zone);
+    double overlap(const ZoneMapDetail& lhs, const ZoneMapDetail& rhs);
+};
+
 class PageDataSample final : public DataSample {
 public:
     PageDataSample(int64_t probability_percent, int64_t random_seed, size_t num_pages, PageIndexer page_indexer)
@@ -74,9 +100,18 @@ public:
 
     StatusOr<RowIdSparseRange> sample() override;
 
+    void with_zonemap(std::shared_ptr<SortableZoneMap> zonemap) { _zonemap = std::move(zonemap); }
+
 private:
+    void _prepare_histogram();
+    bool _has_histogram() const;
+    StatusOr<RowIdSparseRange> _bernoulli_sample();
+    StatusOr<RowIdSparseRange> _histogram_sample();
+
     size_t _num_pages;
     PageIndexer _page_indexer;
+
+    std::shared_ptr<SortableZoneMap> _zonemap = nullptr;
 };
 
 } // namespace starrocks

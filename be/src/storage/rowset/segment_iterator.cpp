@@ -306,6 +306,8 @@ private:
 
     Status _init_ann_reader();
 
+    IndexReadOptions _index_read_options(ColumnId cid) const;
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -2089,6 +2091,14 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     int64_t probability_percent = _opts.sample_options.probability_percent;
     int64_t random_seed = _opts.sample_options.random_seed;
     auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
+
+    if (column_reader->has_zone_map()) {
+        IndexReadOptions opts = _index_read_options(cid);
+        ASSIGN_OR_RETURN(auto zonemap, column_reader->get_raw_zone_map(opts));
+        auto sorted = std::make_shared<SortableZoneMap>(column_reader->column_type(), std::move(zonemap));
+        sampler->with_zonemap(sorted);
+    }
+
     return sampler->sample();
 }
 
@@ -2119,6 +2129,16 @@ Status SegmentIterator::_apply_data_sampling() {
     _scan_range = _scan_range.intersection(sampled_ranges);
 
     return {};
+}
+
+IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
+    IndexReadOptions opts;
+    opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
+    opts.lake_io_opts = _opts.lake_io_opts;
+    opts.read_file = _column_files.at(cid).get();
+    opts.stats = _opts.stats;
+    return opts;
 }
 
 // filter rows by evaluating column predicates using bitmap indexes.

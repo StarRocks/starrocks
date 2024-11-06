@@ -48,6 +48,7 @@ public:
         return _min_value;
     }
     void set_num_rows(const size_t num_rows) { _num_rows = num_rows; }
+    // FIXME: it's not rows in the zone, but incorrectly set to the segment rows
     size_t num_rows() const { return _num_rows; }
 
 private:
