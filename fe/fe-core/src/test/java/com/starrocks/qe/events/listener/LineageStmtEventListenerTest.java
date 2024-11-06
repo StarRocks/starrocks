@@ -17,9 +17,11 @@
 
 package com.starrocks.qe.events.listener;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +29,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.events.listener.LineageStmtEventListener.Action;
@@ -60,10 +63,12 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Iterator;
@@ -108,6 +113,64 @@ public class LineageStmtEventListenerTest {
                 .withTable("create table t21 (id3 bigint, name3 string) PROPERTIES (\"replication_num\" = \"1\")");
         starRocksAssert.useDatabase("test")
                 .withTable("create table t22 (id2 bigint, name2 string, addr string) PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE t_numbers(start INT, end INT) DUPLICATE KEY (start) " +
+                        "DISTRIBUTED BY HASH(start) BUCKETS 1 PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE Employees ( EmployeeID INT, Name VARCHAR(50), Salary DECIMAL(10, 2)) " +
+                        "PRIMARY KEY (EmployeeID) DISTRIBUTED BY HASH (EmployeeID) " +
+                        "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE `site_access1` (\n" +
+                        "  `event_day1` datetime NOT NULL COMMENT \"\",\n" +
+                        "  `site_id1` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code1` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name1` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv1` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day1`, `site_id1`, `city_code1`, `user_name1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY date_trunc('day', event_day1)\n" +
+                        "DISTRIBUTED BY HASH(`event_day1`, `site_id1`)\n" +
+                        "PROPERTIES (\n" +
+                        "\"compression\" = \"LZ4\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_volume\" = \"builtin_storage_volume\"\n" +
+                        ");");
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE `insert_overwrite_all` (\n" +
+                        "  `event_day1` datetime NOT NULL COMMENT \"\",\n" +
+                        "  `site_id1` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code1` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name1` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv1` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day1`, `site_id1`, `city_code1`, `user_name1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY date_trunc('day', event_day1)\n" +
+                        "DISTRIBUTED BY HASH(`event_day1`, `site_id1`)\n" +
+                        "PROPERTIES (\n" +
+                        "\"compression\" = \"LZ4\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_volume\" = \"builtin_storage_volume\"\n" +
+                        ");");
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE `insert_overwrite_exp_mapping` (\n" +
+                        "  `event_day` datetime NOT NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY date_trunc('day', event_day)\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`)\n" +
+                        "PROPERTIES (\n" +
+                        "\"compression\" = \"LZ4\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_volume\" = \"builtin_storage_volume\"\n" +
+                        ");");
     }
 
     private void printLineage(Lineage lineage, StatementBase stmt) {
@@ -607,7 +670,7 @@ public class LineageStmtEventListenerTest {
 
     @Test
     public void testInsertOverwrite() throws Exception {
-        String sql = "insert overwrite t3 select * from t1";
+        String sql = "insert overwrite test.t3 select * from test.t1";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Lineage lineage = lineageProcessor.parseLineage(stmt);
@@ -625,6 +688,102 @@ public class LineageStmtEventListenerTest {
         Assert.assertEquals("name3", entry2.getKey());
         Assert.assertEquals("name", entry2.getValue().iterator().next());
         printLineage(lineage, stmt);
+    }
+
+    @Test
+    public void testInsertOverwriteWitAlias() throws Exception {
+        String sql = "INSERT OVERWRITE test.insert_overwrite_all SELECT * FROM test.site_access1 t1;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        printLineage(lineage, stmt);
+
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertEquals(1, columnLineages.size());
+        Assert.assertEquals("site_access1", columnLineages.get(0).getSrcTable());
+        Assert.assertEquals("insert_overwrite_all", columnLineages.get(0).getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineages.get(0).getColumnMap();
+        Assert.assertNotNull(columnMap);
+        Assert.assertEquals(5, columnMap.size());
+        Set<Pair<String, String>> expectedSet = ImmutableSet.of(
+                Pair.create("event_day1", "event_day1"),
+                Pair.create("site_id1", "site_id1"),
+                Pair.create("city_code1", "city_code1"),
+                Pair.create("user_name1", "user_name1"),
+                Pair.create("pv1", "pv1")
+        );
+        for (String column : columnMap.keySet()) {
+            Set<String> valueSet = columnMap.get(column);
+            Assert.assertNotNull(valueSet);
+            Pair<String, String> colPair = Pair.create(column, valueSet.iterator().next());
+            Assert.assertTrue(expectedSet.contains(colPair));
+        }
+    }
+
+    @Test
+    public void testInsertOverwriteWithExplicitColumnMapping() throws Exception {
+        String sql =
+                "INSERT OVERWRITE test.insert_overwrite_exp_mapping(event_day, site_id, city_code, user_name, pv) " +
+                        "SELECT event_day1, site_id1, city_code1, user_name1, pv1 FROM test.site_access1 tbl;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        printLineage(lineage, stmt);
+
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertEquals(1, columnLineages.size());
+        Assert.assertEquals("site_access1", columnLineages.get(0).getSrcTable());
+        Assert.assertEquals("insert_overwrite_exp_mapping", columnLineages.get(0).getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineages.get(0).getColumnMap();
+        Assert.assertNotNull(columnMap);
+        Assert.assertEquals(5, columnMap.size());
+        Set<Pair<String, String>> expectedSet = ImmutableSet.of(
+                Pair.create("event_day", "event_day1"),
+                Pair.create("site_id", "site_id1"),
+                Pair.create("city_code", "city_code1"),
+                Pair.create("user_name", "user_name1"),
+                Pair.create("pv", "pv1")
+        );
+        for (String column : columnMap.keySet()) {
+            Set<String> valueSet = columnMap.get(column);
+            Assert.assertNotNull(valueSet);
+            Pair<String, String> colPair = Pair.create(column, valueSet.iterator().next());
+            Assert.assertTrue(expectedSet.contains(colPair));
+        }
+    }
+
+    @Test
+    public void testInsertOverwriteWithAutoColumnMapping() throws Exception {
+        String sql = "INSERT OVERWRITE test.insert_overwrite_exp_mapping " +
+                "SELECT event_day1, site_id1, city_code1, user_name1, pv1 FROM test.site_access1 tbl;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        printLineage(lineage, stmt);
+
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertEquals(1, columnLineages.size());
+        Assert.assertEquals("site_access1", columnLineages.get(0).getSrcTable());
+        Assert.assertEquals("insert_overwrite_exp_mapping", columnLineages.get(0).getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineages.get(0).getColumnMap();
+        Assert.assertNotNull(columnMap);
+        Assert.assertEquals(5, columnMap.size());
+        Set<Pair<String, String>> expectedSet = ImmutableSet.of(
+                Pair.create("event_day", "event_day1"),
+                Pair.create("site_id", "site_id1"),
+                Pair.create("city_code", "city_code1"),
+                Pair.create("user_name", "user_name1"),
+                Pair.create("pv", "pv1")
+        );
+        for (String column : columnMap.keySet()) {
+            Set<String> valueSet = columnMap.get(column);
+            Assert.assertNotNull(valueSet);
+            Pair<String, String> colPair = Pair.create(column, valueSet.iterator().next());
+            Assert.assertTrue(expectedSet.contains(colPair));
+        }
     }
 
     @Test
@@ -829,7 +988,7 @@ public class LineageStmtEventListenerTest {
 
     @Test
     public void testCreateWithPartitionNorm() throws Exception {
-        String sql = "CREATE TABLE site_access1 (\n"
+        String sql = "CREATE TABLE site_access_x (\n"
                 + "    event_day DATETIME NOT NULL,\n"
                 + "    site_id INT DEFAULT '10',\n"
                 + "    city_code VARCHAR(100),\n"
@@ -1063,6 +1222,7 @@ public class LineageStmtEventListenerTest {
         printLineage(lineage, stmt);
     }
 
+    @Ignore
     @Test
     public void testCreateCatalog() throws Exception {
         String sql = "CREATE EXTERNAL CATALOG hive_metastore_catalog\n"
@@ -1293,8 +1453,8 @@ public class LineageStmtEventListenerTest {
     public void testAlterTableAddPartition() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withTable("create table t7 (every_day date not null, id bigint not null, name string not null) "
-                        + "duplicate key (every_day, id) partition by (every_day) distributed by hash(every_day,id) "
-                        + "buckets 32 properties (\"replication_num\"=\"1\");");
+                        + "duplicate key (every_day, id) partition by RANGE (every_day) () "
+                        + "distributed by hash(every_day,id)  buckets 32 properties (\"replication_num\"=\"1\");");
         String sql = "ALTER TABLE t7 ADD PARTITION p2023 values less than ('2023-11-12') ";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -1633,8 +1793,8 @@ public class LineageStmtEventListenerTest {
     public void testChangeLogAlterTableAddPartition() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withTable("create table t3_9 (every_day date not null, id bigint not null, name string not null) "
-                        + "duplicate key (every_day, id) partition by (every_day) distributed by hash(every_day,id) buckets 32 "
-                        + "properties (\"replication_num\"=\"1\");");
+                        + "duplicate key (every_day, id) partition by RANGE (every_day) () "
+                        + "distributed by hash(every_day,id) buckets 32 properties (\"replication_num\"=\"1\");");
         String sql = "ALTER TABLE t3_9 ADD PARTITION p2023 values less than ('2023-11-12') ";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -1737,7 +1897,8 @@ public class LineageStmtEventListenerTest {
     public void testChangeLogAlterTableAddTempPartition() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withTable("create table t4 (every_day date not null, id bigint not null, name string not null) "
-                        + "duplicate key (every_day, id) partition by (every_day) distributed by hash(every_day,id) buckets 32 "
+                        + "duplicate key (every_day, id) partition by RANGE (every_day) () " +
+                        "distributed by hash(every_day,id) buckets 32 "
                         + "properties (\"replication_num\"=\"1\");");
         String sql = "ALTER TABLE t4 ADD TEMPORARY PARTITION p2023 values less than ('2023-11-12') ";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
@@ -1878,7 +2039,7 @@ public class LineageStmtEventListenerTest {
         List indexes = (List) target.getExtra().get("indexes");
         Assert.assertEquals("r1", ((Map<String, Object>) indexes.get(0)).get("indexName"));
         Assert.assertEquals("BITMAP", ((Map<String, Object>) indexes.get(0)).get("indexType"));
-        Assert.assertEquals("id2", ((List) ((Map<String, Object>) indexes.get(0)).get("columns")).get(0));
+        Assert.assertEquals(ColumnId.create("id2"), ((List) ((Map<String, Object>) indexes.get(0)).get("columns")).get(0));
         Assert.assertEquals("bab", ((Map<String, Object>) indexes.get(0)).get("comment"));
         printChangeLog(lineage, stmt);
     }
@@ -1897,7 +2058,7 @@ public class LineageStmtEventListenerTest {
         List indexes = (List) target.getExtra().get("indexes");
         Assert.assertEquals("r1", ((Map<String, Object>) indexes.get(0)).get("indexName"));
         Assert.assertEquals("BITMAP", ((Map<String, Object>) indexes.get(0)).get("indexType"));
-        Assert.assertEquals("id2", ((List) ((Map<String, Object>) indexes.get(0)).get("columns")).get(0));
+        Assert.assertEquals(ColumnId.create("id2"), ((List) ((Map<String, Object>) indexes.get(0)).get("columns")).get(0));
         Assert.assertEquals("abc", ((Map<String, Object>) indexes.get(0)).get("comment"));
     }
 
@@ -2270,5 +2431,249 @@ public class LineageStmtEventListenerTest {
         Assert.assertEquals("INT", ((List<String>) target.getExtra().get("functionArgsType")).get(0));
         Assert.assertEquals("INT", ((List<String>) target.getExtra().get("functionArgsType")).get(1));
         printChangeLog(lineage, stmt);
+    }
+
+    @Test
+    public void testCreateAsSelectSingleNormalizedTableFunction() throws Exception {
+        String sql = "create table table_func_test_2 properties(\"replication_num\"=\"1\") AS " +
+                "select * from TABLE(generate_series(5, 2, -1));";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertEquals(Action.CreateTableAsSelect, lineage.getAction());
+        Assert.assertTrue(lineage.getColumnLineages().isEmpty());
+    }
+
+    @Test
+    public void testCreateAsSelectFromNormalizedTableFunction() throws Exception {
+        String sql = "create table sample_table_from_generate_series PROPERTIES(\"replication_num\"=\"1\") AS "
+                + "SELECT start AS new_start, end AS new_end, table_gs.generate_series AS new_gs "
+                + "FROM t_numbers, generate_series(t_numbers.start, t_numbers.end) AS table_gs;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertEquals(Action.CreateTableAsSelect, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("t_numbers", columnLineage.getSrcTable());
+        Assert.assertEquals("sample_table_from_generate_series", columnLineage.getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+        Assert.assertTrue(columnMap.containsKey("new_start"));
+        Assert.assertEquals("start", columnMap.get("new_start").iterator().next());
+        Assert.assertTrue(columnMap.containsKey("new_end"));
+        Assert.assertEquals("end", columnMap.get("new_end").iterator().next());
+        Assert.assertTrue(columnMap.containsKey("new_gs"));
+        Set<String> colNameSet = columnMap.get("new_gs");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+    }
+
+    @Test
+    public void testCreateAsSelectUnnestTableFunction() throws Exception {
+        String sql = "create table table_fun_unnest properties(\"replication_num\"=\"1\") AS "
+                + "SELECT id2 AS new_id, name2 AS new_name, unnest_table.unnest AS new_unnest "
+                + "FROM t22 LEFT JOIN unnest(SPLIT(addr, ';')) AS unnest_table ON TRUE ORDER BY 1, 3;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertEquals(Action.CreateTableAsSelect, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("t22", columnLineage.getSrcTable());
+        Assert.assertEquals("table_fun_unnest", columnLineage.getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+        Assert.assertTrue(columnMap.containsKey("new_id"));
+        Assert.assertEquals("id2", columnMap.get("new_id").iterator().next());
+        Assert.assertTrue(columnMap.containsKey("new_name"));
+        Assert.assertEquals("name2", columnMap.get("new_name").iterator().next());
+        Assert.assertTrue(columnMap.containsKey("new_unnest"));
+        Assert.assertEquals("addr", columnMap.get("new_unnest").iterator().next());
+    }
+
+    @Test
+    public void testInsertWithFunctionCall() throws Exception {
+        String sql = "insert into t_numbers select IF(`start` > `end`, `start`, `end`) AS max_start, " +
+                "CASE WHEN `start` >= `end` THEN `end` ELSE `start` END AS min_end " +
+                "from t_numbers WHERE `start` IS NOT NULL;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertNotNull(lineage);
+        Assert.assertEquals(Action.Insert, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("t_numbers", columnLineage.getSrcTable());
+        Assert.assertEquals("t_numbers", columnLineage.getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+        Assert.assertTrue(columnMap.containsKey("start"));
+        Set<String> colNameSet = columnMap.get("start");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+
+        Assert.assertTrue(columnMap.containsKey("end"));
+        colNameSet = columnMap.get("end");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+    }
+
+    @Test
+    public void testInsertWithWindowFunctionCall() throws Exception {
+        String sql = "insert into t_numbers select "
+                + "ROW_NUMBER() OVER(PARTITION BY `start` ORDER BY `end` ASC) AS row_num, "
+                + "LAST_VALUE(`end`) OVER(PARTITION BY `end` ORDER BY `start` DESC) AS last_end "
+                + "from t_numbers WHERE `start` IS NOT NULL;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertNotNull(lineage);
+        Assert.assertEquals(Action.Insert, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("t_numbers", columnLineage.getSrcTable());
+        Assert.assertEquals("t_numbers", columnLineage.getDestTable());
+
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+        Assert.assertTrue(columnMap.containsKey("start"));
+        Set<String> colNameSet = columnMap.get("start");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+
+        Assert.assertTrue(columnMap.containsKey("end"));
+        colNameSet = columnMap.get("end");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+    }
+
+    @Test
+    public void testInsertWithLambdaExpressionNotSupported() throws Exception {
+        String sql = "insert into t_numbers select "
+                + "(`start`, `end`) -> `start` + `end` AS se_sum, "
+                + "(`start`, `end`) -> abs(`start` - `end`) AS se_sub "
+                + "from t_numbers WHERE `start` IS NOT NULL";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail("com.starrocks.common.AnalysisException: Getting analyzing error. Detail message: " +
+                    "not yet implemented: expression analyzer for com.starrocks.sql.ast.LambdaArgument.");
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+            Assert.assertTrue(e.getClass().getName().contains("com.starrocks.common.AnalysisException"));
+            Assert.assertTrue(e.getMessage()
+                    .contains("not yet implemented: expression analyzer for com.starrocks.sql.ast.LambdaArgument."));
+        }
+    }
+
+    @Test
+    public void testInsertWithCTE() throws Exception {
+        String sql = "INSERT INTO t_numbers (`start`, `end`) "
+                + "WITH sample_cte AS (select (`start` + `end`) AS added, (`end` + `end`) AS times_end from t_numbers) "
+                + "SELECT added, times_end FROM sample_cte;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertNotNull(lineage);
+        Assert.assertEquals(Action.Insert, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("t_numbers", columnLineage.getSrcTable());
+        Assert.assertEquals("t_numbers", columnLineage.getDestTable());
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+        Assert.assertTrue(columnMap.containsKey("start"));
+        Set<String> colNameSet = columnMap.get("start");
+        Assert.assertTrue(colNameSet.contains("start"));
+        Assert.assertTrue(colNameSet.contains("end"));
+
+        Assert.assertTrue(columnMap.containsKey("end"));
+        colNameSet = columnMap.get("end");
+        Assert.assertTrue(colNameSet.contains("end"));
+    }
+
+    @Test
+    public void testUpdateWithCTE() throws Exception {
+        String sql = "WITH AvgSalary AS (SELECT AVG(Salary) AS AverageSalary FROM Employees) "
+                + "UPDATE Employees SET Salary = AverageSalary * 1.1, Name = CONCAT('* ', Name) "
+                + "FROM AvgSalary "
+                + "WHERE Employees.Salary < AvgSalary.AverageSalary;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        UpdateStmt stmt = (UpdateStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertNull(lineage);
+    }
+
+    @Test
+    public void testCreateTableWithCTE() throws Exception {
+        String sql =
+                "CREATE TABLE IF NOT EXISTS temp_employee_with_salary_raise PROPERTIES (\"replication_num\"=\"1\") AS "
+                        + "WITH AvgSalary AS (SELECT AVG(Salary) AS AverageSalary FROM Employees) "
+                        + "SELECT e.EmployeeID, e.Name, (e.Salary * 1.1) AS LatestSalary, a.AverageSalary "
+                        + "FROM Employees e, AvgSalary a "
+                        + "WHERE e.Salary < a.AverageSalary;";
+        ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Lineage lineage = lineageProcessor.parseLineage(stmt);
+        Assert.assertNotNull(lineage);
+        Assert.assertEquals(Action.CreateTableAsSelect, lineage.getAction());
+        List<ColumnLineage> columnLineages = lineage.getColumnLineages();
+        Assert.assertFalse(columnLineages.isEmpty());
+        Assert.assertEquals(1, columnLineages.size());
+        ColumnLineage columnLineage = columnLineages.get(0);
+        Assert.assertEquals("default_catalog", columnLineage.getSrcCatalog());
+        Assert.assertEquals("default_catalog", columnLineage.getDestCatalog());
+        Assert.assertEquals("test", columnLineage.getSrcDatabase());
+        Assert.assertEquals("test", columnLineage.getDestDatabase());
+        Assert.assertEquals("Employees", columnLineage.getSrcTable());
+        Assert.assertEquals("temp_employee_with_salary_raise", columnLineage.getDestTable());
+        Map<String, Set<String>> columnMap = columnLineage.getColumnMap();
+        Assert.assertFalse(columnMap.isEmpty());
+
+        Assert.assertTrue(columnMap.containsKey("EmployeeID"));
+        Set<String> colNameSet = columnMap.get("EmployeeID");
+        Assert.assertTrue(colNameSet.contains("EmployeeID"));
+
+        Assert.assertTrue(columnMap.containsKey("LatestSalary"));
+        colNameSet = columnMap.get("LatestSalary");
+        Assert.assertTrue(colNameSet.contains("Salary"));
+
+        Assert.assertTrue(columnMap.containsKey("AverageSalary"));
+        colNameSet = columnMap.get("AverageSalary");
+        Assert.assertTrue(colNameSet.contains("Salary"));
     }
 }

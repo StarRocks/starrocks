@@ -22,8 +22,11 @@ import com.google.gson.Gson;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -85,12 +88,14 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.QueryRelation;
@@ -103,21 +108,25 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SwapTableClause;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -930,9 +939,6 @@ public class LineageStmtEventListener implements StmtEventListener {
             lineage.setAction(Action.AlterTableComment);
             AlterTableCommentClause clause = (AlterTableCommentClause) alterClause;
             target.putExtra("newComment", clause.getNewComment());
-            if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
-                target.putExtra("properties", clause.getProperties());
-            }
         }
 
         private void handleAddRollUp(AlterClause alterClause, Lineage lineage, Target target) {
@@ -965,7 +971,6 @@ public class LineageStmtEventListener implements StmtEventListener {
                 index.put("indexType", clause.getIndex().getIndexType().name());
                 index.put("comment", clause.getIndex().getComment());
                 target.addExtraList("indexes", index);
-                target.putExtra("properties", clause.getProperties());
             } else if (alterClause instanceof DropIndexClause) {
                 lineage.setAction(Action.DropIndex);
                 DropIndexClause clause = (DropIndexClause) alterClause;
@@ -1042,7 +1047,6 @@ public class LineageStmtEventListener implements StmtEventListener {
                 Map<String, Object> swapTable = new LinkedHashMap<>();
                 swapTable.put("tableName", swapTableClause.getTblName());
                 swapTable.put("opType", swapTableClause.getOpType().name());
-                swapTable.put("properties", swapTableClause.getProperties());
                 target.putExtra("swapTable", swapTable);
             } else if (alterTableClause instanceof ModifyTablePropertiesClause) {
                 ModifyTablePropertiesClause modifyTablePropertiesClause = (ModifyTablePropertiesClause) alterTableClause;
@@ -1171,7 +1175,90 @@ public class LineageStmtEventListener implements StmtEventListener {
         }
 
         @Override
-        public Map<ColumnInfo, List<ColumnInfo>> visitQueryStatement(QueryStatement statement, List<ColumnInfo> context) {
+        public Map<ColumnInfo, List<ColumnInfo>> visitTableFunction(TableFunctionRelation node,
+                                                                    List<ColumnInfo> context) {
+            if (CollectionUtils.isEmpty(node.getChildExpressions()) ||
+                    CollectionUtils.isEmpty(node.getExplicitColumnNames())) {
+                return Collections.emptyMap();
+            }
+            TableName targetTableName = node.getResolveTableName();
+            List<ColumnInfo> targetColumns = new ArrayList<>(node.getExplicitColumnNames().size());
+            for (String targetColumnName : node.getExplicitColumnNames()) {
+                targetColumns.add(new ColumnInfo(targetColumnName, targetTableName.getTbl(), targetTableName.getDb(),
+                        targetTableName.getCatalog()));
+            }
+            Map<ColumnInfo, List<ColumnInfo>> resultMap = new LinkedHashMap<>();
+            List<Expr> exprList = node.getChildExpressions();
+            for (Expr expr : exprList) {
+                Map<ColumnInfo, List<ColumnInfo>> aMap = this.visitExpression(expr, targetColumns);
+                if (MapUtils.isNotEmpty(aMap)) {
+                    mergeIntoResultMap(aMap, resultMap);
+                }
+            }
+            return resultMap;
+        }
+
+        private static void mergeIntoResultMap(Map<ColumnInfo, List<ColumnInfo>> aMap,
+                                               Map<ColumnInfo, List<ColumnInfo>> resultMap) {
+            for (Entry<ColumnInfo, List<ColumnInfo>> entry : aMap.entrySet()) {
+                if (resultMap.containsKey(entry.getKey())) {
+                    List<ColumnInfo> mergedList = new LinkedList<>(resultMap.get(entry.getKey()));
+                    mergedList.addAll(entry.getValue());
+                    resultMap.put(entry.getKey(), mergedList);
+                } else {
+                    resultMap.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitNormalizedTableFunction(NormalizedTableFunctionRelation node,
+                                                                              List<ColumnInfo> context) {
+            return visitJoin(node, context);
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitFunctionCall(FunctionCallExpr node, List<ColumnInfo> context) {
+            Map<ColumnInfo, List<ColumnInfo>> resultMap = new LinkedHashMap<>();
+            FunctionParams params = node.getParams();
+            List<Expr> paramExpressions = params.exprs();
+            for (Expr expr : paramExpressions) {
+                Map<ColumnInfo, List<ColumnInfo>> paramResultMap = visitExpression(expr, context);
+                if (MapUtils.isNotEmpty(paramResultMap)) {
+                    mergeIntoResultMap(paramResultMap, resultMap);
+                }
+            }
+            return resultMap;
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitSlot(SlotRef node, List<ColumnInfo> context) {
+            Map<ColumnInfo, List<ColumnInfo>> resultMap = new LinkedHashMap<>();
+            TableName tn = node.getTblNameWithoutAnalyzed();
+            ColumnInfo srcCol = new ColumnInfo(node.getColumnName(), tn.getTbl(), tn.getDb(), tn.getCatalog());
+            for (ColumnInfo targetColumn : context) {
+                resultMap.put(targetColumn, Collections.singletonList(srcCol));
+            }
+            return resultMap;
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitExpression(Expr node, List<ColumnInfo> context) {
+            // make sure context is always passed
+            node.getChildren().forEach(child -> {
+                visit(child, context);
+            });
+            return node.accept(this, context);
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitLiteral(LiteralExpr node, List<ColumnInfo> context) {
+            return Collections.emptyMap();
+        }
+
+        @Override
+        public Map<ColumnInfo, List<ColumnInfo>> visitQueryStatement(QueryStatement statement,
+                                                                     List<ColumnInfo> context) {
             QueryRelation queryRelation = statement.getQueryRelation();
             return visit(queryRelation);
         }
@@ -1192,9 +1279,12 @@ public class LineageStmtEventListener implements StmtEventListener {
         }
 
         private Map<ColumnInfo, List<ColumnInfo>> mergeSetOperation(SetOperationRelation node) {
-            Map<ColumnInfo, List<ColumnInfo>> columnMap = new LinkedHashMap<>();
+            final Map<ColumnInfo, List<ColumnInfo>> columnMap = new LinkedHashMap<>();
             node.getRelations().forEach(queryRelation -> {
                 Map<ColumnInfo, List<ColumnInfo>> ret = visit(queryRelation, null);
+                if (MapUtils.isEmpty(ret)) {
+                    return;
+                }
                 if (columnMap.isEmpty()) {
                     columnMap.putAll(ret);
                 } else {
@@ -1212,10 +1302,15 @@ public class LineageStmtEventListener implements StmtEventListener {
 
         @Override
         public Map<ColumnInfo, List<ColumnInfo>> visitJoin(JoinRelation node, List<ColumnInfo> request) {
+            Map<ColumnInfo, List<ColumnInfo>> leftResult = visit(node.getLeft(), request);
+            Map<ColumnInfo, List<ColumnInfo>> rightResult = visit(node.getRight(), request);
             Map<ColumnInfo, List<ColumnInfo>> result = new LinkedHashMap<>();
-            result.putAll(visit(node.getLeft(), request));
-            result.putAll(visit(node.getRight(), request));
-
+            if (!MapUtils.isEmpty(leftResult)) {
+                result.putAll(leftResult);
+            }
+            if (!MapUtils.isEmpty(rightResult)) {
+                result.putAll(rightResult);
+            }
             return result;
         }
 
@@ -1243,6 +1338,10 @@ public class LineageStmtEventListener implements StmtEventListener {
             }
 
             Map<ColumnInfo, List<ColumnInfo>> mapResult = visit(node.getRelation(), newRequest);
+            // table function may return null value
+            if (MapUtils.isEmpty(mapResult)) {
+                return Collections.emptyMap();
+            }
             Map<String, List<ColumnInfo>> nameMapResult = new LinkedHashMap<>();
             mapResult.forEach((k, v) -> nameMapResult.put(k.getColName(), v));
             Map<ColumnInfo, List<ColumnInfo>> rs = new LinkedHashMap<>();
@@ -1285,12 +1384,16 @@ public class LineageStmtEventListener implements StmtEventListener {
             if (current == null) {
                 current = tblName;
             }
+            String currentCatalog = (null != tableAlias && StringUtils.isNotEmpty(tableAlias.getCatalog())) ?
+                    tableAlias.getCatalog() : tblName.getCatalog();
+            String currentDb = (null != tableAlias && StringUtils.isNotEmpty(tableAlias.getDb())) ?
+                    tableAlias.getDb() : tblName.getDb();
             Map<String, String> resource = parseResource(node);
             Map<ColumnInfo, List<ColumnInfo>> map = new LinkedHashMap<>();
             if (request == null || request.isEmpty()) {
                 for (Map.Entry<Field, Column> entry : node.getColumns().entrySet()) {
                     ColumnInfo target = new ColumnInfo(entry.getValue().getName(), current.getTbl(),
-                            current.getDb(), current.getCatalog());
+                            currentDb, currentCatalog);
                     ColumnInfo source = new ColumnInfo(entry.getValue().getName(), tblName.getTbl(),
                             tblName.getDb(), tblName.getCatalog());
                     source.setResource(resource);
@@ -1394,7 +1497,10 @@ public class LineageStmtEventListener implements StmtEventListener {
             target.putExtra("indexes", parseIndexes(stmt.getIndexes()));
         }
         if (stmt.getKeysDesc() != null) {
-            target.putExtra("keysDesc", stmt.getKeysDesc().toSql());
+            KeysDesc keysDesc = stmt.getKeysDesc();
+            String namesStr = keysDesc.getKeysColumnNames().stream()
+                    .map(s -> "`" + s + "`").collect(Collectors.joining(","));
+            target.putExtra("keysDesc", String.format("%s(%s)", keysDesc.getKeysType(), String.join(",", namesStr)));
         }
         if (stmt.getPartitionDesc() != null) {
             PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -1412,11 +1518,10 @@ public class LineageStmtEventListener implements StmtEventListener {
         try {
             DistributionInfo info = distributionDesc.toDistributionInfo(columns);
             distributionMap.put("type", info.getType().name());
-            Map<ColumnId, Column> schema = new HashMap<>();
-            columns.forEach(column -> schema.put(column.getColumnId(), column));
-            distributionMap.put("distributionKey", info.getDistributionKey(schema));
             distributionMap.put("bucketNum", info.getBucketNum());
-            distributionMap.put("sql", info.toSql(schema));
+            Map<ColumnId, Column> idColumnMap = MetaUtils.buildIdToColumn(columns);
+            distributionMap.put("distributionKey", info.getDistributionKey(idColumnMap));
+            distributionMap.put("sql", info.toSql(idColumnMap));
             return distributionMap;
         } catch (DdlException e) {
             LOG.debug("ddl exception", e);
