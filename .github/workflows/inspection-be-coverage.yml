@@ -95,7 +95,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
-          export ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
+          export ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${GITHUB_REPOSITORY}`
           export TOTAL_COV_XML=/var/local/env/be_total_coverage_${COMMIT_ID}.xml
           export COV_LOG=/var/local/env/be_total_coverage_${COMMIT_ID}.log
           export RES_FILE=/var/local/env/be_total_coverage_res_${COMMIT_ID}.log
