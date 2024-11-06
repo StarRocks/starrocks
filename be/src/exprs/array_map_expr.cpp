@@ -153,6 +153,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
     DCHECK(aligned_offsets != nullptr);
 
+<<<<<<< HEAD
     // 4. prepare outer common exprs
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         auto column = chunk->get_column_by_slot_id(slot_id);
@@ -166,10 +167,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
 
     // 5. prepare capture columns
+=======
+    // 4. prepare capture columns
+>>>>>>> ee085bf402 ([BugFix] remove unnecessary replicate for outer_common_expr (#52649))
     for (auto slot_id : capture_slot_ids) {
-        if (cur_chunk->is_slot_exist(slot_id)) {
-            continue;
-        }
         auto captured_column = chunk->get_column_by_slot_id(slot_id);
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
@@ -178,7 +179,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         }
     }
 
-    // 6. evaluate lambda expr
+    // 5. evaluate lambda expr
     ColumnPtr column = nullptr;
     if constexpr (independent_lambda_expr) {
         // if lambda expr doesn't rely on arguments, we evaluate it first, and then align offsets
