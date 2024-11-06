@@ -16,12 +16,9 @@
 
 #include <algorithm>
 #include <memory>
-#include <random>
-#include <stack>
 #include <unordered_map>
 #include <utility>
 
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -63,7 +60,6 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
@@ -271,6 +267,7 @@ private:
 
     Status _apply_bitmap_index();
 
+    // Data sampling
     Status _apply_data_sampling();
     StatusOr<RowIdSparseRange> _sample_by_block();
     StatusOr<RowIdSparseRange> _sample_by_page();
@@ -2076,7 +2073,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
     int64_t random_seed = _opts.sample_options.random_seed;
 
     auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
-    return sampler->sample();
+    return sampler->sample(_opts.stats);
 }
 
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
@@ -2099,7 +2096,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
         sampler->with_zonemap(sorted);
     }
 
-    return sampler->sample();
+    return sampler->sample(_opts.stats);
 }
 
 Status SegmentIterator::_apply_data_sampling() {
@@ -2111,6 +2108,8 @@ Status SegmentIterator::_apply_data_sampling() {
     DCHECK(_opts.sample_options.__isset.probability_percent);
     DCHECK(_opts.sample_options.__isset.random_seed);
     DCHECK(_opts.sample_options.__isset.sample_method);
+
+    SCOPED_RAW_TIMER(&_opts.stats->sample_time_ns);
 
     SampleMethod::type sample_method = _opts.sample_options.sample_method;
     RowIdSparseRange sampled_ranges;

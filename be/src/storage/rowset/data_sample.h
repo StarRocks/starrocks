@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "common/statusor.h"
+#include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "storage/zone_map_detail.h"
@@ -50,7 +51,7 @@ public:
         return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
     }
 
-    virtual StatusOr<RowIdSparseRange> sample() = 0;
+    virtual StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) = 0;
 
 protected:
     int64_t _probability_percent;
@@ -62,7 +63,7 @@ public:
     BlockDataSample(int64_t probability_percent, int64_t random_seed, size_t rows_per_block, size_t total_rows)
             : DataSample(probability_percent, random_seed), _rows_per_block(rows_per_block), _total_rows(total_rows) {}
 
-    StatusOr<RowIdSparseRange> sample() override;
+    StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) override;
 
 private:
     size_t _rows_per_block;
@@ -98,15 +99,15 @@ public:
               _num_pages(num_pages),
               _page_indexer(std::move(page_indexer)) {}
 
-    StatusOr<RowIdSparseRange> sample() override;
+    StatusOr<RowIdSparseRange> sample(OlapReaderStatistics* stats) override;
 
     void with_zonemap(std::shared_ptr<SortableZoneMap> zonemap) { _zonemap = std::move(zonemap); }
 
 private:
-    void _prepare_histogram();
+    void _prepare_histogram(OlapReaderStatistics* stats);
     bool _has_histogram() const;
-    StatusOr<RowIdSparseRange> _bernoulli_sample();
-    StatusOr<RowIdSparseRange> _histogram_sample();
+    StatusOr<RowIdSparseRange> _bernoulli_sample(OlapReaderStatistics* stats);
+    StatusOr<RowIdSparseRange> _histogram_sample(OlapReaderStatistics* stats);
 
     size_t _num_pages;
     PageIndexer _page_indexer;

@@ -19,16 +19,17 @@
 #include <random>
 #include <stdexcept>
 
+#include "storage/olap_common.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
-StatusOr<RowIdSparseRange> BlockDataSample::sample() {
+StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) {
     std::mt19937 mt(_random_seed);
     std::bernoulli_distribution dist(_probability_percent / 100.0);
 
-    // Directly use member variables for rows_per_block and total_rows
     size_t sampled_blocks = 0;
     size_t total_blocks = _total_rows / _rows_per_block;
     RowIdSparseRange sampled_ranges;
@@ -39,7 +40,8 @@ StatusOr<RowIdSparseRange> BlockDataSample::sample() {
         }
     }
 
-    VLOG(2) << fmt::format("sample {}/{} blocks in segment", sampled_blocks, total_blocks);
+    stats->sample_size += sampled_blocks;
+    stats->sample_population_size += total_blocks;
 
     return sampled_ranges;
 }
@@ -72,12 +74,6 @@ void SortableZoneMap::sort() {
     std::iota(page_indices.begin(), page_indices.end(), 0);
     std::sort(page_indices.begin(), page_indices.end(),
               [&](size_t lhs, size_t rhs) { return compare_zonemap(zonemap[lhs], zonemap[rhs]); });
-    // std::vector<ZoneMapDetail> sorted;
-    // sorted.reserve(zonemap.size());
-    // for (size_t page_index : page_indices) {
-    //     sorted.push_back(zonemap[page_index]);
-    // }
-    // std::swap(sorted, zonemap);
 }
 
 double SortableZoneMap::width(const ZoneMapDetail& zone) {
@@ -189,18 +185,18 @@ void SortableZoneMap::build_histogram(size_t buckets) {
     }
 }
 
-StatusOr<RowIdSparseRange> PageDataSample::sample() {
+StatusOr<RowIdSparseRange> PageDataSample::sample(OlapReaderStatistics* stats) {
     if (_zonemap) {
-        _prepare_histogram();
+        _prepare_histogram(stats);
         if (_has_histogram()) {
-            return _histogram_sample();
+            return _histogram_sample(stats);
         }
     }
 
-    return _bernoulli_sample();
+    return _bernoulli_sample(stats);
 }
 
-StatusOr<RowIdSparseRange> PageDataSample::_histogram_sample() {
+StatusOr<RowIdSparseRange> PageDataSample::_histogram_sample(OlapReaderStatistics* stats) {
     auto& hist = _zonemap->histogram;
     std::mt19937 mt(_random_seed);
     std::vector<size_t> sample_pages(hist.size());
@@ -220,7 +216,8 @@ StatusOr<RowIdSparseRange> PageDataSample::_histogram_sample() {
         sampled_ranges.add(RowIdRange(first_ordinal, last_ordinal));
     }
 
-    VLOG(2) << fmt::format("histogram sample pages {}/{}", sample_pages.size(), _num_pages);
+    stats->sample_size += sample_pages.size();
+    stats->sample_population_size += _num_pages;
 
     return sampled_ranges;
 }
@@ -231,19 +228,21 @@ bool PageDataSample::_has_histogram() const {
 
 // Build a histogram based on zonemap to make the data sampling more even
 // Without histogram, page sampling may fall into local optimal but not global uniform
-void PageDataSample::_prepare_histogram() {
+void PageDataSample::_prepare_histogram(OlapReaderStatistics* stats) {
     size_t expected_pages = _probability_percent / 100 * _num_pages;
     if (expected_pages <= 1) {
         return;
     }
+    SCOPED_RAW_TIMER(&stats->sample_build_histogram_time_ns);
     _zonemap->sort();
     if (!_zonemap->is_diverse()) {
         return;
     }
+    stats->sample_build_histogram_count++;
     _zonemap->build_histogram(expected_pages);
 }
 
-StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample() {
+StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample(OlapReaderStatistics* stats) {
     size_t num_data_pages = _num_pages;
     size_t sampled_pages = 0;
     std::mt19937 mt(_random_seed);
@@ -258,7 +257,8 @@ StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample() {
         }
     }
 
-    VLOG(2) << fmt::format("bernoulli sample pages {}/{}", sampled_pages, num_data_pages);
+    stats->sample_size += sampled_pages;
+    stats->sample_population_size += num_data_pages;
 
     return sampled_ranges;
 }
