@@ -446,14 +446,14 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         }
         Config.allow_system_reserved_names = true;
 
