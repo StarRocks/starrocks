@@ -259,7 +259,7 @@ public:
 
     virtual Status null_count(size_t* count) { return Status::OK(); };
 
-    // FIXME(murphy)
+    // RAW interface, should be used carefully
     virtual ColumnReader* get_column_reader() { return nullptr; };
 
 protected:

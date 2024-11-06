@@ -19,6 +19,7 @@
 #include <random>
 #include <stack>
 #include <unordered_map>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -55,6 +56,7 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
+#include "storage/rowset/data_sample.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
@@ -2066,62 +2068,28 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
 }
 
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
+    size_t rows_per_block = _segment->num_rows_per_block();
+    size_t total_rows = _segment->num_rows();
     int64_t probability_percent = _opts.sample_options.probability_percent;
     int64_t random_seed = _opts.sample_options.random_seed;
 
-    // Generate a uniformly distributed random number
-    std::mt19937 mt(random_seed);
-    std::bernoulli_distribution dist(probability_percent / 100.0);
-
-    size_t rows_per_block = _segment->num_rows_per_block();
-    size_t total_rows = _segment->num_rows();
-    size_t sampled_blocks = 0;
-    size_t total_blocks = total_rows / rows_per_block;
-    RowIdSparseRange sampled_ranges;
-    for (size_t i = 0; i < total_rows; i += rows_per_block) {
-        if (dist(mt)) {
-            sampled_blocks++;
-            sampled_ranges.add(RowIdRange(i, std::min(i + rows_per_block, total_rows)));
-        }
-    }
-
-    VLOG(2) << fmt::format("sample {}/{} blocks in segment", sampled_blocks, total_blocks);
-
-    return sampled_ranges;
+    auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
+    return sampler->sample();
 }
 
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
-    int64_t probability_percent = _opts.sample_options.probability_percent;
-    int64_t random_seed = _opts.sample_options.random_seed;
-    size_t n = _schema.num_fields();
-    RETURN_IF(n > 1, Status::InvalidArgument("sample by page can only support at most one column"));
+    RETURN_IF(_schema.num_fields() > 1, Status::InvalidArgument("page sample can only support at most 1 column"));
 
     ColumnId cid = _schema.field(0)->id();
     auto& column_iterator = _column_iterators[cid];
     ColumnReader* column_reader = column_iterator->get_column_reader();
-    OrdinalIndexReader* ordinal_index = column_reader->get_ordinal_index_reader();
+    int32_t num_data_pages = column_reader->num_data_pages();
+    PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
-    size_t num_data_pages = ordinal_index->num_data_pages();
-    size_t sampled_pages = 0;
-    std::mt19937 mt(random_seed);
-    std::bernoulli_distribution dist(probability_percent / 100.0);
-    RowIdSparseRange sampled_ranges;
-    for (size_t i = 0; i < num_data_pages; i++) {
-        if (dist(mt)) {
-            // FIXME(murphy) use rowid_t rather than ordinal_t
-            ordinal_t first_ordinal = ordinal_index->get_first_ordinal(i);
-            ordinal_t last_ordinal = ordinal_index->get_last_ordinal(i);
-            sampled_ranges.add(RowIdRange(first_ordinal, last_ordinal));
-            sampled_pages++;
-        }
-    }
-
-#ifndef NDEBUG
-    ordinal_index->print_debug_info();
-#endif
-    VLOG(2) << fmt::format("sample {}/{} pages", sampled_pages, num_data_pages);
-
-    return sampled_ranges;
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+    auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
+    return sampler->sample();
 }
 
 Status SegmentIterator::_apply_data_sampling() {

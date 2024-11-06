@@ -34,19 +34,14 @@
 
 #pragma once
 
-#include <algorithm>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "column/datum.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
@@ -154,6 +149,9 @@ public:
 
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
+    // Return the ordinal range of a page
+    std::pair<ordinal_t, ordinal_t> get_page_range(size_t page_index);
+
     // page-level zone map filter.
 
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
@@ -196,8 +194,6 @@ public:
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
     bool has_remain_json() const { return _has_remain; }
-
-    OrdinalIndexReader* get_ordinal_index_reader() { return _ordinal_index.get(); }
 
 private:
     StatusOr<std::unique_ptr<ColumnIterator>> _new_json_iterator(ColumnAccessPath* path = nullptr,
