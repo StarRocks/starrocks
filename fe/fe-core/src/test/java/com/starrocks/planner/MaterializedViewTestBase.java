@@ -267,7 +267,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        public String getExecPlan() {
+        public String geRewritePlan() {
             return this.rewritePlan;
         }
     }
