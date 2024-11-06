@@ -2098,13 +2098,8 @@ public class CreateTableTest {
         String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
                 " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
-<<<<<<< HEAD
-                " Detail message: Column name [__op] is a system reserved name." +
-                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
-=======
                         " Detail message: Column name [__op] is a system reserved name." +
                         " Please choose a different one.",
->>>>>>> 3745ede0c1 ([Enhancement] try to prevent create pk table with __op column name by mistake (#52621))
                 () -> starRocksAssert.withTable(sql1));
     }
 
