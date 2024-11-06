@@ -692,6 +692,51 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testCreateTableWithReserveColumn() {
+        Config.allow_system_reserved_names = true;
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__op' is reserved for primary key table",
+                () -> createTable(
+                "CREATE TABLE test.test_op (\n" +
+                        "k1 INT,\n" +
+                        "__op INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__row' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__row INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__ROW' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__ROW INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        Config.allow_system_reserved_names = false;
+    }
+
+    @Test
     public void testCreateSumAgg() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
@@ -2061,7 +2106,7 @@ public class CreateTableTest {
                 " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
                         " Detail message: Column name [__op] is a system reserved name." +
-                        " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                        " Please choose a different one.",
                 () -> starRocksAssert.withTable(sql1));
     }
 

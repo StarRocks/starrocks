@@ -52,6 +52,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -266,6 +267,12 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
+                // check reserved column for PK table
+                if (table.getKeysType() == KeysType.PRIMARY_KEYS
+                        && FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(column.getName())) {
+                    throw new DdlException("Column name '" + column.getName()
+                            + "' is reserved for primary key table");
+                }
             }
             List<Integer> sortKeyUniqueIds = new ArrayList<>();
             if (useFastSchemaEvolution) {

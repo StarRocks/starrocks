@@ -93,6 +93,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -1050,6 +1051,10 @@ public class SchemaChangeHandler extends AlterHandler {
             if (newColumn.getAggregationType() != null && newColumn.getAggregationType() != AggregateType.REPLACE) {
                 throw new DdlException(
                         "Can not assign aggregation method on column in Primary data model table: " + newColName);
+            }
+            // check reserved column for PK table
+            if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(newColName)) {
+                throw new DdlException("Column name '" + newColName + "' is reserved for primary key table");
             }
             newColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
