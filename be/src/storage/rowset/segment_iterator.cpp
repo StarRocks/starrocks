@@ -268,8 +268,10 @@ private:
     bool _can_using_global_dict(const FieldPtr& field) const;
 
     Status _apply_bitmap_index();
-    
+
     Status _apply_data_sampling();
+    StatusOr<RowIdSparseRange> _sample_by_block();
+    StatusOr<RowIdSparseRange> _sample_by_page();
 
     Status _apply_del_vector();
 
@@ -516,7 +518,7 @@ Status SegmentIterator::_init() {
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     RETURN_IF_ERROR(_apply_data_sampling());
-    
+
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -2063,15 +2065,7 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
     pred_tree = PredicateTree::create(std::move(new_root));
 }
 
-Status SegmentIterator::_apply_data_sampling() {
-    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
-    RETURN_IF(_scan_range.empty(), Status::OK());
-    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-
-    DCHECK(_opts.sample_options.__isset.probability_percent);
-    DCHECK(_opts.sample_options.__isset.random_seed);
-    DCHECK(_opts.sample_options.__isset.sample_method);
-
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
     int64_t probability_percent = _opts.sample_options.probability_percent;
     int64_t random_seed = _opts.sample_options.random_seed;
 
@@ -2082,18 +2076,74 @@ Status SegmentIterator::_apply_data_sampling() {
     size_t rows_per_block = _segment->num_rows_per_block();
     size_t total_rows = _segment->num_rows();
     RowIdSparseRange sampled_ranges;
-    for (size_t i = 0; i < total_rows; i+= rows_per_block) {
+    for (size_t i = 0; i < total_rows; i += rows_per_block) {
         int rnd = dist(mt);
-        if (rnd < probability_percent) {
-            sampled_ranges.add(RowIdRange(i, i+rows_per_block));
+        if (rnd <= probability_percent) {
+            sampled_ranges.add(RowIdRange(i, i + rows_per_block));
         }
     }
 
     VLOG(2) << "sample data range: " << sampled_ranges;
 
-    // shrink current scan range
+    return sampled_ranges;
+}
+
+StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
+    int64_t probability_percent = _opts.sample_options.probability_percent;
+    int64_t random_seed = _opts.sample_options.random_seed;
+    size_t n = _schema.num_fields();
+    if (n > 1) {
+        return Status::InvalidArgument("sample by page can only support at most one column");
+    }
+
+    ColumnId cid = _schema.field(0)->id();
+    auto& column_iterator = _column_iterators[cid];
+    ColumnReader* column_reader = column_iterator->get_column_reader();
+    OrdinalIndexReader* ordinal_index = column_reader->get_ordinal_index_reader();
+    int32_t num_data_pages = ordinal_index->num_data_pages();
+
+    std::mt19937 mt(random_seed);
+    std::uniform_int_distribution<int> dist(0, 100);
+    RowIdSparseRange sampled_ranges;
+
+    for (int32_t i = 0; i < num_data_pages; i++) {
+        int rnd = dist(mt);
+        if (rnd <= probability_percent) {
+            ordinal_t first_ordinal = ordinal_index->get_first_ordinal(i);
+            ordinal_t last_ordinal = ordinal_index->get_first_ordinal(i);
+            // FIXME(murphy) rowid_t rather than ordinal_t
+            sampled_ranges.add(RowIdRange(first_ordinal, last_ordinal));
+        }
+    }
+
+    return sampled_ranges;
+}
+
+Status SegmentIterator::_apply_data_sampling() {
+    RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+
+    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.random_seed);
+    DCHECK(_opts.sample_options.__isset.sample_method);
+
+    SampleMethod::type sample_method = _opts.sample_options.sample_method;
+    RowIdSparseRange sampled_ranges;
+    switch (sample_method) {
+    case SampleMethod::type::BY_BLOCK: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_block());
+        break;
+    }
+    case SampleMethod::type::BY_PAGE: {
+        ASSIGN_OR_RETURN(sampled_ranges, _sample_by_page());
+        break;
+    }
+    default:
+        return Status::InvalidArgument(fmt::format("unsupported sample_method: {}", sample_method));
+    }
     _scan_range = _scan_range.intersection(sampled_ranges);
-    
+
     return {};
 }
 

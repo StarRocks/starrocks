@@ -259,9 +259,11 @@ public:
 
     virtual Status null_count(size_t* count) { return Status::OK(); };
 
+    // FIXME(murphy)
+    virtual ColumnReader* get_column_reader() { return nullptr; };
+
 protected:
     ColumnIteratorOptions _opts;
-    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

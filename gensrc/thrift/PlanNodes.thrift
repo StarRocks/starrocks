@@ -552,6 +552,7 @@ struct TVectorSearchOptions {
 enum SampleMethod {
   BY_ROW,
   BY_BLOCK,
+  BY_PAGE,
 }
 
 struct TTableSampleOptions {

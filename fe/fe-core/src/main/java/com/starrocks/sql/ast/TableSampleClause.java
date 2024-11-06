@@ -53,22 +53,6 @@ public class TableSampleClause implements ParseNode {
         return useSampling;
     }
 
-    public SampleMethod getSampleMethod() {
-        return sampleMethod;
-    }
-
-    public void setSampleMethod(SampleMethod sampleMethod) {
-        this.sampleMethod = sampleMethod;
-    }
-
-    public long getRandomSeed() {
-        return randomSeed;
-    }
-
-    public void setRandomSeed(long randomSeed) {
-        this.randomSeed = randomSeed;
-    }
-
     @Override
     public NodePosition getPos() {
         return pos;
@@ -124,12 +108,14 @@ public class TableSampleClause implements ParseNode {
     }
 
     public enum SampleMethod {
-        BY_ROW,
-        BY_BLOCK;
+        BY_ROW,     // Bernoulli sampling of each row, which is the least efficient
+        BY_BLOCK,   // BLOCK: about 1024 rows in a logical block
+        BY_PAGE;    // PAGE: physical page, about 64KB, which is the most efficient but may not uniform
 
         private static final Map<SampleMethod, com.starrocks.thrift.SampleMethod> THRIFT_MAPPING =
                 ImmutableMap.of(BY_ROW, com.starrocks.thrift.SampleMethod.BY_ROW,
-                        BY_BLOCK, com.starrocks.thrift.SampleMethod.BY_BLOCK);
+                        BY_BLOCK, com.starrocks.thrift.SampleMethod.BY_BLOCK,
+                        BY_PAGE, com.starrocks.thrift.SampleMethod.BY_PAGE);
 
         public static SampleMethod mustParse(String value) throws AnalysisException {
             SampleMethod result = EnumUtils.getEnumIgnoreCase(SampleMethod.class, value);
