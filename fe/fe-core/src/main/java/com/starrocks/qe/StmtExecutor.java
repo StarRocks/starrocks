@@ -1313,8 +1313,6 @@ public class StmtExecutor {
             for (Long tableId : tableIds) {
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 entity.counterScanFinishedTotal.increase(1L);
-                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-                entity.counterScanFinishedTotal.increase(1L);
             }
         }
     }
