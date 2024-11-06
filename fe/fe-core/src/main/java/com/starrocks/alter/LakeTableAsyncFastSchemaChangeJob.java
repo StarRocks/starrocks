@@ -186,6 +186,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             info.add(jobId);
             info.add(tableName);
             info.add(TimeUtils.longToTimeString(createTimeMs));
+            info.add(TimeUtils.longToTimeString(rewriteFinishedTimeMs));
             info.add(TimeUtils.longToTimeString(finishedTimeMs));
             info.add(schemaInfo.indexName);
             info.add(schemaInfo.indexId);

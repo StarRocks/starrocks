@@ -727,7 +727,7 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         ret = _thread_pool_move_dir.get();
         break;
     case TTaskType::UPDATE_TABLET_META_INFO:
-        ret = _thread_pool_update_tablet_meta_info.get();
+        ret = _thread_pool_alter_tablet.get();
         break;
     case TTaskType::ALTER:
         ret = _thread_pool_alter_tablet.get();
