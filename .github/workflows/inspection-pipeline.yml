@@ -539,15 +539,30 @@ jobs:
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
       DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
 
+  BE-COV-REPORT:
+    uses: ./.github/workflows/inspection-be-coverage.yml
+    name: 'BE Coverage'
+    if: github.repository == 'StarRocks/starrocks' && needs.info.outputs.WITH_COV == 'true'
+    needs:
+      - info
+      - diff-info
+    secrets: inherit
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      DIFF_FILE_PATH: ${{ needs.diff-info.outputs.DIFF_FILE }}
+
   FEATURE-COV:
     runs-on: [ self-hosted, normal ]
     name: COV INFO
     needs:
       - FE-COV-REPORT
+      - BE-COV-REPORT
     steps:
       - name: info
         run: |
           echo "FE_COV_RES_FILE: ${{ needs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}"
+          echo "BE_COV_RES_FILE: ${{ needs.BE-COV-REPORT.outputs.BE_COV_RES_FILE }}"
 
   Teardown:
     runs-on: [self-hosted, normal]

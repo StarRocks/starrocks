@@ -66,7 +66,6 @@ jobs:
         run: |
           oss_path=oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}
           size=$(${OSS_CMD} ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
-          echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" == "0" ]]; then
             echo "::error::FE UT result not exit!"
             exit 1
@@ -117,9 +116,9 @@ jobs:
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
             --cover ${{ github.workspace }}/result/ \
             --threshold 80 -type jacoco \
-            -d ${DIFF_FILE_PATH} -dt file | tee "${DIFF_FILE_PATH}.cov"
+            -d ${DIFF_FILE_PATH} -dt file | tee "${DIFF_FILE_PATH}_fe_cov.log"
           
-          echo "FE_COV_RES_FILE=${DIFF_FILE_PATH}.cov" >> $GITHUB_OUTPUT
+          echo "FE_COV_RES_FILE=${DIFF_FILE_PATH}_fe_cov.log" >> $GITHUB_OUTPUT
           rm -rf coverchecker
           rm -rf ci-tools
 
