@@ -1693,6 +1693,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Partition partition = olapTable.getPartition(info.getPartitionId());
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
+            // the shardGrouId may invalid when upgrade from old version
+            if (physicalPartition.getBaseIndex().getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+            }
             olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
