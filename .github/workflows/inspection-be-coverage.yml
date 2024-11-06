@@ -105,7 +105,7 @@ jobs:
           echo "COV_LOG=${COV_LOG}" | tee -a $GITHUB_OUTPUT
           echo "RES_FILE=${RES_FILE}" | tee -a $GITHUB_OUTPUT
 
-          ./bin/gen_be_cov.sh ${REPO} ${BASE_REF} ${COMMIT_ID} ${COMMIT_ID}
+          ./bin/gen_be_cov.sh ${GITHUB_REPOSITORY} ${BASE_REF} ${COMMIT_ID} ${COMMIT_ID}
 
       # Incremental Total Coverage
       - name: Incremental Coverage Report - Total
