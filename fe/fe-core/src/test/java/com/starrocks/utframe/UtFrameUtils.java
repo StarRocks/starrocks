@@ -171,6 +171,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
@@ -741,6 +743,8 @@ public class UtFrameUtils {
                 }
             }
         });
+        Pattern fkConstraintsPat = Pattern.compile("(\"foreign_key_constraints\"\\s*=\\s*\"[^\"]+\")\\s*,");
+        List<String> addFKSqlList = Lists.newArrayList();
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
             if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
                 continue;
@@ -754,8 +758,20 @@ public class UtFrameUtils {
             String dropTable = String.format("drop table if exists `%s`.`%s`;", dbName, tableName);
             connectContext.executeSql(dropTable);
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withTable(entry.getValue());
+            String tableCreateSql = entry.getValue();
+            Matcher matcher = fkConstraintsPat.matcher(tableCreateSql);
+            if (matcher.find()) {
+                String addFKSql = String.format("alter table %s set (%s)", tableName, matcher.group(1));
+                addFKSqlList.add(addFKSql);
+            }
+            tableCreateSql = matcher.replaceAll("");
+            starRocksAssert.withTable(tableCreateSql);
         }
+
+        for (String addFKSql : addFKSqlList) {
+            starRocksAssert.alterTable(addFKSql);
+        }
+
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
             String normalizedViewName = entry.getKey();
