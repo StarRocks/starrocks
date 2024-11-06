@@ -14,12 +14,11 @@
 
 #pragma once
 
-#ifdef __ARM_NEON
 #include <arrow/util/bpacking.h>
+#ifdef __ARM_NEON
 #include <arrow/util/bpacking_neon.h>
 #endif
 #ifdef __AVX2__
-#include <arrow/util/bpacking.h>
 #include <arrow/util/bpacking_avx2.h>
 #endif
 
@@ -98,7 +97,8 @@ public:
             int num_unpacked = arrow::internal::unpack32_neon(reinterpret_cast<const uint32_t*>(in),
                                                               reinterpret_cast<uint32_t*>(out), batch_size, BIT_WIDTH);
 #else
-#error "Not supported instruction set"
+            int num_unpacked = arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in),
+                                                         reinterpret_cast<uint32_t*>(out), batch_size, BIT_WIDTH);
 #endif
 
             DCHECK(num_unpacked == batch_size);
@@ -126,7 +126,8 @@ public:
                 int num_unpacked = arrow::internal::unpack32_neon(reinterpret_cast<const uint32_t*>(in), unpack_buffer,
                                                                   size, BIT_WIDTH);
 #else
-#error "Not supported instruction set"
+                int num_unpacked = arrow::internal::unpack32(reinterpret_cast<const uint32_t*>(in), unpack_buffer, size,
+                                                             BIT_WIDTH);
 #endif
                 DCHECK(num_unpacked == size);
                 for (int k = 0; k < size; ++k) {
