@@ -3718,7 +3718,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableDialectDowngrade() {
-        return enableOuterJoinReorder;
+        return enableDialectDowngrade;
     }
 
     public void setEnableDialectDowngrade(boolean enableDialectDowngrade) {

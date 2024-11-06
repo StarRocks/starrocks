@@ -26,19 +26,15 @@ public class TrinoDialectDowngradeTest extends TrinoTestBase {
 
     @Test
     public void testTrinoDialectDowngrade() throws Exception {
-        String querySql = "select doy(date '2022-03-06')";
+        String querySql = "select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);";
         try {
             connectContext.getSessionVariable().setEnableDialectDowngrade(true);
             connectContext.getSessionVariable().setSqlDialect("trino");
-            QueryStatement queryStmt =
-                    (QueryStatement) SqlParser.parse(querySql, connectContext.getSessionVariable()).get(0);
-            assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
-            connectContext.getSessionVariable().setEnableDialectDowngrade(true);
-            analyzeFail(querySql, "No matching function with signature: doy(date)");
+            analyzeSuccess(querySql);
+            connectContext.getSessionVariable().setEnableDialectDowngrade(false);
+            analyzeFail(querySql, "mismatched input '2'. Expecting: '+', '-', <string>");
         } finally {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }
     }
-
-
 }
