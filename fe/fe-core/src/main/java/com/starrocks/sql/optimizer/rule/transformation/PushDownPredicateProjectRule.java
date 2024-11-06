@@ -74,13 +74,9 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         if (op == null) {
             return false;
         }
-        System.out.println("hasLambda " + op.debugString());
-
         if (op instanceof LambdaFunctionOperator) {
-            System.out.println("found LambdaFunctionOperator");
             return true;
         }
-
         for (var c : op.getChildren()) {
             if (hasLambda(c)) {
                 return true;
@@ -96,8 +92,8 @@ public class PushDownPredicateProjectRule extends TransformationRule {
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
 
-        Map<ColumnRefOperator, ScalarOperator> xx = project.getColumnRefMap();
-        for (var entry : xx.entrySet()) {
+        Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
+        for (var entry : m.entrySet()) {
             if (hasLambda( entry.getValue())) {
                 return Lists.newArrayList();
             }
