@@ -693,6 +693,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+    public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1343,6 +1345,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean disableGeneratedColumnRewrite = false;
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
@@ -3532,6 +3537,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConnectorSplitIoTasks(boolean v) {
         enableConnectorSplitIoTasks = v;
+    }
+
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
     }
 
     // Serialize to thrift object
