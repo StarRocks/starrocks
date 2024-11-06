@@ -266,6 +266,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             Assert.assertFalse(contained);
             return this;
         }
+
+        public String geRewritePlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {

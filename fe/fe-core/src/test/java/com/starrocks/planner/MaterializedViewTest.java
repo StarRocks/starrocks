@@ -5556,4 +5556,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "TABLE: mv0");
         }
     }
+   @Test
+    public void testRangePredicateRewriteCase1() {
+        String mv = "select lo_orderkey, lo_orderdate, lo_linenumber, lo_shipmode from lineorder";
+        String query = "select distinct lo_orderkey from lineorder where lo_shipmode in (upper('a'), lower('a')) and " +
+                "lo_linenumber = 1";
+        String plan = testRewriteOK(mv, query).geRewritePlan();
+        PlanTestBase.assertContains(plan, "     TABLE: mv0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 20: lo_linenumber = 1, (21: lo_shipmode = lower('a')) OR (21: lo_shipmode = upper('a'))\n" +
+                "     partitions=1/1");
+    }
 }
