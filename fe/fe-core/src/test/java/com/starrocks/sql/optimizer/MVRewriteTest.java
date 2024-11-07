@@ -126,6 +126,7 @@ public class MVRewriteTest {
                 "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
                 "BUCKETS 3 PROPERTIES ( 'replication_num' = '1');";
         starRocksAssert.withTable(createTableSQL);
+        connectContext.getSessionVariable().setCboExtractCommonPlan(false);
     }
 
     @After
@@ -134,6 +135,7 @@ public class MVRewriteTest {
         starRocksAssert.dropTable(DEPTS_TABLE_NAME);
         starRocksAssert.dropTable(USER_TAG_TABLE_NAME);
         starRocksAssert.dropTable("all_type_table");
+        connectContext.getSessionVariable().setCboExtractCommonPlan(true);        
     }
 
     @AfterClass
