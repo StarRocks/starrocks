@@ -29,4 +29,8 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 COPY README.md /
 
 COPY entrypoint.sh /entrypoint.sh
+RUN mkdir /app
+RUN groupadd -g 1001 pdfuser
+RUN useradd -m -u 1001 -g pdfuser pdfuser
+RUN chown pdfuser:pdfuser /app
 ENTRYPOINT ["/entrypoint.sh"]

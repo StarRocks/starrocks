@@ -15,3 +15,15 @@ services:
     working_dir: /app/docusaurus
     command:
       sh -c "yarn build && yarn serve -p 3000 -h 0.0.0.0"
+  
+  docs-to-pdf:
+    user: 1001:1001
+    build:
+      context: .
+    volumes:
+      - ./output:/app/output
+    working_dir: /app
+    command: >
+      /bin/sh -c "
+      tail -f /dev/null
+      "
