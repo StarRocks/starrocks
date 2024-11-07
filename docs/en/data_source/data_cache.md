@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Data Cache
@@ -97,7 +97,7 @@ mysql> explain verbose select col1 from hudi_table;
 
 `dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
 
-You can also fine tune the population behavior of Data Cache via the Session Variable [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode).
+You can also fine tune the population behavior of Data Cache via the Session Variable [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode).
 
 ### Population mode
 
@@ -111,7 +111,7 @@ StarRocks supports populating Data Cache in synchronous or asynchronous mode.
 
   In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
-From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../reference/System_variable.md).
+From v3.3.0, asynchronous cache population is enabled by default. You can change the population mode by setting the session variable [enable_datacache_async_populate_mode](../sql-reference/System_variable.md).
 
 ## Footer Cache
 
@@ -247,10 +247,10 @@ You can configure Data Cache using the following system variables and BE paramet
 
 ### System variables
 
-- [populdate_datacache_mode](../reference/System_variable.md#populate_datacache_mode)
-- [enable_datacache_io_adaptor](../reference/System_variable.md#enable_datacache_io_adaptor)
-- [enable_file_metacache](../reference/System_variable.md#enable_file_metacache)
-- [enable_datacache_async_populate_mode](../reference/System_variable.md)
+- [populdate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
+- [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
 
 ### BE Parameters
 

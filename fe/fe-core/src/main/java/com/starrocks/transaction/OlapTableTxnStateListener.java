@@ -110,7 +110,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
-            long partitionId = tabletMeta.getPartitionId();
+            long partitionId = tabletMeta.getPhysicalPartitionId();
             if (table.getPhysicalPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
@@ -292,10 +292,10 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
-        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -319,7 +319,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
-                locker.unLockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
             }
         }
 

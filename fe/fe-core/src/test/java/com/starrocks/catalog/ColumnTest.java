@@ -334,7 +334,7 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
-        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
         Index i0 = new Index("i0",

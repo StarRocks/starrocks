@@ -36,7 +36,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
@@ -108,12 +107,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,6 +122,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,12 +175,12 @@ public class MvUtils {
         }
         Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
             if (db == null) {
                 logMVPrepare("Cannot find database from mvId:{}", mvId);
                 continue;
             }
-            Table table = db.getTable(mvId.getId());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
             if (table == null) {
                 logMVPrepare("Cannot find materialized view from mvId:{}", mvId);
                 continue;
@@ -870,14 +872,14 @@ public class MvUtils {
         return columnRefMap;
     }
 
-    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
+    public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
         return collectScanColumn(optExpression, Predicates.alwaysTrue());
     }
 
-    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
+    public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
                                                             Predicate<LogicalScanOperator> predicate) {
 
-        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
+        Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
         OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
             @Override
             public Void visit(OptExpression optExpression, Void context) {
@@ -1033,6 +1035,41 @@ public class MvUtils {
         return mergedRanges;
     }
 
+    public static List<Range<PartitionKey>> mergeRanges(List<Pair<Long, Range<PartitionKey>>> ranges,
+                                                        Map<Box<Range<PartitionKey>>, Set<Long>> queryMergeRangesToPartitionIds) {
+        ranges.sort(Comparator.comparing(k -> k.second.lowerEndpoint()));
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (Pair<Long, Range<PartitionKey>> currentRangePair : ranges) {
+            boolean merged = false;
+            Range<PartitionKey> currentRange = currentRangePair.second;
+            long partitionId = currentRangePair.first;
+            for (int j = 0; j < mergedRanges.size(); j++) {
+                // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
+                Range<PartitionKey> mergedRange = mergedRanges.get(j);
+                if (currentRange.isConnected(mergedRange)) {
+                    // for partition range, the intersection must be empty
+                    Preconditions.checkState(currentRange.intersection(mergedRange).isEmpty());
+                    Range<PartitionKey> newRange = mergedRange.span(currentRange);
+                    mergedRanges.set(j, newRange);
+
+                    Box<Range<PartitionKey>> mergedRangeBox = Box.of(mergedRange);
+                    Set<Long> mergePartitionIds = queryMergeRangesToPartitionIds.get(mergedRangeBox);
+                    queryMergeRangesToPartitionIds.remove(mergedRangeBox);
+                    mergePartitionIds.add(partitionId);
+                    queryMergeRangesToPartitionIds.put(Box.of(newRange), mergePartitionIds);
+
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) {
+                mergedRanges.add(currentRange);
+                queryMergeRangesToPartitionIds.put(Box.of(currentRange), Sets.newHashSet(partitionId));
+            }
+        }
+        return mergedRanges;
+    }
+
     public static boolean isDateRange(Range<PartitionKey> range) {
         if (range.hasUpperBound()) {
             PartitionKey partitionKey = range.upperEndpoint();
@@ -1080,7 +1117,6 @@ public class MvUtils {
         }
         return o.toString();
     }
-
 
     /**
      * Return the max refresh timestamp of all partition infos.
@@ -1130,13 +1166,6 @@ public class MvUtils {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 
-    public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        paritionExpr.collect(SlotRef.class, slotRefs);
-        Preconditions.checkState(slotRefs.size() == 1);
-        return slotRefs.get(0);
-    }
-
     /**
      * Inactive related mvs after modified columns have been done. Only inactive mvs after
      * modified columns have done because the modified process may be failed and in this situation
@@ -1150,7 +1179,8 @@ public class MvUtils {
         }
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -1162,7 +1192,7 @@ public class MvUtils {
                 for (MvPlanContext mvPlanContext : mvPlanContexts) {
                     if (mvPlanContext != null) {
                         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                        List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                        Set<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
                             if (scan == null) {
                                 return false;
                             }
@@ -1216,15 +1246,10 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
-                                                               QueryMaterializationContext queryMaterializationContext) {
-        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
-        if (viewScans == null) {
-            return queryExpression;
-        }
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
         if (!viewScanOperators.isEmpty()) {
@@ -1235,20 +1260,18 @@ public class MvUtils {
         return newQuery;
     }
 
-    private static void doReplaceLogicalViewScanOperator(
-            OptExpression parent,
-            int index,
-            OptExpression queryExpression,
-            List<LogicalViewScanOperator> viewScans) {
+    private static void doReplaceLogicalViewScanOperator(OptExpression parent,
+                                                         int index,
+                                                         OptExpression queryExpression) {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
             parent.setChild(index, viewPlan);
             return;
         }
         for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
         }
     }
 
@@ -1280,16 +1303,6 @@ public class MvUtils {
     }
 
     /**
-     * Check whether opt expression or its children have applied mv union rewrite.
-     *
-     * @param optExpression: opt expression to check
-     * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
-     */
-    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
-    }
-
-    /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
      *
      * @param connectContext: connect context
@@ -1301,7 +1314,7 @@ public class MvUtils {
                                                  boolean isInlineView) {
         // step1: get from mv plan cache
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContext(mv, connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
             // TODO: distinguish normal mv plan and view rewrite plan
             return mvPlanContexts.get(0);
@@ -1351,7 +1364,9 @@ public class MvUtils {
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
-            Preconditions.checkState(statementBases.size() == 1);
+            if (statementBases.size() != 1) {
+                return null;
+            }
             StatementBase stmt = statementBases.get(0);
             Analyzer.analyze(stmt, connectContext);
             return stmt;
@@ -1377,7 +1392,7 @@ public class MvUtils {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
         final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
-                mvContext, queryColumnRefFactory, queryExpression);
+                mvContext, rule, queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
                     "predicates from pruned partitions failed.");
@@ -1430,8 +1445,7 @@ public class MvUtils {
         partitionProperties.put("storage_medium", materializedView.getStorageMedium());
         String storageCooldownTime =
                 materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+        if (storageCooldownTime != null) {
             // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
             String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
             partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
@@ -1525,5 +1539,38 @@ public class MvUtils {
             values.add(upperBound);
         }
         return MvUtils.convertToInPredicate(partitionColRef, values);
+    }
+
+    /**
+     * Optimize the inlined view plan.
+     * @param logicalTree logical opt expression tree which has not been optimized
+     * @param connectContext connect context
+     * @param requiredColumns required columns
+     * @param columnRefFactory query column ref factory
+     * @return optimized view plan which has been rule based optimized
+     */
+    public static OptExpression optimizeViewPlan(OptExpression logicalTree,
+                                                 ConnectContext connectContext,
+                                                 ColumnRefSet requiredColumns,
+                                                 ColumnRefFactory columnRefFactory) {
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
+        Optimizer optimizer = new Optimizer(optimizerConfig);
+        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
+                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
+        return optimizedViewPlan;
+    }
+
+    /**
+     * Trim the input string if its length is larger than maxLength.
+     * @param input the input string
+     * @param maxLength the max length
+     */
+    public static String shrinkToSize(String input, int maxLength) {
+        if (input == null) {
+            return "";
+        }
+        return input.length() > maxLength ? input.substring(0, maxLength) : input;
     }
 }

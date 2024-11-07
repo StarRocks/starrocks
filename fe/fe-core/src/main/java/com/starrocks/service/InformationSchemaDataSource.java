@@ -150,12 +150,12 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db != null) {
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    List<Table> allTables = db.getTables();
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -181,7 +181,7 @@ public class InformationSchemaDataSource {
                         tList.add(tableConfigInfo);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
@@ -257,11 +257,11 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
-            List<Table> allTables = db.getTables();
+            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : allTables) {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -277,7 +277,7 @@ public class InformationSchemaDataSource {
                 // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
                 // partition does not trigger crash
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
@@ -304,7 +304,7 @@ public class InformationSchemaDataSource {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
@@ -404,7 +404,7 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             Locker locker = new Locker();
             try {
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                 for (String tableName : tableNames) {
                     if (request.isSetTable_name()) {
@@ -432,14 +432,14 @@ public class InformationSchemaDataSource {
                     tables.add(table);
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             for (BasicTable table : tables) {
                 Locker tableLocker = new Locker();
                 try {
                     if (table.isNativeTableOrMaterializedView()) {
-                        tableLocker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
+                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
                                 LockType.READ);
                     }
 
@@ -485,8 +485,8 @@ public class InformationSchemaDataSource {
                     infos.add(info);
                 } finally {
                     if (table.isNativeTableOrMaterializedView()) {
-                        tableLocker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
-                                LockType.READ);
+                        tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
+                                Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
                     }
                 }
             }
@@ -524,12 +524,12 @@ public class InformationSchemaDataSource {
             if (db != null) {
                 Map<Long, UUID> tableMap = allTables.row(databaseId);
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
                         Long tableId = entry.getKey();
-                        Table table = db.getTable(tableId);
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
 
@@ -566,7 +566,7 @@ public class InformationSchemaDataSource {
                         break;
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }

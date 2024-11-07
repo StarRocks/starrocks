@@ -91,6 +91,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -262,7 +263,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
         // check if db exist
         String dbName = stmt.getDbName();
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -314,18 +315,25 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
                 String tblName = tblRef.getName().getTbl();
-                Table tbl = db.getTable(tblName);
+                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapTableOrMaterializedView()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
+                if (!tbl.isSupportBackupRestore()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                                   "Table: " + tblName + " can not support backup restore, type: " +
+                                                   tbl.getType());
+                }
+
+                if (tbl.isOlapView()) {
+                    backupTbls.add(tbl);
+                    continue;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -366,7 +374,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             }
             curBackupMeta = new BackupMeta(backupTbls);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // Check if label already be used
@@ -442,8 +450,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isCloudNativeTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
+                if (!remoteTbl.isSupportBackupRestore()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                                   "Table: " + remoteTbl.getName() +
+                                                   " can not support backup restore, type: " + remoteTbl.getType());
                 }
                 mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(db.getOriginName(), remoteTbl, jobInfo, tblInfo);
             }
@@ -519,7 +529,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
-        Database db = globalStateMgr.getDb(dbName);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -699,17 +709,16 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public void loadBackupHandlerV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         BackupHandler data = reader.readJson(BackupHandler.class);
         this.repoMgr = data.repoMgr;
-        int size = reader.readInt();
+
         long currentTimeMs = System.currentTimeMillis();
-        while (size-- > 0) {
-            AbstractJob job = reader.readJson(AbstractJob.class);
+        reader.readCollection(AbstractJob.class, job -> {
             if (isJobExpired(job, currentTimeMs)) {
                 LOG.warn("skip expired job {}", job);
-                continue;
+                return;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
-        }
+        });
     }
 
     /**
@@ -744,6 +753,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
     }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
+        return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    }
 }
-
-

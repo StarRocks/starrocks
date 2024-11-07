@@ -61,13 +61,17 @@ public class GlobalVarPersistInfo implements Writable {
     // the modified variable info will be saved as a json string
     private String persistJsonString;
 
-    private GlobalVarPersistInfo() {
+    public GlobalVarPersistInfo() {
         // for persist
     }
 
     public GlobalVarPersistInfo(SessionVariable defaultSessionVariable, List<String> varNames) {
         this.defaultSessionVariable = defaultSessionVariable;
         this.varNames = varNames;
+    }
+
+    public void setPersistJsonString(String persistJsonString) {
+        this.persistJsonString = persistJsonString;
     }
 
     public String getPersistJsonString() {

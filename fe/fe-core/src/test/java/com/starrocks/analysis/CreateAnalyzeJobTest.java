@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -53,13 +52,14 @@ public class CreateAnalyzeJobTest {
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, connectContext));
 
         String sql2 = "create analyze sample table hive0.partitioned_db.t1";
-        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, connectContext));
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+        Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
 
         String sql3 = "create analyze database tpch";
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
 
         String sql4 = "create analyze full table hive0.partitioned_db.t1";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
+        statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
         Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
     }
 

@@ -58,8 +58,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -393,15 +395,19 @@ public class BackupJob extends AbstractJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = db.getTable(tblName);
+            Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
             }
-            if (!tbl.isOlapTableOrMaterializedView()) {
-                status = new Status(ErrCode.COMMON_ERROR, "table " + tblName
-                        + " is not OLAP table");
+            if (!tbl.isSupportBackupRestore()) {
+                status = new Status(ErrCode.UNSUPPORTED,
+                                    "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
                 return;
+            }
+
+            if (tbl.isOlapView()) {
+                continue;
             }
 
             OlapTable olapTbl = (OlapTable) tbl;
@@ -449,7 +455,7 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
@@ -459,7 +465,7 @@ public class BackupJob extends AbstractJob {
         jobId = globalStateMgr.getNextId();
         batchTask = new AgentBatchTask();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             // check all backup tables again
             checkBackupTables(db);
@@ -473,13 +479,17 @@ public class BackupJob extends AbstractJob {
             // create snapshot tasks
             for (TableRef tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
-                OlapTable tbl = (OlapTable) db.getTable(tblName);
+                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
+                if (tbl.isOlapView()) {
+                    continue;
+                }
+                OlapTable olapTbl = (OlapTable) tbl;
                 List<Partition> partitions = Lists.newArrayList();
                 if (tblRef.getPartitionNames() == null) {
-                    partitions.addAll(tbl.getPartitions());
+                    partitions.addAll(olapTbl.getPartitions());
                 } else {
                     for (String partName : tblRef.getPartitionNames().getPartitionNames()) {
-                        Partition partition = tbl.getPartition(partName);
+                        Partition partition = olapTbl.getPartition(partName);
                         partitions.add(partition);
                     }
                 }
@@ -490,9 +500,9 @@ public class BackupJob extends AbstractJob {
                         long visibleVersion = physicalPartition.getVisibleVersion();
                         List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
                         for (MaterializedIndex index : indexes) {
-                            int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
+                            int schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
                             for (Tablet tablet : index.getTablets()) {
-                                prepareSnapshotTask(physicalPartition, tbl, tablet, index, visibleVersion, schemaHash);
+                                prepareSnapshotTask(physicalPartition, olapTbl, tablet, index, visibleVersion, schemaHash);
                                 if (status != Status.OK) {
                                     return;
                                 }
@@ -508,11 +518,17 @@ public class BackupJob extends AbstractJob {
             List<Table> copiedTables = Lists.newArrayList();
             for (TableRef tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
-                OlapTable tbl = (OlapTable) db.getTable(tblName);
+                Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
+                if (tbl.isOlapView()) {
+                    View view = (View) tbl;
+                    copiedTables.add((Table) DeepCopy.copyWithGson(view, View.class));
+                    continue;
+                }
+                OlapTable olapTbl = (OlapTable) tbl;
                 // only copy visible indexes
                 List<String> reservedPartitions = tableRef.getPartitionNames() == null ? null
                         : tableRef.getPartitionNames().getPartitionNames();
-                OlapTable copiedTbl = tbl.selectiveCopy(reservedPartitions, true, IndexExtState.VISIBLE);
+                OlapTable copiedTbl = olapTbl.selectiveCopy(reservedPartitions, true, IndexExtState.VISIBLE);
                 if (copiedTbl == null) {
                     status = new Status(ErrCode.COMMON_ERROR, "faild to copy table: " + tblName);
                     return;
@@ -526,7 +542,7 @@ public class BackupJob extends AbstractJob {
             }
             backupMeta = new BackupMeta(copiedTables);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // send tasks

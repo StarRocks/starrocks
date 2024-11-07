@@ -56,7 +56,7 @@ namespace starrocks {
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
@@ -437,10 +437,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
         bytes.reserve(reserved);
     }
 
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
 
     auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -487,10 +485,8 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     }
 
     bytes.reserve(reserved);
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
@@ -2633,7 +2629,8 @@ StatusOr<ColumnPtr> StringFunctions::ascii(FunctionContext* context, const Colum
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
-    return std::string((char*)&value, 1);
+    char* p = (char*)&value;
+    return std::string(p, 1);
 }
 
 StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {

@@ -189,6 +189,10 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newTable(String name) {
+        return newTable(name, 1024000L);
+    }
+
+    public static OlapTable newTable(String name, long replicaDataSize) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
@@ -198,15 +202,15 @@ public abstract class StarRocksHttpTestCase {
 
         Replica replica1 =
                 new Replica(testReplicaId1, testBackendId1, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica2 =
                 new Replica(testReplicaId2, testBackendId2, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
         Replica replica3 =
                 new Replica(testReplicaId3, testBackendId3, testStartVersion, testSchemaHash,
-                        1024000L, 2000L,
+                        replicaDataSize, 2000L,
                         Replica.ReplicaState.NORMAL, -1, 0);
 
         // tablet
@@ -284,23 +288,15 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
 
-                globalStateMgr.getDb("emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
@@ -320,13 +316,13 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(localMetastore) {
             {
-                localMetastore.listDbNames();
+                localMetastore.getDb("testDb");
                 minTimes = 0;
-                result = Lists.newArrayList("testDb");
+                result = db;
 
-                localMetastore.getFullNameToDb();
+                localMetastore.getDb(testDbId);
                 minTimes = 0;
-                result = nameToDb;
+                result = db;
             }
         };
 
@@ -352,25 +348,9 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb(db.getId());
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
-
-                globalStateMgr.getDb("emptyDb");
-                minTimes = 0;
-                result = null;
-
-                globalStateMgr.getDb(anyString);
-                minTimes = 0;
-                result = new Database();
 
                 globalStateMgr.getLoadInstance();
                 minTimes = 0;
@@ -383,6 +363,10 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
             }
         };
 
@@ -401,7 +385,18 @@ public abstract class StarRocksHttpTestCase {
                 result = newEmptyTable;
             }
         };
-        ;
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getDb(testDbId);
+                minTimes = 0;
+                result = db;
+            }
+        };
 
         return globalStateMgr;
     }

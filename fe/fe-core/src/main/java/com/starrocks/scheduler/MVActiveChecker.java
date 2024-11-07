@@ -93,7 +93,8 @@ public class MVActiveChecker extends FrontendDaemon {
     private void process() {
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
-            for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
+            for (Table table : CollectionUtils.emptyIfNull(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()))) {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
@@ -124,7 +125,7 @@ public class MVActiveChecker extends FrontendDaemon {
         }
 
         long dbId = mv.getDbId();
-        Optional<String> dbName = GlobalStateMgr.getCurrentState().mayGetDb(dbId).map(Database::getFullName);
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId).map(Database::getFullName);
         if (!dbName.isPresent()) {
             LOG.warn("[MVActiveChecker] cannot activate MV {} since database {} not found", mv.getName(), dbId);
             return;

@@ -83,9 +83,13 @@ public class StreamLoadManagerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_ID);
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -296,14 +300,13 @@ public class StreamLoadManagerTest {
 
         TransactionState state = new TransactionState();
         task.afterCommitted(state, true);
-        Assert.assertNotEquals(-1, task.endTimeMs());
+        Assert.assertNotEquals(-1, task.commitTimeMs());
 
-        state.setCommitTime(task.endTimeMs());
-        task.replayOnCommitted(state);
-        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+        Assert.assertTrue(task.isUnreversibleState());
+        Assert.assertFalse(task.isFinalState());
 
         streamLoadManager.cleanSyncStreamLoadTasks();
-        Assert.assertEquals(0, streamLoadManager.getStreamLoadTaskCount());
+        Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
     }
 
 }

@@ -544,7 +544,7 @@ public:
         // if i-th row is null, set nullable_array[x][i] = null, otherwise, set array[x][i]=src[x][i]
         std::vector<ArrayColumn*> arrays(columns.size());
         std::vector<NullData*> array_nulls(columns.size());
-        std::vector<std::vector<uint32_t>*> array_offsets(columns.size());
+        std::vector<Buffer<uint32_t>*> array_offsets(columns.size());
         std::vector<NullableColumn*> nullable_arrays(columns.size());
         auto old_size = columns[0]->size();
         for (auto j = 0; j < columns.size(); ++j) {

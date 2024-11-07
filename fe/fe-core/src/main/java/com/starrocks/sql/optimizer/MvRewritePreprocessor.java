@@ -57,7 +57,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -67,7 +66,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -106,7 +104,8 @@ public class MvRewritePreprocessor {
         this.queryColumnRefFactory = queryColumnRefFactory;
         this.context = context;
         this.requiredColumns = requiredColumns;
-        this.queryMaterializationContext = context.getQueryMaterializationContext();
+        this.queryMaterializationContext = context.getQueryMaterializationContext() == null ?
+                new QueryMaterializationContext() : context.getQueryMaterializationContext();
     }
 
     @VisibleForTesting
@@ -233,13 +232,16 @@ public class MvRewritePreprocessor {
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
+
+                // filter mvs which is set by config: including/excluding mvs
+                Set<MaterializedView> selectedRelatedMVs = getRelatedMVsByConfig(relatedMVs);
+                logMVPrepare(connectContext, "Choose {}/{} mvs after user config", selectedRelatedMVs.size(), relatedMVs.size());
                 // add into queryMaterializationContext for later use
-                this.queryMaterializationContext.addRelatedMVs(relatedMVs);
+                this.queryMaterializationContext.addRelatedMVs(selectedRelatedMVs);
 
                 // 2. choose best related mvs by user's config or related mv limit
-                Set<MaterializedView> selectedRelatedMVs;
                 try (Timer t1 = Tracers.watchScope("MVChooseCandidates")) {
-                    selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                    selectedRelatedMVs = chooseBestRelatedMVs(queryTables, selectedRelatedMVs, queryOptExpression);
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
@@ -261,7 +263,7 @@ public class MvRewritePreprocessor {
 
                 // To avoid disturbing queries without mv, only initialize materialized view context
                 // when there are candidate mvs.
-                if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+                if (CollectionUtils.isNotEmpty(context.getCandidateMvs())) {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
@@ -305,6 +307,8 @@ public class MvRewritePreprocessor {
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
         logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
                 sessionVariable.isEnableViewBasedMvRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_text_match_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewTextMatchRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");
@@ -343,58 +347,49 @@ public class MvRewritePreprocessor {
         }
         List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans, columnRefFactory);
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans);
         if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;
         }
         // optimize logical plan with view
-        OptExpression optimizedPlan = optimizeViewPlan(
+        OptExpression optimizedPlan = MvUtils.optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
-        queryMaterializationContext.setLogicalTreeWithView(optimizedPlan);
-        queryMaterializationContext.setViewScans(viewScans);
+        queryMaterializationContext.setQueryOptPlanWithView(optimizedPlan);
+        queryMaterializationContext.setQueryViewScanOps(viewScans);
     }
 
-    private OptExpression optimizeViewPlan(OptExpression logicalTree,
-                                           ConnectContext connectContext,
-                                           ColumnRefSet requiredColumns,
-                                           ColumnRefFactory columnRefFactory) {
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedViewPlan = optimizer.optimize(connectContext, logicalTree,
-                new PhysicalPropertySet(), requiredColumns, columnRefFactory);
-        return optimizedViewPlan;
-    }
 
     private OptExpression extractLogicalPlanWithView(OptExpression logicalTree,
-                                                     List<LogicalViewScanOperator> viewScans,
-                                                     ColumnRefFactory columnRefFactory) {
+                                                     List<LogicalViewScanOperator> viewScans) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
-            // collect LogicalViewScanOperator to original logical tree,
-            // which will be used in mv union rewrite
-            // should use cloned plan because the following optimizeViewPlan will change the plan
+            // If the view scan operator is not rewritten, needs to use the original plan to replace the view scan operator.
+            // We don't need to evaluate the original plan directly, if view-based-rewrite successes, the original plan will
+            // not be used, so use Lazy Evaluator here.
+            // 1. Collect LogicalViewScanOperator to an original logical tree which will be used in mv union rewrite.
+            // 2. Clone the original plan because the following optimizeViewPlan will change the plan
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
-            OptExpression optimizedViewPlan = optimizeViewPlan(
-                    clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            viewScanOperator.setOriginalPlan(optimizedViewPlan);
+            viewScanOperator.setOriginalPlanEvaluator(new LogicalViewScanOperator.OptPlanEvaluator(clonePlan,
+                    connectContext, viewScanOperator.getOutputColumnSet(), queryColumnRefFactory));
             viewScans.add(viewScanOperator);
+
+            // replace the original plan with a new view scan operator
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
-            LogicalViewScanOperator clone = builder.build();
-            OptExpression viewScanExpr = OptExpression.create(clone);
-            // should add a projection to make predicate pushdown rules work right
+            LogicalViewScanOperator clonedViewScanOp = builder.build();
+            OptExpression viewScanExpr = OptExpression.create(clonedViewScanOp);
+
+            // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input, viewScans, columnRefFactory);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
                 inputs.add(newInput);
             }
             Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
@@ -465,8 +460,8 @@ public class MvRewritePreprocessor {
             return null;
         }
 
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
@@ -534,21 +529,23 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
             return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
+        SessionVariable sessionVariable  = connectContext == null ? SessionVariable.DEFAULT_SESSION_VARIABLE
+                : connectContext.getSessionVariable();
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts = force ?
-                            CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
-                            CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (CollectionUtils.isNotEmpty(planContexts) &&
-                    planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
-                logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
-                        mv.getName(), planContexts.size());
-                String message = planContexts.stream()
-                        .map(MvPlanContext::getInvalidReason)
-                        .collect(Collectors.joining(";"));
-                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-                return Pair.create(false, "no valid plan: " + message);
-            }
+        List<MvPlanContext> planContexts = force ?
+                CachingMvPlanContextBuilder.getInstance()
+                        .getOrLoadPlanContext(sessionVariable, mv) :
+                CachingMvPlanContextBuilder.getInstance()
+                        .getPlanContextIfPresent(sessionVariable, mv);
+        if (CollectionUtils.isNotEmpty(planContexts) &&
+                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
+            logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
+                    mv.getName(), planContexts.size());
+            String message = planContexts.stream()
+                    .map(MvPlanContext::getInvalidReason)
+                    .collect(Collectors.joining(";"));
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return Pair.create(false, "no valid plan: " + message);
         }
         return Pair.create(true, null);
     }
@@ -563,8 +560,8 @@ public class MvRewritePreprocessor {
         for (MaterializedView mv : validMVs) {
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
-            List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                            .getPlanContextIfPresent(connectContext.getSessionVariable(), mv);
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
                     mvQueryScanOpDiff, mv.getLastRefreshTime());
@@ -586,18 +583,14 @@ public class MvRewritePreprocessor {
     public Set<MaterializedView> chooseBestRelatedMVs(Set<Table> queryTables,
                                                       Set<MaterializedView> relatedMVs,
                                                       OptExpression queryOptExpression) {
-        // 1. filter mvs which is set by config: including/excluding mvs
-        Set<MaterializedView> validMVs = getRelatedMVsByConfig(relatedMVs);
-        logMVPrepare(connectContext, "Choose {}/{} mvs after user config", validMVs.size(), relatedMVs.size());
-
-        // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
-        validMVs = validMVs.stream()
+        // choose all valid mvs and filter mvs that cannot be rewritten for the query
+        Set<MaterializedView> validMVs = relatedMVs.stream()
                 .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables).first)
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
 
-        // 3. choose max config related mvs for mv rewrite to avoid too much optimize time
+        // choose max config related mvs for mv rewrite to avoid too much optimize time
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         if (validMVs.size() <= maxRelatedMVsLimit) {
             return validMVs;
@@ -666,7 +659,7 @@ public class MvRewritePreprocessor {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
                 String mvName = olapTable.getIndexNameById(indexId);
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
                 // distribution info
                 DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
@@ -874,7 +867,7 @@ public class MvRewritePreprocessor {
 
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(mv.getDbId()).getFullName();
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
             context.getDumpInfo().addTable(dbName, mv);
         }
 
@@ -989,7 +982,7 @@ public class MvRewritePreprocessor {
             }
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
-
+        // MV's selected partition ids/tablet ids are necessary for MV rewrite.
         return LogicalOlapScanOperator.builder()
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())

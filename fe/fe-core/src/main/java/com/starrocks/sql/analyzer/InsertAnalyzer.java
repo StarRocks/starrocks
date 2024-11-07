@@ -16,10 +16,13 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -29,17 +32,28 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.InsertStmt.ColumnMatchPolicy;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.SnapshotRef;
@@ -49,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -56,6 +71,9 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
+    private static final ImmutableSet<String> PUSH_DOWN_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(LoadStmt.STRICT_MODE)
+            .build();
 
     /**
      * Normal path of analyzer
@@ -70,19 +88,32 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
-        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        List<Table> tables = new ArrayList<>();
+        boolean isLockTaken = false;
         try {
+            // insert properties
+            analyzeProperties(insertStmt, session);
+
+            // push down schema to files
+            // should lock because this needs target table schema, only affacts insert from files()
+            if (pushDownTargetTableSchemaToFiles(insertStmt, session)) {
+                // Take the PlannerMetaLock
+                takeLock.run();
+                isLockTaken = true;
+            }
+
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
+            List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            tables.stream().map(table -> (HiveTable) table)
-                    .forEach(table -> table.useMetadataCache(false));
+            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
+                session.setUseConnectorMetadataCache(Optional.of(false));
+            }
         } finally {
-            // Take the PlannerMetaLock
-            takeLock.run();
+            if (!isLockTaken) {
+                // Take the PlannerMetaLock
+                takeLock.run();
+            }
         }
-
 
         /*
          *  Target table
@@ -184,13 +215,11 @@ public class InsertAnalyzer {
         if (insertStmt.getTargetColumnNames() == null) {
             if (table instanceof OlapTable) {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
-                mentionedColumns =
-                        ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                                .map(Column::getName).collect(Collectors.toSet());
+                mentionedColumns.addAll(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream().map(Column::getName)
+                        .collect(Collectors.toSet()));
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
-                mentionedColumns =
-                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+                mentionedColumns.addAll(table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet()));
             }
         } else {
             targetColumns = new ArrayList<>();
@@ -206,7 +235,7 @@ public class InsertAnalyzer {
                     throw new SemanticException("generated column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
-                    throw new SemanticException("Column '%s' specified twice", colName);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
                 }
                 requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
@@ -245,12 +274,40 @@ public class InsertAnalyzer {
         if ((table.isIcebergTable() || table.isHiveTable()) && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
+            mentionedColumns.removeAll(table.getPartitionColumnNames());
         }
 
-        if (query.getRelationFields().size() != mentionedColumnSize) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
-                    query.getRelationFields().size());
+        // check target and source columns match
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+        if (insertStmt.isColumnMatchByPosition()) {
+            if (query.getRelationFields().size() != mentionedColumnSize) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
+                        query.getRelationFields().size());
+            }
+        } else {
+            Preconditions.checkState(insertStmt.isColumnMatchByName());
+            if (query instanceof ValuesRelation) {
+                throw new SemanticException("Insert match column by name does not support values()");
+            }
+
+            Set<String> selectColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String colName : insertStmt.getQueryStatement().getQueryRelation().getColumnOutputNames()) {
+                if (!selectColumnNames.add(colName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
+                }
+            }
+            if (!selectColumnNames.containsAll(mentionedColumns)) {
+                mentionedColumns.removeAll(selectColumnNames);
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Target", String.join(", ", mentionedColumns), "source");
+            }
+            if (!mentionedColumns.containsAll(selectColumnNames)) {
+                selectColumnNames.removeAll(mentionedColumns);
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Source", String.join(", ", selectColumnNames), "target");
+            }
         }
+
         // check default value expr
         if (query instanceof ValuesRelation) {
             ValuesRelation valuesRelation = (ValuesRelation) query;
@@ -274,6 +331,158 @@ public class InsertAnalyzer {
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }
+    }
+
+    private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
+        Map<String, String> properties = insertStmt.getProperties();
+
+        // column match by related properties
+        // parse the property and remove it for 'LoadStmt.checkProperties' validation
+        if (properties.containsKey(InsertStmt.PROPERTY_MATCH_COLUMN_BY)) {
+            String property = properties.remove(InsertStmt.PROPERTY_MATCH_COLUMN_BY);
+            ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.fromString(property);
+            if (columnMatchPolicy == null) {
+                String msg = String.format("%s (case insensitive)", String.join(", ", ColumnMatchPolicy.getCandidates()));
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INVALID_VALUE, InsertStmt.PROPERTY_MATCH_COLUMN_BY, property, msg);
+            }
+            insertStmt.setColumnMatchPolicy(columnMatchPolicy);
+        }
+
+        // check common properties
+        // use session variable if not set max_filter_ratio property
+        if (!properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                    String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        }
+        // use session variable if not set strict_mode property
+        if (!properties.containsKey(LoadStmt.STRICT_MODE)) {
+            properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        }
+
+        try {
+            LoadStmt.checkProperties(properties);
+        } catch (DdlException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+        }
+
+        // push down some properties to file table function
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        if (queryStatement != null) {
+            List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
+            for (FileTableFunctionRelation relation : relations) {
+                Map<String, String> tableFunctionProperties = relation.getProperties();
+                for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                    if (properties.containsKey(property)) {
+                        tableFunctionProperties.put(property, properties.get(property));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * files() schema infer is not strict.
+     * for example, integer in csv will be inferred to bigint type.
+     * when the target table column is tinyint, the data may be filtered because it is bigger than tinyint.
+     * but strict mode will not take effect in file scan if using bigint type.
+     *
+     * only push down slot ref select column to files.
+     *
+     * @return true if can push down schema, else false.
+     */
+    private static boolean pushDownTargetTableSchemaToFiles(InsertStmt insertStmt, ConnectContext session) {
+        if (!Config.files_enable_insert_push_down_schema) {
+            return false;
+        }
+
+        if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()) {
+            return false;
+        }
+
+        // check insert native table from files()
+        Table targetTable = getTargetTable(insertStmt, session);
+        if (!targetTable.isNativeTable()) {
+            return false;
+        }
+
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
+        }
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        Relation fromRelation = selectRelation.getRelation();
+        if (!(fromRelation instanceof FileTableFunctionRelation)) {
+            return false;
+        }
+
+        Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+            // get target column names
+            List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+            if (targetColumnNames == null) {
+                targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                        .map(Column::getName).collect(Collectors.toList());
+            }
+
+            // get select column names, null if it is not slot ref column
+            List<String> selectColumnNames = Lists.newArrayList();
+            List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+            for (SelectListItem item : listItems) {
+                if (item.isStar()) {
+                    selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
+                            .collect(Collectors.toList()));
+                    continue;
+                }
+
+                Expr expr = item.getExpr();
+                if (expr instanceof SlotRef) {
+                    selectColumnNames.add(((SlotRef) expr).getColumnName());
+                    continue;
+                }
+
+                selectColumnNames.add(null);
+            }
+
+            if (targetColumnNames.size() != selectColumnNames.size()) {
+                return;
+            }
+
+            // update files table schema according to target table schema
+            Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
+            Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            newFileTableColumns.putAll(fileTable.getNameToColumn());
+            for (int i = 0; i < selectColumnNames.size(); ++i) {
+                String selectColumnName = selectColumnNames.get(i);
+                // if select column is a field of struct and the name is 'struct_name.field_name',
+                // it will be not in newFileTableColumns.
+                if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
+                    continue;
+                }
+
+                String targetColumnName = targetColumnNames.get(i);
+                if (!targetTableColumns.containsKey(targetColumnName)) {
+                    continue;
+                }
+
+                Column oldCol = newFileTableColumns.get(selectColumnName);
+                Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
+                // bad case: complex types may fail to convert in scanner.
+                // such as parquet json -> array<varchar>
+                if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
+                    continue;
+                }
+
+                newCol.setName(selectColumnName);
+                newFileTableColumns.put(selectColumnName, newCol);
+            }
+
+            List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
+                    .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
+            fileTable.setNewFullSchema(newFileTableSchema);
+        };
+
+        ((FileTableFunctionRelation) fromRelation).setPushDownSchemaFunc(pushDownSchemaFunc);
+        return true;
     }
 
     private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
@@ -333,14 +542,17 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        insertStmt.getTableName().normalization(session);
         String catalogName = insertStmt.getTableName().getCatalog();
         String dbName = insertStmt.getTableName().getDb();
         String tableName = insertStmt.getTableName().getTbl();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (database == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);

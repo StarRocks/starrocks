@@ -45,7 +45,7 @@ from __row_util;
 -- Invalid cases.
 select get_query_dump('');
 select get_query_dump('invalid-query');
-select get_query_dump(lower('select * from t1'));
+select get_query_dump(trim('select * from t1'));
 
 -- Valid cases.
 with 

@@ -833,6 +833,13 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testLike() throws Exception {
+        String sql = "select count(*) from supplier where S_ADDRESS like 'k' AND S_ADDRESS like S_COMMENT";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "DictDecode(12: S_ADDRESS, [<place-holder> = 'k'])");
+    }
+
+    @Test
     public void testScanPredicate() throws Exception {
         String sql;
         String plan;
@@ -1449,8 +1456,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 14> : 8: S_ADDRESS\n" +
-                "  |  <slot 15> : clone(8: S_ADDRESS)\n" +
+                "  |  <slot 14> : clone(8: S_ADDRESS)\n" +
+                "  |  <slot 15> : 8: S_ADDRESS\n" +
                 "  |  \n" +
                 "  2:Decode\n" +
                 "  |  <dict id 16> : <string id 8>\n" +
@@ -1923,4 +1930,63 @@ public class LowCardinalityTest extends PlanTestBase {
             FeConstants.unitTestView = true;
         }
     }
+
+    @Test
+    public void testExistRequiredDistribution() throws Exception {
+        String sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY) from supplier l join supplier r on l.s_suppkey = r.s_suppkey";
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertTrue("joinNode is in the same fragment with a table contains global dict, " +
+                        "we cannot change its distribution", execPlan.getOptExpression(3).isExistRequiredDistribution());
+        Assert.assertTrue("table contains global dict, we cannot change its distribution",
+                execPlan.getOptExpression(0).isExistRequiredDistribution());
+
+        Assert.assertFalse("table doesn't contain global dict, we can change its distribution",
+                execPlan.getOptExpression(1).isExistRequiredDistribution());
+    }
+
+    @Test
+    public void testRuntimeFilterOnProjectWithDictExpr() throws Exception {
+        String sql = "WITH \n" +
+                "   w1 AS (\n" +
+                "     SELECT CASE\n" +
+                "         WHEN P_NAME = 'a' THEN 'a1'\n" +
+                "         WHEN P_BRAND = 'b' THEN 'b1'\n" +
+                "         ELSE 'c1'\n" +
+                "      END as P_NAME2, P_NAME from part_v2\n" +
+                "      UNION ALL\n" +
+                "      SELECT P_NAME, P_NAME from part_v2\n" +
+                ")\n" +
+                "SELECT count(1) \n" +
+                "FROM  \n" +
+                "   w1 t1 \n" +
+                "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  3:Decode\n" +
+                "  |  <dict id 38> : <string id 2>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n" +
+                "  |  column statistics: \n" +
+                "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  12 <-> CASE WHEN DictDecode(38: P_NAME, [<place-holder> = 'a']) THEN 'a1' " +
+                "WHEN DictDecode(39: P_BRAND, [<place-holder> = 'b']) THEN 'b1' ELSE 'c1' END\n" +
+                "  |  38 <-> [38: P_NAME, INT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (<slot 12>)\n" +
+                "  |  column statistics: \n" +
+                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     table: part_v2, rollup: part_v2\n" +
+                "     preAggregation: on\n" +
+                "     dict_col=P_NAME,P_BRAND");
+        System.out.println(plan);
+    }
+
 }

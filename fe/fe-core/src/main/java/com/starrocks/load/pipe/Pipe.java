@@ -133,7 +133,7 @@ public class Pipe implements GsonPostProcessable {
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
@@ -314,7 +314,7 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
-            String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
@@ -352,6 +352,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        Runnable changeStateAction = null;
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
@@ -362,7 +363,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isError()) {
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeState(State.ERROR, false);
+                        changeStateAction = () -> changeState(State.ERROR, false);
                     }
                 }
                 if (task.isFinished()) {
@@ -376,6 +377,10 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+        }
+
+        if (changeStateAction != null) {
+            changeStateAction.run();
         }
 
         // Persist LoadStatus

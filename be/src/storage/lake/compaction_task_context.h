@@ -40,28 +40,31 @@ private:
 };
 
 struct CompactionTaskStats {
-    int64_t io_ns = 0;
     int64_t io_ns_remote = 0;
     int64_t io_ns_local_disk = 0;
+    int64_t io_bytes_read_remote = 0;
+    int64_t io_bytes_read_local_disk = 0;
     int64_t segment_init_ns = 0;
     int64_t column_iterator_init_ns = 0;
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
-    int64_t compressed_bytes_read = 0;
-    int64_t reader_time_ns = 0;
-    int64_t segment_write_ns = 0;
+    int64_t in_queue_time_sec = 0;
+    int64_t sst_merge_ns = 0;
 
-    void accumulate(const OlapReaderStatistics& reader_stats);
+    void collect(const OlapReaderStatistics& reader_stats);
+    CompactionTaskStats operator+(const CompactionTaskStats& that) const;
+    CompactionTaskStats operator-(const CompactionTaskStats& that) const;
     std::string to_json_stats();
 };
 
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
-    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool is_checker_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
+    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
+                                   bool is_checker_, std::shared_ptr<CompactionTaskCallback> cb_)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
+              force_base_compaction(force_base_compaction_),
               is_checker(is_checker_),
               callback(std::move(cb_)) {}
 
@@ -74,6 +77,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t txn_id;
     const int64_t tablet_id;
     const int64_t version;
+    const bool force_base_compaction;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};
@@ -82,6 +86,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool is_checker;
     Status status;
     Progress progress;
+    int64_t enqueue_time_sec; // time point when put into queue
     std::shared_ptr<CompactionTaskCallback> callback;
     std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
 };

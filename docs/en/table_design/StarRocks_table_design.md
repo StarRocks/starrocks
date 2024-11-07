@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 10
 ---
 
 # Table overview
@@ -41,7 +42,7 @@ Since v3.3.0, the Duplicate Key table supports specifying the sort key using `OR
 
 <Replicanum />
 
-Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
+Execute [DESCRIBE](../sql-reference/sql-statements/table_bucket_part_index/DESCRIBE.md) to view the table schema.
 
 ```SQL
 MySQL [test]> DESCRIBE user_access;
@@ -58,7 +59,7 @@ MySQL [test]> DESCRIBE user_access;
 6 rows in set (0.00 sec)
 ```
 
-Execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) to view the CREATE TABLE statement.
+Execute [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) to view the CREATE TABLE statement.
 
 ```SQL
 MySQL [example_db]> SHOW CREATE TABLE user_access\G
@@ -98,7 +99,7 @@ StarRocks provides four types of tables which are Duplicate Key tables, Primary 
 - Aggregate tables are suitable to store pre-aggregated data, helping reduce the amount of data scanned and calculated and improve efficiency for aggregation queries.
 - Unique tables are also suitable to store frequently updated realtime data. However this type of tables is being replaced by Primary Key tables, which are more powerful.
 
-### [Data distribution](./Data_distribution.md)
+### [Data distribution](data_distribution/Data_distribution.md)
 
 StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to evenly distribute data across BEs. A well-designed data distribution strategy can effectively reduce the amount of data scanned and maximize StarRocks' concurrent processing capabilities, thereby increasing query performance.
 
@@ -119,11 +120,11 @@ StarRocks provides two bucketing methods:
 - Hash bucketing: Data is distributed into buckets based on the hash values of the bucketing key. You can select columns frequently used as condition columns in queries as bucketing columns, which helps improve query efficiency.
 - Random bucketing: Data is randomly distributed to buckets. This bucketing method is more simple and ease to use.
 
-### [Data types](../sql-reference/data-types/data-type-list.md)
+### [Data types](../sql-reference/data-types/README.md)
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### [Index](./indexes/indexes_overview.md)
+### [Index](indexes/indexes.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
@@ -143,10 +144,10 @@ To address this issue, StarRocks introduces temporary tables in v3.3.1. Temporar
 
 You can use the `TEMPORARY` keyword in the following SQL statements to create and drop temporary tables:
 
-- [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)
-- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)
-- [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md)
-- [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md)
+- [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)
+- [CREATE TABLE AS SELECT](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md)
+- [CREATE TABLE LIKE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md)
+- [DROP TABLE](../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md)
 
 :::note
 
@@ -171,4 +172,4 @@ While the usage of temporary tables is similar to that of native tables, there a
 
 ### More features
 
-Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).

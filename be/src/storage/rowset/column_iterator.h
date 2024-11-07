@@ -61,6 +61,8 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
+    // temporary data does not allow caching
+    bool temporary_data = false;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     // check whether column pages are all dictionary encoding.
@@ -254,6 +256,8 @@ public:
     }
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
+
+    virtual Status null_count(size_t* count) { return Status::OK(); };
 
 protected:
     ColumnIteratorOptions _opts;

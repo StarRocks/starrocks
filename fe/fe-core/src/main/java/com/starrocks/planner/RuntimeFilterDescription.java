@@ -197,7 +197,7 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
-        if (isBuildFromColocateGroup) {
+        if (isBuildFromColocateGroup && !isBroadcastJoin()) {
             int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
@@ -348,6 +348,11 @@ public class RuntimeFilterDescription {
     public void setExecGroupInfo(boolean buildFromColocateGroup, int buildExecGroupId) {
         this.isBuildFromColocateGroup = buildFromColocateGroup;
         this.execGroupId = buildExecGroupId;
+    }
+
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
     }
 
     public boolean canPushAcrossExchangeNode() {

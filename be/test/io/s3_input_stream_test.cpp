@@ -55,6 +55,8 @@ public:
 
     std::unique_ptr<S3InputStream> new_random_access_file();
 
+    std::unique_ptr<S3InputStream> new_random_access_file_prefetch(int64_t read_ahead_size);
+
 protected:
     inline static const char* s_bucket_name = nullptr;
 };
@@ -104,6 +106,10 @@ std::unique_ptr<S3InputStream> S3InputStreamTest::new_random_access_file() {
     return std::make_unique<S3InputStream>(g_s3client, s_bucket_name, kObjectName);
 }
 
+std::unique_ptr<S3InputStream> S3InputStreamTest::new_random_access_file_prefetch(int64_t read_ahead_size) {
+    return std::make_unique<S3InputStream>(g_s3client, s_bucket_name, kObjectName, read_ahead_size);
+}
+
 void S3InputStreamTest::put_object(const std::string& object_content) {
     std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_content);
 
@@ -130,6 +136,15 @@ TEST_F(S3InputStreamTest, test_read) {
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ(0, r);
     ASSERT_EQ(10, *f->position());
+}
+
+TEST_F(S3InputStreamTest, test_not_found) {
+    auto f = std::make_unique<S3InputStream>(g_s3client, s_bucket_name, "key_not_found");
+    char buf[6];
+    auto r = f->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
 }
 
 TEST_F(S3InputStreamTest, test_skip) {
@@ -204,4 +219,11 @@ TEST_F(S3InputStreamTest, test_read_all) {
     EXPECT_EQ(kObjectContent, s);
 }
 
+TEST_F(S3InputStreamTest, test_prefetch) {
+    auto f = new_random_access_file_prefetch(2);
+    char buf[6];
+
+    ASSIGN_OR_ABORT(auto r, f->read(buf, sizeof(buf)));
+    ASSERT_EQ("012345", std::string_view(buf, r));
+}
 } // namespace starrocks::io

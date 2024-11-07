@@ -42,6 +42,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -56,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -501,7 +503,8 @@ public class StarOSAgent {
 
         List<List<ShardInfo>> shardInfo;
         try {
-            shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
+                                         true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
             throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
         }
@@ -711,6 +714,53 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
         }
+    }
+
+    // remove previous worker with same backend id
+    private void tryRemovePreviousWorkerGroup(long workerGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Iterator<Map.Entry<Long, Long>> iterator = workerToNode.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Long, Long> entry = iterator.next();
+                long nodeId = entry.getValue();
+                long workerId = entry.getKey();
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                if (node.getWorkerGroupId() == workerGroupId) {
+                    iterator.remove();
+                    workerToId.entrySet().removeIf(e -> e.getValue() == workerId);
+                }
+            }
+        }
+    }
+
+    public long createWorkerGroup(String size) throws DdlException {
+        prepare();
+
+        // size should be x0, x1, x2, x4...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
+        try {
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap());
+        } catch (StarClientException e) {
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+        prepare();
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
+        }
+
+        tryRemovePreviousWorkerGroup(groupId);
     }
 
     // dump all starmgr meta, for DEBUG purpose

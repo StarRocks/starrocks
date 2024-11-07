@@ -54,6 +54,10 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -61,6 +65,14 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -673,7 +685,6 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
@@ -977,6 +988,40 @@ public interface AstVisitor<R, C> {
 
     default R visitCancelRefreshDictionaryStatement(CancelRefreshDictionaryStmt clause, C context) {
         return visitDDLStatement(clause, context);
+    }
+
+    // ---------------------------------------- Warehouse Statement ----------------------------------------------------
+
+    default R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowClusterStatement(ShowClustersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitCreateWarehouseStatement(CreateWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowNodesStatement(ShowNodesStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
@@ -1421,7 +1466,24 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    // ------------------------------------------- AST ---------------------------------------==------------------------
+    // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
+    default R visitAddPlanAdvisorStatement(AddPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitClearPlanAdvisorStatement(ClearPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelPlanAdvisorStatement(DelPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowPlanAdvisorStatement(ShowPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- AST -----------------------------------------------------------------
 
     default R visitLimitElement(LimitElement node, C context) {
         return null;
@@ -1450,4 +1512,5 @@ public interface AstVisitor<R, C> {
     default R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
+
 }

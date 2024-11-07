@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -579,24 +580,22 @@ public class AuthenticationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        AuthenticationMgr ret = null;
-        try {
-            // 1 json for myself
-            ret = reader.readJson(AuthenticationMgr.class);
-            ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
-            // 1 json for num user
-            int numUser = reader.readInt();
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++i) {
-                // 2 json for each user(kv)
-                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
-                userAuthenticationInfo.analyze();
-                ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-            }
-        } catch (AuthenticationException e) {
-            throw new RuntimeException(e);
-        }
+        // 1 json for myself
+        AuthenticationMgr ret = reader.readJson(AuthenticationMgr.class);
+        ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
+
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
+                (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
+                    try {
+                        userAuthenticationInfo.analyze();
+                    } catch (AuthenticationException e) {
+                        throw new IOException(e);
+                    }
+
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                });
+
         LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 
         // mark data is loaded

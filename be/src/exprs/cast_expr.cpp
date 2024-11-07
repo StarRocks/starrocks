@@ -14,10 +14,13 @@
 
 #include "exprs/cast_expr.h"
 
+#ifdef STARROCKS_JIT_ENABLE
 #include <llvm/ADT/APInt.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
+#endif
+
 #include <ryu/ryu.h>
 
 #include <limits>
@@ -38,7 +41,6 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -53,6 +55,10 @@
 #include "util/json_converter.h"
 #include "util/mysql_global.h"
 #include "util/numeric_types.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -356,7 +362,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    return check_number_overflow<Type, ResultType>(value);
+    return check_signed_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
@@ -1118,6 +1124,7 @@ public:
         }
         return result_column;
     };
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CAST) && !AllowThrowException && FromType != TYPE_LARGEINT &&
@@ -1184,6 +1191,7 @@ public:
             return datum;
         }
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;

@@ -54,7 +54,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -240,7 +240,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     public void setJob(ExportStmt stmt) throws UserException {
         String dbName = stmt.getTblName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -266,14 +266,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.columnNames = stmt.getColumnNames();
 
         this.dbId = db.getId();
-        this.exportTable = db.getTable(stmt.getTblName().getTbl());
+        this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), stmt.getTblName().getTbl());
         if (exportTable == null) {
             throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
         }
         this.tableId = exportTable.getId();
         this.tableName = stmt.getTblName();
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(this.tableId),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                     LockType.READ)) {
             genExecFragment(stmt);
         }
@@ -361,7 +362,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dataSize = 0L;
                 if (tabletMeta.isLakeTablet()) {
-                    Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+                    PhysicalPartition partition = exportTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
                     if (partition != null) {
                         MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
                         if (index != null) {
@@ -937,98 +938,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        // base infos
-        out.writeLong(id);
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        Text.writeString(out, exportPath);
-        Text.writeString(out, columnSeparator);
-        Text.writeString(out, rowDelimiter);
-        out.writeInt(properties.size());
-        for (Map.Entry<String, String> property : properties.entrySet()) {
-            Text.writeString(out, property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-
-        // partitions
-        boolean hasPartition = (partitions != null);
-        if (hasPartition) {
-            out.writeBoolean(true);
-            int partitionSize = partitions.size();
-            out.writeInt(partitionSize);
-            for (String partitionName : partitions) {
-                Text.writeString(out, partitionName);
-            }
-        } else {
-            out.writeBoolean(false);
-        }
-
-        // task info
-        Text.writeString(out, state.name());
-        out.writeLong(createTimeMs);
-        out.writeLong(startTimeMs);
-        out.writeLong(finishTimeMs);
-        out.writeInt(progress);
-        failMsg.write(out);
-
-        if (brokerDesc == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            brokerDesc.write(out);
-        }
-
-        tableName.write(out);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        isReplayed = true;
-        id = in.readLong();
-        dbId = in.readLong();
-        tableId = in.readLong();
-        exportPath = Text.readString(in);
-        columnSeparator = Text.readString(in);
-        rowDelimiter = Text.readString(in);
-
-        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
-        Database db = null;
-        if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
-        }
-        if (db != null) {
-            exportTable = db.getTable(tableId);
-        }
-
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            this.properties.put(propertyKey, propertyValue);
-        }
-
-        boolean hasPartition = in.readBoolean();
-        if (hasPartition) {
-            partitions = Lists.newArrayList();
-            int partitionSize = in.readInt();
-            for (int i = 0; i < partitionSize; ++i) {
-                String partitionName = Text.readString(in);
-                partitions.add(partitionName);
-            }
-        }
-
-        state = JobState.valueOf(Text.readString(in));
-        createTimeMs = in.readLong();
-        startTimeMs = in.readLong();
-        finishTimeMs = in.readLong();
-        progress = in.readInt();
-        failMsg.readFields(in);
-
-        if (in.readBoolean()) {
-            brokerDesc = BrokerDesc.read(in);
-        }
-
-        tableName = new TableName();
-        tableName.readFields(in);
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     /**
@@ -1085,11 +995,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
-        if (stateMgr.getMetadata() != null) {
-            db = stateMgr.getDb(dbId);
+        if (stateMgr.getLocalMetastore() != null) {
+            db = stateMgr.getLocalMetastore().getDb(dbId);
         }
         if (db != null) {
-            exportTable = db.getTable(tableId);
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
     }
 
@@ -1120,11 +1030,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
         public void write(DataOutput out) throws IOException {
             out.writeLong(jobId);
             Text.writeString(out, state.name());
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            jobId = in.readLong();
-            state = JobState.valueOf(Text.readString(in));
         }
     }
 

@@ -22,7 +22,7 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20240411.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v3.3-rc3
+ARG starlet_tag=v3.3-rc5
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 # Token to access artifacts in private github repositories.
@@ -30,7 +30,7 @@ ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
-FROM starrocks/toolchains-${distro}:main-20231123 as base
+FROM starrocks/toolchains-${distro}:main-20240831 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /

@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -100,7 +101,7 @@ struct AggHashSet {
     }
 
     void build_hash_set_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                       std::vector<uint8_t>* not_founds) {
+                                       Filter* not_founds) {
         return static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
     }
 };
@@ -130,7 +131,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(!key_columns[0]->is_nullable());
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -150,7 +151,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
         auto& keys = column->get_data();
 
@@ -165,7 +166,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                            std::vector<uint8_t>* not_founds) {
+                                            Filter* not_founds) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
         auto& keys = column->get_data();
 
@@ -208,7 +209,7 @@ struct AggHashSetOfOneNullableNumberKey
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(key_columns[0]->is_nullable());
 
         if constexpr (!compute_and_allocate) {
@@ -233,7 +234,7 @@ struct AggHashSetOfOneNullableNumberKey
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
@@ -264,7 +265,7 @@ struct AggHashSetOfOneNullableNumberKey
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                            std::vector<uint8_t>* not_founds) {
+                                            Filter* not_founds) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
         auto& keys = data_column->get_data();
@@ -297,7 +298,7 @@ template <typename HashSet>
 struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStringKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
-    using ResultVector = typename std::vector<Slice>;
+    using ResultVector = Buffer<Slice>;
 
     AggHashSetOfOneStringKey(int32_t chunk_size) {}
 
@@ -306,7 +307,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(key_columns[0]->is_binary());
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -322,7 +323,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         for (size_t i = 0; i < chunk_size; ++i) {
             auto tmp = column->get_slice(i);
@@ -342,7 +343,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                            std::vector<uint8_t>* not_founds) {
+                                            Filter* not_founds) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -368,7 +369,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         keys.resize(chunk_size);
-        column->append_strings(keys);
+        column->append_strings(keys.data(), keys.size());
     }
 
     static constexpr bool has_single_null_key = false;
@@ -380,7 +381,8 @@ template <typename HashSet>
 struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetOfOneNullableStringKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
-    using ResultVector = typename std::vector<Slice>;
+    // using ResultVector = typename std::vector<Slice>;
+    using ResultVector = Buffer<Slice>;
 
     AggHashSetOfOneNullableStringKey(int32_t chunk_size) {}
 
@@ -389,7 +391,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(key_columns[0]->is_nullable());
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -408,7 +410,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                              std::vector<uint8_t>* not_founds) {
+                                              Filter* not_founds) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
@@ -438,7 +440,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                            std::vector<uint8_t>* not_founds) {
+                                            Filter* not_founds) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
 
@@ -461,8 +463,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         }
     }
 
-    void _handle_data_key_column(BinaryColumn* data_column, size_t row, MemPool* pool,
-                                 std::vector<uint8_t>* not_founds) {
+    void _handle_data_key_column(BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
         auto tmp = data_column->get_slice(row);
         KeyType key(tmp);
 
@@ -473,7 +474,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         });
     }
 
-    void _handle_data_key_column(BinaryColumn* data_column, size_t row, std::vector<uint8_t>* not_founds) {
+    void _handle_data_key_column(BinaryColumn* data_column, size_t row, Filter* not_founds) {
         auto key = data_column->get_slice(row);
         (*not_founds)[row] = !this->hash_set.contains(key);
     }
@@ -483,7 +484,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
         keys.resize(chunk_size);
-        column->append_strings(keys);
+        column->append_strings(keys.data(), keys.size());
         nullable_column->null_column_data().resize(chunk_size);
     }
 
@@ -496,7 +497,8 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
 template <typename HashSet>
 struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerializedKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
-    using ResultVector = typename std::vector<Slice>;
+    // using ResultVector = typename std::vector<Slice>;
+    using ResultVector = Buffer<Slice>;
     using KeyType = typename HashSet::key_type;
 
     AggHashSetOfSerializedKey(int32_t chunk_size)
@@ -509,7 +511,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         slice_sizes.assign(_chunk_size, 0);
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -537,7 +539,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     }
 
     template <bool compute_and_allocate>
-    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
         for (size_t i = 0; i < chunk_size; ++i) {
             Slice tmp = {_buffer + i * max_one_row_size, slice_sizes[i]};
             if constexpr (compute_and_allocate) {
@@ -555,7 +557,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     }
 
     template <bool compute_and_allocate>
-    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
             cache[i] = KeyType(Slice(_buffer + i * max_one_row_size, slice_sizes[i]));
@@ -642,7 +644,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
-    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
         if constexpr (!compute_and_allocate) {
@@ -673,7 +675,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     }
 
     template <bool compute_and_allocate>
-    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
         auto* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
 
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -686,7 +688,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     }
 
     template <bool compute_and_allocate>
-    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, std::vector<uint8_t>* not_founds) {
+    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
         auto* keys = reinterpret_cast<FixedSizeSliceKey*>(buffer);
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
 
@@ -730,7 +732,8 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* buffer;
     ResultVector results;
-    std::vector<Slice> tmp_slices;
+    Buffer<Slice> tmp_slices;
+    // std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
     std::vector<size_t> hashes;

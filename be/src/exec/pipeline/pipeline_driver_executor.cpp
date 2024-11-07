@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "agent/master_info.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -29,20 +30,14 @@
 namespace starrocks::pipeline {
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
-                                           bool enable_resource_group)
-        : Base(name),
+                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
+        : Base("pip_exec_" + name),
           _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()),
-          _audit_statistics_reporter(new AuditStatisticsReporter()) {
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
-                                    [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
-}
+          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids)),
+          _audit_statistics_reporter(new AuditStatisticsReporter()) {}
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
@@ -58,13 +53,22 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     }
 }
 
+DriverExecutorMetrics GlobalDriverExecutor::metrics() const {
+    return {.schedule_count = _schedule_count.load(),
+            .driver_execution_ns = _driver_execution_ns.load(),
+            .driver_queue_len = static_cast<int64_t>(_driver_queue->size()),
+            .driver_poller_block_queue_len = static_cast<int64_t>(_blocked_driver_poller->num_drivers())};
+}
+
 void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
     int32_t old_num_threads = 0;
     if (!_num_threads_setter.adjust_expect_num(num_threads, &old_num_threads)) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
+        }
     }
 }
 
@@ -78,7 +82,7 @@ void GlobalDriverExecutor::_worker_thread() {
     const int worker_id = _next_id++;
     std::queue<DriverRawPtr> local_driver_queue;
     while (true) {
-        if (_num_threads_setter.should_shrink()) {
+        if (local_driver_queue.empty() && _num_threads_setter.should_shrink()) {
             break;
         }
         // Reset TLS state
@@ -165,6 +169,9 @@ void GlobalDriverExecutor::_worker_thread() {
             }
 
             if (!status.ok()) {
+                auto o_id = get_backend_id();
+                int64_t be_id = o_id.has_value() ? o_id.value() : -1;
+                status = status.clone_and_append(fmt::format("BE:{}", be_id));
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
@@ -340,8 +347,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
             auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
             if (!status.ok()) {
                 if (status.is_not_found()) {
-                    LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
-                              << print_id(fragment_id);
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
+                            << print_id(fragment_id);
                 } else {
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;
@@ -351,8 +358,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     }
                 }
             } else {
-                LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params->done;
+                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                        << ", is_done=" << params->done;
             }
             break;
         }
@@ -362,7 +369,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     // and is retried as much as possible to ensure success.
     // Otherwise, it may result in the query or ingestion status getting stuck.
     this->_exec_state_reporter->submit(std::move(report_task), done);
-    VLOG(1) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
+    VLOG(2) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
             << ", is_done=" << done;
 }
 
@@ -396,7 +403,7 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
                              << print_id(fragment_id) << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+            VLOG(1) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
     };
     auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
@@ -405,11 +412,11 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     }
 }
 
-size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+size_t GlobalDriverExecutor::activate_parked_driver(const ConstDriverPredicator& predicate_func) {
     return _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
 
-size_t GlobalDriverExecutor::calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const {
+size_t GlobalDriverExecutor::calculate_parked_driver(const ConstDriverPredicator& predicate_func) const {
     return _blocked_driver_poller->calculate_parked_driver(predicate_func);
 }
 
@@ -438,15 +445,15 @@ void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_c
                              << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
+            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
         }
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
-    _blocked_driver_poller->iterate_immutable_driver(call);
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
+    _blocked_driver_poller->for_each_driver(call);
 }
 
 RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
@@ -506,4 +513,12 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
 
     return new_instance_profile;
 }
+
+void GlobalDriverExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids,
+                                     const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+    _blocked_driver_poller->bind_cpus(cpuids);
+    _exec_state_reporter->bind_cpus(cpuids);
+}
+
 } // namespace starrocks::pipeline

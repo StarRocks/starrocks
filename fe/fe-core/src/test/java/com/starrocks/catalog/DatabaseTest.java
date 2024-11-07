@@ -196,9 +196,9 @@ public class DatabaseTest {
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
         // Attempt to add the same UDF again
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
 
         List<Function> functions = db.getFunctions();
         Assert.assertEquals(functions.size(), 1);

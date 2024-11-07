@@ -101,7 +101,7 @@ public:
         result->resize(size);
         auto* r3 = result->get_data().data();
 
-        const auto& data_array = GetContainer<Type>().get_data(v1);
+        const auto& data_array = GetContainer<Type>::get_data(v1);
 
         if constexpr (lt_is_string<Type> || lt_is_binary<Type>) {
             for (int i = 0; i < size; ++i) {
@@ -136,7 +136,6 @@ public:
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
-            bytes.reserve(ret.size());
             bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
             offset.emplace_back(bytes.size());
         }

@@ -149,15 +149,15 @@ public:
 
     MemPool* mem_pool() { return _mem_pool; }
 
-    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage = mem_usage_counter; }
+    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
 
     int64_t mem_usage() const {
-        DCHECK(_mem_usage);
-        return *_mem_usage;
+        DCHECK(_mem_usage_counter);
+        return *_mem_usage_counter;
     }
     void add_mem_usage(int64_t delta) {
-        DCHECK(_mem_usage);
-        *_mem_usage += delta;
+        DCHECK(_mem_usage_counter);
+        *_mem_usage_counter += delta;
     }
 
     RuntimeState* state() { return _state; }
@@ -210,8 +210,12 @@ private:
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
 
-    // this is used for count memory usage of aggregate state
-    int64_t* _mem_usage = nullptr;
+    int64_t _mem_usage = 0;
+    // This is used to count the memory usage of the agg state.
+    // In Aggregator, multiple FunctionContexts can share the same counter.
+    // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
+    // it will point to the internal _mem_usage
+    int64_t* _mem_usage_counter = &_mem_usage;
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;

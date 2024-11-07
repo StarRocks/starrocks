@@ -25,7 +25,6 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
@@ -192,14 +191,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
-            auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             for (auto& type : fn.arg_types) {
-                arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
+                arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
 
-            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -215,7 +213,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 real_fn_name += "_in";
                 _need_partition_materializing = true;
             }
-            func = get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable, fn.binary_type,
+            const auto& fname = fn.name.function_name;
+            auto real_arg_type = arg_type.type;
+            if (fname == "max_by" || fname == "min_by" || fname == "max_by_v2" || fname == "min_by_v2") {
+                const TypeDescriptor arg1_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
+                real_arg_type = arg1_type.type;
+            }
+            func = get_window_function(real_fn_name, real_arg_type, return_type.type, is_input_nullable, fn.binary_type,
                                        state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
@@ -586,13 +590,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
-        auto check_if_overflow = [](Column* column) {
-            std::string msg;
-            if (column->capacity_limit_reached(&msg)) {
-                return Status::InternalError(msg);
-            }
-            return Status::OK();
-        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -601,20 +598,20 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
-                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
+                RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
+            RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
-            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
+            RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }
 

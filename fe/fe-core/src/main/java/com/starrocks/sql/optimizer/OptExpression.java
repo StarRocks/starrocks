@@ -57,10 +57,16 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+
+    // the actual output property of this expression
     private PhysicalPropertySet outputProperty;
+
     private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
+
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
 
     private OptExpression() {
     }
@@ -246,18 +252,25 @@ public class OptExpression {
         return debugString("", "", limitLine);
     }
 
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
-
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
+            sb.append('\n');
             sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
@@ -280,6 +293,7 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
             return this;
         }
 
@@ -305,6 +319,11 @@ public class OptExpression {
 
         public Builder setCost(double cost) {
             optExpression.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
             return this;
         }
 

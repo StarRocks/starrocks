@@ -53,10 +53,8 @@ struct ApproxTopKState {
     int32_t unused_idx = 0;
     mutable VectorWithAggStateAllocator<Counter> counters;
     mutable Counter null_counter{0};
-    using HASH =
-            std::conditional_t<IsSlice<CppType>, SliceHashWithSeed<PhmapSeed1>, StdHashWithSeed<CppType, PhmapSeed1>>;
     using EQ = std::conditional_t<IsSlice<CppType>, SliceEqual, phmap::priv::hash_default_eq<CppType>>;
-    phmap::flat_hash_map<CppType, Counter*, HASH, EQ> table;
+    phmap::flat_hash_map<CppType, Counter*, PhmapDefaultHashFunc<LT, PhmapSeed1>, EQ> table;
     bool is_init = false;
 
     void reset(int32_t k, int32_t counter_num) {

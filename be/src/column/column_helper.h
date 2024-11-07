@@ -81,7 +81,7 @@ public:
     // Find the first non-null value in [start, end), return end if all null
     static size_t find_nonnull(const Column* col, size_t start, size_t end);
 
-    // Find the non-null value in reversed order in [start, end), return start if all null
+    // Find the non-null value in reversed order in [start, end), return end if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
     // Find first value in range [start, end) that not equal to target
@@ -333,6 +333,33 @@ public:
         }
     }
 
+    template <LogicalType LT>
+    static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
+        } else if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return down_cast<const ColumnType*>(const_column->data_column().get());
+        } else {
+            return reinterpret_cast<const ColumnType*>(column);
+        }
+    }
+
+    static NullColumn* get_null_column(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column().get();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column().get();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
@@ -504,29 +531,31 @@ public:
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
 
-    static NullColumnPtr one_size_not_null_column;
-
-    static NullColumnPtr one_size_null_column;
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
 
 // Hold a slice of chunk
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+    size_t segment_id = 0;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    Ptr cutoff(size_t required_rows);
+    ChunkUniquePtr cutoff(size_t required_rows);
     void reset(Ptr input);
 };
 
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-    const auto& get_data(const Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
-    const auto& get_data(const ColumnPtr& column) {
+    static const auto& get_data(const Column* column) {
+        return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+    }
+    static const auto& get_data(const ColumnPtr& column) {
         return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
     }
 };
@@ -534,10 +563,10 @@ struct GetContainer {
 #define GET_CONTAINER(ltype)                                                                  \
     template <>                                                                               \
     struct GetContainer<ltype> {                                                              \
-        const auto& get_data(const Column* column) {                                          \
+        static const auto& get_data(const Column* column) {                                   \
             return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
         }                                                                                     \
-        const auto& get_data(const ColumnPtr& column) {                                       \
+        static const auto& get_data(const ColumnPtr& column) {                                \
             return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
         }                                                                                     \
     };
@@ -546,5 +575,6 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

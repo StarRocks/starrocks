@@ -17,6 +17,7 @@
 #include "storage/rowset/column_writer.h"
 
 namespace starrocks {
+class BloomFilter;
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
@@ -69,6 +70,7 @@ protected:
     size_t _estimate_size = 0;
 
     bool _has_remain;
+    std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
 };
 } // namespace starrocks

@@ -21,6 +21,7 @@ test_sql_cases
 @Time : 2022/10/28 13:41
 @Author : Brook.Ye
 """
+import copy
 import json
 import os
 import re
@@ -34,7 +35,6 @@ import pymysql
 from nose import tools
 from parameterized import parameterized
 from cup import log
-import munch
 
 from lib import sr_sql_lib
 from lib import choose_cases
@@ -80,14 +80,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """
         super(TestSQLCases, self).__init__(*args, **kwargs)
         self.case_info: choose_cases.ChooseCase.CaseTR
-        self.db = list()
-        self.resource = list()
         self._check_db_unique()
 
     def setUp(self, *args, **kwargs):
         """set up"""
         super().setUp()
         self.connect_starrocks()
+        self.create_starrocks_conn_pool()
         self._init_global_configs()
 
     def _init_global_configs(self):
@@ -95,7 +94,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         Configs that are not ready for production but it can be used for testing.
         """
         default_configs = [
-            "'enable_mv_refresh_insert_strict' = 'true'",
+            "'mv_refresh_fail_on_filter_data' = 'true'",
             "'enable_mv_refresh_query_rewrite' = 'true'",
             # enlarge task run concurrency to speed up mv's refresh and find more potential bugs
             "'task_runs_concurrency' = '16'",
@@ -124,6 +123,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             res = self.save_r_into_db(self.case_info.file, self.case_info.name, self.res_log, self.version)
 
         self.close_starrocks()
+        # destroy connection pool
+        while self.connection_pool and len(self.connection_pool._idle_cache) > 0:
+            log.info(f"Teardown: freeze conn pool, size: {len(self.connection_pool._idle_cache)}")
+            conn = self.connection_pool._idle_cache.pop()
+            conn.close()
+
         self.close_trino()
         self.close_spark()
         self.close_hive()
@@ -200,6 +205,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         all_db_dict = dict()
         for case in case_list:
             sql_list = self._replace_uuid_variables(case.sql)
+
             for sql in sql_list:
                 if isinstance(sql, str):
                     db_name = self._get_db_name(sql)
@@ -229,7 +235,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     @staticmethod
     def _replace_uuid_variables(sql_list: List) -> List:
         ret = list()
-        variable_dict = dict()
+        variable_dict = {}
+
         for sql in sql_list:
 
             if isinstance(sql, str):
@@ -264,17 +271,19 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
                 ret.append(sql)
             elif isinstance(sql, dict) and sql.get("type", "") == LOOP_FLAG:
+                _sql = copy.deepcopy(sql)
                 tmp_stat = []
-                for each_sql in sql["stat"]:
+                for each_sql in _sql["stat"]:
                     for each_var in variable_dict:
                         each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
                     tmp_stat.append(each_sql)
-                sql["stat"] = tmp_stat
-                ret.append(sql)
+                _sql["stat"] = tmp_stat
+                ret.append(_sql)
             elif isinstance(sql, dict) and sql.get("type", "") == CONCURRENCY_FLAG:
+                _sql = copy.deepcopy(sql)
                 tools.assert_in("thread", sql, "CONCURRENCY THREAD FORMAT ERROR!")
 
-                for each_thread in sql["thread"]:
+                for each_thread in _sql["thread"]:
                     tmp_cmd = []
                     for each_cmd in each_thread["cmd"]:
                         for each_var in variable_dict:
@@ -282,7 +291,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         tmp_cmd.append(each_cmd)
                     each_thread["cmd"] = tmp_cmd
 
-                ret.append(sql)
+                ret.append(_sql)
 
         return ret
 
@@ -400,7 +409,11 @@ Start to run: %s
                 t_info_list: List[dict] = sql["thread"]
                 thread_list = []
 
+                # get now db
+                _outer_db = self.get_now_db()
+
                 # thread group
+                _t_conn_list = []
                 for _t_info_id, _thread in enumerate(t_info_list):
 
                     # _thread prop: name, count, info, ori, cmd, res
@@ -413,9 +426,14 @@ Start to run: %s
                     # thread exec, set count in (*)
                     for _t_exec_id in range(_t_count):
                         this_t_id = f'{_t_name}-{_t_info_id}-{_t_exec_id}'
+
+                        # init a conn for thread
+                        this_conn = self.connection_pool.connection()
+                        _t_conn_list.append([this_conn, this_t_id])
+
                         t = threading.Thread(name=f"Thread-{this_t_id}",
                                              target=self.execute_thread,
-                                             args=(this_t_id, _t_cmd, _t_res, _t_ori_cmd, record_mode))
+                                             args=(this_t_id, _t_cmd, _t_res, _t_ori_cmd, record_mode, _outer_db, this_conn))
                         thread_list.append(t)
 
                 threading.excepthook = self.custom_except_hook
@@ -425,6 +443,11 @@ Start to run: %s
 
                 for thread in thread_list:
                     thread.join()
+
+                # release conn
+                for _conn, _id in _t_conn_list:
+                    self_print(f"[{_id}] Close connection...", color=ColorEnum.CYAN, logout=True)
+                    _conn.close()
 
                 if len(self.thread_res) != 0:
                     err_t_name = "\n\t- ".join(self.thread_res.keys())
@@ -449,8 +472,7 @@ Start to run: %s
 
                         # check thread result info
                         tools.assert_in(_t_uid, self.thread_res_log, f"Thread log of {_t_uid} is not found!")
-                        tools.eq_(len(self.thread_res_log[_t_uid]), _t_count,
-                                  f"Thread log size: {len(self.thread_res_log[_t_uid])} error!")
+                        tools.eq_(len(self.thread_res_log[_t_uid]), _t_count, f"Thread log size: {len(self.thread_res_log[_t_uid])} error, maybe you used the same thread name?")
 
                         s_thread_log = self.thread_res_log[_t_uid][0]
                         for exec_res_log in self.thread_res_log[_t_uid]:

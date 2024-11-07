@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnHistogramStatsCacheLoader;
@@ -62,7 +63,7 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertBasicStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
         ColumnBasicStatsCacheLoader basicStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
@@ -103,8 +104,8 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 
@@ -146,8 +147,8 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertHistogramStatisticsDate() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 

@@ -94,9 +94,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -236,9 +238,16 @@ public class ConnectContext {
 
     private UUID sessionId;
 
+    private String proxyHostName;
+    private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
+
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
+    // `insert into table select external table`. Currently, this feature only supports hive table.
+    private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -271,7 +280,7 @@ public class ConnectContext {
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
+        sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         userVariables = new ConcurrentHashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
@@ -341,6 +350,14 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    public Optional<Boolean> getUseConnectorMetadataCache() {
+        return useConnectorMetadataCache;
+    }
+
+    public void setUseConnectorMetadataCache(Optional<Boolean> useConnectorMetadataCache) {
+        this.useConnectorMetadataCache = useConnectorMetadataCache;
+    }
+
     /**
      * Set this connect to thread-local if not exists
      *
@@ -401,8 +418,9 @@ public class ConnectContext {
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
-        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
+        if (!SetType.GLOBAL.equals(setVar.getType()) && GlobalStateMgr.getCurrentState().getVariableMgr()
+                .shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -497,7 +515,7 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         modifiedSessionVariables.clear();
     }
 
@@ -572,6 +590,24 @@ public class ConnectContext {
 
     public void setConnectionId(int connectionId) {
         this.connectionId = connectionId;
+    }
+
+    public String getProxyHostName() {
+        return proxyHostName;
+    }
+
+    public void setProxyHostName(String address) {
+        this.proxyHostName = address;
+    }
+
+    public boolean hasPendingForwardRequest() {
+        return pendingForwardRequests.intValue() > 0;
+    }
+    public void incPendingForwardRequest() {
+        pendingForwardRequests.incrementAndGet();
+    }
+    public void decPendingForwardRequest() {
+        pendingForwardRequests.decrementAndGet();
     }
 
     public void resetConnectionStartTime() {
@@ -920,11 +956,15 @@ public class ConnectContext {
         long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
+        String sql = "";
+        if (executor != null) {
+            sql = executor.getOriginStmtInString();
+        }
         if (command == MysqlCommand.COM_SLEEP) {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
-                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS());
+                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
 
                 killFlag = true;
                 killConnection = true;
@@ -932,8 +972,8 @@ public class ConnectContext {
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
+                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
 
                 // Only kill
                 killFlag = true;
@@ -1126,8 +1166,10 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                String currentValue = VariableMgr.getValue(sessionVariable, new VariableExpr(entry.getKey()));
-                if (!currentValue.equalsIgnoreCase(VariableMgr.getDefaultValue(entry.getKey()))) {
+                String currentValue = GlobalStateMgr.getCurrentState().getVariableMgr().getValue(
+                        sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(
+                        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(entry.getKey()))) {
                     // If the current session variable is not default value, we should respect it.
                     continue;
                 }
@@ -1136,8 +1178,9 @@ public class ConnectContext {
             }
 
             // set catalog and database
-            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(VariableMgr.getDefaultValue(SessionVariable.CATALOG)) ||
-                    !getDatabase().isEmpty();
+            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
+                    || !getDatabase().isEmpty();
             if (!dbHasBeenSetByUser) {
                 String catalog = userProperty.getCatalog();
                 String database = userProperty.getDatabase();

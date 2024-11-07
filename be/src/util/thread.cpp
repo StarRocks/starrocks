@@ -197,6 +197,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
             info.tid = thread.second.thread_id();
             info.idle = thread.second.thread()->idle();
             info.finished_tasks = thread.second.thread()->finished_tasks();
+            info.num_bound_cpu_cores = thread.second.thread()->num_bound_cpu_cores();
         }
     }
 }

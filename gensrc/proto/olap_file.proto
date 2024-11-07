@@ -105,6 +105,8 @@ message RowsetTxnMetaPB {
     optional PartialUpdateMode partial_update_mode = 6;
     // auto increment column unique id
     optional int32 auto_increment_partial_update_column_uid = 7;
+    // the value of the column express
+    map<string, string> column_to_expr_value = 8;
 }
 
 message RowsetMetaPB {
@@ -177,6 +179,9 @@ message RowsetMetaPB {
     optional int64 gtid = 62;
     // total number of upt file's rows.
     optional int64 num_rows_upt = 63;
+    repeated bytes segment_encryption_metas = 64;
+    repeated bytes delfile_encryption_metas = 65;
+    repeated bytes updatefile_encryption_metas = 66;
 }
 
 enum DataFileType {

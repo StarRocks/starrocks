@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.encryption.KeyMgr;
 import com.starrocks.system.BackendResourceStat;
 
 import java.lang.reflect.Field;
@@ -75,6 +76,7 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
+    public static final String ENABLE_TDE = "enable_tde";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -172,6 +174,9 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ACTIVATE_ALL_ROLES_ON_LOGIN_V2, flag = VariableMgr.GLOBAL,
             alias = ACTIVATE_ALL_ROLES_ON_LOGIN, show = ACTIVATE_ALL_ROLES_ON_LOGIN)
     private static boolean activateAllRolesOnLogin = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
+    public static boolean enableTde = KeyMgr.isEncrypted();
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;

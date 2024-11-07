@@ -84,7 +84,7 @@ public class LakeDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isCloudNativeTable());
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, warehouseId);
         } catch (Throwable t) {
@@ -96,7 +96,7 @@ public class LakeDeleteJob extends DeleteJob {
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         // create delete predicate

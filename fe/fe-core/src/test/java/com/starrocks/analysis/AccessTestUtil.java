@@ -166,25 +166,28 @@ public class AccessTestUtil {
 
         Database db = mockDb("testDb");
 
+        /*
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDb("testDb");
+                globalStateMgr.getLocalMetastore().getDb("testDb");
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb("emptyDb");
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
-                globalStateMgr.getDb("emptyCluster");
+                globalStateMgr.getLocalMetastore().getDb("emptyCluster");
                 minTimes = 0;
                 result = null;
             }
         };
+
+         */
         return globalStateMgr;
     }
 

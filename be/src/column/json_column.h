@@ -101,7 +101,7 @@ public:
     void swap_column(Column& rhs) override;
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
     void check_or_die() const override;
 
     // support flat json on storage
@@ -135,6 +135,8 @@ public:
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                           const Columns& flat_columns);
+
+    bool is_equallity_schema(const Column* other) const;
 
     std::string debug_flat_paths() const;
 

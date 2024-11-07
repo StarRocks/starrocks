@@ -706,7 +706,8 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     auto iter = _shard_info_by_length.find(_cur_key_size);
     if (iter == _shard_info_by_length.end()) {
         if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
-            LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size;
+            LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size
+                         << ", maybe duplicate key size which should not happened.";
             return Status::InternalError("insert shard info failed");
         }
     } else {
@@ -881,10 +882,10 @@ public:
                     auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
                     auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
                     std::string msg = strings::Substitute(
-                            "FixedMutableIndex<$0> insert found duplicate key $1, new(rssid=$2 rowid=$3), old(rssid=$4 "
-                            "rowid=$5)",
-                            KeySize, hexdump((const char*)key.data, KeySize), (uint32_t)((*new_value) >> 32),
-                            (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
+                            "FixedMutableIndex<$0> insert found duplicate key, new(rssid=$1 rowid=$2), old(rssid=$3 "
+                            "rowid=$4)",
+                            KeySize, (uint32_t)((*new_value) >> 32), (uint32_t)((*new_value) & ROWID_MASK), old_rssid,
+                            old_rowid);
                     LOG(WARNING) << msg;
                     return Status::AlreadyExist(msg);
                 }
@@ -1221,10 +1222,10 @@ public:
                     auto old_rowid = (uint32_t)(old_value & ROWID_MASK);
                     auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
                     std::string msg = strings::Substitute(
-                            "SliceMutableIndex key_size=$0 insert found duplicate key $1, "
-                            "new(rssid=$2 rowid=$3), old(rssid=$4 rowid=$5)",
-                            skey.size, hexdump((const char*)skey.data, skey.size), (uint32_t)((*new_value) >> 32),
-                            (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
+                            "SliceMutableIndex key_size=$0 insert found duplicate key, "
+                            "new(rssid=$1 rowid=$2), old(rssid=$3 rowid=$4)",
+                            skey.size, (uint32_t)((*new_value) >> 32), (uint32_t)((*new_value) & ROWID_MASK), old_rssid,
+                            old_rowid);
                     LOG(WARNING) << msg;
                     return Status::AlreadyExist(msg);
                 }
@@ -1343,7 +1344,7 @@ public:
 
     bool dump(phmap::BinaryOutputArchive& ar) override {
         if (!ar.dump(size())) {
-            LOG(ERROR) << "Failed to dump size";
+            LOG(ERROR) << "Pindex dump snapshot size failed";
             return false;
         }
         if (size() == 0) {
@@ -1351,14 +1352,14 @@ public:
         }
         for (const auto& composite_key : _set) {
             if (!ar.dump(static_cast<size_t>(composite_key.size()))) {
-                LOG(ERROR) << "Failed to dump compose_key_size";
+                LOG(ERROR) << "Pindex dump compose_key_size failed";
                 return false;
             }
             if (composite_key.size() == 0) {
                 continue;
             }
             if (!ar.dump(composite_key.data(), composite_key.size())) {
-                LOG(ERROR) << "Failed to dump composite_key";
+                LOG(ERROR) << "Pindex dump composite_key failed.";
                 return false;
             }
         }
@@ -1381,7 +1382,7 @@ public:
     bool load_snapshot(phmap::BinaryInputArchive& ar) override {
         size_t size = 0;
         if (!ar.load(&size)) {
-            LOG(ERROR) << "Failed to load size";
+            LOG(ERROR) << "Pindex load snapshot failed because load snapshot size failed";
             return false;
         }
         if (size == 0) {
@@ -1391,7 +1392,7 @@ public:
         for (auto i = 0; i < size; ++i) {
             size_t compose_key_size = 0;
             if (!ar.load(&compose_key_size)) {
-                LOG(ERROR) << "Failed to load compose_key_size";
+                LOG(ERROR) << "Pindex load snapshot failed because load compose_key_size failed";
                 return false;
             }
             if (compose_key_size == 0) {
@@ -1400,7 +1401,7 @@ public:
             std::string composite_key;
             raw::stl_string_resize_uninitialized(&composite_key, compose_key_size);
             if (!ar.load(composite_key.data(), composite_key.size())) {
-                LOG(ERROR) << "Failed to load composite_key";
+                LOG(ERROR) << "Pindex load snapshot failed because load composite_key failed";
                 return false;
             }
             auto [it, inserted] = _set.emplace(composite_key);
@@ -2128,7 +2129,8 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     for (auto i = 0; i < snapshot_meta.dumped_shard_idxes_size(); ++i) {
         auto [_, insert] = dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
         if (!insert) {
-            LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i);
+            LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i)
+                         << " which should not happened.";
             return Status::InternalError("duplicate shard idx");
         }
     }
@@ -2445,7 +2447,7 @@ bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, 
         return false;
     }
     if (!_bf_vec.empty() && _bf_vec.size() <= shard_idx) {
-        LOG(ERROR) << "error shard idx:" << shard_idx << ", size:" << _bf_vec.size();
+        LOG(ERROR) << "read bloom filter failed, error shard idx:" << shard_idx << ", size:" << _bf_vec.size();
         return false;
     }
 
@@ -2473,7 +2475,7 @@ bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, 
     std::unique_ptr<BloomFilter> bf;
     st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
     if (!st.ok()) {
-        LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter init failed, " << st;
+        LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter create failed, " << st;
         return false;
     }
     st = bf->init(bf_buff.data(), len, HASH_MURMUR3_X64_64);
@@ -3831,7 +3833,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         auto iter = _usage_and_size_by_key_length.find(_key_size);
         DCHECK(iter != _usage_and_size_by_key_length.end());
         if (iter == _usage_and_size_by_key_length.end()) {
-            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            std::string msg =
+                    strings::Substitute("update pindex info failed, no key_size: $0 in usage info", _key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         } else {
@@ -3842,7 +3845,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
             auto iter = _usage_and_size_by_key_length.find(key_size);
             if (iter == _usage_and_size_by_key_length.end()) {
-                std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+                std::string msg =
+                        strings::Substitute("update pindex info failed, no key_size: $0 in usage info", key_size);
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             } else {
@@ -3860,7 +3864,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         DCHECK(_key_size == 0);
         auto iter = _usage_and_size_by_key_length.find(_key_size);
         if (iter == _usage_and_size_by_key_length.end()) {
-            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            std::string msg =
+                    strings::Substitute("update pindex info failed, no key_size: $0 in usage info", _key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -4023,7 +4028,7 @@ Status PersistentIndex::flush_advance() {
                                                   _version.minor_number(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
 
-    VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+    VLOG(2) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
@@ -4128,7 +4133,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete expired index file " << path;
+            VLOG(2) << "delete expired index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
@@ -4144,7 +4149,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                 if ((*version_st) < min_l2_version) {
                     // delete expired l2 file
                     std::string path = dir + "/" + full;
-                    VLOG(1) << "delete expired index file " << path;
+                    VLOG(2) << "delete expired index file " << path;
                     Status st = FileSystem::Default()->delete_file(path);
                     if (!st.ok()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
@@ -4175,7 +4180,7 @@ Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
         std::string full(name);
         if (major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete tmp index file " << path;
+            VLOG(2) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4196,7 +4201,7 @@ Status PersistentIndex::_delete_tmp_index_file() {
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
             !major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
-            VLOG(1) << "delete tmp index file " << path;
+            VLOG(2) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -5162,13 +5167,13 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                 status = load(index_meta);
             }
             if (status.ok()) {
-                LOG(INFO) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
-                          << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
-                          << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                          << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-                          << " memory: " << memory_usage() << " status: " << status.to_string()
-                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                VLOG(1) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
+                        << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                        << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                        << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+                        << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                        << " memory: " << memory_usage() << " status: " << status.to_string()
+                        << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
@@ -5177,14 +5182,14 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                     std::string l0_file_name =
                             strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l0_file_name);
-                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                    LOG_IF(WARNING, !st.ok()) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
                 }
                 if (index_meta.has_l1_version()) {
                     EditVersion l1_version = index_meta.l1_version();
                     std::string l1_file_name =
                             strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l1_file_name);
-                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                    LOG_IF(WARNING, !st.ok()) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
                 if (index_meta.l2_versions_size() > 0) {
                     DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
@@ -5194,7 +5199,8 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                                 "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
                                 index_meta.l2_version_merged(i) ? MergeSuffix : "");
                         Status st = FileSystem::Default()->delete_file(l2_file_name);
-                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                        LOG_IF(WARNING, !st.ok())
+                                << "delete error l2 index file: " << l2_file_name << ", status: " << st;
                     }
                 }
             }

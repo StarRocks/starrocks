@@ -14,10 +14,12 @@
 
 #include "agent/heartbeat_server.h"
 
+#include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
 
 namespace starrocks {
 
+// defined in common/process_exit.cpp
 extern std::atomic<bool> k_starrocks_exit;
 
 TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
@@ -31,6 +33,47 @@ TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
     Status status(result.status);
     EXPECT_TRUE(status.is_shutdown());
     k_starrocks_exit = false;
+}
+
+TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
+    HeartbeatServer server;
+    TMasterInfo master_info;
+
+    master_info.network_address.__set_hostname("127.0.0.1");
+    master_info.network_address.__set_port(8080);
+    master_info.__set_cluster_id(12345);
+    master_info.__set_epoch(100);
+    master_info.__set_backend_ip("192.168.1.1");
+
+    std::string expected_output =
+            "TMasterInfo(network_address=TNetworkAddress(hostname=127.0.0.1, port=8080), "
+            "cluster_id=12345, epoch=100, token=<null>, backend_ip=192.168.1.1, "
+            "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
+            "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
+            "decommissioned_disks=<null>, encrypted=<null>)";
+
+    EXPECT_EQ(server.print_master_info(master_info), expected_output);
+}
+
+TEST(HeartbeatServerTest, test_print_master_info_with_token_hidden) {
+    HeartbeatServer server;
+    TMasterInfo master_info;
+
+    master_info.network_address.__set_hostname("127.0.0.1");
+    master_info.network_address.__set_port(8080);
+    master_info.__set_cluster_id(12345);
+    master_info.__set_epoch(100);
+    master_info.__set_token("secret_token");
+    master_info.__set_backend_ip("192.168.1.1");
+
+    std::string expected_output =
+            "TMasterInfo(network_address=TNetworkAddress(hostname=127.0.0.1, port=8080), "
+            "cluster_id=12345, epoch=100, token=<hidden>, backend_ip=192.168.1.1, "
+            "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
+            "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
+            "decommissioned_disks=<null>, encrypted=<null>)";
+
+    EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
 
 } // namespace starrocks

@@ -22,6 +22,7 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
@@ -109,7 +110,11 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
 
     void update(MemPool* mem_pool, Slice raw_key) {
         KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+        set.lazy_emplace(key, [&](const auto& ctor) {
+#else
         set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
             uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
@@ -119,7 +124,11 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
 
     void update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+#if defined(__clang__) && (__clang_major__ >= 16)
+        set.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
             uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
@@ -158,7 +167,11 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             Slice raw_key(src, size);
             KeyType key(raw_key);
             // we only memcpy when the key is new
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set.lazy_emplace(key, [&](const auto& ctor) {
+#else
             set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
                 uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);

@@ -100,7 +100,7 @@ protected:
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
 
-    void sort_results_from_coroutine(std::vector<uint32_t>& pid, std::vector<uint32_t>& bid, int size) {
+    void sort_results_from_coroutine(Buffer<uint32_t>& pid, Buffer<uint32_t>& bid, int size) {
         std::vector<std::pair<int, int>> zipped;
         for (auto i = 0; i < size; i++) {
             zipped.push_back(std::make_pair(pid[i], bid[i]));
@@ -1590,6 +1590,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
 
+    table_items.row_count = 8193;
     table_items.next.resize(8193);
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
@@ -1605,6 +1606,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtFirstOneToMany) {
         table_items.next[1 + i] = 0;
         table_items.next[4096 + 1 + i] = 1 + i;
     }
+    table_items.used_buckets = 4097;
 
     for (size_t i = 0; i < 3000; i++) {
         probe_data[i] = i;

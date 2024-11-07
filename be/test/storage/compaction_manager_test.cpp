@@ -81,6 +81,11 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+        config::max_compaction_concurrency = -1;
+        config::enable_event_based_compaction_framework = true;
+        config::max_compaction_candidate_num = 40960;
+        config::cumulative_compaction_num_threads_per_disk = 1;
+        config::base_compaction_num_threads_per_disk = 1;
     }
 
 protected:
@@ -173,6 +178,60 @@ TEST_F(CompactionManagerTest, test_candidates_exceede) {
         CompactionCandidate candidate_1;
         _engine->compaction_manager()->pick_candidate(&candidate_1);
         ASSERT_EQ(19, candidate_1.tablet->tablet_id());
+    }
+}
+
+TEST_F(CompactionManagerTest, test_disable_compaction) {
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    for (int i = 0; i < 10; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidates.push_back(candidate);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(candidates.begin(), candidates.end(), g);
+
+    _engine->compaction_manager()->update_candidates(candidates);
+
+    {
+        ASSERT_EQ(10, _engine->compaction_manager()->candidates_size());
+
+        int64_t valid_condidates = 0;
+        while (true) {
+            CompactionCandidate candidate;
+            auto valid = _engine->compaction_manager()->pick_candidate(&candidate);
+            if (!valid) {
+                break;
+            }
+            ++valid_condidates;
+        }
+        ASSERT_EQ(10, valid_condidates);
+    }
+
+    _engine->compaction_manager()->disable_table_compaction(0, UnixSeconds() + 3600);
+
+    {
+        int64_t valid_condidates = 0;
+        while (true) {
+            CompactionCandidate candidate;
+            auto valid = _engine->compaction_manager()->pick_candidate(&candidate);
+            if (!valid) {
+                break;
+            }
+            ++valid_condidates;
+        }
+        ASSERT_EQ(0, valid_condidates);
     }
 }
 
@@ -304,6 +363,43 @@ TEST_F(CompactionManagerTest, test_compaction_parallel) {
 
     _engine->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+}
+
+TEST_F(CompactionManagerTest, test_compaction_update_thread_pool_num) {
+    config::max_compaction_concurrency = 10;
+    config::cumulative_compaction_num_threads_per_disk = 2;
+    config::base_compaction_num_threads_per_disk = 2;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    int32_t compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(4, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = 0;
+    config::base_compaction_num_threads_per_disk = 0;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(0, compaction_concurrency);
+
+    config::cumulative_compaction_num_threads_per_disk = -1;
+    config::base_compaction_num_threads_per_disk = -1;
+    _engine->compaction_manager()->set_max_compaction_concurrency(config::max_compaction_concurrency);
+    compaction_concurrency = _engine->compaction_manager()->compute_max_compaction_task_num();
+    EXPECT_EQ(5, compaction_concurrency);
+
+    _engine->compaction_manager()->init_max_task_num(compaction_concurrency);
+    _engine->compaction_manager()->schedule();
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+
+    _engine->compaction_manager()->update_max_threads(3);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(3, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(0);
+    EXPECT_EQ(3, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(0, _engine->compaction_manager()->max_task_num());
+
+    _engine->compaction_manager()->update_max_threads(-1);
+    EXPECT_EQ(5, _engine->compaction_manager()->TEST_get_compaction_thread_pool()->max_threads());
+    EXPECT_EQ(5, _engine->compaction_manager()->max_task_num());
 }
 
 } // namespace starrocks

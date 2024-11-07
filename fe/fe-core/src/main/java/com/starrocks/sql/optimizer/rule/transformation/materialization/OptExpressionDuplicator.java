@@ -230,33 +230,22 @@ public class OptExpressionDuplicator {
                     }
                 }
             } else {
-                try {
-                    if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                        // refresh iceberg table's metadata
-                        Table refBaseTable = scanOperator.getTable();
-                        IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
-                        String catalogName = cachedIcebergTable.getCatalogName();
-                        String dbName = cachedIcebergTable.getRemoteDbName();
-                        TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-                        Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
-                        if (currentTable == null) {
-                            return null;
-                        }
-                        
-                        scanBuilder.setTable(currentTable);
-                        TableVersionRange versionRange = TableVersionRange.withEnd(
-                                Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
-                                        .map(Snapshot::snapshotId));
-                        scanBuilder.setTableVersionRange(versionRange);
+                if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                    // refresh iceberg table's metadata
+                    Table refBaseTable = scanOperator.getTable();
+                    IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+                    String catalogName = cachedIcebergTable.getCatalogName();
+                    String dbName = cachedIcebergTable.getRemoteDbName();
+                    TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+                    Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                    if (currentTable == null) {
+                        return null;
                     }
-                    ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
-                    if (isResetSelectedPartitions) {
-                        scanOperatorPredicates.clear();
-                    } else {
-                        scanOperatorPredicates.duplicate(rewriter);
-                    }
-                } catch (AnalysisException e) {
-                    // ignore exception
+                    scanBuilder.setTable(currentTable);
+                    TableVersionRange versionRange = TableVersionRange.withEnd(
+                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                                    .map(Snapshot::snapshotId));
+                    scanBuilder.setTableVersionRange(versionRange);
                 }
             }
 
@@ -281,7 +270,25 @@ public class OptExpressionDuplicator {
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
-            return OptExpression.create(opBuilder.build());
+            // process external table scan operator's predicates
+            LogicalScanOperator newScanOperator = (LogicalScanOperator) opBuilder.build();
+            if (!(scanOperator instanceof LogicalOlapScanOperator)) {
+                processExternalTableScanOperator(newScanOperator);
+            }
+            return OptExpression.create(newScanOperator);
+        }
+
+        private void processExternalTableScanOperator(LogicalScanOperator newScanOperator) {
+            try {
+                ScanOperatorPredicates scanOperatorPredicates = newScanOperator.getScanOperatorPredicates();
+                if (isResetSelectedPartitions) {
+                    scanOperatorPredicates.clear();
+                } else {
+                    scanOperatorPredicates.duplicate(rewriter);
+                }
+            } catch (AnalysisException e) {
+                // ignore exception
+            }
         }
 
         @Override

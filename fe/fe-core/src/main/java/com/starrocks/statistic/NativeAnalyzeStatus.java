@@ -27,7 +27,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -114,7 +113,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -123,11 +122,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -205,7 +204,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         if (dbId == StatsConstants.DEFAULT_ALL_ID) {
             dbName = "*";
         } else {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             dbName = db.getOriginName();
         }
         String tableName;
@@ -213,7 +212,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
             tableName = "*";
         } else {
             try {
-                tableName = MetaUtils.getTable(dbId, tableId).getName();
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+                if (table == null) {
+                    throw new SemanticException("Table %s is not found", tableId);
+                }
+                tableName = table.getName();
             } catch (SemanticException e) {
                 tableName = "<tableId : " + tableId + ">";
                 status = StatsConstants.ScheduleStatus.FAILED;

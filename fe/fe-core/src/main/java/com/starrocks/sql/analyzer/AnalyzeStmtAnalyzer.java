@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.math.BigDecimal;
@@ -100,7 +101,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -131,10 +132,6 @@ public class AnalyzeStmtAnalyzer {
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
-                if (!statement.getAnalyzeTypeDesc().isHistogram() && statement.isSample()) {
-                    throw new SemanticException("External table %s don't support SAMPLE analyze",
-                            statement.getTableName().toString());
-                }
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake and odps table",
@@ -159,10 +156,6 @@ public class AnalyzeStmtAnalyzer {
                         throw new SemanticException("External catalog don't support analyze all tables, please give a" +
                                 " specific table");
                     }
-                    if (statement.isSample()) {
-                        throw new SemanticException("External table %s don't support SAMPLE analyze",
-                                statement.getTableName().toString());
-                    }
                     String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
                             session.getCurrentCatalog() : tbl.getCatalog();
                     tbl.setCatalog(catalogName);
@@ -178,7 +171,10 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = MetaUtils.getDatabase(session, tbl);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+                    }
 
                     if (statement.isNative() &&
                             StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -187,8 +183,12 @@ public class AnalyzeStmtAnalyzer {
 
                     statement.setDbId(db.getId());
                 } else if (null != statement.getTableName().getTbl()) {
-                    MetaUtils.normalizationTableName(session, statement.getTableName());
-                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
+                    statement.getTableName().normalization(session);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
+                    }
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
 
                     if (analyzeTable.isTemporaryTable()) {
@@ -230,6 +230,7 @@ public class AnalyzeStmtAnalyzer {
                 }
             }
             analyzeProperties(statement.getProperties());
+            analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
 
@@ -258,11 +259,27 @@ public class AnalyzeStmtAnalyzer {
             }
         }
 
-        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, StatementBase statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
-                List<Expr> columns = statement.getColumns();
-                Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
+                List<Expr> columns;
+                Map<String, String> properties;
+                TableName tableName;
+                if (statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    columns = analyzeStmt.getColumns();
+                    properties = analyzeStmt.getProperties();
+                    tableName = analyzeStmt.getTableName();
+                } else if (statement instanceof CreateAnalyzeJobStmt) {
+                    CreateAnalyzeJobStmt createAnalyzeJobStmt = (CreateAnalyzeJobStmt) statement;
+                    columns = createAnalyzeJobStmt.getColumns();
+                    properties = createAnalyzeJobStmt.getProperties();
+                    tableName = createAnalyzeJobStmt.getTableName();
+                } else {
+                    throw new NotImplementedException("unreachable");
+                }
+
+                Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
                 if (!isSupportedHistogramAnalyzeTableType(analyzeTable)) {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
@@ -276,13 +293,11 @@ public class AnalyzeStmtAnalyzer {
                     }
                 }
 
-                Map<String, String> properties = statement.getProperties();
-
                 long bucket = ((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets();
                 if (bucket <= 0) {
                     throw new SemanticException("Bucket number can't less than 1");
                 }
-                statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
+                properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
                         p -> String.valueOf(Config.histogram_mcv_size));
@@ -294,7 +309,6 @@ public class AnalyzeStmtAnalyzer {
                     OlapTable analyzedOlapTable = (OlapTable) analyzeTable;
                     totalRows = analyzedOlapTable.getRowCount();
                 } else {
-                    TableName tableName = statement.getTableName();
                     List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
                                     tableName.getTbl());
@@ -339,7 +353,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }
@@ -348,7 +362,7 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
-            MetaUtils.normalizationTableName(session, statement.getTableName());
+            statement.getTableName().normalization(session);
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }

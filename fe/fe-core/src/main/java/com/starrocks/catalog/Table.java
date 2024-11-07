@@ -41,6 +41,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -455,6 +457,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return new ArrayList<>(nameToColumn.values());
     }
 
+    public void addColumn(Column column) {
+        fullSchema.add(column);
+        nameToColumn.put(column.getName(), column);
+    }
+
     public long getCreateTime() {
         return createTime;
     }
@@ -781,5 +788,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
                 !isConnectorView();
+    }
+
+    public boolean isSupportBackupRestore() {
+        return isOlapTableOrMaterializedView() || isOlapView();
     }
 }

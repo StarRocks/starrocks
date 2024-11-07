@@ -40,7 +40,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -197,9 +197,9 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(svName, svm.getStorageVolumeName(svKey));
         StorageVolume sv = svm.getStorageVolumeByName(svName);
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
         StorageVolume sv1 = svm.getStorageVolume(sv.getId());
         Assert.assertEquals(sv1.getId(), sv.getId());
@@ -228,9 +228,9 @@ public class SharedDataStorageVolumeMgrTest {
         svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
-        Assert.assertEquals("region1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("region1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getRegion());
-        Assert.assertEquals("endpoint1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+        Assert.assertEquals("endpoint1", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
                 .getEndpoint());
         Assert.assertEquals("test update", sv.getComment());
         Assert.assertEquals(true, sv.getEnabled());
@@ -387,6 +387,9 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_path = "bucketname:30/b";
         Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
+        Config.aws_s3_path = "s3://bucketname:9030/b";
+        Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
+
         Config.aws_s3_path = "/";
         Assert.assertThrows(InvalidConfException.class, SharedDataStorageVolumeMgr::parseLocationsFromConfig);
 
@@ -399,6 +402,12 @@ public class SharedDataStorageVolumeMgrTest {
             List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
             Assert.assertEquals(1, locations.size());
             Assert.assertEquals("hdfs://url", locations.get(0));
+        }
+        Config.cloud_native_hdfs_url = "viewfs://host:9030/a/b/c";
+        {
+            List<String> locations = SharedDataStorageVolumeMgr.parseLocationsFromConfig();
+            Assert.assertEquals(1, locations.size());
+            Assert.assertEquals("viewfs://host:9030/a/b/c", locations.get(0));
         }
     }
 

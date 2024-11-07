@@ -1,5 +1,5 @@
 
-有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/SET_DEFAULT_STORAGE_VOLUME.md)。
+有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) 和 [SET DEFAU../../sql-reference/sql-statements/cluster_management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.mdT_STORAGE_VOLUME.md)。
 
 ### 创建数据库和云原生表
 
@@ -27,8 +27,7 @@ DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "storage_volume" = "def_volume",
     "datacache.enable" = "true",
-    "datacache.partition_duration" = "1 MONTH",
-    "enable_async_write_back" = "false"
+    "datacache.partition_duration" = "1 MONTH"
 );
 ```
 
@@ -59,16 +58,9 @@ PROPERTIES (
 > - 在 v3.0 版本中，该参数名称为 `storage_cache_ttl`。
 > - 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
 
-#### enable_async_write_back
-
-是否允许数据异步写入对象存储。默认值：`false`。
-
-- `true`：导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
-- `false`：只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
-
 ### 查看表信息
 
-您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md)。
+您可以通过 `SHOW PROC "/dbs/<db_id>"` 查看特定数据库中的表的信息。详细信息，请参阅 [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md)。
 
 示例：
 
@@ -85,11 +77,11 @@ StarRocks 存算分离集群中表的 `Type` 为 `CLOUD_NATIVE`。`StoragePath` 
 
 ### 向 StarRocks 存算分离集群导入数据
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/loading_introduction/Loading_intro.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有导入方式。详细信息，请参阅 [导入方案](../../loading/Loading_intro.md)。
 
 ### 在 StarRocks 存算分离集群查询
 
-StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 存算分离集群支持 StarRocks 提供的所有查询方式。详细信息，请参阅 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md)。
 
 > **说明**
 >

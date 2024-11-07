@@ -176,10 +176,10 @@ public:
                                                       1.0, workgroup::WorkGroupType::WG_NORMAL);
         _wg4 = std::make_shared<workgroup::WorkGroup>("wg400", 400, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
                                                       1.0, workgroup::WorkGroupType::WG_NORMAL);
-        _wg1 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg1);
-        _wg2 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg2);
-        _wg3 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg3);
-        _wg4 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg4);
+        _wg1 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg1);
+        _wg2 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg2);
+        _wg3 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg3);
+        _wg4 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg4);
     }
 
 protected:

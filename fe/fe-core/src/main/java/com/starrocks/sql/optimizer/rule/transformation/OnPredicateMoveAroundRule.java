@@ -16,7 +16,9 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -39,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class OnPredicateMoveAroundRule extends TransformationRule {
@@ -114,6 +117,18 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                                 OptExpression.create(toRightFilter, input.inputAt(1)))
                 );
             }
+        } else if (joinOperator.getJoinType() == JoinOperator.LEFT_ANTI_JOIN) {
+            List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, leftDomainProperty, rightDomainProperty, false))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            ScalarOperator toRightPredicate = Utils.compoundAnd(distinctPredicates(toRightPredicates));
+            if (toRightPredicate != null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
+                );
+            }
         } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
             List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, leftDomainProperty, rightDomainProperty, false))
@@ -184,12 +199,12 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         } else if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
             if (domainProperty.contains(seed)) {
                 RangeExtractor.RangeDescriptor desc = domainProperty.getValueWrapper(seed).getRangeDesc();
-                rewriteResult = deriveLessPredicate(offspring, desc.getRange(), toLeft);
+                rewriteResult = deriveLessPredicate(offspring, desc, toLeft);
             }
         } else if (binaryType == BinaryType.GT || binaryType == BinaryType.GE) {
             if (domainProperty.contains(seed)) {
                 RangeExtractor.RangeDescriptor desc = domainProperty.getValueWrapper(seed).getRangeDesc();
-                rewriteResult = deriveGreaterPredicate(offspring, desc.getRange(), toLeft);
+                rewriteResult = deriveGreaterPredicate(offspring, desc, toLeft);
             }
         }
         if (rewriteResult == null) {
@@ -209,10 +224,16 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         if (!existDomainProperty.contains(offspring)) {
             return rewriteResult;
         }
+        Set<ScalarOperator> set = Sets.newLinkedHashSet();
+        set.addAll(Utils.extractConjuncts(existDomainProperty.getPredicateDesc(offspring)));
+        rewriteResult = Utils.compoundAnd(Utils.extractConjuncts(rewriteResult).stream()
+                .filter(e  -> !set.contains(e)).collect(Collectors.toList()));
+        if (rewriteResult == null) {
+            return null;
+        }
 
         DomainPropertyDeriver deriver = new DomainPropertyDeriver();
         DomainProperty newDomainProperty = deriver.derive(rewriteResult);
-
         Range<ConstantOperator> existRange = existDomainProperty.getValueWrapper(offspring).getRangeDesc().getRange();
         Range<ConstantOperator> newRange = newDomainProperty.getValueWrapper(offspring).getRangeDesc().getRange();
         if (existRange == null) {
@@ -228,7 +249,12 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
     // if we want to derive predicate to left, we need obtain the upper bound value of right_tbl_col
     // if we want to derive predicate to right, we need obtain the lower bound value of left_tbl_col
     private ScalarOperator deriveLessPredicate(ScalarOperator offspring,
-                                               Range<ConstantOperator> range, boolean toLeft) {
+                                               RangeExtractor.RangeDescriptor desc, boolean toLeft) {
+        if (desc == null) {
+            return null;
+        }
+        Range<ConstantOperator> range = desc.getRange();
+
         if (range == null) {
             return null;
         }
@@ -245,7 +271,12 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
     // if we want to derive predicate to left, we need obtain the lower bound value of right_tbl_col
     // if we want to derive predicate to right, we need obtain the upper bound value of left_tbl_col
     private ScalarOperator deriveGreaterPredicate(ScalarOperator offspring,
-                                                  Range<ConstantOperator> range, boolean toLeft) {
+                                                  RangeExtractor.RangeDescriptor desc, boolean toLeft) {
+        if (desc == null) {
+            return null;
+        }
+        Range<ConstantOperator> range = desc.getRange();
+
         if (range == null) {
             return null;
         }

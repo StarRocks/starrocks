@@ -376,7 +376,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
             return true;
@@ -387,7 +387,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         String tableName;
         boolean skipAddPartition = false;
         OlapTable olapTable;
-        olapTable = (OlapTable) db.getTable(tableId);
+        olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (olapTable == null) {
             LOG.warn("Automatically removes the schedule because table does not exist, " +
                         "tableId: {}", tableId);
@@ -395,7 +395,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
         // Only OlapTable has DynamicPartitionProperty
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
             if (!olapTable.dynamicPartitionExists()) {
                 LOG.warn("Automatically removes the schedule because " +
                             "table[{}] does not have dynamic partition", olapTable.getName());
@@ -461,7 +461,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
-                locker.unLockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
 
@@ -474,7 +474,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
-                } catch (DdlException e) {
+                } catch (Exception e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 }
             }
@@ -488,13 +488,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 iterator.remove();
                 LOG.warn("Could not get database={} info. remove it from scheduler", dbId);
                 continue;
             }
-            Table table = db.getTable(tableId);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             OlapTable olapTable;
             if (table instanceof OlapTable) {
                 olapTable = (OlapTable) table;
@@ -547,8 +547,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
             String tableName = olapTable.getName();
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-                try (AutoCloseableLock ignore
-                            = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
+                try (AutoCloseableLock ignore = new AutoCloseableLock(
+                            new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
                     AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                     analyzer.analyze(new ConnectContext(), dropPartitionClause);
                     GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
@@ -686,7 +686,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         Map<String, List<String>> ttlPartitionTables = new HashMap<>();
         long start = System.currentTimeMillis();
         for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -695,9 +695,9 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                         dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())
@@ -711,7 +711,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         LOG.info("finished to find all schedulable tables, cost: {}ms, dynamic partition tables: {}, " +

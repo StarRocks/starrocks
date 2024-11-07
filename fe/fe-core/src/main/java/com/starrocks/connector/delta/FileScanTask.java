@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import io.delta.kernel.utils.FileStatus;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.Map;
 
@@ -28,7 +29,7 @@ public class FileScanTask {
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues) {
         this.fileStatus = fileStatus;
         this.records = records;
-        this.partitionValues = partitionValues;
+        this.partitionValues = new CaseInsensitiveMap<>(partitionValues);
     }
 
     public FileStatus getFileStatus() {

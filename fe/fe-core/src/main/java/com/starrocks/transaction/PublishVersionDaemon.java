@@ -177,19 +177,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
             return;
         }
-
-        int oldNumThreads = lakeTaskExecutor.getMaximumPoolSize();
-        if (oldNumThreads == newNumThreads) {
-            return;
-        }
-
-        if (newNumThreads < oldNumThreads) { // scale in
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-        } else { // scale out
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-        }
+        ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
     }
 
     /**
@@ -283,6 +271,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
+        List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -292,9 +281,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
+                transactionIds.add(transactionState.getTransactionId());
             }
         }
+        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
             AgentTaskExecutor.submit(batchTask);
         }
@@ -427,7 +417,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
@@ -478,11 +468,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Tablet> normalTablets = null;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -523,7 +513,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -655,7 +645,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
@@ -766,9 +756,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
@@ -800,7 +790,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
@@ -818,6 +808,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+            // prevent excessive logging
+            if (partitionCommitInfo.getVersionTime() < 0 && 
+                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
+                return false;
+            }
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
                     txnId, e.getMessage());
             return false;

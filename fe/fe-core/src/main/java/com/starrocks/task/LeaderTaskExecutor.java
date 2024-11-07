@@ -114,6 +114,14 @@ public class LeaderTaskExecutor {
         }
     }
 
+    public int getCorePoolSize() {
+        return executor.getCorePoolSize();
+    }
+
+    public void setPoolSize(int poolSize) {
+        ThreadPoolManager.setFixedThreadPoolSize(executor, poolSize);
+    }
+
     private class TaskChecker implements Runnable {
         @Override
         public void run() {

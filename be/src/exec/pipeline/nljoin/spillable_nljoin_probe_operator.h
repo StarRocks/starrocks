@@ -177,7 +177,7 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
-    Buffer<SlotDescriptor*> _col_types;
+    std::vector<SlotDescriptor*> _col_types;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

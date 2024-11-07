@@ -127,6 +127,10 @@ struct TStructField {
     1: optional string name
     2: optional string comment
     3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
 }
 
 struct TTypeNode {
@@ -163,7 +167,8 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
-    PERCENTILE_UNION
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
 }
 
 enum TPushType {
@@ -208,6 +213,7 @@ enum TTaskType {
     REMOTE_SNAPSHOT,
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
     NUM_TASK_TYPE
 }
 
@@ -327,6 +333,14 @@ struct TTableFunction {
   3: optional bool is_left_join
 }
 
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
+}
+
 // Represents a function in the Catalog.
 struct TFunction {
   // Fully qualified function name.
@@ -359,6 +373,7 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+  13: optional TAggStateDesc agg_state_desc
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache

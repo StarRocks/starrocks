@@ -102,7 +102,6 @@ set(EXEC_FILES
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
     cache_select_scanner.cpp
-    mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -284,6 +283,8 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

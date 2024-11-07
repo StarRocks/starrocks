@@ -109,17 +109,17 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getLocalMetastore();
         metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }
 
     public static boolean compareState(GlobalStateMgr masterGlobalStateMgr, GlobalStateMgr slaveGlobalStateMgr) {
-        Database masterDb = masterGlobalStateMgr.getDb(testDb1);
-        Database slaveDb = slaveGlobalStateMgr.getDb(testDb1);
+        Database masterDb = masterGlobalStateMgr.getLocalMetastore().getDb(testDb1);
+        Database slaveDb = slaveGlobalStateMgr.getLocalMetastore().getDb(testDb1);
         List<Table> tables = masterDb.getTables();
         for (Table table : tables) {
-            Table slaveTable = slaveDb.getTable(table.getId());
+            Table slaveTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(slaveDb.getId(), table.getId());
             if (slaveTable == null) {
                 return false;
             }

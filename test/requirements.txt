@@ -16,4 +16,4 @@ thrift
 thrift-sasl
 PyHive
 timeout_decorator
-munch
+DBUtils

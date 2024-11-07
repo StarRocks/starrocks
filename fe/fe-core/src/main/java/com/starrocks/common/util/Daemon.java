@@ -17,7 +17,6 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,8 +30,6 @@ public class Daemon extends Thread {
     private Runnable runnable;
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
-
-    private MetaContext metaContext = null;
 
     {
         setDaemon(true);
@@ -69,10 +66,6 @@ public class Daemon extends Thread {
         }
     }
 
-    public void setMetaContext(MetaContext metaContext) {
-        this.metaContext = metaContext;
-    }
-
     public void setStop() {
         isStopped.set(true);
     }
@@ -98,10 +91,6 @@ public class Daemon extends Thread {
 
     @Override
     public void run() {
-        if (metaContext != null) {
-            metaContext.setThreadLocalInfo();
-        }
-
         while (!isStopped.get()) {
             try {
                 runOneCycle();
@@ -116,9 +105,6 @@ public class Daemon extends Thread {
             }
         }
 
-        if (metaContext != null) {
-            MetaContext.remove();
-        }
         LOG.error("daemon thread exits. name=" + this.getName());
         if (!isRunning.compareAndSet(true, false)) {
             LOG.warn("set daemon thread {} to stop failed", getName());

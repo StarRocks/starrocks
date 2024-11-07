@@ -24,5 +24,19 @@ public interface SRMetaBlockWriter {
 
     void writeLong(long value) throws IOException, SRMetaBlockException;
 
+    void writeByte(byte value) throws IOException, SRMetaBlockException;
+
+    void writeShort(short value) throws IOException, SRMetaBlockException;
+
+    void writeDouble(double value) throws IOException, SRMetaBlockException;
+
+    void writeFloat(float value) throws IOException, SRMetaBlockException;
+
+    void writeChar(char value) throws IOException, SRMetaBlockException;
+
+    void writeBoolean(boolean value) throws IOException, SRMetaBlockException;
+
+    void writeString(String value) throws IOException, SRMetaBlockException;
+
     void close() throws IOException, SRMetaBlockException;
 }

@@ -15,6 +15,8 @@
 #pragma once
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "fmt/format.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"
@@ -35,7 +37,7 @@ public:
     DeltaColumnGroup() {}
     ~DeltaColumnGroup() {}
     void init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
-              const std::vector<std::string>& column_files);
+              const std::vector<std::string>& column_files, const std::vector<std::string>& encryption_metas = {});
     Status load(int64_t version, const char* data, size_t length);
     Status load(int64_t version, const DeltaColumnGroupVerPB& dcg_ver_pb);
     std::string save() const;
@@ -67,6 +69,14 @@ public:
         return column_files;
     }
 
+    StatusOr<std::string> column_file_by_idx(const std::string& dir_path, uint32_t idx) const {
+        if (idx >= _column_files.size()) {
+            return Status::InvalidArgument(fmt::format("column_file_by_idx fail, path: {} column file cnt: {} idx: {}",
+                                                       dir_path, _column_files.size(), idx));
+        }
+        return dir_path + "/" + _column_files[idx];
+    }
+
     // TODO: rename
     std::vector<std::vector<ColumnUID>>& column_ids() { return _column_uids; }
     // TODO: rename
@@ -92,6 +102,8 @@ public:
 
     const std::vector<std::string>& relative_column_files() const { return _column_files; }
 
+    const std::vector<std::string>& encryption_metas() const { return _encryption_metas; }
+
 private:
     void _calc_memory_usage();
 
@@ -99,6 +111,7 @@ private:
     int64_t _version = 0;
     std::vector<std::vector<ColumnUID>> _column_uids;
     std::vector<std::string> _column_files;
+    std::vector<std::string> _encryption_metas;
     size_t _memory_usage = 0;
 };
 

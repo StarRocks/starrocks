@@ -488,13 +488,13 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "    group by cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3";
             sql(sql).contains("mv1")
                     .contains("  1:Project\n" +
-                            "  |  <slot 2> : '2024-07-20'\n" +
-                            "  |  <slot 3> : '2024-06-20 00:00:00'\n" +
-                            "  |  <slot 4> : '2024-08-20 00:00:00'\n" +
                             "  |  <slot 6> : 11: k1\n" +
                             "  |  <slot 7> : 12: k2\n" +
                             "  |  <slot 8> : 13: k3\n" +
-                            "  |  <slot 10> : 14: sum(v1)\n" +
+                            "  |  <slot 10> : '2024-07-20'\n" +
+                            "  |  <slot 11> : '2024-06-20 00:00:00'\n" +
+                            "  |  <slot 12> : '2024-08-20 00:00:00'\n" +
+                            "  |  <slot 13> : 14: sum(v1)\n" +
                             "  |  \n" +
                             "  0:OlapScanNode\n" +
                             "     TABLE: mv1");
@@ -514,13 +514,55 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "    group by cte.date1, cte.start_date, cte.end_date, t1.k1";
             sql(sql).contains("mv1")
                     .contains("1:Project\n" +
-                            "|  <slot 11> : col$: k1\n" +
-                            "|  <slot 14> : col$: sum(v1)\n" +
+                            "|  <slot 14> : col$: k1\n" +
+                            "|  <slot 17> : col$: sum(v1)\n" +
                             "|\n" +
                             "0:OlapScanNode\n" +
                             "TABLE: mv1");
         }
         starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+    public void testWrongMVRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` decimal64(18, 2),\n" +
+                "  `k3` varchar(255),\n" +
+                "  `v1` varchar(255)\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS SELECT 1, count(distinct k1) from tbl1");
+            sql("select count(distinct k1) from tbl1").contains("mv1");
+            sql("select count(1) from tbl1").notContain("mv1");
+            sql("select count(*) from tbl1").notContain("mv1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS SELECT 1, count(1) from tbl1");
+            sql("select count(distinct k1) from tbl1").notContain("mv1");
+            sql("select count(1) from tbl1").contains("mv1");
+            sql("select count(*) from tbl1").contains("mv1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
         starRocksAssert.dropTable("tbl1");
     }
 }

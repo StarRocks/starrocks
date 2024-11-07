@@ -59,6 +59,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -95,7 +96,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
         t0StatsTableId = t0.getId();
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.updateVisibleVersion(2, t0UpdateTime
@@ -114,7 +115,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1_stats");
         new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(t1, 20000000);
 
@@ -142,7 +143,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
-        OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
+        OlapTable t0p = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats_partition");
         new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(t0p, 20000000);
 
@@ -160,7 +161,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable tps = (OlapTable) globalStateMgr.getDb("stats").getTable("tprimary_stats");
+        OlapTable tps = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tprimary_stats");
         new ArrayList<>(tps.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tps, 20000000);
 
@@ -176,7 +177,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable tus = (OlapTable) globalStateMgr.getDb("stats").getTable("tunique_stats");
+        OlapTable tus = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tunique_stats");
         new ArrayList<>(tus.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tps, 20000000);
 
@@ -191,7 +192,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
+        OlapTable tcount = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tcount");
         new ArrayList<>(tcount.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(tcount, 20000000);
 
@@ -206,7 +207,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
-        OlapTable structTable = (OlapTable) globalStateMgr.getDb("stats").getTable("struct_a");
+        OlapTable structTable = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("struct_a");
         new ArrayList<>(structTable.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(structTable, 20000000);
     }
@@ -239,7 +240,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeDB() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -258,7 +259,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeTable() {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -271,8 +272,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals("t0_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
-        Table table = db.getTable("tprimary_stats");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tprimary_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -285,7 +286,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals("tprimary_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumnNames().toString());
 
-        table = db.getTable("tunique_stats");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tunique_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -301,8 +302,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeStructSubFiled() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
-        Table table = db.getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "struct_a");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), table.getId(), ImmutableList.of("b.a", "b.c", "d.c.a"),
                         ImmutableList.of(Type.INT, Type.INT, Type.INT),
@@ -319,7 +320,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeColumn() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
                         Lists.newArrayList(Type.BIGINT),
@@ -335,7 +336,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeColumnSample() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
                         Lists.newArrayList(Type.BIGINT),
@@ -351,8 +352,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeColumnSample2() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
 
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
@@ -396,8 +398,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeHistogram() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
         long dbid = db.getId();
 
         Map<String, String> properties = new HashMap<>();
@@ -406,8 +409,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                properties);
+                StatsConstants.ScheduleType.ONCE, properties);
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
@@ -461,7 +463,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testNativeAnalyzeJob() {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -486,7 +488,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         new MockUp<FullStatisticsCollectJob>() {
             @Mock
-            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {}
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
         };
 
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
@@ -499,8 +502,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
-        Table table = db.getTable("tprimary_stats");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tprimary_stats");
         nativeAnalyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
@@ -509,6 +512,53 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
         Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void createAnalyzeJobSimultaneously() throws Exception {
+        new MockUp<StatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        // case: sample table
+        {
+            starRocksAssert.ddl("create analyze sample table test.t0_stats");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            Optional<StatisticsCollectJob> tableJob = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats")).findFirst();
+            Assert.assertTrue(tableJob.isPresent());
+            Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, tableJob.get().getType());
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: column
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(2, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
+
+        // case: overlapped columns
+        {
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v3)");
+            starRocksAssert.ddl("create analyze full table test.t0_stats(v2, v3)");
+            StatisticAutoCollector collector = new StatisticAutoCollector();
+            List<StatisticsCollectJob> jobs = collector.runJobs();
+            long count = jobs.stream()
+                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
+                    .count();
+            Assert.assertEquals(4, count);
+            starRocksAssert.dropAnalyzeForTable("t0_stats");
+        }
     }
 
     @Test
@@ -557,7 +607,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         new MockUp<ExternalFullStatisticsCollectJob>() {
             @Mock
-            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {}
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
         };
 
         externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
@@ -584,30 +635,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
 
         externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, externalAnalyzeJob.getStatus());
         Assert.assertEquals("mock exception", externalAnalyzeJob.getReason());
-    }
-
-    @Test
-    public void testExternalAnalyzeAllDb() {
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                return Maps.newHashMap();
-            }
-        };
-        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                new ExternalAnalyzeJob("hive0", null, null, null, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
-                        Maps.newHashMap(),
-                        StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN));
-        Assert.assertEquals(32, jobs.size());
     }
 
     @Test
@@ -648,7 +682,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testCreateHiveAnalyzeJob() {
         ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
-                "t1", null, null,
+                "t1", List.of("c1"), null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -664,11 +698,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -679,10 +723,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
             }
         };
@@ -691,22 +739,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -714,25 +751,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100000000));
+                        100000000, ""));
             }
         };
-
+        // analyze all columns
         analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
                 "t1", null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -747,7 +773,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testCreateIcebergAnalyzeJob() {
         ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
-                "t1", null, null,
+                "t1", List.of("id"), null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -761,11 +787,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1",  List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -777,10 +813,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1", List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime, Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                statsUpdateTime, Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
             }
         };
@@ -799,22 +838,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                statsUpdateTime, Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100));
+                        100, ""));
             }
         };
         new MockUp<DefaultTraits>() {
@@ -836,25 +864,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
                 return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
-                        100000000));
+                        100000000, ""));
             }
         };
-
+        // analyze all columns
         analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
                 "t1", null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -863,13 +880,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 LocalDateTime.MIN);
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
         Assert.assertEquals(1, statsJobs.size());
-        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+        Assert.assertEquals(5, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
     }
 
     @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
-                .getDb("test").getTable("t0_stats_partition");
+                .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
         int i = 1;
         for (Partition p : t0p.getAllPartitions()) {
             p.updateVisibleVersion(2);
@@ -877,8 +894,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             i++;
         }
 
-        Database database = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) database.getTable("t0_stats_partition");
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t0_stats_partition");
         List<Long> partitionIdList =
                 table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
@@ -886,7 +904,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
 
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
@@ -919,12 +938,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
-                database,
-                table, null,
-                Lists.newArrayList("c1", "c2", "c3", "par_col"),
-                StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap());
+                        database,
+                        table, null,
+                        Lists.newArrayList("c1", "c2", "c3", "par_col"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(12, collectSqlList.size());
 
@@ -1191,9 +1210,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testExcludeStatistics() {
         OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
-                .getDb("test").getTable("t0_stats_partition");
+                .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
 
-        Database database = connectContext.getGlobalStateMgr().getDb("test");
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
 
         NativeAnalyzeJob job = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
                 null, null,
@@ -1244,8 +1263,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testCount() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
-        OlapTable olapTable = (OlapTable) db.getTable("tcount");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tcount");
         long dbid = db.getId();
 
         SampleStatisticsCollectJob sampleStatisticsCollectJob = new SampleStatisticsCollectJob(
@@ -1259,7 +1279,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap());
+                Maps.newHashMap()
+        );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
@@ -1268,7 +1289,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Test
     public void testAnalyzeBeforeUpdate() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
@@ -1319,7 +1340,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
@@ -1383,7 +1404,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
@@ -1443,7 +1464,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),

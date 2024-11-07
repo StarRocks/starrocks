@@ -82,13 +82,14 @@ public class RewriteTreeTask extends OptimizerTask {
                 continue;
             }
 
+            OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, root);
             List<OptExpression> result;
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 result = rule.transform(root, context.getOptimizerContext());
             }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
-            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, root, result);
+            OptimizerTraceUtil.logApplyRuleAfter(result);
 
             if (result.isEmpty()) {
                 continue;

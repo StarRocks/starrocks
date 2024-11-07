@@ -18,33 +18,38 @@ import com.google.common.base.Preconditions;
 
 import java.util.Optional;
 
-public class EitherOr<T> {
-    private final T first;
-    private final T second;
+public class EitherOr<L, R> {
+    private final L first;
+    private final R second;
 
-    private EitherOr(T first, T second) {
-        Preconditions.checkArgument((first == null && second != null) || (first != null && second == null));
+    public EitherOr(L first, R second) {
+        Preconditions.checkArgument((first == null && second != null) || (first != null && second == null)
+                || (first == null && second == null));
         this.first = first;
         this.second = second;
     }
 
-    public static <T> EitherOr<T> either(T first) {
+    public static <L, R> EitherOr<L, R> left(L first) {
         return new EitherOr<>(first, null);
     }
 
-    public static <T> EitherOr<T> or(T second) {
+    public static <L, R> EitherOr<L, R> right(R second) {
         return new EitherOr<>(null, second);
     }
 
-    public Optional<T> getFirst() {
+    public Optional<L> getFirst() {
         return Optional.ofNullable(first);
     }
 
-    public Optional<T> getSecond() {
+    public Optional<R> getSecond() {
         return Optional.ofNullable(second);
     }
 
-    public T get() {
-        return (first != null) ? first : second;
+    public L left() {
+        return first;
+    }
+
+    public R right() {
+        return second;
     }
 }

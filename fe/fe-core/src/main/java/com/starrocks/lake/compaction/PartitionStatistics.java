@@ -54,7 +54,7 @@ public class PartitionStatistics {
 
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.compactionVersion = null;
+        this.compactionVersion = new PartitionVersion(0 /* version */, System.currentTimeMillis() /* createTime */);
         this.nextCompactionTime = 0;
         this.punishFactor = 1;
     }
@@ -141,6 +141,10 @@ public class PartitionStatistics {
 
     public void resetPriority() {
         this.setPriority(CompactionPriority.DEFAULT);
+    }
+
+    public PartitionStatisticsSnapshot getSnapshot() {
+        return new PartitionStatisticsSnapshot(this);
     }
 
     @Override

@@ -24,7 +24,7 @@ desc bill_detail;
 -- result:
 bill_code	varchar(200)	NO	true		
 -- !result
-explain select * from bill_detail where bill_code='JT2921712368984';
+[UC]explain select * from bill_detail where bill_code='JT2921712368984';
 select * from bill_detail where bill_code='JT2921712368984';
 -- result:
 JT2921712368984

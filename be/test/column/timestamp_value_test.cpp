@@ -114,4 +114,10 @@ TEST(TimestampValueTest, cast) {
     ASSERT_EQ("2004-02-29", ((DateValue)v).to_string());
 }
 
+TEST(TimestampValueTest, unixTime) {
+    auto v = TimestampValue::create(2004, 2, 29, 23, 30, 30);
+    std::cout << "unix time " << v.to_unixtime() << std::endl;
+    ASSERT_EQ(1078097430000, v.to_unixtime());
+}
+
 } // namespace starrocks

@@ -31,6 +31,7 @@ import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -79,15 +80,19 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -521,14 +526,6 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Table getTable(Long databaseId, Long tableId) {
-        Database database = localMetastore.getDb(databaseId);
-        if (database == null) {
-            return null;
-        }
-        return database.getTable(tableId);
-    }
-
     public TableVersionRange getTableVersionRange(String dbName, Table table,
                                                   Optional<ConnectorTableVersion> startVersion,
                                                   Optional<ConnectorTableVersion> endVersion) {
@@ -547,7 +544,7 @@ public class MetadataMgr {
 
     public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
-            return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+            return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
             return Optional.ofNullable(
                     getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
@@ -588,7 +585,7 @@ public class MetadataMgr {
         if (database == null) {
             return null;
         }
-        return database.getTable(tableId);
+        return localMetastore.getTable(database.getId(), tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {
@@ -696,14 +693,16 @@ public class MetadataMgr {
                 connectorTableColumnStats = new ConnectorTableColumnStats(
                         ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
                                 setHistogram(histogram).build(),
-                        columnStatisticList.get(i).getRowCount());
+                        columnStatisticList.get(i).getRowCount(), columnStatisticList.get(i).getUpdateTime());
             } else {
                 connectorTableColumnStats = columnStatisticList.get(i);
             }
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
-                    statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                    double rowCount = Double.isNaN(statistics.getOutputRowCount()) ? connectorTableColumnStats.getRowCount()
+                            : Math.max(statistics.getOutputRowCount(), connectorTableColumnStats.getRowCount());
+                    statistics.setOutputRowCount(rowCount);
                 }
             }
         }
@@ -781,6 +780,19 @@ public class MetadataMgr {
             }
         }
         return new ArrayList<>();
+    }
+
+    public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getDeleteFiles(table, snapshotId, predicate, content);
+            } catch (Exception e) {
+                LOG.error("Failed to get delete files on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new HashSet<>();
     }
 
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {

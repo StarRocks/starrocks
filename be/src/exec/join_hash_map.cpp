@@ -36,7 +36,7 @@ void HashTableProbeState::consider_probe_time_locality() {
         if ((probe_chunks & (detect_step - 1)) == 0) {
             int window_size = std::min(active_coroutines * 4, 50);
             if (probe_row_count > window_size) {
-                phmap::flat_hash_map<uint32_t, uint32_t> occurrence;
+                phmap::flat_hash_map<uint32_t, uint32_t, StdHash<uint32_t>> occurrence;
                 occurrence.reserve(probe_row_count);
                 uint32_t unique_size = 0;
                 bool enable_interleaving = true;
@@ -654,6 +654,21 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
     }
 
     _table_items->row_count += chunk->num_rows();
+}
+
+void JoinHashTable::merge_ht(const JoinHashTable& ht) {
+    _table_items->row_count += ht._table_items->row_count;
+
+    Columns& columns = _table_items->build_chunk->columns();
+    Columns& other_columns = ht._table_items->build_chunk->columns();
+
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {
+            // upgrade to nullable column
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+        }
+        columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
+    }
 }
 
 ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {

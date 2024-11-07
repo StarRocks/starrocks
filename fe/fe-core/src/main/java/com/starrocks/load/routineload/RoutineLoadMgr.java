@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -73,6 +74,8 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,6 +96,7 @@ import java.util.stream.Collectors;
 
 public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     // warehouse ==> {be : running tasks num}
     private Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
@@ -104,6 +108,9 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
@@ -508,7 +515,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
-                Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -658,6 +665,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         if (dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId()).isEmpty()) {
             dbToNameToRoutineLoadJob.remove(routineLoadJob.getDbId());
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
     public void updateRoutineLoadJob() throws UserException {
@@ -785,16 +794,22 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     public void loadRoutineLoadJobsV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
-
+        reader.readCollection(RoutineLoadJob.class, routineLoadJob -> {
             if (routineLoadJob.needRemove()) {
                 LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                continue;
+                return;
             }
 
             putJob(routineLoadJob);
+        });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToRoutineLoadJob.values());
+        } finally {
+            readUnlock();
         }
     }
 
@@ -803,4 +818,13 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         return ImmutableMap.of("RoutineLoad", (long) idToRoutineLoadJob.size());
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToRoutineLoadJob.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(samples, (long) idToRoutineLoadJob.size()));
+    }
 }

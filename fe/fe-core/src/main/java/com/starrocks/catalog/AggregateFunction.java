@@ -139,9 +139,9 @@ public class AggregateFunction extends Function {
         this.intermediateType =
                 (intermediateType != null && intermediateType.equals(retType)) ? null : intermediateType;
         this.isAnalyticFn = isAnalyticFn;
-        ignoresDistinct = false;
-        isAggregateFn = true;
-        returnsNonNullOnEmpty = false;
+        this.ignoresDistinct = false;
+        this.isAggregateFn = true;
+        this.returnsNonNullOnEmpty = false;
     }
 
     public static AggregateFunction createBuiltin(String name,
@@ -211,6 +211,23 @@ public class AggregateFunction extends Function {
         isAscOrder = other.isAscOrder;
         nullsFirst = other.nullsFirst;
         isDistinct = other.isDistinct;
+    }
+
+    /**
+     * Returns a new instance of this aggregate function with new argument types and return type which is used for
+     * original function's argument types are psedo types.
+     */
+    public AggregateFunction withNewTypes(List<Type> newArgTypes, Type newRetType) {
+        AggregateFunction newFn = new AggregateFunction(this.getFunctionName(), newArgTypes, newRetType,
+                this.getIntermediateType(), this.hasVarArgs());
+        newFn.setFunctionId(this.getFunctionId());
+        newFn.setChecksum(this.getChecksum());
+        newFn.setBinaryType(this.getBinaryType());
+        newFn.setHasVarArgs(this.hasVarArgs());
+        newFn.setId(this.getId());
+        newFn.setUserVisible(this.isUserVisible());
+        newFn.setAggStateDesc(this.getAggStateDesc());
+        return newFn;
     }
 
     public String getSymbolName() {
@@ -313,6 +330,10 @@ public class AggregateFunction extends Function {
 
     public void setIntermediateType(Type t) {
         intermediateType = t;
+    }
+
+    public Type getIntermediateTypeOrReturnType() {
+        return intermediateType == null ? getReturnType() : intermediateType;
     }
 
     @Override

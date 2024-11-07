@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -204,13 +205,15 @@ public class Explain {
             int totalTabletsNum = 0;
             for (Long partitionId : scan.getSelectedPartitionId()) {
                 final Partition partition = ((OlapTable) scan.getTable()).getPartition(partitionId);
-                final MaterializedIndex selectedTable = partition.getIndex(scan.getSelectedIndexId());
-                totalTabletsNum += selectedTable.getTablets().size();
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    final MaterializedIndex selectedTable = subPartition.getIndex(scan.getSelectedIndexId());
+                    totalTabletsNum += selectedTable.getTablets().size();
+                }
             }
             String partitionAndBucketInfo = "partitionRatio: " +
                     scan.getSelectedPartitionId().size() +
                     "/" +
-                    ((OlapTable) scan.getTable()).getPartitions().size() +
+                    ((OlapTable) scan.getTable()).getVisiblePartitionNames().size() +
                     ", tabletRatio: " +
                     scan.getSelectedTabletId().size() +
                     "/" +

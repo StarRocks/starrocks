@@ -24,6 +24,12 @@
 namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
+ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
+                                                                                 int scan_node_number)
+        : query_mem_limit(query_mem_limit),
+          scan_mem_limit(query_mem_limit),
+          total_chunk_source_mem_bytes(scan_node_number * connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES) {}
+
 int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
     int64_t diff = new_value - old_value;
     int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
@@ -291,7 +297,8 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
         _adaptive_processor->started_running = true;
         int64_t c = L->update_active_scan_operator_count(1);
         if (c == 0) {
-            _adjust_scan_mem_limit(0, L->get_arb_chunk_source_mem_bytes());
+            _adjust_scan_mem_limit(connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES,
+                                   L->get_arb_chunk_source_mem_bytes());
         }
     }
 
@@ -593,7 +600,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     return io_tasks;
 }
 
-void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
@@ -606,7 +613,8 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
             }
         }
     }
-    _morsel_queue->append_morsels(std::move(morsels));
+    RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
+    return Status::OK();
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -721,16 +729,17 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
+        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+
         [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
                << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", "
-               << action << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes;
+               << action << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes
+               << ", running = " << limiter->update_running_chunk_source_count(0);
             return ss.str();
         };
-
-        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
 
         int retry = 3;
         while (retry > 0) {
@@ -870,7 +879,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                 split_morsels.emplace_back(std::move(m));
             }
 
-            scan_op->append_morsels(std::move(split_morsels));
+            RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
         }
     }
     return Status::EndOfFile("");

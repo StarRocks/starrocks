@@ -3,6 +3,7 @@
 #  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-centos7.Dockerfile -t toolchains-centos7:latest docker/dockerfiles/toolchains/
 
 ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-10/root/usr
+ARG GCC_10_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz
 ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.gz
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG MAVEN_VERSION=3.6.3
@@ -10,7 +11,7 @@ ARG MAVEN_INSTALL_HOME=/opt/maven
 # Can't upgrade to a later version, due to incompatible changes between 2.31 and 2.32
 ARG BINUTILS_DOWNLOAD_URL=https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.bz2
 # install epel-release directly from the url link
-ARG EPEL_RPM_URL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+ARG EPEL_RPM_URL=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/Packages/e/epel-release-7-14.noarch.rpm
 
 FROM centos:centos7 AS fixed-centos7-image
 # Fix the centos mirrorlist, due to official list is gone after EOL
@@ -24,8 +25,18 @@ RUN yum install -y gcc gcc-c++ make automake curl wget gzip gunzip zip bzip2 fil
 
 FROM base-builder AS gcc-builder
 ARG GCC_INSTALL_HOME
+ARG GCC_10_DOWNLOAD_URL
 ARG GCC_DOWNLOAD_URL
-RUN mkdir -p /workspace/gcc && \
+# build gcc-10
+RUN mkdir -p /workspace/gcc-10 && \
+    cd /workspace/gcc-10 &&    \
+    wget --progress=dot:mega --no-check-certificate $GCC_10_DOWNLOAD_URL -O ../gcc-10.tar.gz && \
+    tar -xzf ../gcc-10.tar.gz --strip-components=1 && \
+    ./contrib/download_prerequisites && \
+    ./configure --disable-multilib --enable-languages=c,c++ --prefix=/workspace/gcc-10/install
+RUN cd /workspace/gcc-10 && make -j`nproc` && make install
+# build gcc-14
+RUN mkdir -p /workspace/gcc && export CC=/workspace/gcc-10/install/bin/gcc && export CXX=/workspace/gcc-10/install/bin/g++ && \
     cd /workspace/gcc &&    \
     wget --progress=dot:mega --no-check-certificate $GCC_DOWNLOAD_URL -O ../gcc.tar.gz && \
     tar -xzf ../gcc.tar.gz --strip-components=1 && \
@@ -57,9 +68,8 @@ ARG EPEL_RPM_URL
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
-RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh
-
-RUN yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
+RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh && \
+        yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
         libtool which git ccache binutils-devel python3 file java-11-openjdk java-11-openjdk-devel java-11-openjdk-jmods less psmisc && \
         yum clean all && rm -rf /var/cache/yum
 

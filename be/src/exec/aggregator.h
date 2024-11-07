@@ -312,7 +312,7 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
-    const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+    const Filter& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -495,7 +495,7 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
-    std::vector<uint8_t> _streaming_selection;
+    Filter _streaming_selection;
 
     bool _has_udaf = false;
 
@@ -506,6 +506,9 @@ protected:
     bool _is_opened = false;
     bool _is_prepared = false;
     int64_t _agg_state_mem_usage = 0;
+
+    // aggregate combinator functions since they are not persisted in agg hash map
+    std::vector<AggregateFunctionPtr> _combinator_function;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
@@ -571,6 +574,11 @@ protected:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     void _release_agg_memory();
+
+    bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
 
     template <class HashMapWithKey>
     friend struct AllocateState;

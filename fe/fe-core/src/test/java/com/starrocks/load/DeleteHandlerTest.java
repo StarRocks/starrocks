@@ -43,7 +43,9 @@ import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -102,6 +104,7 @@ public class DeleteHandlerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
     private ConnectContext connectContext = new ConnectContext();
+    private VariableMgr variableMgr = new VariableMgr();
 
     @Before
     public void setUp() {
@@ -109,6 +112,7 @@ public class DeleteHandlerTest {
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         try {
             db = CatalogMocker.mockDb();
@@ -136,13 +140,25 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable("test_db", "test_tbl");
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+
+                globalStateMgr.getLocalMetastore().getTable(CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -159,6 +175,10 @@ public class DeleteHandlerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
@@ -188,6 +208,13 @@ public class DeleteHandlerTest {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
                 minTimes = 0;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
             }
         };
     }
@@ -535,6 +562,18 @@ public class DeleteHandlerTest {
 
     @Test
     public void testRemoveOldOnReplay() throws Exception {
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(1L);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = db.getTable("test_tbl");
+            }
+        };
+
         Config.label_keep_max_second = 1;
         Config.label_keep_max_num = 10;
 

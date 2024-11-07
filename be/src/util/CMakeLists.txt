@@ -30,6 +30,7 @@ set(UTIL_FILES
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
+  cpu_util.cpp
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp

@@ -48,7 +48,7 @@ class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
 
 template <typename T>
-void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf);
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -186,6 +186,9 @@ private:
     Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
                                            std::vector<uint32_t>& filtered_indexes);
 
+    void _reset_cur_chunk(Chunk* input);
+    void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
@@ -236,6 +239,7 @@ private:
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
     std::unique_ptr<Chunk> _cur_chunk;
+    int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
     using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;

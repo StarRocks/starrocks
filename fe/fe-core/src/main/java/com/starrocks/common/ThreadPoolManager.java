@@ -79,7 +79,8 @@ public class ThreadPoolManager {
 
     private static Map<String, ThreadPoolExecutor> nameToThreadPoolMap = Maps.newConcurrentMap();
 
-    private static String[] poolMerticTypes = {"pool_size", "active_thread_num", "task_in_queue"};
+    private static final String[] POOL_METRIC_TYPES = {"pool_size", "active_thread_num", "task_in_queue",
+            "completed_task_count"};
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
@@ -91,7 +92,7 @@ public class ThreadPoolManager {
     }
 
     public static void registerThreadPoolMetric(String poolName, ThreadPoolExecutor threadPool) {
-        for (String poolMetricType : poolMerticTypes) {
+        for (String poolMetricType : POOL_METRIC_TYPES) {
             GaugeMetric<Integer> gauge =
                     new GaugeMetric<Integer>("thread_pool", MetricUnit.NOUNIT, "thread_pool statistics") {
                         @Override
@@ -104,6 +105,8 @@ public class ThreadPoolManager {
                                     return threadPool.getActiveCount();
                                 case "task_in_queue":
                                     return threadPool.getQueue().size();
+                                case "completed_task_count":
+                                    return (int) threadPool.getCompletedTaskCount();
                                 default:
                                     return 0;
                             }
@@ -234,6 +237,38 @@ public class ThreadPoolManager {
                 throw new RejectedExecutionException(msg);
             }
         }
+    }
+
+    public static void setFixedThreadPoolSize(ThreadPoolExecutor executor, int poolSize) {
+        int coreSize = executor.getCorePoolSize();
+        if (coreSize == poolSize) { // no change
+            return;
+        }
+        if (coreSize < poolSize) {
+            // increase the pool size, set the `MaximumPoolSize` first and then the `CoreSize`
+            executor.setMaximumPoolSize(poolSize);
+            executor.setCorePoolSize(poolSize);
+        } else {
+            // decrease the pool size, set `CoreSize` first and then the `MaximumPoolSize`
+            executor.setCorePoolSize(poolSize);
+            executor.setMaximumPoolSize(poolSize);
+        }
+    }
+
+    /**
+     * Calculate the number of CPU cores available on the machine.
+     *
+     * @return The number of CPU cores available.
+     */
+    public static int cpuCores() {
+        return Runtime.getRuntime().availableProcessors();
+    }
+
+    /**
+     * Use at most 3/4 to execute cpu-intensive background tasks
+     */
+    public static int cpuIntensiveThreadPoolSize() {
+        return Integer.max(2, cpuCores() * 3 / 4);
     }
 }
 

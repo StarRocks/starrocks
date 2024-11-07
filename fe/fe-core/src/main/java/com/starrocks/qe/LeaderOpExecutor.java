@@ -149,7 +149,8 @@ public class LeaderOpExecutor {
                 SetStmt stmt = (SetStmt) parsedStmt;
                 for (SetListItem var : stmt.getSetListItems()) {
                     if (var instanceof SystemVariable) {
-                        VariableMgr.setSystemVariable(ctx.getSessionVariable(), (SystemVariable) var, true);
+                        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
+                                ctx.getSessionVariable(), (SystemVariable) var, true);
                     }
                 }
             } catch (DdlException e) {
@@ -242,6 +243,7 @@ public class LeaderOpExecutor {
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);

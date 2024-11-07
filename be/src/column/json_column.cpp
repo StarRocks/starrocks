@@ -24,6 +24,7 @@
 #include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
@@ -73,6 +74,9 @@ std::string JsonColumn::debug_item(size_t idx) const {
         }
         ss << _flat_column_paths[i] << ": ";
         ss << get_flat_field(i)->debug_item(idx);
+        if (has_remain()) {
+            ss << ", remain: " << get_remain()->debug_item(idx);
+        }
         ss << "}";
         return ss.str();
     } else {
@@ -430,14 +434,12 @@ void JsonColumn::reset_column() {
     _path_to_index.clear();
 }
 
-bool JsonColumn::capacity_limit_reached(std::string* msg) const {
+Status JsonColumn::capacity_limit_reached() const {
     if (size() > Column::MAX_CAPACITY_LIMIT) {
-        if (msg != nullptr) {
-            msg->append("row count of object column exceed the limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
-        }
-        return true;
+        return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
-    return false;
+    return Status::OK();
 }
 
 void JsonColumn::check_or_die() const {
@@ -468,6 +470,28 @@ bool JsonColumn::has_flat_column(const std::string& path) const {
         }
     }
     return false;
+}
+
+bool JsonColumn::is_equallity_schema(const Column* other) const {
+    if (!other->is_json()) {
+        return false;
+    }
+    auto* other_json = down_cast<const JsonColumn*>(other);
+    if (this->is_flat_json() && other_json->is_flat_json()) {
+        if (this->_flat_column_paths.size() != other_json->_flat_column_paths.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < this->_flat_column_paths.size(); i++) {
+            if (this->_flat_column_paths[i] != other_json->_flat_column_paths[i]) {
+                return false;
+            }
+            if (this->_flat_column_types[i] != other_json->_flat_column_types[i]) {
+                return false;
+            }
+        }
+        return _flat_columns.size() == other_json->_flat_columns.size();
+    }
+    return !this->is_flat_json() && !other_json->is_flat_json();
 }
 
 std::string JsonColumn::debug_flat_paths() const {

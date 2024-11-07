@@ -39,6 +39,7 @@ import com.starrocks.sql.common.DmlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -98,7 +99,7 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                          Map<Long, TableSnapshotInfo> snapshotBaseTables,
-                                                         String start, String end, boolean force,
+                                                         MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
     public abstract Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) throws AnalysisException;
 
@@ -113,7 +114,7 @@ public abstract class MVPCTRefreshPartitioner {
      * @throws AnalysisException
      */
     public abstract Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                           String start, String end,
+                                                           MVRefreshParams mvRefreshParams,
                                                            int partitionTTLNumber,
                                                            boolean isAutoRefresh) throws AnalysisException;
 
@@ -259,7 +260,7 @@ public abstract class MVPCTRefreshPartitioner {
         }
         try {
             // check
-            Table mv = db.getTable(materializedView.getId());
+            Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }
@@ -277,7 +278,33 @@ public abstract class MVPCTRefreshPartitioner {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
         }
+    }
+
+    /**
+     * @param mvPartitionNames : the need to refresh materialized view partition names
+     * @return : the corresponding ref base table partition names to the materialized view partition names
+     */
+    protected Map<Table, Set<String>> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
+        Map<Table, Set<String>> result = new HashMap<>();
+        Map<String, Map<Table, Set<String>>> mvRefBaseTablePartitionMaps =
+                mvContext.getMvRefBaseTableIntersectedPartitions();
+        for (String mvPartitionName : mvPartitionNames) {
+            if (mvRefBaseTablePartitionMaps == null || !mvRefBaseTablePartitionMaps.containsKey(mvPartitionName)) {
+                LOG.warn("Cannot find need refreshed mv table partition from synced partition info: {}",
+                        mvPartitionName);
+                continue;
+            }
+            Map<Table, Set<String>> mvRefBaseTablePartitionMap = mvRefBaseTablePartitionMaps.get(mvPartitionName);
+            for (Map.Entry<Table, Set<String>> entry : mvRefBaseTablePartitionMap.entrySet()) {
+                Table baseTable = entry.getKey();
+                Set<String> baseTablePartitions = entry.getValue();
+                // If the result already contains the base table name, add all new partitions to the existing set
+                // If the result doesn't contain the base table name, put the new set into the map
+                result.computeIfAbsent(baseTable, k -> Sets.newHashSet()).addAll(baseTablePartitions);
+            }
+        }
+        return result;
     }
 }

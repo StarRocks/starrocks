@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -28,6 +29,7 @@ import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+import com.starrocks.connector.hudi.HudiRemoteFileIO;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -73,7 +75,8 @@ public class RemoteFileOperationsTest {
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         List<RemoteFileInfo> remoteFileInfos =
-                ops.getRemoteFiles(null, Lists.newArrayList(partitions.values()), GetRemoteFilesParams.newBuilder().build());
+                ops.getRemoteFiles(new HudiTable(), Lists.newArrayList(partitions.values()),
+                        GetRemoteFilesParams.newBuilder().build());
         Assert.assertEquals(2, remoteFileInfos.size());
         Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
@@ -332,4 +335,20 @@ public class RemoteFileOperationsTest {
         }
     }
 
+    @Test
+    public void testRemotePathKeySetFileScanContext() {
+        RemotePathKey pathKey = new RemotePathKey("hello", true);
+        Assert.assertNull(pathKey.getTableLocation());
+        Assert.assertNull(pathKey.getScanContext());
+
+        RemoteFileScanContext scanContext = null;
+        scanContext = HudiRemoteFileIO.getScanContext(pathKey, "tableLocation");
+        Assert.assertNotNull(scanContext);
+        pathKey.setScanContext(scanContext);
+        Assert.assertEquals(pathKey.getTableLocation(), "tableLocation");
+        Assert.assertTrue(pathKey.getScanContext() == scanContext);
+
+        RemoteFileScanContext scanContext1 = HudiRemoteFileIO.getScanContext(pathKey, "null");
+        Assert.assertTrue(pathKey.getScanContext() == scanContext1);
+    }
 }

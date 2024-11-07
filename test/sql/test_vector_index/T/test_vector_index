@@ -22,7 +22,7 @@ ALTER TABLE t_test_vector_table drop index index_vector2;
 
 DROP TABLE t_test_vector_table;
 
--- name: test_write_vector_index
+-- name: test_vector_index
 CREATE TABLE `t_test_vector_table` (
   `id` bigint(20) NOT NULL COMMENT "",
   `vector1` ARRAY<FLOAT> NOT NULL COMMENT "",
@@ -38,6 +38,8 @@ PROPERTIES (
 );
 
 insert into t_test_vector_table values(1, [1,2,3,4,5]);
-insert into t_test_vector_table values(2, [0,0]);
+insert into t_test_vector_table values(2, [4,5,6,7,8]);
+select id, approx_l2_distance([1,1,1,1,1], vector1) from t_test_vector_table order by approx_l2_distance([1,1,1,1,1], vector1) limit 1;
+select * from (select id, approx_l2_distance([1,1,1,1,1], vector1) score from t_test_vector_table) a where score < 40 order by score limit 1;
 
 DROP TABLE t_test_vector_table;

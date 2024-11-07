@@ -58,4 +58,10 @@ public class PartitionStatisticsTest {
         statistics.setCompactionScoreAndAdjustPunishFactor(q4);
         assertEquals(1, statistics.getPunishFactor());
     }
+
+    @Test
+    public void testGetCompactionVersion() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        assertEquals(0, statistics.getCompactionVersion().getVersion());
+    }
 }

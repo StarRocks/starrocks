@@ -40,6 +40,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
@@ -331,6 +332,10 @@ public class FragmentNormalizer {
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
             cacheParam.setKeys_type(keysType.toThrift());
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
+            if (RunMode.isSharedDataMode()) {
+                cacheParam.setIs_lake(true);
+            }
+
             fragment.setCacheParam(cacheParam);
             return true;
         } catch (TException | NoSuchAlgorithmException e) {
@@ -720,7 +725,7 @@ public class FragmentNormalizer {
         // Get leftmost path
         List<PlanNode> leftNodesTopDown = Lists.newArrayList();
         for (PlanNode currNode = root; currNode != null && currNode.getFragment() == fragment;
-             currNode = currNode.getChild(0)) {
+                currNode = currNode.getChild(0)) {
             leftNodesTopDown.add(currNode);
         }
 
@@ -774,15 +779,17 @@ public class FragmentNormalizer {
         // Not cacheable unless alien GRF(s) take effects on this PlanFragment.
         // The alien GRF(s) mean the GRF(S) that not created by PlanNodes of the subtree rooted at
         // the PlanFragment.planRoot.
+
         Set<Integer> grfBuilders =
                 fragment.getProbeRuntimeFilters().values().stream().filter(RuntimeFilterDescription::isHasRemoteTargets)
                         .map(RuntimeFilterDescription::getBuildPlanNodeId).collect(Collectors.toSet());
         if (!grfBuilders.isEmpty()) {
             List<PlanFragment> rightSiblings = Lists.newArrayList();
             collectRightSiblingFragments(root, rightSiblings, Sets.newHashSet());
-            Set<Integer> acceptableGrfBuilders = rightSiblings.stream().flatMap(
-                    frag -> frag.getBuildRuntimeFilters().values().stream().map(
-                            RuntimeFilterDescription::getBuildPlanNodeId)).collect(Collectors.toSet());
+            Set<Integer> acceptableGrfBuilders = rightSiblings.stream()
+                    .flatMap(frag -> frag.getBuildRuntimeFilters().values().stream())
+                    .map(RuntimeFilterDescription::getBuildPlanNodeId)
+                    .collect(Collectors.toSet());
             boolean hasAlienGrf = !Sets.difference(grfBuilders, acceptableGrfBuilders).isEmpty();
             if (hasAlienGrf) {
                 return false;

@@ -75,13 +75,24 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay, boolean allowExists) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+            throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        if (allowExists && createIfNotExists) {
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            throw new UserException(
+                    "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
+        }
         if (!isReplay) {
             for (Function existFunc : existFuncs) {
-                if (!allowExists && function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
-                    throw new UserException("function already exists");
+                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    if (createIfNotExists) {
+                        LOG.info("create function [{}] which already exists", functionName);
+                        return;
+                    } else if (!allowExists) {
+                        throw new UserException("function already exists");
+                    }
                 }
             }
             assignIdToUserDefinedFunction(function);
@@ -117,23 +128,27 @@ public class GlobalFunctionMgr {
         function.setFunctionId(-functionId);
     }
 
-    public synchronized void userAddFunction(Function f, boolean allowExists) throws UserException {
-        addFunction(f, false, allowExists);
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws UserException {
+        addFunction(f, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
-            addFunction(f, true, false);
+            addFunction(f, true, false, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
     }
 
-    private void dropFunction(FunctionSearchDesc function) throws UserException {
+    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         boolean isFound = false;
@@ -146,6 +161,10 @@ public class GlobalFunctionMgr {
             }
         }
         if (!isFound) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
             throw new UserException("Unknown function, function=" + function.toString());
         }
         ImmutableList<Function> newFunctions = builder.build();
@@ -156,14 +175,14 @@ public class GlobalFunctionMgr {
         }
     }
 
-    public synchronized void userDropFunction(FunctionSearchDesc f) throws UserException {
-        dropFunction(f);
+    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws UserException {
+        dropFunction(f, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(f);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc f) {
         try {
-            dropFunction(f);
+            dropFunction(f, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
@@ -183,11 +202,7 @@ public class GlobalFunctionMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            Function function = reader.readJson(Function.class);
-            replayAddFunction(function);
-        }
+        reader.readCollection(Function.class, this::replayAddFunction);
     }
 }
 

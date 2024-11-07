@@ -250,6 +250,10 @@ struct TCompactionReq {
     2: optional bool is_base_compaction
 }
 
+struct TCompactionControlReq {
+    1: optional map<Types.TTableId, i64> table_to_disable_deadline
+}
+
 struct TUpdateSchemaReq {
     1: optional i64 index_id
     2: optional i64 schema_id
@@ -400,6 +404,7 @@ struct TRemoteSnapshotRequest {
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+     14: optional binary encryption_meta
  }
 
 enum TTabletMetaType {
@@ -413,7 +418,9 @@ enum TTabletMetaType {
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
     STORAGE_TYPE,
-    MUTABLE_BUCKET_NUM
+    MUTABLE_BUCKET_NUM,
+    ENABLE_LOAD_PROFILE,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES
 }
 
 struct TTabletMetaInfo {
@@ -477,6 +484,7 @@ struct TAgentTaskRequest {
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
+    32: optional TCompactionControlReq compaction_control_req
 }
 
 struct TAgentResult {

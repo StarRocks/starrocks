@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['fuzai', 'ziyuan'] 
 ---
 
 # 中间结果落盘
@@ -19,6 +20,7 @@ displayed_sidebar: "Chinese"
 - 聚合算子
 - 排序算子
 - Hash join（LEFT JOIN、RIGHT JOIN、FULL JOIN、OUTER JOIN、SEMI JOIN 以及 INNER JOIN）算子
+- CTE 算子（自 v3.3.4 起支持）
 
 ## 开启中间结果落盘
 
@@ -61,7 +63,7 @@ displayed_sidebar: "Chinese"
 自 v3.3.0 起，StarRocks 支持将中间结果落盘至对象存储。
 
 :::tip
-在启用将对象存储落盘功能之前，您必须创建一个存储卷来指定您想要使用的对象存储。有关创建存储卷的详细说明，请参阅 [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md)。
+在启用将对象存储落盘功能之前，您必须创建一个存储卷来指定您想要使用的对象存储。有关创建存储卷的详细说明，请参阅 [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
 :::
 
 在上一步中开启落盘之后，您可以进一步设置以下系统变量，以允许将中间结果落盘至对象存储：

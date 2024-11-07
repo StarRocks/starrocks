@@ -525,6 +525,9 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
+                if (p.key.find('.') != std::string::npos) {
+                    in_flat = false;
+                }
                 if (in_flat) {
                     flat_path += "." + p.key;
                     if (p.array_selector->type != NONE) {
@@ -536,8 +539,6 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                 state->real_path.paths.emplace_back(p);
             }
 
-            state->init_flat = true;
-            state->flat_path = flat_path.substr(1);
             if (in_flat) {
                 state->is_partial_match = false;
                 state->flat_column_type = TargetType;
@@ -545,6 +546,8 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                 state->is_partial_match = true;
                 state->flat_column_type = TYPE_JSON;
             }
+            state->flat_path = flat_path.substr(1);
+            state->init_flat = true;
         });
     }
     std::vector<std::string> dst_path{state->flat_path};

@@ -21,6 +21,7 @@
 #include <queue>
 #include <set>
 #include <unordered_set>
+#include <utility>
 
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -69,11 +70,11 @@ public:
     using YieldFunction = std::function<void(ScanTask&&)>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
-    explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
-    ScanTask(WorkGroup* workgroup, WorkFunction work_function)
-            : workgroup(workgroup), work_function(std::move(work_function)) {}
-    ScanTask(WorkGroup* workgroup, WorkFunction work_function, YieldFunction yield_function)
-            : workgroup(workgroup),
+    explicit ScanTask(WorkFunction work_function) : ScanTask(nullptr, std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
+            : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function, YieldFunction yield_function)
+            : workgroup(std::move(workgroup)),
               work_function(std::move(work_function)),
               yield_function(std::move(yield_function)) {}
     ~ScanTask() = default;
@@ -103,7 +104,7 @@ public:
     const YieldContext& get_work_context() const { return work_context; }
 
 public:
-    WorkGroup* workgroup;
+    WorkGroupPtr workgroup;
     YieldContext work_context;
     WorkFunction work_function;
     YieldFunction yield_function;
@@ -173,7 +174,7 @@ public:
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
-    WorkGroupScanSchedEntity* _take_next_wg() const;
+    WorkGroupScanSchedEntity* _pick_next_wg() const;
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
     void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);
@@ -198,6 +199,7 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::condition_variable _cv_for_borrowed_cpus;
     bool _is_closed = false;
 
     // Contains the workgroups which include the tasks ready to be run.

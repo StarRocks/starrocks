@@ -38,8 +38,14 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -60,6 +66,7 @@ import java.util.stream.Collectors;
 public class FunctionAnalyzer {
     public static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
     private static final Set<String> SUPPORTED_TGT_TYPES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+
     static {
         SUPPORTED_TGT_TYPES.addAll(Lists.newArrayList("HLL_8", "HLL_6", "HLL_4"));
     }
@@ -145,12 +152,43 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
         }
+        Function fn = functionCallExpr.getFn();
+        if (fn instanceof AggStateCombinator) {
+            // analyze `_state` combinator function by using its arg function
+            FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
+        } else if (fn instanceof AggStateUnionCombinator) {
+            AggStateUnionCombinator unionCombinator = (AggStateUnionCombinator) fn;
+            if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as argument type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+            if (unionCombinator.getReturnType().isWildcardDecimal()) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+        } else if (fn instanceof AggStateMergeCombinator) {
+            AggStateMergeCombinator mergeCombinator = (AggStateMergeCombinator) fn;
+            if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as argument type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+            if (mergeCombinator.getReturnType().isWildcardDecimal()) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
         FunctionName fnName = functionCallExpr.getFnName();
         FunctionParams fnParams = functionCallExpr.getParams();
+        analyzeBuiltinAggFunction(fnName, fnParams, functionCallExpr);
+    }
 
+    private static void analyzeBuiltinAggFunction(FunctionName fnName,
+                                                  FunctionParams fnParams,
+                                                  FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + functionCallExpr.toSql(),
                     functionCallExpr.getPos());
@@ -396,17 +434,14 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         "percentile_approx requires the first parameter's type is numeric type");
             }
-            if (!functionCallExpr.getChild(1).getType().isNumericType() ||
-                    !functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(
-                        "percentile_approx requires the second parameter's type is numeric constant type");
+            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+                throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
             }
 
             if (functionCallExpr.getChildren().size() == 3) {
-                if (!functionCallExpr.getChild(2).getType().isNumericType() ||
-                        !functionCallExpr.getChild(2).isConstant()) {
+                if (!functionCallExpr.getChild(2).getType().isNumericType()) {
                     throw new SemanticException(
-                            "percentile_approx requires the third parameter's type is numeric constant type");
+                            "percentile_approx requires the third parameter's type is numeric type");
                 }
             }
         }
@@ -519,6 +554,33 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function 's args must be column");
             }
         }
+
+        if (fnName.getFunction().equals(FunctionSet.MANN_WHITNEY_U_TEST)) {
+            if (functionCallExpr.getChildren().size() >= 3) {
+                if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
+                    throw new SemanticException(fnName + "'s third parameter should be a string literal.");
+                }
+                String alternative = ((StringLiteral) functionCallExpr.getChild(2)).getStringValue();
+                if (!(alternative.equals("two-sided") || alternative.equals("greater") || alternative.equals("less"))) {
+                    throw new SemanticException(
+                            fnName + "'s third parameter should be one of ['two-sided', 'greater', 'less'], but get '" +
+                                    alternative + "'.");
+                }
+            }
+            if (functionCallExpr.getChildren().size() >= 4) {
+                long continuityCorrection;
+                if (functionCallExpr.getChild(3) instanceof IntLiteral) {
+                    continuityCorrection = ((IntLiteral) functionCallExpr.getChild(3)).getLongValue();
+                } else if (functionCallExpr.getChild(3) instanceof LargeIntLiteral) {
+                    continuityCorrection = ((LargeIntLiteral) functionCallExpr.getChild(3)).getLongValue();
+                } else {
+                    throw new SemanticException(fnName + "'s fourth parameter should be a non-negative int literal.");
+                }
+                if (continuityCorrection < 0) {
+                    throw new SemanticException(fnName + "'s fourth parameter should be a non-negative int literal.");
+                }
+            }
+        }
     }
 
     private static Optional<Long> extractIntegerValue(Expr expr) {
@@ -535,8 +597,9 @@ public class FunctionAnalyzer {
 
     /**
      * Get function by function call expression and argument types.
-     * @param session current connect context
-     * @param node function call expression
+     *
+     * @param session       current connect context
+     * @param node          function call expression
      * @param argumentTypes argument types
      * @return function if it's found, otherwise return null
      */
@@ -586,9 +649,10 @@ public class FunctionAnalyzer {
 
     /**
      * Get function by function call expression and argument types.
-     * @param session current connect context
-     * @param node function call expression
-     * @param argumentTypes argument types
+     *
+     * @param session          current connect context
+     * @param node             function call expression
+     * @param argumentTypes    argument types
      * @param newArgumentTypes new argument types
      * @return function if it's found, otherwise return null
      */
@@ -597,7 +661,7 @@ public class FunctionAnalyzer {
                                                     Type[] argumentTypes,
                                                     List<Type> newArgumentTypes) {
         // get fn from known function variants
-        Function fn = getAnalyzedFunction(session, node, argumentTypes, newArgumentTypes);
+        Function fn = getAdjustedAnalyzedFunction(session, node, argumentTypes, newArgumentTypes);
         if (fn != null) {
             return fn;
         }
@@ -607,7 +671,7 @@ public class FunctionAnalyzer {
         String fnName = node.getFnName().getFunction();
         FunctionParams params = node.getParams();
         Boolean[] isArgumentConstants = node.getChildren().stream().map(Expr::isConstant).toArray(Boolean[]::new);
-        fn = getAnalyzedAggregateFunction(fnName, params, argumentTypes, isArgumentConstants);
+        fn = getAdjustedAnalyzedAggregateFunction(session, fnName, params, argumentTypes, isArgumentConstants, node.getPos());
         if (fn != null) {
             return fn;
         }
@@ -631,16 +695,17 @@ public class FunctionAnalyzer {
     /**
      * Get function's variant from known scalar functions by function name and argument types.
      * NOTE: Function's argument types may be changed in this method.
-     * @param session  connect context
-     * @param node function call expr
-     * @param argumentTypes original argument types
+     *
+     * @param session          connect context
+     * @param node             function call expr
+     * @param argumentTypes    original argument types
      * @param newArgumentTypes new argument types
      * @return function's variant
      */
-    private static Function getAnalyzedFunction(ConnectContext session,
-                                                FunctionCallExpr node,
-                                                Type[] argumentTypes,
-                                                List<Type> newArgumentTypes) {
+    private static Function getAdjustedAnalyzedFunction(ConnectContext session,
+                                                        FunctionCallExpr node,
+                                                        Type[] argumentTypes,
+                                                        List<Type> newArgumentTypes) {
         Function fn = null;
         String fnName = node.getFnName().getFunction();
         // throw exception direct
@@ -713,13 +778,32 @@ public class FunctionAnalyzer {
                     Type toBitmapArg0Type = toBitmapArg0.getType();
                     if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
                             || toBitmapArg0Type.isLargeIntType()) {
-                        argumentTypes = new Type[] {toBitmapArg0Type};
+                        argumentTypes = new Type[] { toBitmapArg0Type };
                         node.setChild(0, toBitmapArg0);
                         node.resetFnName("", FunctionSet.BITMAP_AGG);
                         node.getParams().setExprs(Lists.newArrayList(toBitmapArg0));
                         fn = Expr.getBuiltinFunction(FunctionSet.BITMAP_AGG, argumentTypes,
                                 Function.CompareMode.IS_IDENTICAL);
                     }
+                }
+            }
+        } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
+            SessionVariableConstants.CountDistinctImplMode countDistinctImplementation =
+                    session.getSessionVariable().getCountDistinctImplementation();
+            if (countDistinctImplementation != null) {
+                switch (countDistinctImplementation) {
+                    case NDV:
+                        node.resetFnName("", FunctionSet.NDV);
+                        node.getParams().setIsDistinct(false);
+                        fn = Expr.getBuiltinFunction(FunctionSet.NDV, argumentTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        break;
+                    case MULTI_COUNT_DISTINCT:
+                        node.resetFnName("", FunctionSet.MULTI_DISTINCT_COUNT);
+                        node.getParams().setIsDistinct(false);
+                        fn = Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, argumentTypes,
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                        break;
                 }
             }
         }
@@ -733,12 +817,12 @@ public class FunctionAnalyzer {
      * If is format is constant and don't contains time part, return date type, to compatible with mysql.
      * In fact we don't want to support str_to_date return date like mysql, reason:
      * 1. The return type of FE/BE str_to_date function signature is datetime, return date
-     *    let type different, it's will throw unpredictable error
+     * let type different, it's will throw unpredictable error
      * 2. Support return date and datetime at same time in one function is complicated.
      * 3. The meaning of the function is confusing. In mysql, will return date if format is a constant
-     *    string and it's not contains "%H/%M/%S" pattern, but it's a trick logic, if format is a variable
-     *    expression, like: str_to_date(col1, col2), and the col2 is '%Y%m%d', the result always be
-     *    datetime.
+     * string and it's not contains "%H/%M/%S" pattern, but it's a trick logic, if format is a variable
+     * expression, like: str_to_date(col1, col2), and the col2 is '%Y%m%d', the result always be
+     * datetime.
      */
     private static Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
         Function fn = Expr.getBuiltinFunction(node.getFnName().getFunction(),
@@ -796,18 +880,37 @@ public class FunctionAnalyzer {
                 Function.CompareMode.IS_SUPERTYPE_OF);
     }
 
+    public static Pair<Type[], Type> getArrayAggGroupConcatIntermediateType(String fnName,
+                                                                            Type[] argumentTypes,
+                                                                            List<Boolean> isAscOrder) {
+        Type[] argsTypes = new Type[argumentTypes.length];
+        for (int i = 0; i < argumentTypes.length; ++i) {
+            argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+            if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argumentTypes.length - isAscOrder.size()) {
+                argsTypes[i] = Type.VARCHAR;
+            }
+        }
+        ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
+        for (Type t : argsTypes) {
+            structTypes.add(new ArrayType(t));
+        }
+        return Pair.create(argsTypes, new StructType(structTypes));
+    }
     /**
      * Get and normalize function to make its argument/result type correct.
-     * @param fnName function name
-     * @param params function's params(eg: is distinct or not, order by elements)
-     * @param argumentTypes function's argument types
+     *
+     * @param fnName              function name
+     * @param params              function's params(eg: is distinct or not, order by elements)
+     * @param argumentTypes       function's argument types
      * @param argumentIsConstants function's argument is constant or not
      * @return normalized function
      */
-    private static Function getAnalyzedAggregateFunction(String fnName,
-                                                         FunctionParams params,
-                                                         Type[] argumentTypes,
-                                                         Boolean[] argumentIsConstants) {
+    private static Function getAdjustedAnalyzedAggregateFunction(ConnectContext session,
+                                                                 String fnName,
+                                                                 FunctionParams params,
+                                                                 Type[] argumentTypes,
+                                                                 Boolean[] argumentIsConstants,
+                                                                 NodePosition pos) {
         Preconditions.checkArgument(fnName != null);
         Preconditions.checkArgument(argumentTypes != null);
         Preconditions.checkArgument(argumentIsConstants != null);
@@ -818,7 +921,7 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
+            fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -839,19 +942,11 @@ public class FunctionAnalyzer {
                     nullsFirst.add(elem.getNullsFirstParam());
                 }
             }
-            Type[] argsTypes = new Type[argumentTypes.length];
-            for (int i = 0; i < argumentTypes.length; ++i) {
-                argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
-                if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argSize - isAscOrder.size()) {
-                    argsTypes[i] = Type.VARCHAR;
-                }
-            }
+            Pair<Type[], Type> argsAndIntermediateTypes =
+                    getArrayAggGroupConcatIntermediateType(fnName, argumentTypes, isAscOrder);
+            Type[] argsTypes = argsAndIntermediateTypes.first;
             fn.setArgsType(argsTypes); // as accepting various types
-            ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
-            for (Type t : argsTypes) {
-                structTypes.add(new ArrayType(t));
-            }
-            ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
+            ((AggregateFunction) fn).setIntermediateType(argsAndIntermediateTypes.second);
             ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
             ((AggregateFunction) fn).setNullsFirst(nullsFirst);
             boolean outputConst = true;
@@ -888,6 +983,14 @@ public class FunctionAnalyzer {
                 newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
                 fn = newFn;
             }
+        } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
+                || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
+                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+            Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (func == null) {
+                return null;
+            }
+            fn = AggStateUtils.getAnalyzedCombinatorFunction(session, func, params, argumentTypes, argumentIsConstants, pos);
         }
         return fn;
     }
@@ -909,7 +1012,7 @@ public class FunctionAnalyzer {
                                                         Type[] argumentTypes,
                                                         Boolean[] argumentIsConstants,
                                                         NodePosition pos) {
-        Function fn = getAnalyzedAggregateFunction(fnName, params, argumentTypes, argumentIsConstants);
+        Function fn = getAdjustedAnalyzedAggregateFunction(session, fnName, params, argumentTypes, argumentIsConstants, pos);
         if (fn != null) {
             return fn;
         }
@@ -943,7 +1046,7 @@ public class FunctionAnalyzer {
         } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn instanceof AggregateFunction) {
-                throw new SemanticException("Time Type can not used in" + fnName + " function", pos);
+                throw new SemanticException("Time Type can not used in " + fnName + " function", pos);
             }
         } else {
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

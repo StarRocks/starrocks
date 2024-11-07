@@ -123,7 +123,7 @@ public class OlapDeleteJob extends DeleteJob {
         List<Predicate> conditions = getDeleteConditions();
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num
@@ -298,7 +298,7 @@ public class OlapDeleteJob extends DeleteJob {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }

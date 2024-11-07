@@ -51,13 +51,47 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value, u
             _max_rss_rowid = max_rss_rowid;
             _index_value_vers.emplace_front(version, index_value);
         } else if ((version > _index_value_vers.front().first) ||
-                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid)) {
+                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid) ||
+                   (version == _index_value_vers.front().first && max_rss_rowid == _max_rss_rowid &&
+                    index_value.get_value() == NullIndexValue)) {
             // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
-            // Consider the following two scenarios:
+            // Consider the following 3 scenarios:
             // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
             //    in Rowset.
+            //   | ------- ver1 --------- | + | -------- ver2 ----------|
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
+            //
+            //   =
+            //   | ------- ver2 --------- |
+            //   | k1 k2 k3(2) k4         |
+            //   k3 in ver2 will replace k3 in ver1, because it has a larger version.
+            //
             // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
             //    decide their order.
+            //   | ------- ver1 --------- | + | -------- ver1 ----------|
+            //   | k1 k2 k3(1)            |   | k3(2) k4                |
+            //   | max_rss_rowid = 2      |   | max_rss_rowid = 4       |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2 k3(2) k4         |
+            //   | max_rss_rowid = 4      |
+            //
+            //   k3 with larger max_rss_rowid will replace previous one, because max_rss_rowid is incremental,
+            //   larger max_rss_rowid means it was generated later.
+            //
+            // 3. Same keys are from same Rowset, and they have same version. And they also have same `max_rss_rowid`
+            //    because one of them is delete flag.
+            //   | ------- ver1 --------- | + | -------- ver1 ----------|
+            //   | k1 k2 k3 k4(del)       |   | k3(del)      k4(del)    |
+            //   | max_rss_rowid = MAX    |   | max_rss_rowid = MAX     |
+            //   =
+            //   | ------- ver1 --------- |
+            //   | k1 k2                  |
+            //   | max_rss_rowid = MAX    |
+            //
+            //   Because we use UINT32_TMAX as delete flag key's rowid, so two sst will have same
+            //   max_rss_rowid, when the second one is only contains delete flag keys.
+            //   k3 with delete flag will replace previous one.
             _max_rss_rowid = max_rss_rowid;
             std::list<std::pair<int64_t, IndexValue>> t;
             t.emplace_front(version, index_value);
@@ -531,8 +565,14 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     std::unique_ptr<Column> pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
-    for (const auto& del : rowset->metadata().del_files()) {
-        ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.name())));
+    for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
+        const auto& del = rowset->metadata().del_files(del_idx);
+        RandomAccessFileOptions ropts;
+        if (!del.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
+        }
+        ASSIGN_OR_RETURN(auto read_file,
+                         fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
         // serialize to column
         auto pkc = pk_column->clone();
@@ -732,6 +772,11 @@ size_t LakePersistentIndex::memory_usage() const {
     }
     if (_immutable_memtable != nullptr) {
         mem_usage += _immutable_memtable->memory_usage();
+    }
+    for (const auto& sst_ptr : _sstables) {
+        if (sst_ptr != nullptr) {
+            mem_usage += sst_ptr->memory_usage();
+        }
     }
     return mem_usage;
 }

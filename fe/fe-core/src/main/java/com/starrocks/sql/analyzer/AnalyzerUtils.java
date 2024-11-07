@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
+import com.google.common.base.Predicates;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
@@ -70,6 +71,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -207,7 +209,7 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             return null;
         }
@@ -384,7 +386,7 @@ public class AnalyzerUtils {
                 return;
             }
 
-            Database db = session.getGlobalStateMgr().getDb(dbName);
+            Database db = session.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 return;
             }
@@ -711,6 +713,12 @@ public class AnalyzerUtils {
         return allTableAndViewRelations;
     }
 
+    public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
+        List<FileTableFunctionRelation> fileTableFunctionRelations = Lists.newArrayList();
+        new AnalyzerUtils.FileTableFunctionRelationsCollector(fileTableFunctionRelations).visit(statementBase);
+        return fileTableFunctionRelations;
+    }
+
     /**
      * CopySafe:
      * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
@@ -726,6 +734,15 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = new HashMap<>();
         new AnalyzerUtils.TableCollector(tables).visit(statementBase);
         return tables.values().stream().anyMatch(t -> t.isTemporaryTable());
+    }
+
+    /**
+     * Whether this statement access external tables
+     */
+    public static boolean hasExternalTables(StatementBase statementBase) {
+        List<Table> tables = Lists.newArrayList();
+        collectSpecifyExternalTables(statementBase, tables, Predicates.alwaysTrue());
+        return !tables.isEmpty();
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
@@ -929,6 +946,7 @@ public class AnalyzerUtils {
         }
     }
 
+    // The conception is not very clear, be careful when use it.
     private static class ExternalTableCollector extends TableCollector {
         List<Table> tables;
         Predicate<Table> predicate;
@@ -941,7 +959,8 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            if (predicate.test(table)) {
+            boolean internal = table.isNativeTableOrMaterializedView() || table.isOlapView();
+            if (!internal && predicate.test(table)) {
                 tables.add(table);
             }
             return null;
@@ -1089,12 +1108,27 @@ public class AnalyzerUtils {
         }
     }
 
+    private static class FileTableFunctionRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<FileTableFunctionRelation> fileTableFunctionRelations;
+
+        public FileTableFunctionRelationsCollector(List<FileTableFunctionRelation> fileTableFunctionRelations) {
+            this.fileTableFunctionRelations = fileTableFunctionRelations;
+        }
+
+        @Override
+        public Void visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            fileTableFunctionRelations.add(node);
+            return null;
+        }
+    }
+
     public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null && !db.isSystemDatabase()) {
-                Table table = db.getTable(tableId);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
@@ -1113,9 +1147,9 @@ public class AnalyzerUtils {
     }
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(id);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
         if (db != null && !db.isSystemDatabase()) {
-            for (Table table : db.getTables()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
                 }
@@ -1299,8 +1333,9 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 50) {
-                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
+                if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
+                    partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
+                            + "_" + Integer.toHexString(partitionName.hashCode());
                 }
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
@@ -1505,7 +1540,8 @@ public class AnalyzerUtils {
         } else if (type.isStructType()) {
             ArrayList<StructField> newFields = Lists.newArrayList();
             for (StructField sf : ((StructType) type).getFields()) {
-                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+                newFields.add(new StructField(sf.getName(), sf.getFieldId(),
+                        replaceNullType2Boolean(sf.getType()), sf.getComment()));
             }
             return new StructType(newFields);
         }

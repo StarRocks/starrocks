@@ -81,6 +81,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
@@ -176,12 +177,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table does not exist. name: " + tableName);
         }
@@ -190,7 +191,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -212,7 +213,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -722,7 +723,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             return infos;
         }
@@ -816,11 +817,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return;
         }
@@ -891,14 +892,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            long dbId = reader.readLong();
-            List<MultiDeleteInfo> multiDeleteInfos =
-                    (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
-                    }.getType());
-            dbToDeleteInfos.put(dbId, multiDeleteInfos);
-        }
+        reader.readMap(Long.class, new TypeToken<List<MultiDeleteInfo>>() {}.getType(),
+                dbToDeleteInfos::put);
     }
 
     @Override
@@ -911,4 +906,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 "DeleteJob", (long) idToDeleteJob.size());
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = dbToDeleteInfos.values()
+                .stream()
+                .filter(infos -> !infos.isEmpty())
+                .map(infos -> infos.stream().findAny().get())
+                .collect(Collectors.toList());
+        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
+        return Lists.newArrayList(Pair.create(samples, size));
+    }
 }

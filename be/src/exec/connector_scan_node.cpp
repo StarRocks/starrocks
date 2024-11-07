@@ -391,7 +391,7 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     const TQueryOptions& query_options = runtime_state()->query_options();
     if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
         config::enable_streaming_load_thread_pool) {
-        VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        VLOG(2) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
@@ -448,7 +448,7 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
                 return true;
             }
         }
-        VLOG(1) << "Failed to submit scanner for streaming load with block mode, "
+        VLOG(2) << "Failed to submit scanner for streaming load with block mode, "
                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
                 << ", last status: " << block_status;
         // always return true for blockable which is same as that in _submit_scanner
@@ -690,7 +690,6 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    _data_source_provider->peek_scan_ranges(scan_ranges);
     return _data_source_provider->convert_scan_range_to_morsel_queue(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);

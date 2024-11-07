@@ -49,6 +49,14 @@ enum KeysType {
     PRIMARY_KEYS = 10;
 }
 
+message AggStateDescPB {
+    optional string agg_func_name = 1;
+    repeated PTypeDesc arg_types = 2;
+    optional PTypeDesc ret_type = 3;
+    optional bool is_result_nullable = 4;
+    optional int32 func_version = 5;
+}
+
 message ColumnPB {
     required int32 unique_id = 1;
     optional string name = 2;
@@ -68,6 +76,8 @@ message ColumnPB {
     optional bool visible = 16 [default=true];
     repeated ColumnPB children_columns = 17;
     optional bool is_auto_increment = 18;
+    // agg_state type
+    optional AggStateDescPB agg_state_desc = 19;
 }
 
 message TabletSchemaPB {

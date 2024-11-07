@@ -89,7 +89,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     // pulsar properties, property prefix will be mapped to pulsar custom parameters, which can be extended in the future
     @SerializedName("cpt")
     private Map<String, String> customProperties = Maps.newHashMap();
-    private Map<String, String> convertedCustomProperties = Maps.newHashMap();
+    private final Map<String, String> convertedCustomProperties = Maps.newHashMap();
 
     public static final String POSITION_EARLIEST = "POSITION_EARLIEST"; // 1
     public static final String POSITION_LATEST = "POSITION_LATEST"; // 0
@@ -101,6 +101,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     public PulsarRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.PULSAR);
+        this.progress = new PulsarProgress();
+        this.timestampProgress = new PulsarProgress();
     }
 
     public PulsarRoutineLoadJob(Long id, String name, long dbId, long tableId,
@@ -110,6 +112,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         this.topic = topic;
         this.subscription = subscription;
         this.progress = new PulsarProgress();
+        this.timestampProgress = new PulsarProgress();
     }
 
     public String getTopic() {
@@ -262,8 +265,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // For compatible reason, the default behavior of empty load is still returning
         // "No partitions have data available for loading" and abort transaction.
         // In this situation, we also need update commit info.
-        if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
+        if (txnStatusChangeReason == TransactionState.TxnStatusChangeReason.NO_PARTITIONS) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
             // If no data is imported, the error "No partitions have data available for loading" may only be returned.
@@ -388,17 +390,17 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected String getStatistic() {
         Map<String, Object> summary = Maps.newHashMap();
-        summary.put("totalRows", Long.valueOf(totalRows));
-        summary.put("loadedRows", Long.valueOf(totalRows - errorRows - unselectedRows));
-        summary.put("errorRows", Long.valueOf(errorRows));
-        summary.put("unselectedRows", Long.valueOf(unselectedRows));
-        summary.put("receivedBytes", Long.valueOf(receivedBytes));
-        summary.put("taskExecuteTimeMs", Long.valueOf(totalTaskExcutionTimeMs));
-        summary.put("receivedBytesRate", Long.valueOf(receivedBytes / totalTaskExcutionTimeMs * 1000));
+        summary.put("totalRows", totalRows);
+        summary.put("loadedRows", totalRows - errorRows - unselectedRows);
+        summary.put("errorRows", errorRows);
+        summary.put("unselectedRows", unselectedRows);
+        summary.put("receivedBytes", receivedBytes);
+        summary.put("taskExecuteTimeMs", totalTaskExcutionTimeMs);
+        summary.put("receivedBytesRate", receivedBytes * 1000 / totalTaskExcutionTimeMs);
         summary.put("loadRowsRate",
-                Long.valueOf((totalRows - errorRows - unselectedRows) / totalTaskExcutionTimeMs * 1000));
-        summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
-        summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
+                (totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs);
+        summary.put("committedTaskNum", committedTaskNum);
+        summary.put("abortedTaskNum", abortedTaskNum);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
@@ -412,21 +414,21 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {
         // check db and table
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDBName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDBName());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
         long tableId = -1L;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
-            Table table = db.getTable(stmt.getTableName());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
             tableId = table.getId();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         // init pulsar routine load job

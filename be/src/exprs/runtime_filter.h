@@ -894,7 +894,7 @@ private:
             if (const_column->only_null()) {
                 _selection[0] = _has_null;
             } else {
-                const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
+                const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
                 _evaluate_min_max(input_data, _selection, 1);
                 if constexpr (can_use_bf) {
                     _rf_test_data<multi_partition>(_selection, input_data, _hash_values, 0);
@@ -904,7 +904,7 @@ private:
             memset(_selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            const auto& input_data = GetContainer<Type>().get_data(nullable_column->data_column());
+            const auto& input_data = GetContainer<Type>::get_data(nullable_column->data_column());
             _evaluate_min_max(input_data, _selection, size);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -925,7 +925,7 @@ private:
                 }
             }
         } else {
-            const auto& input_data = GetContainer<Type>().get_data(input_column);
+            const auto& input_data = GetContainer<Type>::get_data(input_column);
             _evaluate_min_max(input_data, _selection, size);
             if constexpr (can_use_bf) {
                 for (int i = 0; i < size; ++i) {

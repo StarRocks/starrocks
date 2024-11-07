@@ -44,6 +44,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
@@ -134,7 +135,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public ExportJob getExportJob(String dbName, UUID queryId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
         ExportJob matchedJob = null;
@@ -234,7 +235,7 @@ public class ExportMgr implements MemoryTrackable {
                 TableName tableName = job.getTableName();
                 if (tableName == null || tableName.getTbl().equals("DUMMY")) {
                     // forward compatibility, no table name is saved before
-                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
                     if (db == null) {
                         continue;
                     }
@@ -424,21 +425,25 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
         long currentTimeMs = System.currentTimeMillis();
-        for (int i = 0; i < size; i++) {
-            ExportJob job = reader.readJson(ExportJob.class);
+
+        reader.readCollection(ExportJob.class, job -> {
             // discard expired job right away
             if (isJobExpired(job, currentTimeMs)) {
                 LOG.info("discard expired job: {}", job);
-                continue;
+                return;
             }
             unprotectAddJob(job);
-        }
+        });
     }
 
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ExportJob", (long) idToJob.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return Lists.newArrayList(Pair.create(new ArrayList<>(idToJob.values()), (long) idToJob.size()));
     }
 }

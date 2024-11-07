@@ -42,7 +42,7 @@ public abstract class Tracer {
     public void record(String name, String value) {
     }
 
-    public void count(String name, int count) {
+    public void count(String name, long count) {
     }
 
     public List<Var<?>> getAllVars() {

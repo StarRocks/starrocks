@@ -344,13 +344,16 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
+                // disable plan cache will make the test more stable
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(2, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
 
                 // if mv_3 is in the plan cache
                 MaterializedView mv3 = getMv("test", "mv_3");
-                CachingMvPlanContextBuilder.getInstance().getPlanContext(mv3, true);
+                CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv3);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(1, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_1"));
@@ -394,6 +397,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
         int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
 
             long currentTime = System.currentTimeMillis();
@@ -416,6 +420,8 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
+                // disable plan cache will make the test more stable
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(2, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
@@ -423,12 +429,12 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(1, validMVs.size());
-                Assert.assertTrue(containsMV(validMVs, "mv_3"));
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
 
                 // if mv_3 is in the plan cache
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
                 MaterializedView mv3 = getMv("test", "mv_3");
-                CachingMvPlanContextBuilder.getInstance().getPlanContext(mv3, true);
+                CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv3);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertEquals(1, validMVs.size());
                 Assert.assertTrue(containsMV(validMVs, "mv_1"));

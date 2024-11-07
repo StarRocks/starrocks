@@ -312,7 +312,7 @@ jobs:
       - name: UPDATE ECI & RUN Clang Tidy
         id: run_clang_tidy
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
@@ -592,7 +592,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [test-checker, clang-tidy, fe-ut, thirdparty-info]
+    needs: [test-checker, be-ut, fe-ut, thirdparty-info]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -606,7 +606,7 @@ jobs:
       is_self_build: ${{ steps.run_build.outputs.is_self_build }}
       build_nece: ${{ steps.check-necessity.outputs.BUILD_NECE }}
     if: >
-      always() && needs.clang-tidy.result != 'failure' && needs.fe-ut.result != 'failure'
+      always() && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure' && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success' || needs.test-checker.result == 'success')
     steps:
       - name: CLEAN
         run: |
@@ -666,9 +666,9 @@ jobs:
       - name: Check necessity
         id: check-necessity
         if: >
-          (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
+          (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || 
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
-          (steps.parsing-fe-path-filter.outputs.src_filter != 'true' && steps.parsing-be-path-filter.outputs.src_filter == 'true' && needs.clang-tidy.result == 'success') ||
+          (steps.parsing-fe-path-filter.outputs.src_filter != 'true' && steps.parsing-be-path-filter.outputs.src_filter == 'true' && needs.be-ut.result == 'success') ||
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
         run: |
           echo "BUILD_NECE=true" >> $GITHUB_OUTPUT

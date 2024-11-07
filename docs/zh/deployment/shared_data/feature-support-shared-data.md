@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: "能力边界"
 ---
 
@@ -182,7 +182,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 
 ### 手动 Compaction
 
-从 v3.1 开始，StarRocks 支持通过 SQL 语句手动 Compaction。可以指定表或分区进行 Compaction。有关详细信息，请参阅 [手动 Compaction](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#手动-compaction)。
+从 v3.1 开始，StarRocks 支持通过 SQL 语句手动 Compaction。可以指定表或分区进行 Compaction。有关详细信息，请参阅 [手动 Compaction](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#手动-compaction)。
 
 ## 主键表
 
@@ -221,7 +221,7 @@ SSB 1TB 数据集
 
 :::note
 
-以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements)。
+以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements)。
 
 :::
 

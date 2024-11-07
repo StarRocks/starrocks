@@ -100,6 +100,10 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
     /**
      * cast expr to SlotDescriptor type
      */
@@ -157,5 +161,10 @@ public abstract class ScanNode extends PlanNode {
 
     protected boolean supportTopNRuntimeFilter() {
         return false;
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
     }
 }

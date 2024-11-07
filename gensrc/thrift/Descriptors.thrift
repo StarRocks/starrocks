@@ -52,6 +52,10 @@ struct TSlotDescriptor {
   11: optional bool isOutputColumn // Deprecated
   12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
   13: optional i32 col_unique_id = -1
+  // col_physical_name is used to store the physical name of the column in the storage layer.
+  // for example, the physical name of a column in a parquet file.
+  // used in delta lake column mapping name mode
+  14: optional string col_physical_name
 }
 
 struct TTupleDescriptor {
@@ -215,6 +219,7 @@ struct TColumn {
     9: optional bool is_auto_increment
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
+    12: optional Types.TAggStateDesc agg_state_desc
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -282,6 +287,7 @@ struct TOlapTableIndexSchema {
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
 }
 
 struct TOlapTableSchemaParam {

@@ -47,14 +47,15 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 import org.apache.thrift.protocol.TType;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class TaskRunsSystemTable extends SystemTable {
-
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
 
     private static final SystemTable TABLE = new TaskRunsSystemTable();
@@ -68,13 +69,15 @@ public class TaskRunsSystemTable extends SystemTable {
                     .put(TType.BOOL, Type.BOOLEAN)
                     .build();
 
+    public static final String NAME = "task_runs";
+
     public static SystemTable getInstance() {
         return TABLE;
     }
 
     public TaskRunsSystemTable() {
         super(SystemId.TASK_RUNS_ID,
-                "task_runs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
                         .column("QUERY_ID", ScalarType.createVarchar(64))
@@ -160,7 +163,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
         // From timestamp to DATETIME
         if (value.getType().isBigint() && schemaType.isDatetime()) {
-            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
+            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000, ZoneId.systemDefault()));
         }
         return value.castTo(schemaType)
                 .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
@@ -210,14 +213,18 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setState(status.getState().toString());
             info.setCatalog(status.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
-            try {
-                // NOTE: use task's definition to display task-run's definition here
-                Task task = taskManager.getTaskWithoutLock(taskName);
-                if (task != null) {
-                    info.setDefinition(task.getDefinition());
+            if (!Strings.isEmpty(status.getDefinition())) {
+                info.setDefinition(status.getDefinition());
+            } else {
+                try {
+                    // NOTE: use task's definition to display task-run's definition here
+                    Task task = taskManager.getTaskWithoutLock(taskName);
+                    if (task != null) {
+                        info.setDefinition(task.getDefinition());
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Get taskName {} definition failed: {}", taskName, e);
                 }
-            } catch (Exception e) {
-                LOG.warn("Get taskName {} definition failed: {}", taskName, e);
             }
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Upgrade StarRocks
@@ -36,7 +36,7 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 >
 > Suppose you need to perform consecutive minor version upgrades, for example, 2.4->2.5->3.0->3.1->3.2, or you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, perform the following steps between two consecutive upgrades or after the downgrade before the second trial of upgrade:
 >
-> 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
+> 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a new image.
 > 2. Wait for the new image to be synchronized to all Follower FEs.
 >
 > You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.

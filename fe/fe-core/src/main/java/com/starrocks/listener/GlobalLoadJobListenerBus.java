@@ -18,6 +18,8 @@ package com.starrocks.listener;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.DmlType;
+import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,11 +55,14 @@ public class GlobalLoadJobListenerBus {
      * @param db database of the target table
      * @param table target table that has changed
      */
-    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
         if (transactionState == null) {
             return;
         }
-        listeners.stream().forEach(listener -> listener.onDMLStmtJobTransactionFinish(transactionState, db, table));
+        listeners.stream().forEach(listener -> listener.onDMLStmtJobTransactionFinish(transactionState, db, table,
+                dmlType
+        ));
     }
 
     /**
@@ -65,11 +70,11 @@ public class GlobalLoadJobListenerBus {
      * @param db database of the target table
      * @param table target table that has changed
      */
-    public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
         if (db == null || table == null) {
             return;
         }
-        listeners.stream().forEach(listener -> listener.onInsertOverwriteJobCommitFinish(db, table));
+        listeners.stream().forEach(listener -> listener.onInsertOverwriteJobCommitFinish(db, table, stats));
     }
 
     /**

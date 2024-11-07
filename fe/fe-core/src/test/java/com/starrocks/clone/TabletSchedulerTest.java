@@ -38,6 +38,7 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
@@ -88,6 +89,7 @@ public class TabletSchedulerTest {
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
     LockManager lockManager;
+    VariableMgr variableMgr;
 
     @Before
     public void setup() throws Exception {
@@ -96,6 +98,8 @@ public class TabletSchedulerTest {
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
         lockManager = new LockManager();
+        variableMgr = new VariableMgr();
+
 
         new Expectations() {
             {
@@ -130,6 +134,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 
@@ -223,10 +231,10 @@ public class TabletSchedulerTest {
                 Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    locker.lockDatabase(goodDB, LockType.READ);
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    locker.unLockDatabase(goodDB, LockType.READ);
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
                 }
             }
         }, "testAddCtx").start();

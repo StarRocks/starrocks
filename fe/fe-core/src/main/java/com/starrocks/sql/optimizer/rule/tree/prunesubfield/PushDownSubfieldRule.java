@@ -206,60 +206,73 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             }
 
             LogicalProjectOperator lpo = optExpression.getOp().cast();
+            Map<ColumnRefOperator, ScalarOperator> pushDownProject = lpo.getColumnRefMap();
+            ColumnRefSet pushDownExprUsedColumns = new ColumnRefSet();
 
-            Map<ColumnRefOperator, ScalarOperator> projectMap = lpo.getColumnRefMap();
-            // rewrite push down expressions
             if (!context.pushDownExprRefs.isEmpty()) {
-                context.pushDownExprRefsIndex.clear();
-                context.pushDownExprUseColumns.clear();
+                // has push down expression, generate new project node first
+                hasRewrite = true;
+                pushDownProject = Maps.newHashMap();
+
+                Map<ColumnRefOperator, ScalarOperator> projectMap = lpo.getColumnRefMap();
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
-                    context.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+                    ScalarOperator op = rewriter.rewrite(entry.getValue());
+                    pushDownProject.put(entry.getKey(), op);
+                    pushDownExprUsedColumns.union(op.getUsedColumns());
                 }
+                pushDownProject.putAll(lpo.getColumnRefMap());
             }
 
-            // collect & push down expressions
-            ColumnRefSet allUsedColumns = new ColumnRefSet();
-            context.pushDownExprUseColumns.values().forEach(allUsedColumns::union);
-
-            SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
-            for (ScalarOperator value : lpo.getColumnRefMap().values()) {
+            // collect push down expression
+            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector();
+            for (ScalarOperator value : pushDownProject.values()) {
                 // check repeat put complex column, like that
                 //      project( columnB: structA.b.c.d )
                 //         |
                 //      project( structA: structA ) -- structA use for `structA.b.c.d`, so we don't need put it again
                 //         |
                 //       .....
-                if (value.isColumnRef() && allUsedColumns.contains((ColumnRefOperator) value)) {
+                if (value.isColumnRef() && pushDownExprUsedColumns.contains((ColumnRefOperator) value)) {
                     continue;
                 }
                 value.accept(collector, null);
             }
 
+            Context childContext = new Context();
             for (ScalarOperator expr : collector.getComplexExpressions()) {
+                if (childContext.pushDownExprRefsIndex.containsKey(expr)) {
+                    continue;
+                }
                 if (context.pushDownExprRefsIndex.containsKey(expr)) {
+                    // push down expression is from parent, reuse parent rewrite column
+                    childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
                     continue;
                 }
 
                 ColumnRefOperator index = factory.create(expr, expr.getType(), expr.isNullable());
-                context.put(index, expr);
+                childContext.put(index, expr);
             }
 
-            if (context.pushDownExprRefs.isEmpty()) {
-                return visitChildren(optExpression, context);
+            if (childContext.pushDownExprRefs.isEmpty()) {
+                if (!context.pushDownExprRefs.isEmpty()) {
+                    // parent has push down expression, must rewrite project node
+                    optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
+                            .setColumnRefMap(pushDownProject)
+                            .build(), optExpression.getInputs());
+                }
+                return visitChildren(optExpression, childContext);
             }
 
             // rewrite project node
-            ExpressionReplacer replacer = new ExpressionReplacer(context.pushDownExprRefsIndex);
+            ExpressionReplacer replacer = new ExpressionReplacer(childContext.pushDownExprRefsIndex);
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-            lpo.getColumnRefMap().forEach((k, v) -> newProjectMap.put(k, v.accept(replacer, null)));
-            context.pushDownExprRefs.forEach((k, v) -> newProjectMap.put(k, k));
+            pushDownProject.forEach((k, v) -> newProjectMap.put(k, v.accept(replacer, null)));
 
             optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
                     .setColumnRefMap(newProjectMap)
                     .build(), optExpression.getInputs());
-
-            return visitChildren(optExpression, context);
+            return visitChildren(optExpression, childContext);
         }
 
         @Override

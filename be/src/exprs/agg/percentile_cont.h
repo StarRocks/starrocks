@@ -57,7 +57,7 @@ struct PercentileState {
     using GridType = typename PercentileStateTypes<LT>::GridType;
 
     void update(CppType item) { items.emplace_back(item); }
-    void update_batch(const std::vector<CppType>& vec) {
+    void update_batch(const Buffer<CppType>& vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
@@ -523,7 +523,7 @@ struct LowCardPercentileState {
     constexpr int static ser_header = 0x3355 | LT << 16;
     void update(CppType item) { items[item]++; }
 
-    void update_batch(const std::vector<CppType>& vec) {
+    void update_batch(const Buffer<CppType>& vec) {
         for (const auto& item : vec) {
             items[item]++;
         }

@@ -87,7 +87,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version);
+        auto res = tablet_mgr->tablet_metadata_exists(tablet_id, index_version);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -148,15 +148,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         CHECK_EQ(new_version, base_version + txns.size());
     }
 
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
+    VLOG(2) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
             << ", new_version: " << new_version;
 
     auto commit_time = txns.back().commit_time();
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
     if (cached_new_metadata != nullptr) {
-        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
-                  << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+        // The retries may be caused by some tablets failing to publish in a partition
+        // set the following log as debug log to prevent excessive logging
+        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
         return std::move(cached_new_metadata);
     }
 

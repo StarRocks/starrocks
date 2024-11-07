@@ -15,8 +15,10 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -30,6 +32,9 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
         MaterializedViewTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
         starRocksAssert.withTable("create table user_tags (" +
                 " time date, " +
                 " user_id int, " +
@@ -135,9 +140,8 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
                 " order by user_id, time";
         // sub-query's order by will be squashed.
-        testRewriteFail(mv, "select * from (" + mv + ") as a;");
-        // TODO: support order by push-down
-        testRewriteFail(mv, "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) " +
+        testRewriteOK(mv, "select * from (" + mv + ") as a;");
+        testRewriteOK(mv, "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) " +
                 "from user_tags group by user_id, time) as a order by user_id, time;");
     }
 
@@ -318,8 +322,7 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time order by " +
                 "user_id, time";
         String query = String.format("select user_id, count(time) from (%s) as t group by user_id limit 3;", mv);
-        // TODO: support order by elimiation
-        testRewriteFail(mv, query);
+        testRewriteOK(mv, query);
     }
 
     @Test
@@ -331,11 +334,32 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
     }
 
     @Test
+    public void testTextMatchRewriteWithSubQuery5() {
+        String mv = "select * from (" +
+                "   select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags " +
+                "   group by user_id, time order by user_id, time) s where user_id != 'xxxx'";
+        String query = String.format("with cte1 as (select * from (%s) as t) select user_id, count(time) " +
+                "  from cte1 as t group by user_id limit 3;", mv);
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQuery6() {
+        String mv = "select * from (" +
+                "   select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags " +
+                "   group by user_id, time order by user_id, time) s where user_id != 'xxxx'";
+        String query = String.format("with cte1 as (select * from (%s) as t) select user_id, count(time) " +
+                "  from cte1 as t group by user_id limit 3;", mv);
+        testRewriteOK(mv, query);
+    }
+
+    @Test
     public void testTextMatchRewriteWithExtraOrder1() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time";
         String query = String.format("select user_id from (%s) t order by user_id, time;", mv);
         testRewriteOK(mv, query);
     }
+
     @Test
     public void testTextMatchRewriteWithExtraOrder2() {
         String mv = "select user_id, count(1) from (select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags " +
@@ -355,5 +379,21 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                 sql(query).nonMatch("mv0");
             }
         });
+    }
+
+    @Test
+    public void testTextMatchRewriteWithSubQueryFilter() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by  random" +
+                " as select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id,time;",
+                () -> {
+                    String query = "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by " +
+                            " user_id,time) s where user_id != 'xxxx'";
+                    String plan = getQueryPlan(query);
+                    PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                            "     TABLE: mv0\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: CAST(6: user_id AS VARCHAR(1048576)) != 'xxxx'");
+                });
     }
 }

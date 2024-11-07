@@ -36,8 +36,6 @@ EncryptionKey::EncryptionKey() = default;
 EncryptionKey::EncryptionKey(EncryptionKeyPB pb) : _pb(std::move(pb)) {}
 EncryptionKey::~EncryptionKey() = default;
 
-static const std::string VAULT_KEY_IDENTIFIER = "GLOBAL_VAULT_KEY";
-
 static const std::string& get_identifier_from_pb(const EncryptionKeyPB& pb) {
     switch (pb.type()) {
     case NORMAL_KEY:
@@ -215,6 +213,24 @@ StatusOr<FileEncryptionPair> KeyCache::create_encryption_meta_pair_using_current
     return ret;
 }
 
+StatusOr<FileEncryptionPair> KeyCache::create_plain_random_encryption_meta_pair() {
+    EncryptionKeyPB pb;
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    std::string pkey(16, '\0');
+    ssl_random_bytes(pkey.data(), 16);
+    pb.set_plain_key(pkey);
+    EncryptionMetaPB meta_pb;
+    *meta_pb.add_key_hierarchy() = pb;
+    FileEncryptionPair ret;
+    RETURN_IF_UNLIKELY(!meta_pb.SerializeToString(&ret.encryption_meta),
+                       Status::InternalError("serialize EncryptionMetaPB failed"));
+    ret.info.algorithm = pb.algorithm();
+    ret.info.key = pkey;
+    encryption_keys_created.increment(1);
+    return ret;
+}
+
 StatusOr<FileEncryptionInfo> KeyCache::unwrap_encryption_meta(const std::string& encryption_meta) {
     EncryptionMetaPB meta_pb;
     RETURN_IF_UNLIKELY(!meta_pb.ParseFromArray(encryption_meta.data(), encryption_meta.size()),
@@ -269,7 +285,7 @@ Status KeyCache::refresh_keys(const std::string& key_meta) {
     RETURN_IF_UNLIKELY(nkey == 0, Status::Corruption("no key in encryption_meta"););
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
-    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, nkey - 1));
+    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true));
     if (size_before != size()) {
         LOG(INFO) << "refresh keys, num keys before: " << size_before << " after:" << size();
     }

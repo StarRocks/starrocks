@@ -35,6 +35,7 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
@@ -72,7 +73,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "group by p_brand, LO_ORDERDATE";
 
         // This case must disable outer join to inner join in `JoinPredicatePushdown`
-        setTracLogModule("Optimizer");
         starRocksAssert.withMaterializedView(mv, () -> {
             String query = "select t1.p_brand as p_brand, t1.LO_ORDERDATE as LO_ORDERDATE,\n" +
                     "SUM(revenue_sum) + SUM(supplycost_sum) as revenue_and_supplycost_sum\n" +
@@ -120,7 +120,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "   bitmap_union(to_bitmap(lo_tax)), \n" +
                 "   bitmap_union(to_bitmap(lo_shipmode)) \n" +
                 "from lineorder l group by LO_ORDERDATE";
-        setTracLogModule("MV");
         starRocksAssert.withMaterializedView(mv, () -> {
             {
                 String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) as revenue_sum\n" +

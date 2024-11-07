@@ -18,8 +18,8 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/column_pool.h"
 #include "column/datum.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -67,7 +67,7 @@ private:
 class ProjectionIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
-    void TearDown() override { TEST_clear_all_columns_this_thread(); }
+    void TearDown() override {}
 };
 
 // NOLINTNEXTLINE

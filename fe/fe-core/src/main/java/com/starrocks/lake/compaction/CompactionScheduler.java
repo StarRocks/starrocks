@@ -199,25 +199,26 @@ public class CompactionScheduler extends Daemon {
         }
 
         // Create new compaction tasks.
-        int index = 0;
         int compactionLimit = compactionTaskLimit();
         int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
             return;
         }
 
-        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet(),
-                disabledTables);
+        List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
+                runningCompactions.keySet(), disabledTables);
+        int index = 0;
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
-            PartitionIdentifier partition = partitions.get(index++);
-            CompactionJob job = startCompaction(partition);
+            PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
+            CompactionJob job = startCompaction(partitionStatisticsSnapshot);
             if (job == null) {
                 continue;
             }
             numRunningTasks += job.getNumTabletCompactionTasks();
-            runningCompactions.put(partition, job);
+            runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
+                LOG.debug("Created new compaction job. {}, txnId={}",
+                        partitionStatisticsSnapshot.toString(), job.getTxnId());
             }
         }
     }
@@ -255,8 +256,9 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
-        Database db = stateMgr.getDb(partitionIdentifier.getDbId());
+    private CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+        PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
             return null;
@@ -269,11 +271,12 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
 
         try {
             // lake table or lake materialized view
-            table = (OlapTable) db.getTable(partitionIdentifier.getTableId());
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -307,14 +310,14 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                    job.getAllowPartialSuccess());
+                    job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
             for (CompactionTask task : tasks) {
                 task.sendRequest();
             }
@@ -335,7 +338,8 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess) throws UserException, RpcException {
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            throws UserException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -352,6 +356,7 @@ public class CompactionScheduler extends Daemon {
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -401,7 +406,7 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
-        Database db = stateMgr.getDb(partition.getDbId());
+        Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
@@ -415,7 +420,7 @@ public class CompactionScheduler extends Daemon {
                 .getTransactionState(db.getId(), job.getTxnId());
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
             if (forceCommit) { // do not write extra info if no need to force commit
@@ -424,7 +429,7 @@ public class CompactionScheduler extends Daemon {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

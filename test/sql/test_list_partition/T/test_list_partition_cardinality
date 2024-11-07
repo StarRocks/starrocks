@@ -1,0 +1,41 @@
+-- name: test_list_partition_cardinality
+
+DROP DATABASE IF EXISTS test_list_partition_cardinality;
+CREATE DATABASE test_list_partition_cardinality;
+USE test_list_partition_cardinality;
+
+CREATE TABLE partitions_multi_column_1 (
+    c1 int NOT NULL,
+    c2 int NOT NULL,
+    c3 int
+)
+PARTITION BY (c1, c2);
+
+INSERT INTO partitions_multi_column_1 VALUES
+    (1,1,1),
+    (1,2,4),
+    (1,2,4),
+    (1,2,4),
+    (2,3,2),
+    (2,4,5),
+    (3,5,3),
+    (3,6,6);
+
+INSERT INTO partitions_multi_column_1 
+SELECT 4, 7, generate_series FROM TABLE(generate_series(1, 1000));
+
+ANALYZE FULL TABLE partitions_multi_column_1 WITH SYNC MODE;
+
+SELECT count(*) FROM partitions_multi_column_1;
+
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=0', 'EMPTYSET')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1', 'cardinality: 4')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=2', 'cardinality: 1')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=3', 'cardinality: 1')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=4', 'cardinality: 1000')
+
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=0', 'EMPTYSET')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=1', 'cardinality: 1')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=2', 'cardinality: 3')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=3', 'cardinality: 1')
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c2=7', 'cardinality: 1000')

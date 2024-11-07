@@ -8,6 +8,43 @@ symbol = "Sumbigint"
 type = "StarrocksJar"
 file = "${udf_url}/starrocks-jdbc%2FSumbigint.jar";
 
+CREATE TABLE FUNCTION udtfstring(string)
+RETURNS string
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+
+CREATE TABLE FUNCTION udtfstring_wrong_match(string)
+RETURNS int
+symbol = "UDTFstring"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFstring.jar";
+
+CREATE TABLE FUNCTION udtfint(int)
+RETURNS int
+symbol = "UDTFint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFint.jar";
+
+CREATE TABLE FUNCTION udtfbigint(bigint)
+RETURNS bigint
+symbol = "UDTFbigint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFbigint.jar";
+
+CREATE TABLE FUNCTION udtffloat(float)
+RETURNS float
+symbol = "UDTFfloat"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFfloat.jar";
+
+CREATE TABLE FUNCTION udtfdouble(double)
+RETURNS double
+symbol = "UDTFdouble"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc%2FUDTFdouble.jar";
+
+
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(20) NULL COMMENT "",
@@ -21,6 +58,22 @@ PROPERTIES (
 );
 
 insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+
+-- test udtf cases
+select count(udtfstring) from t0, udtfstring(c1);
+select count(udtfstring_wrong_match) from t0, udtfstring_wrong_match(c1);
+select count(udtfint) from t0, udtfint(c1);
+select count(udtfbigint) from t0, udtfbigint(c1);
+select count(udtffloat) from t0, udtffloat(c1);
+select count(udtfdouble) from t0, udtfdouble(c1);
+-- test udtf with utf8 case
+select * from TABLE(udtfstring(""));
+select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
+select * from TABLE(udtfstring("中文测试"));
+select * from TABLE(udtfstring("∀∂∈ℝ∧∪≡∞ ↑↗↨↻⇣ ┐┼╔╘░►☺♀ ﬁ�⑀₂ἠḂӥẄɐː⍎אԱა"));
+select * from TABLE(udtfstring("2H₂ + O₂ ⇌ 2H₂O"));
+select * from TABLE(udtfstring("ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ ᚻᛖ ᛒᚢᛞᛖ ᚩᚾ ᚦᚫᛗ ᛚᚪᚾᛞᛖ ᚾᚩᚱᚦᚹᛖᚪᚱᛞᚢᛗ ᚹᛁᚦ ᚦᚪ ᚹᛖᛥᚫ"));
+
 
 -- test group by limit case:
 set streaming_preaggregation_mode="force_streaming";

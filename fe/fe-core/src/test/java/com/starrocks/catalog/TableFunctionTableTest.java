@@ -52,6 +52,7 @@ public class TableFunctionTableTest {
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+        properties.put("strict_mode", "true");
         properties.put("auto_detect_sample_files", "10");
         properties.put("csv.column_separator", ",");
         properties.put("csv.row_delimiter", "\n");
@@ -154,6 +155,7 @@ public class TableFunctionTableTest {
             Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
+            Assert.assertEquals(true, table.isStrictMode());
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
             Assert.assertEquals("\n", table.getCsvRowDelimiter());
             Assert.assertEquals(",", table.getCsvColumnSeparator());
@@ -179,6 +181,11 @@ public class TableFunctionTableTest {
         Assertions.assertThrows(DdlException.class, () -> {
             Map<String, String> properties = newProperties();
             properties.put("auto_detect_sample_files", "not_a_number");
+            new TableFunctionTable(properties);
+        });
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Map<String, String> properties = newProperties();
+            properties.put("list_files_only", "not_true_false");
             new TableFunctionTable(properties);
         });
     }

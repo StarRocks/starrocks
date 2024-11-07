@@ -19,13 +19,8 @@
 
 namespace starrocks::workgroup {
 
-ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
-                           bool add_metrics)
-        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
-    if (add_metrics) {
-        REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
-    }
-}
+ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {}
 
 void ScanExecutor::close() {
     _task_queue->close();
@@ -45,7 +40,9 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+        }
     }
 }
 
@@ -91,6 +88,14 @@ bool ScanExecutor::submit(ScanTask task) {
 
 void ScanExecutor::force_submit(ScanTask task) {
     _task_queue->force_put(std::move(task));
+}
+
+void ScanExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+}
+
+int64_t ScanExecutor::num_tasks() const {
+    return _task_queue->size();
 }
 
 } // namespace starrocks::workgroup

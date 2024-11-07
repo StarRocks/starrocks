@@ -469,8 +469,7 @@ as select dt, province, sum(age) from t5 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-01	beijing	80
-2024-01-01	guangdong	20
+2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
@@ -489,7 +488,7 @@ select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
@@ -516,7 +515,8 @@ as select dt, province, sum(age) from t5 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-01	beijing	100
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
@@ -535,7 +535,7 @@ select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
@@ -566,8 +566,7 @@ None
 -- !result
 select * from test_mv1 order by 1, 2;
 -- result:
-2024-01-01	beijing	120
-2024-01-01	guangdong	20
+2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
@@ -586,7 +585,7 @@ select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result

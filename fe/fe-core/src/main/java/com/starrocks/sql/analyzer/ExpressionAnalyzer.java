@@ -88,7 +88,6 @@ import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -1234,6 +1233,7 @@ public class ExpressionAnalyzer {
                     break;
                 }
                 case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAY_CONTAINS_SEQ:
                 case FunctionSet.ARRAYS_OVERLAP: {
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have only two inputs", node.getPos());
@@ -1295,9 +1295,6 @@ public class ExpressionAnalyzer {
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
-            }
-            if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column", node.getPos());
             }
 
             Type[] childTypes = new Type[1];
@@ -1409,7 +1406,8 @@ public class ExpressionAnalyzer {
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
-            } else if (funcType.equalsIgnoreCase(FunctionSet.USER)) {
+            } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
+                    || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(Type.VARCHAR);
 
                 String user = session.getQualifiedUser();
@@ -1458,11 +1456,15 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                VariableMgr.fillValue(session.getSessionVariable(), node);
+                GlobalStateMgr.getCurrentState().getVariableMgr().fillValue(session.getSessionVariable(), node);
                 if (!Strings.isNullOrEmpty(node.getName()) &&
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     node.setType(Type.VARCHAR);
                     node.setValue(SqlModeHelper.decode((long) node.getValue()));
+                } else if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.AUTO_COMMIT)) {
+                    node.setType(Type.BIGINT);
+                    node.setValue(((boolean) node.getValue()) ? (long) (1) : (long) 0);
                 }
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
@@ -1518,11 +1520,11 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
-            Table table = db.getTable(tableName.getTbl());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }

@@ -46,6 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
@@ -74,6 +75,8 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -108,12 +111,16 @@ import java.util.stream.Collectors;
  */
 public class LoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
+    private static final int MEMORY_JOB_SAMPLES = 10;
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
     private final LoadJobScheduler loadJobScheduler;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -154,7 +161,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -232,14 +239,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
-                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
-                                int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout, Coordinator coordinator)
-            throws UserException {
-
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws UserException {
         // get db id
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -260,11 +265,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
-        return loadJob.getId();
+        return loadJob;
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -386,6 +391,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
+
+        warehouseLoadInfoBuilder.withRemovedJob(job);
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -664,7 +671,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -778,17 +785,24 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
         long now = System.currentTimeMillis();
-        while (size-- > 0) {
-            LoadJob loadJob = reader.readJson(LoadJob.class);
+        reader.readCollection(LoadJob.class, loadJob -> {
             // discard expired job right away
             if (isJobExpired(loadJob, now)) {
                 LOG.info("discard expired job: {}", loadJob);
-                continue;
+                return;
             }
 
             putLoadJob(loadJob);
+        });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
+        } finally {
+            readUnlock();
         }
     }
 
@@ -822,5 +836,14 @@ public class LoadMgr implements Writable, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("LoadJob", (long) idToLoadJob.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = idToLoadJob.values()
+                .stream()
+                .limit(MEMORY_JOB_SAMPLES)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
     }
 }

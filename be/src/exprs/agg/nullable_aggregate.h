@@ -274,7 +274,7 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const Filter& filter) const override {
         for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
@@ -412,7 +412,7 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
-                                  AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+                                  AggDataPtr* states, const Filter& selection) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
         if (columns[0]->is_nullable()) {
@@ -738,7 +738,7 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
-                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const Filter& filter) const override {
         auto fast_call_path = [&](const Column* data_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (filter[i] == 0) {
@@ -836,7 +836,7 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
-                                  AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+                                  AggDataPtr* states, const Filter& selection) const override {
         auto column_size = ctx->get_num_args();
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->only_null()) {

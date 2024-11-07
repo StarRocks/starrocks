@@ -29,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -105,7 +106,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -114,11 +115,11 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -204,14 +205,21 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     @Override
-    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+    public List<StatisticsCollectJob> instantiateJobs() {
+        return StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
+    }
+
+    @Override
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor,
+                    List<StatisticsCollectJob> jobs) {
+        if (CollectionUtils.isEmpty(jobs)) {
+            return;
+        }
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
-        List<StatisticsCollectJob> statisticsCollectJobList =
-                StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
 
         boolean hasFailedCollectJob = false;
-        for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+        for (StatisticsCollectJob statsJob : jobs) {
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());

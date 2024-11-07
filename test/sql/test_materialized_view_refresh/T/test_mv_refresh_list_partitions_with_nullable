@@ -225,7 +225,7 @@ function: assert_table_partitions_num("test_mv1", 1)
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 drop materialized view test_mv1;
 
@@ -268,7 +268,7 @@ function: assert_table_partitions_num("test_mv1", 1)
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 drop materialized view test_mv1;
 

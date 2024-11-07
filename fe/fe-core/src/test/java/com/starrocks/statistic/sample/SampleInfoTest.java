@@ -62,8 +62,8 @@ public class SampleInfoTest extends PlanTestBase {
                 "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        db = GlobalStateMgr.getCurrentState().getMetadata().getDb("test");
-        table = GlobalStateMgr.getCurrentState().getMetadata().getTable("test", "t_struct");
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), table);
     }
 

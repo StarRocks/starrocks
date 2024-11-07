@@ -136,7 +136,7 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
-ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
+ColumnPtr NullableColumn::replicate(const Buffer<uint32_t>& offsets) {
     return NullableColumn::create(this->_data_column->replicate(offsets),
                                   std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
 }
@@ -152,27 +152,27 @@ bool NullableColumn::append_nulls(size_t count) {
     return true;
 }
 
-bool NullableColumn::append_strings(const Buffer<Slice>& strs) {
-    if (_data_column->append_strings(strs)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_strings(const Slice* data, size_t size) {
+    if (_data_column->append_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
-bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
-    if (_data_column->append_strings_overflow(strs, max_length)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
-bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
-    if (_data_column->append_continuous_strings(strs)) {
-        null_column_data().resize(_null_column->size() + strs.size(), 0);
+bool NullableColumn::append_continuous_strings(const Slice* data, size_t size) {
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -430,9 +430,7 @@ void NullableColumn::check_or_die() const {
 }
 
 StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
-    if (_null_column->capacity_limit_reached()) {
-        return Status::InternalError("Size of NullableColumn exceed the limit");
-    }
+    RETURN_IF_ERROR(_null_column->capacity_limit_reached());
 
     return upgrade_helper_func(&_data_column);
 }
