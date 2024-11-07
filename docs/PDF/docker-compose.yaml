@@ -1,0 +1,17 @@
+services:
+  docusaurus:
+    environment:
+      DISABLE_VERSIONING: "true"
+    build:
+      context: ../docusaurus
+    ports:
+      - 3000:3000
+      - 35729:35729
+    volumes:
+      - ../docusaurus/sidebars.json:/app/docusaurus/sidebars.json
+      - ../en:/app/docusaurus/docs
+      - ../docusaurus/i18n:/app/docusaurus/i18n
+      - ../zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
+    working_dir: /app/docusaurus
+    command:
+      sh -c "yarn build && yarn serve -p 3000 -h 0.0.0.0"
