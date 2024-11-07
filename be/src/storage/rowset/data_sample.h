@@ -86,6 +86,9 @@ struct SortableZoneMap {
     bool is_diverse();
     void build_histogram(size_t buckets);
 
+    std::string zonemap_string() const;
+    std::string histogram_string() const;
+
     size_t ith_zone(size_t idx) { return page_indices[idx]; }
     double width(const Datum& lhs, const Datum& rhs);
     double width(const ZoneMapDetail& zone);

@@ -27,6 +27,8 @@
 namespace starrocks {
 
 StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) {
+    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+              Status::InvalidArgument("percent should be in (0, 100)"));
     std::mt19937 mt(_random_seed);
     std::bernoulli_distribution dist(_probability_percent / 100.0);
 
@@ -51,9 +53,20 @@ static int compare_datum(const TypeInfoPtr& type_info, const Datum& lhs, const D
         return 0;
     }
     if (lhs.is_null() != rhs.is_null()) {
-        return lhs.is_null() < rhs.is_null();
+        if (lhs.is_null())
+            return 1;
+        else
+            return -1;
     }
     return type_info->cmp(lhs, rhs);
+}
+
+static int compare_zonemap(const TypeInfoPtr& type_info, const ZoneMapDetail& a, const ZoneMapDetail& b) {
+    int cmp = compare_datum(type_info, a.min_value(), b.min_value());
+    if (cmp != 0) {
+        return cmp;
+    }
+    return compare_datum(type_info, a.max_value(), b.max_value());
 }
 
 void SortableZoneMap::sort() {
@@ -61,19 +74,12 @@ void SortableZoneMap::sort() {
         return;
     }
     auto type_info = get_type_info(type);
-    auto compare_zonemap = [type_info](const ZoneMapDetail& a, const ZoneMapDetail& b) {
-        int cmp = compare_datum(type_info, a.min_value(), b.min_value());
-        if (cmp != 0) {
-            return cmp;
-        }
-        return compare_datum(type_info, a.max_value(), b.max_value());
-    };
 
-    // first sort the page_indices,  then sort the zonemap, this way can keep the relative ordering of them
+    // only sort the page_indices but not zonemap
     page_indices.resize(zonemap.size());
     std::iota(page_indices.begin(), page_indices.end(), 0);
     std::sort(page_indices.begin(), page_indices.end(),
-              [&](size_t lhs, size_t rhs) { return compare_zonemap(zonemap[lhs], zonemap[rhs]); });
+              [&](size_t lhs, size_t rhs) { return compare_zonemap(type_info, zonemap[lhs], zonemap[rhs]) < 0; });
 }
 
 double SortableZoneMap::width(const ZoneMapDetail& zone) {
@@ -121,11 +127,35 @@ double SortableZoneMap::width(const Datum& lhs, const Datum& rhs) {
     }
 }
 
+std::string SortableZoneMap::zonemap_string() const {
+    std::ostringstream oss;
+    oss << "zonemap: ";
+    auto type_info = get_type_info(type);
+    for (const auto& index : page_indices) {
+        auto& zone = zonemap[index];
+        oss << fmt::format("[{},{}]", type_info->to_string(&zone.min_value()), type_info->to_string(&zone.max_value()))
+            << ",";
+    }
+    return oss.str();
+}
+
+std::string SortableZoneMap::histogram_string() const {
+    std::ostringstream oss;
+    oss << "histogram: ";
+    auto type_info = get_type_info(type);
+    for (auto& bucket : histogram) {
+        oss << fmt::format("[{},{}]", type_info->to_string(&bucket.first.min_value()),
+                           type_info->to_string(&bucket.first.max_value()));
+        oss << fmt::format(": ({})\n", fmt::join(bucket.second, ","));
+    }
+    return oss.str();
+}
+
 double SortableZoneMap::overlap(const ZoneMapDetail& lhs, const ZoneMapDetail& rhs) {
     auto type_info = get_type_info(type);
     Datum upper = type_info->cmp(lhs.max_value(), rhs.max_value()) <= 0 ? lhs.max_value() : rhs.max_value();
     Datum lower = type_info->cmp(lhs.min_value(), rhs.min_value()) >= 0 ? lhs.min_value() : rhs.min_value();
-    if (type_info->cmp(lower, upper) <= 0) {
+    if (type_info->cmp(lower, upper) >= 0) {
         return 0;
     }
     return width(lower, upper);
@@ -147,38 +177,41 @@ bool SortableZoneMap::is_diverse() {
     return (overlap_area / total_area) < diversity_threshold;
 }
 
+// Build a histogram to improve the quality of data sampling
+// It's more like a equi-width histogram to make the data sampling more uniform, but it's not a strict one.
 void SortableZoneMap::build_histogram(size_t buckets) {
     DCHECK_GT(buckets, 0);
-    size_t total_rows = 0;
-    for (auto& x : zonemap) {
-        total_rows += x.num_rows();
-    }
-    size_t bucket_depth = std::max<size_t>(1, total_rows / buckets);
 
-    size_t current_row = 0;
-    Datum min_value;
-    Datum max_value;
+    // consider the bucket width but put at most `bucket_max_depth` elements in a bucket
+    size_t total_width = width(zonemap.front().min_value(), zonemap.back().max_value());
+    size_t bucket_width = total_width / buckets;
+    size_t bucket_max_depth = std::max<size_t>(zonemap.size() / buckets, zonemap.size() * 0.25);
+
+    size_t bucket_count = 0;
+    Datum min_value, max_value;
     bool has_null = false;
     std::vector<size_t> current_pages;
     for (size_t i = 0; i < page_indices.size(); i++) {
         size_t idx = ith_zone(i);
         auto& zone = zonemap[idx];
-        current_row += zone.num_rows();
+        bucket_count++;
         max_value = zone.max_value();
         has_null = has_null || zone.has_null();
         if (min_value.is_null()) {
             min_value = zone.min_value();
         }
         current_pages.push_back(idx);
-        if (current_row >= bucket_depth || i == zonemap.size() - 1) {
+
+        double current_width = width(min_value, zone.min_value());
+        if (bucket_count >= bucket_max_depth || i == zonemap.size() - 1 || current_width > bucket_width) {
             auto bucket = std::make_pair(ZoneMapDetail(min_value, max_value), std::move(current_pages));
-            bucket.first.set_num_rows(current_row);
+            bucket.first.set_num_rows(bucket_count);
             bucket.first.set_has_null(has_null);
             histogram.emplace_back(std::move(bucket));
 
             // reset
             min_value.set_null();
-            current_row = 0;
+            bucket_count = 0;
             has_null = false;
             current_pages.clear();
         }
@@ -186,6 +219,8 @@ void SortableZoneMap::build_histogram(size_t buckets) {
 }
 
 StatusOr<RowIdSparseRange> PageDataSample::sample(OlapReaderStatistics* stats) {
+    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+              Status::InvalidArgument("percent should be in (0, 100)"));
     if (_zonemap) {
         _prepare_histogram(stats);
         if (_has_histogram()) {
@@ -199,13 +234,13 @@ StatusOr<RowIdSparseRange> PageDataSample::sample(OlapReaderStatistics* stats) {
 StatusOr<RowIdSparseRange> PageDataSample::_histogram_sample(OlapReaderStatistics* stats) {
     auto& hist = _zonemap->histogram;
     std::mt19937 mt(_random_seed);
-    std::vector<size_t> sample_pages(hist.size());
+    std::vector<size_t> sample_pages;
     for (auto& bucket : hist) {
         auto& pages = bucket.second;
 
         std::uniform_int_distribution<> dist(0, pages.size() - 1);
         int rnd = dist(mt);
-        sample_pages.push_back(rnd);
+        sample_pages.push_back(pages[rnd]);
     }
 
     std::ranges::sort(sample_pages);
@@ -229,7 +264,7 @@ bool PageDataSample::_has_histogram() const {
 // Build a histogram based on zonemap to make the data sampling more even
 // Without histogram, page sampling may fall into local optimal but not global uniform
 void PageDataSample::_prepare_histogram(OlapReaderStatistics* stats) {
-    size_t expected_pages = _probability_percent / 100 * _num_pages;
+    size_t expected_pages = _probability_percent * _num_pages / 100;
     if (expected_pages <= 1) {
         return;
     }
