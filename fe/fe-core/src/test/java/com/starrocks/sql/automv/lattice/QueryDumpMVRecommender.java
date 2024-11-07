@@ -29,16 +29,21 @@ import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.MetaUtil;
+import com.starrocks.sql.automv.util.PrettyPrinter;
+import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.plan.ReplayWithMVFromDumpTest;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.core.config.Configurator;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -64,6 +69,11 @@ public class QueryDumpMVRecommender {
         FeConstants.runningUnitTest = true;
         FeConstants.isReplayFromQueryDump = true;
         ReplayWithMVFromDumpTest.beforeClass();
+        StarRocksAssert starRocksAssert = ReplayWithMVFromDumpTest.starRocksAssert;
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
         return new QueryDumpMVRecommender(ReplayWithMVFromDumpTest.starRocksAssert);
     }
 
@@ -96,12 +106,11 @@ public class QueryDumpMVRecommender {
         return starRocksAssert;
     }
 
-    private void recommendAndValidate(StarRocksAssert starRocksAssert, String query,
-                                      Consumer<SessionVariable> svSetter,
-                                      Consumer<List<List<String>>> resultChecker) {
+    private List<MVResultWithRewriteTraceInfo> recommendAndValidate(StarRocksAssert starRocksAssert, String query,
+                                                                    Consumer<SessionVariable> svSetter) {
+        List<MVResultWithRewriteTraceInfo> rewritableMVs = Lists.newArrayList();
         List<Pair<String, String>> queryList = Collections.singletonList(Pair.create("query", query));
         AutoMVUtil.testHelper(starRocksAssert.getCtx(), queryList, svSetter, (pieces, mvResults) -> {
-            List<List<String>> rewritableMVs = Lists.newArrayList();
             for (List<String> row : mvResults) {
                 String mvName = row.get(1);
                 String mv = row.get(2);
@@ -111,11 +120,21 @@ public class QueryDumpMVRecommender {
                         .collect(Collectors.joining("\n"));
                 starRocksAssert.withMaterializedView(mv, () -> {
                     associateBaseTablesWithMV(starRocksAssert, mvName, pieces);
-                    String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), query);
-                    if (plan.contains(mvName)) {
-                        rewritableMVs.add(row);
+                    Optional<Pair<String, String>> optFailMessages =
+                            UtFrameUtils.checkMVRewriteWithTracing(starRocksAssert.getCtx(), query, mvName);
+                    if (optFailMessages.isPresent()) {
+                        Pair<String, String> failMessages = optFailMessages.get();
+                        String reason = failMessages.first;
+                        String verboseTraceLogs = failMessages.second;
+                        rewritableMVs.add(new MVResultWithRewriteTraceInfo(row, reason, verboseTraceLogs));
+                    } else {
+                        rewritableMVs.add(new MVResultWithRewriteTraceInfo(row, null, null));
                     }
                 });
+                try {
+                    starRocksAssert.dropMaterializedView(mvName);
+                } catch (Exception ignored) {
+                }
             }
             boolean hasExternalTables = !pieces.stream()
                     .map(p -> p.second)
@@ -126,37 +145,80 @@ public class QueryDumpMVRecommender {
             if (hasExternalTables) {
                 starRocksAssert.getCtx().getSessionVariable().setAutoMVRectifyTableName(true);
                 AutoMVUtil.testHelper(starRocksAssert.getCtx(), queryList, svSetter, (pieces0, mvResults0) -> {
-                    rewritableMVs.replaceAll(strings -> mvResults0.get(Integer.parseInt(strings.get(0))));
+                    rewritableMVs.replaceAll(mvResult -> {
+                        int idx = Integer.parseInt(mvResult.mvResult.get(0));
+                        return new MVResultWithRewriteTraceInfo(mvResults0.get(idx),
+                                mvResult.rewriteFailReason, mvResult.rewriteFailVerboseLogs);
+                    });
                     return null;
                 });
                 starRocksAssert.getCtx().getSessionVariable().setAutoMVRectifyTableName(false);
             }
-            resultChecker.accept(rewritableMVs);
             return null;
+        });
+        return rewritableMVs;
+    }
+
+    private List<MVResultWithRewriteTraceInfo> recommendMV(StarRocksAssert starRocksAssert,
+                                                           QueryDumpInfo dumpInfo) {
+        String query = dumpInfo.getOriginStmt();
+        return recommendAndValidate(starRocksAssert, query, sv -> {
         });
     }
 
-    private List<String> recommendMV(StarRocksAssert starRocksAssert, QueryDumpInfo dumpInfo) {
-        String query = dumpInfo.getOriginStmt();
-        List<String> mvList = Lists.newArrayList();
-        recommendAndValidate(starRocksAssert, query,
-                sv -> {
-                },
-                results -> {
-                    results.forEach(row -> mvList.add(row.get(2)));
-                });
-        return mvList;
-    }
-
-    public String recommend(String dumpJson, Consumer<SessionVariable> svSetter) throws Exception {
+    public List<MVResultWithRewriteTraceInfo> recommend(String dumpJson, Consumer<SessionVariable> svSetter)
+            throws Exception {
         dumpJson = rectifyQueryDump(dumpJson);
         QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
         System.out.println(dumpInfo.getOriginStmt());
-        List<String> mvs = UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV);
-        if (!mvs.isEmpty()) {
-            return mvs.get(0);
-        } else {
-            return null;
+        return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV);
+    }
+
+    public List<String> recommendNoTraceInfo(String dumpJson, Consumer<SessionVariable> svSetter)
+            throws Exception {
+        dumpJson = rectifyQueryDump(dumpJson);
+        QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
+        System.out.println(dumpInfo.getOriginStmt());
+        return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV)
+                .stream()
+                .filter(mvResult -> mvResult.rewriteFailReason == null && mvResult.rewriteFailVerboseLogs == null)
+                .map(mvResult -> mvResult.mvResult.get(2))
+                .collect(Collectors.toList());
+    }
+
+    public String recommendAndFormatOutput(String dumpJson, Consumer<SessionVariable> svSetter) throws Exception {
+        Supplier<String> mvIdGen = Util.nextStringGenerator("Recommend MV ", "");
+        PrettyPrinter printer = new PrettyPrinter();
+        recommend(dumpJson, svSetter).forEach(mvResult -> {
+            boolean rewriteOK = mvResult.rewriteFailReason == null && mvResult.rewriteFailVerboseLogs == null;
+            String rewriteStatus = rewriteOK ? "OK" : "FAIL";
+            printer.add(mvIdGen.get())
+                    .add(" [").add("REWRITE ").add(rewriteStatus).add("]: ")
+                    .add(mvResult.mvResult.get(1)).newLine();
+            printer.add(mvResult.mvResult.get(2)).newLine().newLine();
+            if (mvResult.rewriteFailReason != null) {
+                printer.add("Rewrite Fail Reason").newLine().add(mvResult.rewriteFailReason).newLine();
+            }
+            if (mvResult.rewriteFailVerboseLogs != null) {
+                String[] logs = mvResult.rewriteFailVerboseLogs.split("\n");
+                String tail10Lns =
+                        Stream.of(logs).skip(Math.max(0, logs.length - 10)).collect(Collectors.joining("\n"));
+                printer.add("Rewrite Verbose Logs").newLine().add(tail10Lns).newLine();
+            }
+        });
+        return printer.getResult();
+    }
+
+    public static class MVResultWithRewriteTraceInfo {
+        public final List<String> mvResult;
+        public final String rewriteFailReason;
+        public final String rewriteFailVerboseLogs;
+
+        public MVResultWithRewriteTraceInfo(List<String> mvResult, String rewriteFailReason,
+                                            String rewriteFailVerboseLogs) {
+            this.mvResult = mvResult;
+            this.rewriteFailReason = rewriteFailReason;
+            this.rewriteFailVerboseLogs = rewriteFailVerboseLogs;
         }
     }
 }

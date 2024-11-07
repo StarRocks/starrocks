@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.HintNode;
@@ -162,6 +163,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
@@ -176,6 +178,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.connectContext;
 
 public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -577,6 +580,25 @@ public class UtFrameUtils {
         }
     }
 
+    public static Optional<Pair<String, String>> checkMVRewriteWithTracing(
+            ConnectContext connectContext, String sql, String targetMVName) throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, Tracers.Module.MV.name());
+        Tracers.addTraceModeAndModule(Tracers.Mode.REASON, Tracers.Module.MV);
+        try {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            if (planPair.first.contains(targetMVName)) {
+                return Optional.empty();
+            } else {
+                return Optional.of(Pair.create(Tracers.printReasons(), Tracers.printLogs()));
+            }
+        } catch (Exception e) {
+            throw e;
+        } finally {
+            Tracers.close();
+        }
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
                 throws Exception {
         return buildPlan(connectContext, originStmt,
@@ -961,6 +983,20 @@ public class UtFrameUtils {
         }
     }
 
+    private static void rectifySessionVariables(ConnectContext ctx) {
+        Gson gson = new Gson();
+        try {
+            Map<String, Object> keyValues = gson.fromJson(
+                    ctx.getSessionVariable().getJsonString(), Map.class);
+            if (keyValues.containsKey("enable_materialized_view_agg_pushdown_rewrite")) {
+                keyValues.put("enable_materialized_view_agg_pushdown_rewrite", true);
+            }
+            ctx.getSessionVariable().replayFromJson(gson.toJson(keyValues));
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
     public static <T> T execInMockedEnv(StarRocksAssert starRocksAssert, QueryDumpInfo dumpInfo,
                                         Consumer<SessionVariable> svSetter,
                                         BiFunction<StarRocksAssert, QueryDumpInfo, T> cb) throws Exception {
@@ -968,6 +1004,7 @@ public class UtFrameUtils {
         initMockEnv(context, dumpInfo);
         try {
             svSetter.accept(context.getSessionVariable());
+            rectifySessionVariables(context);
             return cb.apply(starRocksAssert, dumpInfo);
         } finally {
             tearMockEnv();

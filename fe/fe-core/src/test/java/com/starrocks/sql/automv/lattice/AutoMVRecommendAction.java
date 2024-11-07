@@ -21,19 +21,83 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.sql.util.Util;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpUtil;
+import org.apache.commons.io.IOUtils;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AutoMVRecommendAction extends RestBaseAction {
+    public static final Logger LOG = LogManager.getLogger(AutoMVRecommendAction.class);
+    private static final File HISTORY_DIR = new File(
+            Optional.ofNullable(System.getenv("MV_RECOMMEND_HISTORY_DIR"))
+                    .orElse("history_dir"));
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private String previousTimestamp = Util.yyyyMMddTHHmmss();
+    private Integer idx = 0;
+
     public AutoMVRecommendAction(ActionController controller) {
         super(controller);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         controller.registerHandler(HttpMethod.POST, "/api/v1/automv_recommend", new AutoMVRecommendAction(controller));
+    }
+
+    private void createHistoryDirIfNotExists() {
+        synchronized (HISTORY_DIR) {
+            if (!HISTORY_DIR.exists()) {
+                try {
+                    HISTORY_DIR.mkdirs();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    String uniqueFileName() {
+        String currentTimestamp = Util.yyyyMMddTHHmmss();
+        synchronized (this) {
+            if (currentTimestamp.equals(previousTimestamp)) {
+                String suffix = "0000" + (++idx);
+                suffix = suffix.substring(suffix.length() - 4);
+                return currentTimestamp + "_" + suffix;
+            } else {
+                previousTimestamp = currentTimestamp;
+                idx = 0;
+                return currentTimestamp + "_0000";
+            }
+        }
+    }
+
+    void saveHistoryAsync(String queryDump, String result) {
+        executor.submit(() -> {
+            createHistoryDirIfNotExists();
+            String name = uniqueFileName();
+            File queryDumpFile = new File(HISTORY_DIR, name + ".json");
+            File resultFile = new File(HISTORY_DIR, name + "_result.txt");
+            try {
+                FileWriter queryDumpWriter = new FileWriter(queryDumpFile);
+                FileWriter resultWriter = new FileWriter(resultFile);
+                IOUtils.write(queryDump, queryDumpWriter);
+                IOUtils.write(result, resultWriter);
+                queryDumpWriter.flush();
+                queryDumpWriter.close();
+                resultWriter.flush();
+                resultWriter.close();
+            } catch (Throwable ex) {
+                LOG.error("Fail to create file", ex);
+            }
+        });
     }
 
     @Override
@@ -63,9 +127,9 @@ public class AutoMVRecommendAction extends RestBaseAction {
 
         MVRecommendParams params = MVRecommendParams.parseFromQueryParams(request.getAllParameters());
         QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
-        String mv = recommender.recommend(requestContent, params::setSessionVariables);
-        response.appendContent(mv);
-        response.appendContent("\n");
+        String output = recommender.recommendAndFormatOutput(requestContent, params::setSessionVariables);
+        response.appendContent(output);
         sendResult(request, response);
+        saveHistoryAsync(requestContent, output);
     }
 }

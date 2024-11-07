@@ -23,6 +23,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -51,13 +52,13 @@ public class RecommendMVFromQueryDumpTest {
         String jsonStr = IOUtils.toString(new FileReader(queryDumpFile));
         QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
 
-        String mv = recommender.recommend(jsonStr, AutoMVUtil::configDefaultAutoMV);
+        List<String> mvList = recommender.recommendNoTraceInfo(jsonStr, AutoMVUtil::configDefaultAutoMV);
         String testName = groupName + "." + queryDumpPath;
         Set<String> noMVs = Set.of(
                 "tpch.tpch_1g_q02.json",
                 "tpch.tpch_1g_q08.json",
                 "tpch.tpch_1g_q14.json",
                 "tpch.tpch_1g_q17.json");
-        Assert.assertTrue(noMVs.contains(testName) || mv != null);
+        Assert.assertTrue(noMVs.contains(testName) || !mvList.isEmpty());
     }
 }

@@ -24,9 +24,8 @@ public class QueryDumpMVRecommenderCmd {
         MVRecommendParams params = Objects.requireNonNull(MVRecommendParams.parseFromCmdLineArgs(args));
         String jsonStr = IOUtils.toString(new FileReader(params.getQueryDump()));
         QueryDumpMVRecommender recommender = QueryDumpMVRecommender.of();
-        String mv = recommender.recommend(jsonStr, params::setSessionVariables);
-        System.out.println(mv);
+        String output = recommender.recommendAndFormatOutput(jsonStr, params::setSessionVariables);
+        System.out.println(output);
         System.exit(0);
     }
-
 }

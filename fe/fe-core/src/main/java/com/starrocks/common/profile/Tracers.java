@@ -150,6 +150,12 @@ public class Tracers {
         return (tracers.moduleMask & 1 << m.ordinal()) != 0;
     }
 
+    public static void addTraceModeAndModule(Mode mode, Module module) {
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.modeMask |= 1 << mode.ordinal();
+        tracers.moduleMask |= 1 << module.ordinal();
+    }
+
     public static void close() {
         THREAD_LOCAL.remove();
     }
