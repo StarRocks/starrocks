@@ -84,7 +84,7 @@ public class BackupRestoreAnalyzer {
             List<TableRef> tableRefs = backupStmt.getTableRefs();
             // If TableRefs is empty and withOnClause is not true, it means that we do not specify any table in Backup stmt.
             // We should backup all table in current database.
-            if (!withOnClause && tableRefs.size() == 0) {
+            if (!withOnClause && tableRefs.isEmpty()) {
                 for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +

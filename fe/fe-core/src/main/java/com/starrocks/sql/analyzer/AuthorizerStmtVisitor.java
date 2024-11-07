@@ -2111,7 +2111,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
         List<TableRef> tableRefs = statement.getTableRefs();
-        if (statement.withOnClause() && tableRefs.size() == 0 && statement.getFnRefs().size() == 0) {
+        if (statement.withOnClause() && tableRefs.isEmpty() && statement.getFnRefs().isEmpty()) {
             String dBName = statement.getDbName();
             throw new SemanticException("Database: %s is empty", dBName);
         }
