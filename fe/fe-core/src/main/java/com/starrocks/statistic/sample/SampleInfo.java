@@ -46,6 +46,19 @@ public class SampleInfo {
 
     private final List<TabletStats> lowWeightTablets;
 
+    public SampleInfo() {
+        this.dbName = null;
+        this.tableName = null;
+        this.tabletSampleRatio = 1;
+        this.sampleRowCount = 1;
+        this.totalRowCount = 1;
+        this.rowSampleRatio = 1;
+        this.highWeightTablets = null;
+        this.mediumHighWeightTablets = null;
+        this.mediumLowWeightTablets = null;
+        this.lowWeightTablets = null;
+    }
+
     public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,

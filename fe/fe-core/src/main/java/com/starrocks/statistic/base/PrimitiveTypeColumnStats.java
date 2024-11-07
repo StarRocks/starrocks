@@ -1,0 +1,61 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.statistic.base;
+
+import com.starrocks.catalog.Type;
+
+public class PrimitiveTypeColumnStats extends ColumnStats {
+    public PrimitiveTypeColumnStats(String columnName, Type columnType) {
+        super(columnName, columnType);
+    }
+
+    @Override
+    public String getFullDateSize() {
+        if (columnType.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(" + columnName + ")), 0)";
+        }
+        long typeSize = columnType.getTypeSize();
+        return "COUNT(1) * " + typeSize;
+    }
+
+    @Override
+    public String getFullMax() {
+        String fn = "MAX";
+        if (columnType.getPrimitiveType().isCharFamily()) {
+            fn = fn + "(LEFT(column_key, 200))";
+        } else {
+            fn = fn + "(column_key)";
+        }
+        fn = "IFNULL(" + fn + ", '')";
+        return fn;
+    }
+
+    @Override
+    public String getFullMin() {
+        String fn = "MIN";
+        if (columnType.getPrimitiveType().isCharFamily()) {
+            fn = fn + "(LEFT(column_key, 200))";
+        } else {
+            fn = fn + "(column_key)";
+        }
+        fn = "IFNULL(" + fn + ", '')";
+        return fn;
+    }
+
+    @Override
+    public String getFullNDV() {
+        return "hex(hll_serialize(IFNULL(hll_raw(" + getQuotedColumnName() + "), hll_empty())))";
+    }
+}

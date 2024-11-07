@@ -117,8 +117,14 @@ public class StatisticsCollectJobFactory {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
                         .map(Partition::getId).collect(Collectors.toList());
             }
-            return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                    StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+
+            if (Config.statistic_use_meta_statistics) {
+                return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+            } else {
+                return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+            }
         }
     }
 

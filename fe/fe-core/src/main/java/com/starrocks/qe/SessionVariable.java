@@ -466,6 +466,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+    public static final String STATISTIC_META_COLLECT_PARALLEL = "statistic_meta_collect_parallel";
+
     public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
@@ -1497,6 +1499,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
+
+    @VarAttr(name = STATISTIC_META_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
+    private int statisticMetaCollectParallelism = 10;
 
     @VarAttr(name = ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS, flag = VariableMgr.INVISIBLE)
     private boolean enableAnalyzePhasePruneColumns = false;
@@ -2568,6 +2573,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setStatisticCollectParallelism(int parallelism) {
         this.statisticCollectParallelism = parallelism;
+    }
+
+    public int getStatisticMetaCollectParallelism() {
+        return statisticMetaCollectParallelism;
+    }
+
+    public void setStatisticMetaCollectParallelism(int statisticMetaCollectParallelism) {
+        this.statisticMetaCollectParallelism = statisticMetaCollectParallelism;
     }
 
     public boolean isEnableAnalyzePhasePruneColumns() {
