@@ -272,8 +272,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            Map<String, String> properties = catalog.getConfig();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
