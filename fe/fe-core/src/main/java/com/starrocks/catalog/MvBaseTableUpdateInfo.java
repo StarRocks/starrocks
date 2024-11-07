@@ -52,6 +52,10 @@ public class MvBaseTableUpdateInfo {
         return toRefreshPartitionNames;
     }
 
+    public Map<String, PCell> getNameToPartKeys() {
+        return nameToPartKeys;
+    }
+
     /**
      * Add partition names that base table needs to be refreshed
      * @param toRefreshPartitionNames the partition names that need to be refreshed

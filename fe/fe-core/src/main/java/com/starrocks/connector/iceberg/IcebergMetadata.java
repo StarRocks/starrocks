@@ -707,7 +707,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    @Override
     public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
         IcebergTable icebergTable = (IcebergTable) table;
         String dbName = icebergTable.getRemoteDbName();
@@ -942,9 +941,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                .useSnapshot(snapshotId)
-                .metricsReporter(metricsReporter)
-                .planWith(jobPlanningExecutor);
+                    .useSnapshot(snapshotId)
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
 
         if (enableCollectColumnStats) {
             scan = scan.includeColumnStats();

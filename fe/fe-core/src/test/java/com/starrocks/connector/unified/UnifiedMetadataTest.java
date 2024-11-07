@@ -291,12 +291,6 @@ public class UnifiedMetadataTest {
             }
 
             {
-                icebergMetadata.getPrunedPartitions(icebergTable, null, -1, TableVersionRange.empty());
-                result = ImmutableList.of();
-                times = 1;
-            }
-
-            {
                 icebergMetadata.prepareMetadata((MetaPreparationItem) any, null, null);
                 result = true;
                 times = 1;
@@ -317,7 +311,6 @@ public class UnifiedMetadataTest {
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("iceberg");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
-        Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1, TableVersionRange.empty()).isEmpty());
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null,
                 -1, TableVersionRange.empty()), null, null));
         Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null));

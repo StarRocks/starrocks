@@ -218,11 +218,6 @@ public interface ConnectorMetadata {
         return true;
     }
 
-    default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate,
-                                                   long limit, TableVersionRange version) {
-        throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
-    }
-
     // return true if the connector has self info schema
     default boolean hasSelfInfoSchema() {
         return false;
