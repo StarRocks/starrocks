@@ -42,5 +42,4 @@ public class TrinoInsertTest extends TrinoTestBase {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }
     }
-
-    }
+}
