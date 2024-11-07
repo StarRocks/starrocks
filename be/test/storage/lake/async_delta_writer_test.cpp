@@ -543,6 +543,9 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
         latch.count_down();
     });
     latch.wait();
+    while (delta_writer->queueing_memtable_num() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     EXPECT_EQ(0, delta_writer->queueing_memtable_num());
 
     // test flush after close

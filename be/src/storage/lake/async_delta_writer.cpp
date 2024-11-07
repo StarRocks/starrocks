@@ -163,7 +163,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFlushTask: {
             auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
             if (st.ok()) {
-                st.update(delta_writer->flush());
+                st.update(delta_writer->manual_flush());
             }
             flush_task->cb(st);
             break;
