@@ -45,8 +45,16 @@ public:
             // First unpack as many full batches as possible.
             const int64_t values_to_read = BitPacking::NumValuesToUnpack(bit_width, in_bytes, num_values);
             constexpr int BATCH_SIZE = 8;
+
             // make sure don't access memory out of bound.
-            const int64_t batches_to_read = values_to_read * bit_width / 8 / 8 * 8 * 8 / bit_width / BATCH_SIZE;
+            // we need make sure the last batch is not out of bound, so if there are x batch,
+            // the prior (x - 1) batch has used (x - 1) * bit_width bytes, and the last batch use
+            // (bit_width + 7) / 8 * 8 bytes, so there should be
+            // (x - 1) * bit_width + (bit_width + 7) / 8 <= in_bytes
+            const int64_t batches_to_read = std::max(
+                    (int64_t)0,
+                    std::min((in_bytes - (bit_width + 7) / 8 * 8) / bit_width + 1, values_to_read / BATCH_SIZE));
+
             if (batches_to_read > 0) {
                 starrocks::util::unpack(bit_width, in, in_bytes, batches_to_read * BATCH_SIZE, out);
                 in_bytes -= batches_to_read * bit_width;
