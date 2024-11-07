@@ -93,6 +93,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
@@ -1253,7 +1254,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
                 tableName.concat(UUID.randomUUID().toString()), null,
-                (QueryStatement) visit(node.getQuery(), context), true);
+                (QueryStatement) visit(node.getQuery(), context), true, new HashMap<>(0), NodePosition.ZERO);
     }
 
 
