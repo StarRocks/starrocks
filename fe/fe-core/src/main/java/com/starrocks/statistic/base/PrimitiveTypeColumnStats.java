@@ -27,7 +27,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
             return "IFNULL(SUM(CHAR_LENGTH(" + getQuotedColumnName() + ")), 0)";
         }
         long typeSize = columnType.getTypeSize();
-        return "COUNT(1) * " + typeSize;
+        return "COUNT(" + getQuotedColumnName() + ") * " + typeSize;
     }
 
     @Override

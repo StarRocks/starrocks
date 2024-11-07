@@ -56,12 +56,12 @@ public class StatisticSQLs {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-            " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+            " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
-            ", cast(COUNT(1) as BIGINT)" + // BIGINT, row_count
+            ", cast(COUNT(*) as BIGINT)" + // BIGINT, row_count
             ", cast($dataSize as BIGINT)" + // BIGINT, data_size
             ", '00'" + // VARBINARY, ndv
             ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
