@@ -87,7 +87,6 @@ const TDataSink& UnifiedExecPlanFragmentParams::output_sink() const {
 /// FragmentExecutor.
 FragmentExecutor::FragmentExecutor() {
     _fragment_start_time = MonotonicNanos();
-    LOG(INFO) << "create FragmentExecutor";
 }
 
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
