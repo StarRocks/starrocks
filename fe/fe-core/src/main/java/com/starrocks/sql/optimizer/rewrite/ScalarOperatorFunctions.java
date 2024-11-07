@@ -106,7 +106,8 @@ import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
  */
 public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
-            ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
+            ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").
+                    add("yyyyMMdd HH:mm:ss").build();
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
