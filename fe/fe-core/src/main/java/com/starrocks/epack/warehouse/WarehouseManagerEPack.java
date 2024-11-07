@@ -72,7 +72,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     private void checkWarehouseState(LocalWarehouse warehouse) {
         if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouse.getName()));
         }
     }
 
@@ -179,7 +179,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
@@ -205,7 +205,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     LOG.info("Warehouse {} already exists", warehouseName);
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, warehouseName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, String.format("name: %s", warehouseName));
             }
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
@@ -255,7 +255,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 if (stmt.isSetIfExists()) {
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
 
             nameToWh.remove(warehouseName);
@@ -290,7 +290,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouseName));
             }
             warehouse.suspendSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
