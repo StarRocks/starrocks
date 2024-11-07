@@ -98,12 +98,8 @@ public class ColumnClassifier {
         }
     }
 
-    public List<ColumnStats> getMetaCollectColumns() {
-        return columnStats.stream().filter(ColumnStats::supportMeta).collect(Collectors.toList());
-    }
-
-    public List<ColumnStats> getDataCollectColumns() {
-        return columnStats.stream().filter(ColumnStats::supportData).collect(Collectors.toList());
+    public List<ColumnStats> getColumnStats() {
+        return columnStats;
     }
 
     public List<ColumnStats> getUnSupportCollectColumns() {

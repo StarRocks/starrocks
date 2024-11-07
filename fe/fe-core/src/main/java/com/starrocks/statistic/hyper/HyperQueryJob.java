@@ -207,9 +207,12 @@ public abstract class HyperQueryJob {
         ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, new SampleInfo());
         int splitSize = Math.max(1, batchLimit / columnNames.size());
 
-        List<ColumnStats> dataCollectColumns = classifier.getDataCollectColumns();
-        List<ColumnStats> metaCollectColumns = Lists.newArrayList(classifier.getMetaCollectColumns());
-        metaCollectColumns.addAll(classifier.getUnSupportCollectColumns());
+        List<ColumnStats> supportedStats = classifier.getColumnStats();
+
+        List<ColumnStats> metaCollectColumns =
+                supportedStats.stream().filter(ColumnStats::supportMeta).collect(Collectors.toList());
+        List<ColumnStats> dataCollectColumns =
+                supportedStats.stream().filter(c -> !c.supportMeta() && c.supportData()).collect(Collectors.toList());
 
         List<List<Long>> pids = Lists.partition(partitionIdList, splitSize);
         List<HyperQueryJob> jobs = Lists.newArrayList();
