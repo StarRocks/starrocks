@@ -43,7 +43,8 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final boolean useHashBasedPartition;
     private final boolean isSkewed;
 
-    // only true when local partition top N can pre agg
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private boolean inputIsBinary;
 
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -50,7 +51,7 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                 OptExpression.Builder partialSortOptBuilder = OptExpression.builder()
                         .setOp(new PhysicalTopNOperator(topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
                                 topN.getPartitionByColumns(), topN.getPartitionLimit(), SortPhase.PARTIAL,
-                                topN.getTopNType(), false, topN.isEnforced(), null, null, null))
+                                topN.getTopNType(), false, topN.isEnforced(), null, null, ImmutableMap.of()))
                         .setInputs(optExpr.inputAt(0).getInputs())
                         .setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
                         .setStatistics(optExpr.getStatistics())

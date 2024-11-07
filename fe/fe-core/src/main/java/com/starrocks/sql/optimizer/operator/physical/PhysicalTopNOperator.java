@@ -46,6 +46,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private boolean isSplit;
     private boolean isEnforced;
 
+    // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private Map<ColumnRefOperator, CallOperator> preAggCall;
 
     private PhysicalTopNOperator() {

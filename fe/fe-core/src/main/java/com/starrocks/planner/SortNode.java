@@ -215,7 +215,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 Expr.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
-        //        Preconditions.checkState(tupleIds.size() == 1, "Incorrect size for tupleIds in SortNode");
         sortInfo.setSort_tuple_slot_exprs(Expr.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);

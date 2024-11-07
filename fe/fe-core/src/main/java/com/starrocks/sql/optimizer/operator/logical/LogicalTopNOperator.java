@@ -50,6 +50,8 @@ public class LogicalTopNOperator extends LogicalOperator {
     private TopNType topNType;
     private boolean isSplit;
 
+    // only set when rank <=1 with preAgg optimization is triggered
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
