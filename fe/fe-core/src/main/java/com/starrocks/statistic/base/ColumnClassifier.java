@@ -22,7 +22,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ColumnClassifier {
 
