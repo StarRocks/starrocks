@@ -185,9 +185,8 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                 if (_enable_pre_agg) {
                     AggDataPtr agg_states = _mem_pool->allocate_aligned(_pre_agg->_agg_states_total_size,
                                                                         _pre_agg->_max_agg_state_align_size);
-                    _pre_agg->_managed_fn_states.emplace_back(
-                            std::make_unique<ManagedFunctionStates<LocalPartitionTopnContext>>(&_pre_agg->_agg_fn_ctxs,
-                                                                                               agg_states, this));
+                    _pre_agg->_managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates<PreAggState>>(
+                            &_pre_agg->_agg_fn_ctxs, agg_states, _pre_agg.get()));
                 }
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {

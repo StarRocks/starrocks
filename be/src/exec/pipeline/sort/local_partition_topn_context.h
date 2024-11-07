@@ -59,7 +59,7 @@ struct PreAggState {
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     std::vector<FunctionTypes> _agg_fn_types;
     // every partition has one Agg State
-    std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
+    std::vector<ManagedFunctionStatesPtr<PreAggState>> _managed_fn_states;
 };
 
 // LocalPartitionTopnContext is the bridge of each pair of LocalPartitionTopn{Sink/Source}Operators
