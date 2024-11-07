@@ -820,7 +820,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("100.000B", resultSet.getString(23));
         Assert.assertEquals("0", resultSet.getString(24));
         Assert.assertEquals("N/A", resultSet.getString(27));
-        Assert.assertEquals("DISCONNECTED", resultSet.getString(29));
+        Assert.assertEquals("CONNECTING", resultSet.getString(29));
         Assert.assertEquals(String.valueOf(workerId), resultSet.getString(31));
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }

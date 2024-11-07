@@ -198,7 +198,7 @@ public class BackendTest {
         back2.updateOnce(1, 1, 1);
         Assert.assertFalse(back1.equals(back2));
 
-        Assert.assertEquals("Backend [id=1, host=a, heartbeatPort=1, alive=true]", back1.toString());
+        Assert.assertEquals("Backend [id=1, host=a, heartbeatPort=1, alive=true, status=OK]", back1.toString());
 
         // 3. delete files
         dis.close();
