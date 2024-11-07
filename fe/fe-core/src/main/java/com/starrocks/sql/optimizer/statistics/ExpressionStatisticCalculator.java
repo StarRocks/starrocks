@@ -607,6 +607,17 @@ public class ExpressionStatisticCalculator {
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
                     return childColumnStatisticList.get(0);
+<<<<<<< HEAD
+=======
+                case FunctionSet.CONCAT:
+                    distinctValues = Math.min(rowCount,
+                            childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
+                    averageRowSize = childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize).sum();
+                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getNullsFraction)
+                            .reduce(1.0, (accumulator, nullFraction) -> accumulator * (1 - nullFraction));
+                    return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                            nullsFraction, averageRowSize, distinctValues);
+>>>>>>> 3b8e68324e ([BugFix] fix concat expr with multiple args nullsFraction (#52683))
                 default:
                     return ColumnStatistic.unknown();
             }
