@@ -161,7 +161,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
+        String sql = "INSERT INTO _statistics_.column_statistics values " + String.join(", ", sqlBuffer) + ";";
         List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
                 "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
                 "column_10", "column_11", "column_12");

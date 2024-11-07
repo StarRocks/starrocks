@@ -72,10 +72,10 @@ public class StatisticSQLs {
     public static final String BATCH_NDV_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
-            ", 0" + // BIGINT, row_count
-            ", 0" + // BIGINT, data_size
+            ", cast(0 as BIGINT)" + // BIGINT, row_count
+            ", cast(0 as BIGINT)" + // BIGINT, data_size
             ", $hllFunction" + // VARBINARY, ndv
-            ", 0" + // BIGINT, null_count
+            ", cast(0 as BIGINT)" + // BIGINT, null_count
             ", ''" + // VARCHAR, max
             ", '' " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`)";
