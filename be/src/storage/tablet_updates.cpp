@@ -5686,49 +5686,35 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
 }
 
 void TabletUpdates::rewrite_rs_meta() {
-    std::unordered_map<int64_t, RowsetSharedPtr> pending_rs;
-    std::vector<RowsetSharedPtr> published_rs;
-    {
-        std::lock_guard lg(_lock);
-        for (auto& [_, rs] : _rowsets) {
-            if (rs->rowset_meta()->skip_tablet_schema()) {
-                published_rs.emplace_back(rs);
-            }
-        }
-
-        for (auto& [version, rs] : _pending_commits) {
-            if (rs->rowset_meta()->skip_tablet_schema()) {
-                pending_rs[version] = rs;
-            }
-        }
-    }
-
+    std::lock_guard lg(_lock);
     for (auto& [version, rs] : _pending_commits) {
-        RowsetMetaPB meta_pb;
-        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
-        Status st = TabletMetaManager::pending_rowset_commit(
-                _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
-                RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
-        LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
-                                << ", rowset_id=" << rs->rowset_id();
-        rs->rowset_meta()->set_skip_tablet_schema(false);
+        if (rs->rowset_meta()->skip_tablet_schema()) {
+            rs->rowset_meta()->set_skip_tablet_schema(false);
+            RowsetMetaPB meta_pb;
+            rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+            Status st = TabletMetaManager::pending_rowset_commit(
+                    _tablet.data_dir(), _tablet.tablet_id(), version, meta_pb,
+                    RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rs->rowset_id()));
+            LOG_IF(FATAL, !st.ok()) << "fail to save pending rowset meta:" << st
+                                    << ". tablet_id=" << _tablet.tablet_id() << ", rowset_id=" << rs->rowset_id();
+        }
     }
 
     auto kv_store = _tablet.data_dir()->get_meta();
     rocksdb::WriteBatch wb;
-    for (auto& rs : published_rs) {
-        RowsetMetaPB meta_pb;
-        rs->rowset_meta()->get_full_meta_pb(&meta_pb);
-        Status st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
-        LOG_IF(FATAL, !st.ok()) << "fail to put published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
-                                << ", rowset_id=" << rs->rowset_id();
+    for (auto& [_, rs] : _rowsets) {
+        if (rs->rowset_meta()->skip_tablet_schema()) {
+            rs->rowset_meta()->set_skip_tablet_schema(false);
+            RowsetMetaPB meta_pb;
+            rs->rowset_meta()->get_full_meta_pb(&meta_pb);
+            Status st = TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, _tablet.tablet_id(), meta_pb);
+            LOG_IF(FATAL, !st.ok()) << "fail to put published rowset meta:" << st
+                                    << ". tablet_id=" << _tablet.tablet_id() << ", rowset_id=" << rs->rowset_id();
+        }
     }
     Status st = kv_store->write_batch(&wb);
     LOG_IF(FATAL, !st.ok()) << "fail to write published rowset meta:" << st << ". tablet_id=" << _tablet.tablet_id()
                             << ", rowset nul=" << published_rs.size();
-    for (auto& rs : published_rs) {
-        rs->rowset_meta()->set_skip_tablet_schema(false);
-    }
 }
 
 } // namespace starrocks
