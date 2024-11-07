@@ -84,7 +84,7 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
                                 << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
     if (flush_after_write) {
-        auto st = writer->flush_memtable_async(false);
+        auto st = writer->manual_flush();
         LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
                                   << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }

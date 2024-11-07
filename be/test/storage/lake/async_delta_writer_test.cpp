@@ -516,4 +516,47 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    CountDownLatch latch(1);
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+    delta_writer->flush([&](const Status& st) {
+        ASSERT_OK(st);
+        latch.count_down();
+    });
+    latch.wait();
+    while (delta_writer->queueing_memtable_num() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    EXPECT_EQ(0, delta_writer->queueing_memtable_num());
+
+    // test flush after close
+    SyncPoint::GetInstance()->LoadDependency({{"AsyncDeltaWriterImpl::close:2", "AsyncDeltaWriterImpl::execute:1"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() { SyncPoint::GetInstance()->DisableProcessing(); });
+    delta_writer->flush([&](const Status& st) { ASSERT_ERROR(st); });
+    delta_writer->close();
+}
+
+>>>>>>> 2ec626ec6a ([BugFix] Fix stale mem flush not reduce load memory usage (#52613))
 } // namespace starrocks::lake

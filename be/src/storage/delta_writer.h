@@ -110,7 +110,14 @@ public:
     // [NOT thread-safe]
     [[nodiscard]] Status commit();
 
+<<<<<<< HEAD
     [[nodiscard]] Status flush_memtable_async(bool eos = false);
+=======
+    // Manual flush used by stale memtable flush
+    Status manual_flush();
+
+    Status flush_memtable_async(bool eos = false);
+>>>>>>> 2ec626ec6a ([BugFix] Fix stale mem flush not reduce load memory usage (#52613))
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
