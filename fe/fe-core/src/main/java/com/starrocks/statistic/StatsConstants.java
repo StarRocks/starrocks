@@ -75,6 +75,8 @@ public class StatsConstants {
 
     public static final String MAX_SAMPLE_TABLET_NUM = "max_sample_tablet_num";
 
+    public static final String STATISTIC_SAMPLE_COLLECT_PARTITIONS = "statistic_sample_collect_partitions";
+
     // Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";

@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -26,6 +27,7 @@ import com.starrocks.statistic.ColumnStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalFullStatisticsCollectJob;
+import com.starrocks.statistic.ExternalSampleStatisticsCollectJob;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.UtFrameUtils;
@@ -88,12 +90,10 @@ public class ConnectorAnalyzeTaskTest {
         Optional<AnalyzeStatus> result = task1.run();
         Assert.assertTrue(result.isEmpty());
 
-        new MockUp<ConnectorAnalyzeTask>() {
+        new MockUp<ExternalSampleStatisticsCollectJob>() {
             @Mock
-            private AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus,
-                                                 Set<String> updatedPartitions) {
-                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
-                return analyzeStatus;
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                // do nothing
             }
         };
 
@@ -171,5 +171,54 @@ public class ConnectorAnalyzeTaskTest {
         Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
         Assert.assertEquals(2, externalAnalyzeStatusResult.getColumns().size());
+    }
+
+    @Test
+    public void testSampleTaskRun() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(tableUUID);
+        ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
+        new MockUp<ExternalSampleStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                // do nothing
+            }
+        };
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                // do nothing
+            }
+        };
+
+        Optional<AnalyzeStatus> result = task1.run();
+        Assert.assertTrue(result.isPresent());
+        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
+        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
+
+        Config.statistic_sample_collect_partition_size = 2000;
+        result = task1.run();
+        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
+        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.FULL);
+        Config.statistic_sample_collect_partition_size = 1000;
+
+        // mock only two partitions updated
+        new MockUp<StatisticUtils>() {
+            @Mock
+            Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+                return Sets.newHashSet("o_orderdate=1992-04-19", "o_orderdate=1992-04-18");
+            }
+        };
+        result = task1.run();
+        Assert.assertTrue(result.isPresent());
+        Assert.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
+        externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
+        Assert.assertSame(externalAnalyzeStatusResult.getType(), StatsConstants.AnalyzeType.SAMPLE);
     }
 }

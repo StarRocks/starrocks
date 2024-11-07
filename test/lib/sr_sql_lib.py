@@ -2619,6 +2619,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan:\n %s" % (expect, plan_string))
 
+    def assert_show_stats_meta_contains(self, predicate, *expects):
+        """
+        assert show stats meta with predicate contains expect string
+        """
+        sql = "show stats meta %s" % predicate
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            meta_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in show stats meta:\n %s" % (expect, meta_string))
+
     def assert_trace_values_contains(self, query, *expects):
         """
         assert trace values result contains expect string

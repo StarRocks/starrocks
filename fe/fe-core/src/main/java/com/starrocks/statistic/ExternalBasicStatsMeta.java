@@ -125,6 +125,10 @@ public class ExternalBasicStatsMeta implements Writable {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 
+    public ColumnStatsMeta getColumnStatsMeta(String columnName) {
+        return columnStatsMetaMap.get(columnName);
+    }
+
     public Map<String, ColumnStatsMeta> getColumnStatsMetaMap() {
         return columnStatsMetaMap;
     }

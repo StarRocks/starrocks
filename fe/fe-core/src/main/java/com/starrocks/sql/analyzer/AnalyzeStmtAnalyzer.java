@@ -132,10 +132,6 @@ public class AnalyzeStmtAnalyzer {
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
-                if (!statement.getAnalyzeTypeDesc().isHistogram() && statement.isSample()) {
-                    throw new SemanticException("External table %s don't support SAMPLE analyze",
-                            statement.getTableName().toString());
-                }
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake and odps table",
@@ -159,10 +155,6 @@ public class AnalyzeStmtAnalyzer {
                     if (tbl.getTbl() == null) {
                         throw new SemanticException("External catalog don't support analyze all tables, please give a" +
                                 " specific table");
-                    }
-                    if (statement.isSample()) {
-                        throw new SemanticException("External table %s don't support SAMPLE analyze",
-                                statement.getTableName().toString());
                     }
                     String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
                             session.getCurrentCatalog() : tbl.getCatalog();

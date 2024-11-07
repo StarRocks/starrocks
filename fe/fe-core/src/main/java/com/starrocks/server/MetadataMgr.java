@@ -700,7 +700,9 @@ public class MetadataMgr {
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
-                    statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                    double rowCount = Double.isNaN(statistics.getOutputRowCount()) ? connectorTableColumnStats.getRowCount()
+                            : Math.max(statistics.getOutputRowCount(), connectorTableColumnStats.getRowCount());
+                    statistics.setOutputRowCount(rowCount);
                 }
             }
         }
