@@ -645,23 +645,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalAnalyzeAllDb() {
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                return Maps.newHashMap();
-            }
-        };
-        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                new ExternalAnalyzeJob("hive0", null, null, null, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
-                        Maps.newHashMap(),
-                        StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN));
-        Assert.assertEquals(32, jobs.size());
-    }
-
-    @Test
     public void testExternalAnalyzeDb() {
         new MockUp<AnalyzeMgr>() {
             @Mock
@@ -699,7 +682,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testCreateHiveAnalyzeJob() {
         ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
-                "t1", null, null,
+                "t1", List.of("c1"), null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -715,11 +698,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -730,10 +723,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0",
+                        "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().minusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
             }
         };
@@ -742,17 +739,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
@@ -765,17 +751,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
@@ -783,7 +758,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         100000000, ""));
             }
         };
-
+        // analyze all columns
         analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
                 "t1", null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -798,7 +773,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testCreateIcebergAnalyzeJob() {
         ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
-                "t1", null, null,
+                "t1", List.of("id"), null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -812,11 +787,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1",  List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now().plusHours(2)));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(2), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
+            }
+        };
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return LocalDateTime.now();
             }
         };
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
@@ -828,10 +813,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("iceberg0",
+                        "partitioned_db", "t1", List.of("id"), StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime, Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("id", StatsConstants.AnalyzeType.FULL,
+                        statsUpdateTime));
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                statsUpdateTime, Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
             }
         };
@@ -850,17 +838,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                statsUpdateTime, Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
@@ -887,17 +864,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
 
         // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
-        new MockUp<AnalyzeMgr>() {
-            @Mock
-            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
-                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("iceberg0", "partitioned_db", "t1"),
-                        new ExternalBasicStatsMeta("iceberg0", "partitioned_db", "t1", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
-                return metaMap;
-            }
-        };
         new MockUp<CachedStatisticStorage>() {
             @Mock
             public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
@@ -905,7 +871,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         100000000, ""));
             }
         };
-
+        // analyze all columns
         analyzeJob = new ExternalAnalyzeJob("iceberg0", "partitioned_db",
                 "t1", null, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -914,7 +880,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 LocalDateTime.MIN);
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
         Assert.assertEquals(1, statsJobs.size());
-        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+        Assert.assertEquals(5, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
     }
 
     @Test

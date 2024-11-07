@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
@@ -143,7 +143,7 @@ public class StatisticsCollectJobFactory {
                         continue;
                     }
 
-                    createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null, null);
+                    createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null);
                 }
             }
         } else if (externalAnalyzeJob.isAnalyzeAllTable()) {
@@ -162,7 +162,7 @@ public class StatisticsCollectJobFactory {
                     continue;
                 }
 
-                createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null, null);
+                createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, null);
             }
         } else {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().
@@ -178,8 +178,7 @@ public class StatisticsCollectJobFactory {
                 return Collections.emptyList();
             }
 
-            createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, externalAnalyzeJob.getColumns(),
-                    externalAnalyzeJob.getColumnTypes());
+            createExternalAnalyzeJob(statsJobs, externalAnalyzeJob, db, table, externalAnalyzeJob.getColumns());
         }
 
         return statsJobs;
@@ -216,21 +215,61 @@ public class StatisticsCollectJobFactory {
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
 
+        List<String> allPartitionNames = null;
         if (partitionNames == null) {
-            if (!table.isUnPartitioned()) {
-                partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        listPartitionNames(catalogName, db.getFullName(), table.getName());
+            partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
+            allPartitionNames = partitionNames;
+        }
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            int samplePartitionSize = properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_PARTITIONS) != null ?
+                    Integer.parseInt(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_PARTITIONS)) :
+                    Config.statistic_sample_collect_partition_size;
+
+            samplePartitionSize = Math.min(samplePartitionSize, partitionNames.size());
+            List<String> samplePartitionNames = StatisticUtils.getLatestPartitionsSample(partitionNames, samplePartitionSize);
+            allPartitionNames = allPartitionNames == null ? ConnectorPartitionTraits.build(table).getPartitionNames() :
+                    allPartitionNames;
+            return new ExternalSampleStatisticsCollectJob(catalogName, db, table, samplePartitionNames, columnNames,
+                    columnTypes, analyzeType, scheduleType, properties, allPartitionNames.size());
+        }
+
+        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
+                StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+    }
+
+    private static List<String> needCollectStatsColumns(ExternalBasicStatsMeta basicStatsMeta, Table table,
+                                                        List<String> columnNames, LocalDateTime tableUpdateTime,
+                                                        long timeInterval) {
+        List<String> needCollectStatsColumns = Lists.newArrayList();
+        for (String columnName : columnNames) {
+            if (basicStatsMeta == null || !basicStatsMeta.getColumnStatsMetaMap().containsKey(columnName)) {
+                needCollectStatsColumns.add(columnName);
             } else {
-                partitionNames = ImmutableList.of(table.getName());
+                // check stats column last update time, if last collect time is after table update time, skip this column
+                LocalDateTime columnCollectStatsTime = basicStatsMeta.getColumnStatsMeta(columnName).getUpdateTime();
+                if (tableUpdateTime != null) {
+                    if (columnCollectStatsTime.isAfter(tableUpdateTime)) {
+                        LOG.info("statistics job doesn't work on non-update table: {}, " +
+                                        "last update time: {}, last collect time: {}",
+                                table.getName(), tableUpdateTime, columnCollectStatsTime);
+                        continue;
+                    }
+                }
+
+                if (columnCollectStatsTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+                    LOG.info("statistics job doesn't work on the interval table: {}, " +
+                                    "last collect time: {}, interval: {}",
+                            table.getName(), tableUpdateTime, timeInterval);
+                    continue;
+                }
+                needCollectStatsColumns.add(columnName);
             }
         }
-        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
-                analyzeType, scheduleType, properties);
+        return needCollectStatsColumns;
     }
 
     private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
-                                                 Database db, Table table, List<String> columnNames,
-                                                 List<Type> columnTypes) {
+                                                 Database db, Table table, List<String> columnNames) {
         if (table == null) {
             return;
         }
@@ -247,24 +286,13 @@ public class StatisticsCollectJobFactory {
 
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
-        if (basicStatsMeta != null) {
-            // check table last update time, if last collect time is after last update time, skip this table
-            LocalDateTime statisticsUpdateTime = basicStatsMeta.getUpdateTime();
-            LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
-            if (tableUpdateTime != null) {
-                if (statisticsUpdateTime.isAfter(tableUpdateTime)) {
-                    LOG.info("statistics job doesn't work on non-update table: {}, " +
-                                    "last update time: {}, last collect time: {}",
-                            table.getName(), tableUpdateTime, statisticsUpdateTime);
-                    return;
-                }
-            }
 
+        if (columnNames == null || columnNames.isEmpty()) {
+            columnNames = StatisticUtils.getCollectibleColumns(table);
+        }
+        List<String> needCollectStatsColumns;
+        if (basicStatsMeta != null) {
             // check table row count
-            if (columnNames == null || columnNames.isEmpty()) {
-                columnNames = StatisticUtils.getCollectibleColumns(table);
-                columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
-            }
             List<ConnectorTableColumnStats> columnStatisticList =
                     GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columnNames);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
@@ -275,6 +303,7 @@ public class StatisticsCollectJobFactory {
             if (!validColumnStatistics.isEmpty()) {
                 tableRowCount = validColumnStatistics.get(0).getRowCount();
             }
+
             long defaultInterval = tableRowCount < Config.statistic_auto_collect_small_table_rows ?
                     Config.statistic_auto_collect_small_table_interval :
                     Config.statistic_auto_collect_large_table_interval;
@@ -282,24 +311,42 @@ public class StatisticsCollectJobFactory {
             long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
-            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
-                LOG.info("statistics job doesn't work on the interval table: {}, " +
-                                "last collect time: {}, interval: {}, table rows: {}",
-                        table.getName(), tableUpdateTime, timeInterval, tableRowCount);
-                return;
-            }
+
+            needCollectStatsColumns = needCollectStatsColumns(basicStatsMeta, table, columnNames,
+                    StatisticUtils.getTableLastUpdateTime(table), timeInterval);
+        } else {
+            needCollectStatsColumns = columnNames;
         }
 
-        if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            if (basicStatsMeta == null) {
-                createExternalFullStatsJob(allTableJobMap, LocalDateTime.MIN, job, db, table, columnNames, columnTypes);
-            } else {
-                createExternalFullStatsJob(allTableJobMap, basicStatsMeta.getUpdateTime(), job, db, table, columnNames,
-                        columnTypes);
-            }
+        if (needCollectStatsColumns.isEmpty()) {
+            LOG.info("There are no columns need to collect statistics for table: {}", table.getName());
+            return;
+        }
+
+        List<Type> needCollectStatsColumnTypes = needCollectStatsColumns.stream().map(col ->
+                table.getColumn(col).getType()).collect(Collectors.toList());
+
+        // compute the earliest last collect time of columns
+        LocalDateTime collectColumnStatsTimeMin;
+        if (basicStatsMeta == null) {
+            collectColumnStatsTimeMin = LocalDateTime.MIN;
         } else {
-            LOG.warn("Do not support analyze type: {} for external table: {}",
-                    job.getAnalyzeType(), table.getName());
+            collectColumnStatsTimeMin = needCollectStatsColumns.stream().
+                    map(columnName -> {
+                        if (basicStatsMeta.getColumnStatsMetaMap().containsKey(columnName)) {
+                            return basicStatsMeta.getColumnStatsMeta(columnName).getUpdateTime();
+                        } else {
+                            return LocalDateTime.MIN;
+                        }
+                    }).
+                    min(LocalDateTime::compareTo).orElse(LocalDateTime.MIN);
+        }
+        if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
+            createExternalFullStatsJob(allTableJobMap, collectColumnStatsTimeMin, job, db, table,
+                    needCollectStatsColumns, needCollectStatsColumnTypes);
+        } else {
+            createExternalSampleStatsJob(allTableJobMap, collectColumnStatsTimeMin, job, db, table, needCollectStatsColumns,
+                    needCollectStatsColumnTypes);
         }
     }
 
@@ -315,6 +362,19 @@ public class StatisticsCollectJobFactory {
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
                 columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
+    }
+
+    private static void createExternalSampleStatsJob(List<StatisticsCollectJob> allTableJobMap,
+                                                     LocalDateTime statisticsUpdateTime,
+                                                     ExternalAnalyzeJob job, Database db, Table table,
+                                                     List<String> columnNames, List<Type> columnTypes) {
+        // get updated partitions
+        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
+        LOG.info("create external sa,ple statistics job for table: {}, partitions: {}",
+                table.getName(), updatedPartitions);
+        allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
+                null, columnNames, columnTypes, StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(),
+                Maps.newHashMap()));
     }
 
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
