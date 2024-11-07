@@ -361,8 +361,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
         _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        COUNTER_SET(_non_pushdown_predicates_counter,
-                    static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
+        COUNTER_UPDATE(_non_pushdown_predicates_counter,
+                       static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
         if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
@@ -405,7 +405,7 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
     _params.column_access_paths = &_column_access_paths;
 
     // update counter
-    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
+    COUNTER_UPDATE(_pushdown_access_paths_counter, leaf_size);
     return Status::OK();
 }
 
@@ -656,7 +656,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+    COUNTER_UPDATE(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(
