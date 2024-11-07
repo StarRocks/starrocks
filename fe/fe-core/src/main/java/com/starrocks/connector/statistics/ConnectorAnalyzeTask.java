@@ -21,6 +21,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -126,6 +128,8 @@ public class ConnectorAnalyzeTask {
                     } else {
                         needAnalyzeColumns.remove(column);
                     }
+                } else {
+                    lastEarliestAnalyzedTime = Optional.of(LocalDateTime.MIN);
                 }
             }
             columns = needAnalyzeColumns;
@@ -137,43 +141,54 @@ public class ConnectorAnalyzeTask {
             return Optional.empty();
         }
 
-        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table,
-                lastEarliestAnalyzedTime.orElse(LocalDateTime.MIN));
-
-        // Init new analyze status
-        AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                catalogName, db.getOriginName(), table.getName(),
-                table.getUUID(),
-                Lists.newArrayList(columns), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
-                Maps.newHashMap(), LocalDateTime.now());
-
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
-        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
         try {
-            return Optional.of(executeAnalyze(statsConnectCtx, analyzeStatus, updatedPartitions));
+            return Optional.of(executeAnalyze(lastEarliestAnalyzedTime.orElse(LocalDateTime.MIN)));
         } finally {
             ConnectContext.remove();
         }
     }
 
-    public AnalyzeStatus executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStatus analyzeStatus,
-                                        Set<String> updatedPartitions) {
+    public AnalyzeStatus executeAnalyze(LocalDateTime lastAnalyzedTime) {
+        // init connect context
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setThreadLocalInfo();
+        // init column names and types
         List<String> columnNames = Lists.newArrayList(columns);
         List<Type> columnTypes = columnNames.stream().map(col -> {
             Column column = table.getColumn(col);
             Preconditions.checkNotNull(column, "Column " + col + " does not exist in table " + table.getName());
             return column.getType();
         }).collect(Collectors.toList());
+        // init partition names
+        List<String> partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
+        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, lastAnalyzedTime);
+        if (updatedPartitions == null) {
+            // assume all partitions is updated if updatedPartitions is null
+            updatedPartitions = new HashSet<>(partitionNames);
+        }
+
+        StatsConstants.AnalyzeType analyzeType = StatsConstants.AnalyzeType.FULL;
+        if (partitionNames.size() >  Config.statistic_sample_collect_partition_size) {
+            analyzeType = StatsConstants.AnalyzeType.SAMPLE;
+        }
+        // only collect updated partitions
+        partitionNames = new ArrayList<>(updatedPartitions);
+
+        // Init new analyze status
+        AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                catalogName, db.getOriginName(), table.getName(),
+                table.getUUID(),
+                Lists.newArrayList(columns), analyzeType, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         return statisticExecutor.collectStatistics(statsConnectCtx,
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                        catalogName, db, table, updatedPartitions == null ? null : new ArrayList<>(updatedPartitions),
+                        catalogName, db, table, partitionNames,
                         columnNames, columnTypes,
-                        StatsConstants.AnalyzeType.FULL,
-                        StatsConstants.ScheduleType.ONCE, Maps.newHashMap()),
+                        analyzeType, StatsConstants.ScheduleType.ONCE, Maps.newHashMap()),
                 analyzeStatus,
                 false);
     }

@@ -57,8 +57,10 @@ import org.jetbrains.annotations.NotNull;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StatisticExecutor {
@@ -437,9 +439,23 @@ public class StatisticExecutor {
                     externalBasicStatsMeta.setProperties(statsJob.getProperties());
                     externalBasicStatsMeta.setAnalyzeType(statsJob.getType());
                 }
+
+                Set<Long> sampledPartitions = new HashSet<>();
+                int allPartitionSize = -1;
+                if (statsJob.getType() == StatsConstants.AnalyzeType.SAMPLE) {
+                    ExternalSampleStatisticsCollectJob sampleStatsJob = (ExternalSampleStatisticsCollectJob) statsJob;
+                    sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
+                    allPartitionSize = sampleStatsJob.getAllPartitionSize();
+                }
                 for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
+                    // merge sampled partitions
+                    if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
+                        sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
+                                getSampledPartitionsHashValue());
+                    }
                     ColumnStatsMeta meta =
-                            new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime());
+                            new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime(),
+                                    sampledPartitions, allPartitionSize);
                     externalBasicStatsMeta.addColumnStatsMeta(meta);
                 }
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
