@@ -36,6 +36,32 @@ using LocalPartitionTopnContextFactoryPtr = std::shared_ptr<LocalPartitionTopnCo
 
 using AggDataPtr = uint8_t*;
 
+struct PreAggState {
+    PreAggState(const std::vector<TExpr>& t_pre_agg_exprs, const std::vector<TSlotId>& t_pre_agg_output_slot_id)
+            : _t_pre_agg_exprs(t_pre_agg_exprs), _t_pre_agg_output_slot_id(t_pre_agg_output_slot_id) {}
+
+    bool _is_first_chunk_of_current_sorter = true;
+    const std::vector<TExpr>& _t_pre_agg_exprs;
+    const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
+
+    // The offset of the n-th aggregate function in a row of aggregate functions.
+    std::vector<size_t> _agg_states_offsets;
+    // The total size of the row for the aggregate function state.
+    size_t _agg_states_total_size = 0;
+    // The max align size for all aggregate state
+    size_t _max_agg_state_align_size = 1;
+    // The followings are aggregate function information:
+    std::vector<FunctionContext*> _agg_fn_ctxs;
+    std::vector<const AggregateFunction*> _agg_functions;
+    std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
+    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    //raw pointers in order to get multi-column values
+    std::vector<std::vector<const Column*>> _agg_input_raw_columns;
+    std::vector<FunctionTypes> _agg_fn_types;
+    // every partition has one Agg State
+    std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
+};
+
 // LocalPartitionTopnContext is the bridge of each pair of LocalPartitionTopn{Sink/Source}Operators
 // The purpose of LocalPartitionTopn{Sink/Source}Operator is to reduce the amount of data,
 // so the output chunks are still remain unordered
@@ -111,26 +137,27 @@ private:
 
     // only set when _enable_pre_agg=true
     bool _enable_pre_agg;
-    bool _is_first_chunk_of_current_sorter = true;
-    const std::vector<TExpr>& _t_pre_agg_exprs;
-    const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
+    std::unique_ptr<PreAggState> _pre_agg;
+    // bool _is_first_chunk_of_current_sorter = true;
+    // const std::vector<TExpr>& _t_pre_agg_exprs;
+    // const std::vector<TSlotId>& _t_pre_agg_output_slot_id;
 
-    // The offset of the n-th aggregate function in a row of aggregate functions.
-    std::vector<size_t> _agg_states_offsets;
-    // The total size of the row for the aggregate function state.
-    size_t _agg_states_total_size = 0;
-    // The max align size for all aggregate state
-    size_t _max_agg_state_align_size = 1;
-    // The followings are aggregate function information:
-    std::vector<FunctionContext*> _agg_fn_ctxs;
-    std::vector<const AggregateFunction*> _agg_functions;
-    std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
-    //raw pointers in order to get multi-column values
-    std::vector<std::vector<const Column*>> _agg_input_raw_columns;
-    std::vector<FunctionTypes> _agg_fn_types;
-    // every partition has one Agg State
-    std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
+    // // The offset of the n-th aggregate function in a row of aggregate functions.
+    // std::vector<size_t> _agg_states_offsets;
+    // // The total size of the row for the aggregate function state.
+    // size_t _agg_states_total_size = 0;
+    // // The max align size for all aggregate state
+    // size_t _max_agg_state_align_size = 1;
+    // // The followings are aggregate function information:
+    // std::vector<FunctionContext*> _agg_fn_ctxs;
+    // std::vector<const AggregateFunction*> _agg_functions;
+    // std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
+    // std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    // //raw pointers in order to get multi-column values
+    // std::vector<std::vector<const Column*>> _agg_input_raw_columns;
+    // std::vector<FunctionTypes> _agg_fn_types;
+    // // every partition has one Agg State
+    // std::vector<ManagedFunctionStatesPtr<LocalPartitionTopnContext>> _managed_fn_states;
 
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
