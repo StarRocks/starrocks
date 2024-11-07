@@ -124,32 +124,9 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
-<<<<<<< HEAD
         if (st.ok() && iter->flush_after_write) {
             flush_after_write = true;
             continue;
-=======
-        case kFlushTask: {
-            auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
-            if (st.ok()) {
-                st.update(delta_writer->manual_flush());
-            }
-            flush_task->cb(st);
-            break;
-        }
-        case kFinishTask: {
-            auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
-            if (st.ok()) {
-                auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
-                st.update(res.status());
-                LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
-                                        << " txn_id: " << delta_writer->txn_id() << ": " << st;
-                finish_task->cb(std::move(res));
-            } else {
-                finish_task->cb(st);
-            }
-            break;
->>>>>>> 2ec626ec6a ([BugFix] Fix stale mem flush not reduce load memory usage (#52613))
         }
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
@@ -159,7 +136,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         iter->cb(st);
     }
     if (flush_after_write) {
-        st = delta_writer->flush_async();
+        st = delta_writer->manual_flush();
         LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
                                 << " txn_id: " << delta_writer->txn_id() << ": " << st;
     }

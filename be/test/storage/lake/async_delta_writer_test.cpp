@@ -516,8 +516,6 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
     // Prepare data for writing
     static const int kChunkSize = 128;
@@ -558,5 +556,4 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
     delta_writer->close();
 }
 
->>>>>>> 2ec626ec6a ([BugFix] Fix stale mem flush not reduce load memory usage (#52613))
 } // namespace starrocks::lake
