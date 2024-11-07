@@ -27,7 +27,7 @@ public class TrinoInsertTest extends TrinoTestBase {
     }
 
     @Test
-    public void testCtasTrinoDialect() throws Exception {
+    public void testInsertTrinoDialect() throws Exception {
         String insertSql = "insert into t3 select doy(date '2022-03-06')";
         try {
             connectContext.getSessionVariable().setSqlDialect("trino");
