@@ -248,7 +248,7 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
-        } else {
+        } else if (!_invalid_as_null) {
             std::stringstream str_error;
             str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
