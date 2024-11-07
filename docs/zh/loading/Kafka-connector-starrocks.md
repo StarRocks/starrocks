@@ -16,6 +16,13 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ## 环境准备
 
+### 版本要求
+
+| Connector | Kafka | StarRocks | Java |
+|-----------|-------|-----------| ---- |
+| 1.0.4     | 3.4   | 2.5 及以上   | 8    |
+| 1.0.3     | 3.4   | 2.5 及以上   | 8    |
+
 ### 准备 Kafka 环境
 
 支持自建 Apache Kafka 集群和 Confluent Cloud：

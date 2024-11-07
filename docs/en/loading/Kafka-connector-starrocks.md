@@ -16,6 +16,13 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 
 ## Preparations
 
+### Version requirements
+
+| Connector | Kafka                    | StarRocks | Java |
+|-----------|--------------------------|-----------| ---- |
+| 1.0.4     | 3.4                      | 2.5 and later | 8    |
+| 1.0.3     | 3.4                      | 2.5 and later | 8    |
+
 ### Set up Kafka environment
 
 Both self-managed Apache Kafka clusters and Confluent Cloud are supported.
