@@ -15,10 +15,12 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -110,5 +112,19 @@ public class PredicateStatisticsCalculatorTest {
                 PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assert.assertEquals(5000, estimatedStatistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(1, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testConcatExpressionCalculate() {
+        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.VARCHAR, "c1", true);
+        ConstantOperator c2 = new ConstantOperator("-", Type.VARCHAR);
+        ColumnRefOperator c3 = new ColumnRefOperator(1, Type.VARCHAR, "c3", true);
+        CallOperator concat = new CallOperator("concat", Type.VARCHAR, Lists.newArrayList(c1, c2, c3));
+        Statistics statistics = Statistics.builder()
+                .addColumnStatistic(c1, ColumnStatistic.builder().setNullsFraction(0.2).setDistinctValuesCount(10).build())
+                .addColumnStatistic(c3, ColumnStatistic.builder().setNullsFraction(0.4).setDistinctValuesCount(10).build())
+                .setOutputRowCount(10000).build();
+        ColumnStatistic estimatedStatistics = ExpressionStatisticCalculator.calculate(concat, statistics);
+        Assert.assertEquals(0.52, estimatedStatistics.getNullsFraction(), 0.001);
     }
 }
