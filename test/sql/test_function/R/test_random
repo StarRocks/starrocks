@@ -1,0 +1,85 @@
+-- name: test_random
+select random(1);
+-- result:
+0.303263684252395
+-- !result
+select random(10);
+-- result:
+0.04054825027038398
+-- !result
+select random(1) rnd from table(generate_series(1, 10)) order by rnd;
+-- result:
+0.29807723660665303
+0.303263684252395
+0.3299691983558783
+0.42813594232989677
+0.517568710535781
+0.640347459629553
+0.6418163354732807
+0.7591263240225643
+0.833037205570971
+0.881035884971337
+-- !result
+select uniform_distribution(1, 100, 1);
+-- result:
+31
+-- !result
+select uniform_distribution(1, 100, 10);
+-- result:
+5
+-- !result
+select uniform_distribution(1, 100, 10) rnd from table(generate_series(1, 10)) order by rnd;
+-- result:
+5
+14
+22
+23
+25
+28
+29
+71
+76
+87
+-- !result
+select normal_distribution(1, 100, 1);
+-- result:
+-63.01020571085887
+-- !result
+select normal_distribution(1, 100, 10);
+-- result:
+72.50572802138228
+-- !result
+select normal_distribution(1, 100, 10) rnd from table(generate_series(1, 10)) order by rnd;
+-- result:
+-94.79866804331847
+-79.83596794998422
+-45.20298575303522
+-36.41876788945288
+-34.11147340221618
+-22.08090124885721
+54.25588443053017
+72.50572802138228
+93.83360967533088
+123.40065138459902
+-- !result
+select poisson_distribution(100, 1);
+-- result:
+87
+-- !result
+select poisson_distribution(100, 10);
+-- result:
+91
+-- !result
+select poisson_distribution(100, 10) rnd from table(generate_series(1, 10)) order by rnd;
+-- result:
+77
+85
+91
+92
+95
+95
+107
+112
+114
+118
+-- !result

@@ -15,12 +15,14 @@
 #include "exprs/function_context.h"
 
 #include <iostream>
+#include <random>
 
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/java_udaf_function.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/bloom_filter.h"
 #include "types/logical_type_infra.h"
@@ -186,6 +188,41 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
         ss << "Unknown FunctionStateScope: " << scope;
         set_error(ss.str().c_str());
     }
+}
+
+std::mt19937_64* FunctionContext::driver_local_random_generator() {
+    int32_t driver_id = CurrentThread::current().get_driver_id();
+
+    std::lock_guard<std::mutex> lock(_rnd_mu);
+    std::mt19937_64* res;
+    auto iter = _driver_local_generators.find(driver_id);
+    if (iter == _driver_local_generators.end()) {
+        if (_global_seed == 0) {
+            // init global seed
+            std::random_device rnd;
+            _global_seed = rnd();
+            _default_generator.seed(_global_seed);
+        }
+        // use default generator to generate seed for driver-local generators
+        // this way can make sure all seeds and generated number are deterministic
+        std::uniform_int_distribution<> dist;
+        auto gen = std::make_unique<std::mt19937_64>(dist(_default_generator));
+        res = gen.get();
+        _driver_local_generators.emplace(driver_id, std::move(gen));
+    } else {
+        res = iter->second.get();
+    }
+
+    return res;
+}
+
+void FunctionContext::reseed_random_number(int64_t seed) {
+    std::lock_guard<std::mutex> lock(_rnd_mu);
+
+    _global_seed = seed;
+    _default_generator.seed(seed);
+    _driver_local_generators.clear();
+    VLOG(2) << "reseed_random_number to " << seed;
 }
 
 bool FunctionContext::add_warning(const char* warning_msg) {

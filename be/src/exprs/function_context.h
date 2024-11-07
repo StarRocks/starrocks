@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -166,6 +167,12 @@ public:
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
+    // Returns a driver-local random number generator
+    // Driver-local: each pipeline-driver will only initialie one generator, and be kept during the lifecycle
+    // By default it will be seed a random number, you can re-seed it with a specified value
+    std::mt19937_64* driver_local_random_generator();
+    void reseed_random_number(int64_t seed);
+
     void release_mems();
 
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
@@ -197,6 +204,12 @@ private:
     /// The function state accessed via FunctionContext::Get/SetFunctionState()
     void* _thread_local_fn_state{nullptr};
     void* _fragment_local_fn_state{nullptr};
+
+    // Random number
+    std::mutex _rnd_mu;
+    int64_t _global_seed = 0; // 0 means uninitialized
+    std::mt19937_64 _default_generator;
+    std::map<int32_t, std::unique_ptr<std::mt19937_64>> _driver_local_generators;
 
     // Type descriptor for the return type of the function.
     FunctionContext::TypeDesc _return_type;

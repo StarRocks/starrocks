@@ -315,6 +315,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(rand_seed);
 
+    DEFINE_VECTORIZED_FN(uniform_distribution);
+    DEFINE_VECTORIZED_FN(poisson_distribution);
+    DEFINE_VECTORIZED_FN(normal_distribution);
+
     //
     /**
      * @param: [BigIntColumn]

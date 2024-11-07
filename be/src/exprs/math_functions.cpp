@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "common/constexpr.h"
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -30,9 +31,6 @@
 #include "util/time.h"
 
 namespace starrocks {
-
-static std::uniform_real_distribution<double> distribution(0.0, 1.0);
-static thread_local std::mt19937_64 generator{std::random_device{}()};
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -704,24 +702,30 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
 
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        if (context->get_num_args() == 1) {
-            // This is a call to RandSeed, initialize the seed
-            // TODO: should we support non-constant seed?
-            if (!context->is_constant_column(0)) {
-                std::stringstream error;
-                error << "Seed argument to rand() must be constant";
-                context->set_error(error.str().c_str());
-                return Status::InvalidArgument(error.str());
-            }
-
-            auto seed_column = context->get_constant_column(0);
-            if (seed_column->only_null()) {
-                return Status::OK();
-            }
-
-            int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            generator.seed(seed_value);
+        if (context->get_num_args() == 0) {
+            std::stringstream error;
+            error << "no constant seed available";
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
         }
+
+        // This is a call to RandSeed, initialize the seed
+        // TODO: should we support non-constant seed?
+        int last = context->get_num_args() - 1;
+        if (!context->is_constant_column(last)) {
+            std::stringstream error;
+            error << "Seed argument to rand() must be constant";
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
+        }
+
+        auto seed_column = context->get_constant_column(last);
+        if (seed_column->only_null()) {
+            return Status::OK();
+        }
+
+        int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
+        context->reseed_random_number(seed_value);
     }
     return Status::OK();
 }
@@ -730,24 +734,67 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
-    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    ColumnBuilder<TYPE_DOUBLE> result(num_rows);
+template <LogicalType type, class Distribution>
+static StatusOr<ColumnPtr> rand_impl(FunctionContext* context, const Columns& columns, Distribution dist) {
+    if (columns[0]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+
+    int32_t num_rows = columns[0]->size();
+    ColumnBuilder<type> result(num_rows);
+
+    std::mt19937_64* generator = context->driver_local_random_generator();
     for (int i = 0; i < num_rows; ++i) {
-        result.append(distribution(generator));
+        result.append(dist(*generator));
     }
 
     return result.build(false);
 }
 
+StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
+    std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    return rand_impl<TYPE_DOUBLE>(context, columns, distribution);
+}
+
 StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
-
-    if (columns[0]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
-
     return rand(context, columns);
+}
+
+StatusOr<ColumnPtr> MathFunctions::uniform_distribution(FunctionContext* context, const Columns& columns) {
+    RETURN_IF(!context->is_constant_column(0), Status::InvalidArgument("first argument must be constant"));
+    RETURN_IF(!context->is_constant_column(1), Status::InvalidArgument("second argument must be constant"));
+
+    auto start_column = context->get_constant_column(0);
+    int64_t start = ColumnHelper::get_const_value<TYPE_BIGINT>(start_column);
+    auto end_column = context->get_constant_column(1);
+    int64_t end = ColumnHelper::get_const_value<TYPE_BIGINT>(end_column);
+
+    std::uniform_int_distribution<int64_t> distribution(start, end);
+    return rand_impl<TYPE_BIGINT>(context, columns, distribution);
+}
+
+StatusOr<ColumnPtr> MathFunctions::poisson_distribution(FunctionContext* context, const Columns& columns) {
+    RETURN_IF(!context->is_constant_column(0), Status::InvalidArgument("first argument must be constant"));
+
+    auto a_column = context->get_constant_column(0);
+    int64_t a = ColumnHelper::get_const_value<TYPE_BIGINT>(a_column);
+
+    std::poisson_distribution<int64_t> distribution(a);
+    return rand_impl<TYPE_BIGINT>(context, columns, distribution);
+}
+
+StatusOr<ColumnPtr> MathFunctions::normal_distribution(FunctionContext* context, const Columns& columns) {
+    RETURN_IF(!context->is_constant_column(0), Status::InvalidArgument("first argument must be constant"));
+    RETURN_IF(!context->is_constant_column(1), Status::InvalidArgument("second argument must be constant"));
+
+    auto a_column = context->get_constant_column(0);
+    double a = ColumnHelper::get_const_value<TYPE_DOUBLE>(a_column);
+    auto b_column = context->get_constant_column(1);
+    double b = ColumnHelper::get_const_value<TYPE_DOUBLE>(b_column);
+
+    std::normal_distribution<> distribution(a, b);
+    return rand_impl<TYPE_DOUBLE>(context, columns, distribution);
 }
 
 #ifdef __AVX2__
