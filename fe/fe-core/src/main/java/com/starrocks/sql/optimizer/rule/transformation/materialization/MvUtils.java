@@ -1303,16 +1303,6 @@ public class MvUtils {
     }
 
     /**
-     * Check whether opt expression or its children have applied mv union rewrite.
-     *
-     * @param optExpression: opt expression to check
-     * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
-     */
-    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
-    }
-
-    /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
      *
      * @param connectContext: connect context
@@ -1324,7 +1314,7 @@ public class MvUtils {
                                                  boolean isInlineView) {
         // step1: get from mv plan cache
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContext(mv, connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
             // TODO: distinguish normal mv plan and view rewrite plan
             return mvPlanContexts.get(0);

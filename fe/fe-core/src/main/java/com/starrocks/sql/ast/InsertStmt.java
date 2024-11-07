@@ -29,6 +29,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -53,6 +54,7 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
+    public static final String PROPERTY_MATCH_COLUMN_BY = "match_column_by";
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -95,6 +97,9 @@ public class InsertStmt extends DmlStmt {
     private final Map<String, String> tableFunctionProperties;
 
     private boolean isVersionOverwrite = false;
+
+    // column match by position or name
+    private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
@@ -320,12 +325,47 @@ public class InsertStmt extends DmlStmt {
     }
 
     public Table makeBlackHoleTable() {
-        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        // rename each column's name, assign unique name
+        for (int i = 0; i < columns.size(); i++) {
+            columns.get(i).setName(columns.get(i).getName() + "_blackhole_" + i);
+        }
+        return new BlackHoleTable(columns);
     }
 
     public Table makeTableFunctionTable(SessionVariable sessionVariable) {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
+    }
+
+    public enum ColumnMatchPolicy {
+        POSITION,
+        NAME;
+
+        public static ColumnMatchPolicy fromString(String value) {
+            for (ColumnMatchPolicy policy : values()) {
+                if (policy.name().equalsIgnoreCase(value)) {
+                    return policy;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public boolean isColumnMatchByPosition() {
+        return columnMatchPolicy == ColumnMatchPolicy.POSITION;
+    }
+
+    public boolean isColumnMatchByName() {
+        return columnMatchPolicy == ColumnMatchPolicy.NAME;
+    }
+
+    public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
+        this.columnMatchPolicy = columnMatchPolicy;
     }
 }

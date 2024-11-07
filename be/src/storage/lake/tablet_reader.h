@@ -59,6 +59,8 @@ public:
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  bool need_split, bool could_split_physically);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,

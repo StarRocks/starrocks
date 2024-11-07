@@ -110,6 +110,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKGroupByKeysRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
@@ -256,6 +257,7 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
+                MergeLimitDirectRule.CTE_CONSUMER,
                 MergeLimitDirectRule.TABLE_FUNCTION,
                 MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
@@ -298,6 +300,7 @@ public class RuleSet {
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
+                new PruneUKFKGroupByKeysRule(), // Put this before PruneAggregateColumnsRule
                 new PruneAggregateColumnsRule(),
                 new PruneGroupByKeysRule(),
                 new PruneTopNColumnsRule(),

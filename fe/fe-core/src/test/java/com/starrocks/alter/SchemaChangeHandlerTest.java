@@ -438,4 +438,43 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
         }
     }
+
+    @Test
+    public void testAddReserveColumn() throws Exception {
+
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "sc_pk");
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        try {
+            Assertions.assertNotNull(tbl);
+            System.out.println(tbl.getName());
+            Assertions.assertEquals("StarRocks", tbl.getEngine());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        }
+        Config.allow_system_reserved_names = true;
+
+        try {
+            String addValColStmtStr2 = "alter table test.sc_pk add column __op int";
+            AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
+            DDLStmtExecutor.execute(addValColStmt2, connectContext);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage(), e);
+            Assert.assertTrue(e.getMessage().contains("Column name '__op' is reserved for primary key table"));
+        }
+
+        try {
+            String addValColStmtStr3 = "alter table test.sc_pk add column __row int";
+            AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
+            DDLStmtExecutor.execute(addValColStmt3, connectContext);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage(), e);
+            Assert.assertTrue(e.getMessage().contains("Column name '__row' is reserved for primary key table"));
+        }
+        Config.allow_system_reserved_names = false;
+    }
 }

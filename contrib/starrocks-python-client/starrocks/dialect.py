@@ -226,11 +226,11 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if 'ENGINE' in opts:
             table_opts.append(f'ENGINE={opts["ENGINE"]}')
 
-        # ToDo This will put in PRIMARY KEY (), but that also needs a DISTRIBUTED BY
-        ### Currently only support default distribution in DUP_KEYS
-        # const = self.create_table_constraints(table)
-        # if const:
-        #     table_opts.append('\n' + const +'\n')
+        if 'PRIMARY_KEY' in opts:
+            table_opts.append(f'PRIMARY KEY({opts["PRIMARY_KEY"]})')
+
+        if 'DISTRIBUTED_BY' in opts:
+            table_opts.append(f'DISTRIBUTED BY HASH({opts["DISTRIBUTED_BY"]})')
 
         if "COMMENT" in opts:
             comment = self.sql_compiler.render_literal_value(
@@ -387,7 +387,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         cursor.execute("SELECT CURRENT_VERSION()")
         val = cursor.fetchone()[0]
         cursor.close()
-        if util.py3k and isinstance(val, bytes):
+        if isinstance(val, bytes):
             val = val.decode()
 
         return self._parse_server_version(val)
@@ -525,3 +525,11 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
             indexes.append(index_d)
         return indexes
+
+    def has_table(self, connection, table_name, schema=None, **kw):
+        try:
+            return super().has_table(connection, table_name, schema, **kw)
+        except exc.DBAPIError as e:
+            if self._extract_error_code(e.orig) in (5501, 5502):
+                return False
+            raise

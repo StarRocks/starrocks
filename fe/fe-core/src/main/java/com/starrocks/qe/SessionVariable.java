@@ -213,6 +213,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_UKFK_JOIN_REORDER = "enable_ukfk_join_reorder";
     public static final String MAX_UKFK_JOIN_REORDER_SCALE_RATIO = "max_ukfk_join_reorder_scale_ratio";
     public static final String MAX_UKFK_JOIN_REORDER_FK_ROWS = "max_ukfk_join_reorder_fk_rows";
+    public static final String ENABLE_ELIMINATE_AGG = "enable_eliminate_agg";
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
@@ -356,6 +357,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
+
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -730,6 +733,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
+    public static final String COUNT_DISTINCT_IMPLEMENTATION = "count_distinct_implementation";
+
+    public static final String ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP = "enable_count_distinct_rewrite_by_hll_bitmap";
+
     // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
     // negative value means force interleaving under the group size of abs(interleaving_group_size)
     public static final String INTERLEAVING_GROUP_SIZE = "interleaving_group_size";
@@ -810,6 +817,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
 
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+
+    public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1238,6 +1247,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
     private int maxUKFKJoinReorderFKRows = 100000000;
 
+    @VarAttr(name = ENABLE_ELIMINATE_AGG)
+    private boolean enableEliminateAgg = true;
+
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1480,6 +1492,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
     private int cboPushDownAggregateMode = -1;
 
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownAggregateOnBroadcastJoin = true;
+
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private String cboPushDownAggregate = "global";
@@ -1574,6 +1589,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PLAN_ADVISOR)
     private boolean enablePlanAdvisor = true;
 
+    @VarAttr(name = COUNT_DISTINCT_IMPLEMENTATION)
+    private String countDistinctImplementation = "default";
+
+    // By default, we always use the created mv's bitmap/hll to rewrite count distinct, but result is not
+    // exactly matched with the original result.
+    // If we want to get the exactly matched result, we can disable this.
+    @VarAttr(name = ENABLE_COUNT_DISTINCT_REWRITE_BY_HLL_BITMAP)
+    private boolean enableCountDistinctRewriteByHllBitmap = true;
+
+    @VarAttr(name = DISABLE_GENERATED_COLUMN_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean disableGeneratedColumnRewrite = false;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -2853,6 +2879,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTablePruneOnUpdate;
     }
 
+    public boolean isEnableEliminateAgg() {
+        return enableEliminateAgg;
+    }
+
+    public void setEnableEliminateAgg(boolean enableEliminateAgg) {
+        this.enableEliminateAgg = enableEliminateAgg;
+    }
+
     public boolean isEnableUKFKOpt() {
         return enableUKFKOpt;
     }
@@ -3449,6 +3483,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
+    }
+
+    public boolean isCboPushDownAggregateOnBroadcastJoin() {
+        return cboPushDownAggregateOnBroadcastJoin;
+    }
+
+    public void setCboPushDownAggregateOnBroadcastJoin(boolean cboPushDownAggregateOnBroadcastJoin) {
+        this.cboPushDownAggregateOnBroadcastJoin = cboPushDownAggregateOnBroadcastJoin;
     }
 
     public String getCboPushDownAggregate() {
@@ -4254,6 +4296,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
         this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
+    public void setCountDistinctImplementation(String countDistinctImplementation) {
+        this.countDistinctImplementation = countDistinctImplementation;
+    }
+
+    public SessionVariableConstants.CountDistinctImplMode getCountDistinctImplementation() {
+        return SessionVariableConstants.CountDistinctImplMode.parse(countDistinctImplementation);
+    }
+
+    public boolean isEnableCountDistinctRewriteByHllBitmap() {
+        return enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
+        this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

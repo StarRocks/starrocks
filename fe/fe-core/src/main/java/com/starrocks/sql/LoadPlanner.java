@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -74,6 +75,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,6 +143,12 @@ public class LoadPlanner {
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
     private String mergeConditionStr;
+
+    // Only valid for stream load
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
@@ -237,6 +245,14 @@ public class LoadPlanner {
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    public void setBatchWrite(
+            int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
@@ -417,6 +433,9 @@ public class LoadPlanner {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
             streamScanNode.setNeedAssignBE(true);
+            if (enableBatchWrite) {
+                streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
+            }
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);

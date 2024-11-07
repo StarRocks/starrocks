@@ -1975,6 +1975,33 @@ class StarrocksSQLApiLib(object):
             if plan.find(expect) > 0:
                 return True
         return False
+    
+    def print_hit_materialized_views(self, query) -> str:
+        """
+        print all mv_names hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return ""
+        plan = res["result"]
+        if not plan:
+            return ""
+        mv_name = None
+        ans = []
+        for line in plan:
+            if len(line) != 1:
+                continue
+            content = line[0]
+            if content.find("MaterializedView: true") > 0:
+                if mv_name:
+                    ans.append(mv_name)
+                mv_name = None
+            if content.find("TABLE:") > 0:
+                mv_name = content.split("TABLE:")[1].strip()
+        return ",".join(ans)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2539,6 +2566,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 time.sleep(0.5)
             else:
                 break
+
+    def assert_is_identical_explain_plan(self, query1, query2):
+        """
+        assert whether two plans from query1 and query2 are identical
+        """
+        sql1 = "explain %s" % query1
+        sql2 = "explain %s" % query2
+        res1 = self.execute_sql(sql1, True)
+        res2 = self.execute_sql(sql2, True)
+        tools.assert_true(res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"]))
 
     def assert_explain_contains(self, query, *expects):
         """

@@ -20,9 +20,12 @@ import com.starrocks.jni.connector.ColumnValue;
 import org.apache.kudu.client.RowResult;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import static com.starrocks.kudu.reader.KuduScannerUtils.ZONE_UTC;
 
 public class KuduColumnValue implements ColumnValue {
     private final RowResult row;
@@ -78,7 +81,8 @@ public class KuduColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(TypeValue type) {
-        return row.getTimestamp(index).toLocalDateTime();
+        long millis = row.getLong(index) / 1000;
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZONE_UTC);
     }
 
     @Override

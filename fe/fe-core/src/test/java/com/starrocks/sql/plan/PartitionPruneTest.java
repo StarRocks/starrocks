@@ -394,6 +394,12 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.query("select min(c1-1)+1, max(c1-1)-1 from t1_list_multi_values")
                 .explainContains("OlapScanNode");
 
+        // multi-value partition doesn't support partition prune
+        starRocksAssert.query("select * from t1_list_multi_values where c1 not in (10, 2, 8, 5)")
+                .explainContains("partitions=4/4");
+
+        starRocksAssert.query("select * from t1_list_multi_values where c1 != 10")
+                .explainContains("partitions=4/4");
 
         // TODO: not supported
         // multi-item list partition

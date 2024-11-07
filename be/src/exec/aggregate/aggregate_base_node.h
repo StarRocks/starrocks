@@ -29,6 +29,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
+    void push_down_tuple_slot_mappings(RuntimeState* state,
+                                       const std::vector<TupleSlotMapping>& parent_mappings) override;
 
 protected:
     const TPlanNode& _tnode;

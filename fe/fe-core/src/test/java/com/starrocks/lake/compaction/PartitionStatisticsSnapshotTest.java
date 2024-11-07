@@ -35,5 +35,7 @@ public class PartitionStatisticsSnapshotTest {
         statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         Assert.assertNotEquals(stat.getPriority(), statistics.getPriority());
         Assert.assertFalse(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
+
+        stat.toString();
     }
 }

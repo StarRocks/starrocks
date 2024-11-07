@@ -41,8 +41,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     if (columns[0]->is_constant()) {
         auto col_result = Int32Column::create();
         col_result->append(col_array->offsets().get_data().data()[1]);
-        col_result->assign(num_rows, 0);
-        return col_result;
+        auto const_column = ConstColumn::create(std::move(col_result), num_rows);
+        return const_column;
     } else {
         Column* arg0 = columns[0].get();
         auto col_result = Int32Column::create();

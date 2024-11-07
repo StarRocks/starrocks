@@ -191,7 +191,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
@@ -272,8 +272,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            Map<String, String> properties = catalog.getConfig();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -340,7 +339,7 @@ public class CatalogMgr {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName.isEmpty()) {
+            if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {

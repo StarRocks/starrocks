@@ -1,0 +1,270 @@
+-- name: test_mv_rewrite_with_time_series_multi_mvs
+CREATE TABLE t0(
+ ts datetime,
+ v1 INT,
+ v2 INT)
+ DUPLICATE KEY(ts)
+ PARTITION BY date_trunc('day', ts)
+DISTRIBUTED BY HASH(ts);
+-- result:
+-- !result
+INSERT INTO t0 VALUES 
+  ('2020-01-22 12:12:12', 0,1),
+  ('2020-02-23 12:12:12',1,1),
+  ('2020-03-24 12:12:12',1,2),
+  ('2020-04-25 12:12:12',3,3),
+  ('2020-05-22 12:12:12', 0,1),
+  ('2020-06-23 12:12:12',1,1),
+  ('2020-07-24 12:12:12',1,2),
+  ('2020-08-24 12:12:12',1,2),
+  ('2020-09-24 12:12:12',1,2),
+  ('2020-10-25 12:12:12',3,3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('hour', ts) as dt, sum(v1) as sum_v1, sum(v2) as sum_v2
+from t0 group by date_trunc('hour', ts);
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv2
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('day', ts) as dt, sum(v1) as sum_v1, sum(v2) as sum_v2
+from t0 group by date_trunc('day', ts);
+-- result:
+-- !result
+refresh materialized view test_mv2 with sync mode;
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv3
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('month', ts) as dt, sum(v1) as sum_v1, sum(v2) as sum_v2
+from t0 group by date_trunc('month', ts);
+-- result:
+-- !result
+refresh materialized view test_mv3 with sync mode;
+[UC]analyze table test_mv1 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv1	analyze	status	OK
+-- !result
+[UC]analyze table test_mv2 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv2	analyze	status	OK
+-- !result
+[UC]analyze table test_mv3 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv3	analyze	status	OK
+-- !result
+set enable_materialized_view_rewrite=true;
+-- result:
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
+-- result:
+test_mv2,test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;")
+-- result:
+test_mv2,test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts < '2020-04-23 12:12:00'  order by 1;")
+-- result:
+test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts <= '2020-05-23 12:12:00' and ts > '2020-10-22' order by 1;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-01-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv2
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-10-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv1
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where (ts > '2020-06-23 12:12:00' or ts <= '2020-10-24 12:12:00') group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv1
+-- !result
+select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;
+-- result:
+12	17
+-- !result
+select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;
+-- result:
+11	16
+-- !result
+select sum(v1), sum(v2) from t0 where ts < '2020-04-23 12:12:00'  order by 1;
+-- result:
+2	4
+-- !result
+select sum(v1), sum(v2) from t0 where ts <= '2020-05-23 12:12:00' and ts > '2020-10-22' order by 1;
+-- result:
+None	None
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-01-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;
+-- result:
+2020-02-23 00:00:00	1	1
+2020-03-24 00:00:00	1	2
+2020-04-25 00:00:00	3	3
+2020-05-22 00:00:00	0	1
+2020-06-23 00:00:00	1	1
+2020-07-24 00:00:00	1	2
+2020-08-24 00:00:00	1	2
+2020-09-24 00:00:00	1	2
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-10-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;
+-- result:
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where (ts > '2020-06-23 12:12:00' or ts <= '2020-10-24 12:12:00') group by date_trunc('day', ts) order by 1;
+-- result:
+2020-01-22 00:00:00	0	1
+2020-02-23 00:00:00	1	1
+2020-03-24 00:00:00	1	2
+2020-04-25 00:00:00	3	3
+2020-05-22 00:00:00	0	1
+2020-06-23 00:00:00	1	1
+2020-07-24 00:00:00	1	2
+2020-08-24 00:00:00	1	2
+2020-09-24 00:00:00	1	2
+2020-10-25 00:00:00	3	3
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('hour', ts) as dt, sum(v1) as sum_v1, sum(v2) as sum_v2
+from t0 group by date_trunc('hour', ts);
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv2
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('day', dt) as dt, sum(sum_v1) as sum_v1, sum(sum_v2) as sum_v2
+from test_mv1 group by date_trunc('day', dt);
+-- result:
+-- !result
+refresh materialized view test_mv2 with sync mode;
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv3
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1"
+) as select date_trunc('month', dt) as dt, sum(sum_v1) as sum_v1, sum(sum_v2) as sum_v2
+from test_mv2 group by date_trunc('month', dt);
+-- result:
+-- !result
+refresh materialized view test_mv3 with sync mode;
+[UC]analyze table test_mv1 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv1	analyze	status	OK
+-- !result
+[UC]analyze table test_mv2 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv2	analyze	status	OK
+-- !result
+[UC]analyze table test_mv3 WITH SYNC MODE;
+-- result:
+test_db_8d93f2d33c72496aa3925e2bb2c40af3.test_mv3	analyze	status	OK
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;")
+-- result:
+test_mv1,test_mv2,test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;")
+-- result:
+test_mv1,test_mv2,test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts < '2020-04-23 12:12:00'  order by 1;")
+-- result:
+test_mv1,test_mv2,test_mv3
+-- !result
+function: print_hit_materialized_views("select sum(v1), sum(v2) from t0 where ts <= '2020-05-23 12:12:00' and ts > '2020-10-22' order by 1;")
+-- result:
+
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-01-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv1,test_mv2
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-10-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv1
+-- !result
+function: print_hit_materialized_views("select date_trunc('day', ts), sum(v1), sum(v2) from t0 where (ts > '2020-06-23 12:12:00' or ts <= '2020-10-24 12:12:00') group by date_trunc('day', ts) order by 1;")
+-- result:
+test_mv2
+-- !result
+select sum(v1), sum(v2) from t0 where ts > '2020-02-23 12:12:00' order by 1;
+-- result:
+12	17
+-- !result
+select sum(v1), sum(v2) from t0 where ts >= '2020-03-23 12:12:00' order by 1;
+-- result:
+11	16
+-- !result
+select sum(v1), sum(v2) from t0 where ts < '2020-04-23 12:12:00'  order by 1;
+-- result:
+2	4
+-- !result
+select sum(v1), sum(v2) from t0 where ts <= '2020-05-23 12:12:00' and ts > '2020-10-22' order by 1;
+-- result:
+None	None
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-01-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;
+-- result:
+2020-02-23 00:00:00	1	1
+2020-03-24 00:00:00	1	2
+2020-04-25 00:00:00	3	3
+2020-05-22 00:00:00	0	1
+2020-06-23 00:00:00	1	1
+2020-07-24 00:00:00	1	2
+2020-08-24 00:00:00	1	2
+2020-09-24 00:00:00	1	2
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where ts > '2020-10-23 12:12:00' and ts <= '2020-10-25 12:12:00' group by date_trunc('day', ts) order by 1;
+-- result:
+-- !result
+select date_trunc('day', ts), sum(v1), sum(v2) from t0 where (ts > '2020-06-23 12:12:00' or ts <= '2020-10-24 12:12:00') group by date_trunc('day', ts) order by 1;
+-- result:
+2020-01-22 00:00:00	0	1
+2020-02-23 00:00:00	1	1
+2020-03-24 00:00:00	1	2
+2020-04-25 00:00:00	3	3
+2020-05-22 00:00:00	0	1
+2020-06-23 00:00:00	1	1
+2020-07-24 00:00:00	1	2
+2020-08-24 00:00:00	1	2
+2020-09-24 00:00:00	1	2
+2020-10-25 00:00:00	3	3
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result

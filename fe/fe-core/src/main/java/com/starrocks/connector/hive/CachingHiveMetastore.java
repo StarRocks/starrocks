@@ -59,6 +59,7 @@ import static com.google.common.base.Throwables.throwIfUnchecked;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
+import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
 
 public class CachingHiveMetastore extends CachingMetastore implements IHiveMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
@@ -215,7 +216,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         HivePartitionValue hivePartitionValue = HivePartitionValue.of(databaseTableName, partitionValues);
         if (metastore instanceof CachingHiveMetastore) {
             Table table = getTable(dbName, tableName);
-            if (table.isHiveTable() && !((HiveTable) table).isUseMetadataCache()) {
+            if (table.isHiveTable() && !useMetadataCache()) {
                 invalidatePartitionKeys(hivePartitionValue);
             }
         }

@@ -922,7 +922,7 @@ bool Tablet::version_for_delete_predicate_unlocked(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
-bool Tablet::has_delete_predicates(const Version& version) {
+StatusOr<bool> Tablet::has_delete_predicates(const Version& version) {
     std::shared_lock rlock(get_header_lock());
     const auto& preds = _tablet_meta->delete_predicates();
     return std::any_of(preds.begin(), preds.end(), [&version](const auto& pred) {

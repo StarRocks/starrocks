@@ -88,7 +88,6 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
-import com.starrocks.planner.IcebergEqualityDeleteScanNode;
 import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
@@ -165,6 +164,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
@@ -221,6 +221,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -1003,6 +1004,7 @@ public class PlanFragmentBuilder {
 
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
             scanNode.computeStatistics(optExpression.getStatistics());
@@ -1438,14 +1440,18 @@ public class PlanFragmentBuilder {
 
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
+
             boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
             IcebergScanNode icebergScanNode;
+            String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
             if (!isEqDeleteScan) {
-                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+                PhysicalIcebergScanOperator op = node.cast();
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
-                icebergScanNode = new IcebergEqualityDeleteScanNode(context.getNextNodeId(), tupleDescriptor,
-                        "IcebergEqualityDeleteScanNode", op.getEqualityIds(), op.isHitMutableIdentifierColumns());
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
             }
 
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
@@ -1465,7 +1471,8 @@ public class PlanFragmentBuilder {
                         ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
                 icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
                 icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
-                icebergScanNode.setupScanRangeLocations(context.getDescTbl());
+                icebergScanNode.setupScanRangeLocations(
+                        context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
                 if (!isEqDeleteScan) {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
@@ -3769,31 +3776,30 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalTableFunctionTableScanOperator node =
-                    (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
+            PhysicalTableFunctionTableScanOperator node = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
             TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
+            prepareContextSlots(node, context, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.loadFileList());
-
             long warehouseId = context.getConnectContext().getCurrentWarehouseId();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.loadFileList().size(), warehouseId);
-            List<BrokerFileGroup> fileGroups = new ArrayList<>();
 
+            Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
+                    Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+            List<BrokerFileGroup> fileGroups = new ArrayList<>();
             try {
-                BrokerFileGroup grp = new BrokerFileGroup(table);
+                BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
             }
-
-            prepareContextSlots(node, context, tupleDesc);
 
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);

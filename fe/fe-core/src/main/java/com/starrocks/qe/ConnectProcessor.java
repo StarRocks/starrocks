@@ -98,6 +98,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -215,7 +216,6 @@ public class ConnectProcessor {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                 ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
                 //represent analysis err
                 if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
                     MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
@@ -227,12 +227,12 @@ public class ConnectProcessor {
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                 ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms || ctx.getSessionVariable().isEnableSQLDigest()) {
-                    if (elapseMs > Config.qe_slow_log_ms) {
-                        MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
-                    }
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+                if (elapseMs > Config.qe_slow_log_ms) {
+                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                 }
+            }
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
             if (ctx.getSessionVariable().isEnableBigQueryLog()) {
@@ -547,6 +547,7 @@ public class ConnectProcessor {
         }
         ctx.setCommand(command);
         ctx.setStartTime();
+        ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
 
@@ -821,6 +822,7 @@ public class ConnectProcessor {
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = new StmtExecutor(ctx, statement);
+            ctx.setExecutor(executor);
             executor.setProxy();
             executor.execute();
         } catch (IOException e) {
@@ -832,6 +834,8 @@ public class ConnectProcessor {
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
+        } finally {
+            ctx.setExecutor(null);
         }
 
         // If stmt is also forwarded during execution, just return the forward result.

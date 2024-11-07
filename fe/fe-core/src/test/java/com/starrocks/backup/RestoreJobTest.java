@@ -839,6 +839,11 @@ public class RestoreJobTest {
 
         View restoredView = (View) db.getTable(CatalogMocker.TEST_TBL6_ID);
 
+        BackupTableInfo tblInfo = new BackupTableInfo();
+        tblInfo.id = CatalogMocker.TEST_TBL6_ID;
+        tblInfo.name = CatalogMocker.TEST_TBL6_NAME;
+        jobInfo.tables.put(tblInfo.name, tblInfo);
+
         new MockUp<LocalMetastore>() {
             @Mock
             public Database getDb(String dbName) {

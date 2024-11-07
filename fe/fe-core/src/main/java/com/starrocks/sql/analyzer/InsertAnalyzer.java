@@ -46,6 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.InsertStmt.ColumnMatchPolicy;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
@@ -104,8 +105,9 @@ public class InsertAnalyzer {
 
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            tables.stream().map(table -> (HiveTable) table)
-                    .forEach(table -> table.useMetadataCache(false));
+            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
+                session.setUseConnectorMetadataCache(Optional.of(false));
+            }
         } finally {
             if (!isLockTaken) {
                 // Take the PlannerMetaLock
@@ -213,13 +215,11 @@ public class InsertAnalyzer {
         if (insertStmt.getTargetColumnNames() == null) {
             if (table instanceof OlapTable) {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
-                mentionedColumns =
-                        ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                                .map(Column::getName).collect(Collectors.toSet());
+                mentionedColumns.addAll(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream().map(Column::getName)
+                        .collect(Collectors.toSet()));
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
-                mentionedColumns =
-                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+                mentionedColumns.addAll(table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet()));
             }
         } else {
             targetColumns = new ArrayList<>();
@@ -235,7 +235,7 @@ public class InsertAnalyzer {
                     throw new SemanticException("generated column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
-                    throw new SemanticException("Column '%s' specified twice", colName);
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
                 }
                 requiredKeyColumns.remove(colName.toLowerCase());
                 targetColumns.add(column);
@@ -274,13 +274,40 @@ public class InsertAnalyzer {
         if ((table.isIcebergTable() || table.isHiveTable()) && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
+            mentionedColumns.removeAll(table.getPartitionColumnNames());
         }
 
+        // check target and source columns match
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        if (query.getRelationFields().size() != mentionedColumnSize) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
-                    query.getRelationFields().size());
+        if (insertStmt.isColumnMatchByPosition()) {
+            if (query.getRelationFields().size() != mentionedColumnSize) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
+                        query.getRelationFields().size());
+            }
+        } else {
+            Preconditions.checkState(insertStmt.isColumnMatchByName());
+            if (query instanceof ValuesRelation) {
+                throw new SemanticException("Insert match column by name does not support values()");
+            }
+
+            Set<String> selectColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String colName : insertStmt.getQueryStatement().getQueryRelation().getColumnOutputNames()) {
+                if (!selectColumnNames.add(colName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
+                }
+            }
+            if (!selectColumnNames.containsAll(mentionedColumns)) {
+                mentionedColumns.removeAll(selectColumnNames);
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Target", String.join(", ", mentionedColumns), "source");
+            }
+            if (!mentionedColumns.containsAll(selectColumnNames)) {
+                selectColumnNames.removeAll(mentionedColumns);
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Source", String.join(", ", selectColumnNames), "target");
+            }
         }
+
         // check default value expr
         if (query instanceof ValuesRelation) {
             ValuesRelation valuesRelation = (ValuesRelation) query;
@@ -308,15 +335,29 @@ public class InsertAnalyzer {
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
         Map<String, String> properties = insertStmt.getProperties();
+
+        // column match by related properties
+        // parse the property and remove it for 'LoadStmt.checkProperties' validation
+        if (properties.containsKey(InsertStmt.PROPERTY_MATCH_COLUMN_BY)) {
+            String property = properties.remove(InsertStmt.PROPERTY_MATCH_COLUMN_BY);
+            ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.fromString(property);
+            if (columnMatchPolicy == null) {
+                String msg = String.format("%s (case insensitive)", String.join(", ", ColumnMatchPolicy.getCandidates()));
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_INVALID_VALUE, InsertStmt.PROPERTY_MATCH_COLUMN_BY, property, msg);
+            }
+            insertStmt.setColumnMatchPolicy(columnMatchPolicy);
+        }
+
+        // check common properties
         // use session variable if not set max_filter_ratio property
         if (!properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
             properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                     String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         }
         // use session variable if not set strict_mode property
-        if (!properties.containsKey(LoadStmt.STRICT_MODE) &&
-                session.getSessionVariable().getEnableInsertStrict()) {
-            properties.put(LoadStmt.STRICT_MODE, "true");
+        if (!properties.containsKey(LoadStmt.STRICT_MODE)) {
+            properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
         }
 
         try {
