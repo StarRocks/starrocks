@@ -539,21 +539,40 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
+    public TNodesInfo createNodesInfo(boolean isExternalCluster, long warehouseId, SystemInfoService systemInfoService) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        if (isExternalCluster) {
+            // for external olap table scenario, use backends by default (no need to consider cluster mode)
+            for (Long id : systemInfoService.getBackendIds(false)) {
+                Backend backend = systemInfoService.getBackend(id);
+                if (backend != null) {
+                    nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
+                }
+            }
+        } else {
+            nodesInfo = createNodesInfo(warehouseId, systemInfoService);
+        }
+        return nodesInfo;
+    }
+
     public TNodesInfo createNodesInfo(long warehouseId, SystemInfoService systemInfoService) {
         TNodesInfo nodesInfo = new TNodesInfo();
         if (RunMode.isSharedDataMode()) {
             List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
             for (Long cnId : computeNodeIds) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
-                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
+                if (cn != null) {
+                    nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
+                }
             }
         } else {
             for (Long id : systemInfoService.getBackendIds(false)) {
                 Backend backend = systemInfoService.getBackend(id);
-                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
+                if (backend != null) {
+                    nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
+                }
             }
         }
-
         return nodesInfo;
     }
 
