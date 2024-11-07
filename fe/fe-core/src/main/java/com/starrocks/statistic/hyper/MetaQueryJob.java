@@ -25,6 +25,7 @@ import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -141,6 +142,10 @@ public class MetaQueryJob extends HyperQueryJob {
             }
         }
 
+        if (metaSQL.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
         int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> l = Lists.partition(metaSQL, parts);
         pipelineDop = l.size() < parts ? parts / l.size() : 1;

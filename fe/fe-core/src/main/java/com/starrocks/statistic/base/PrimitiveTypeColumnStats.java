@@ -24,7 +24,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     @Override
     public String getFullDateSize() {
         if (columnType.getPrimitiveType().isCharFamily()) {
-            return "IFNULL(SUM(CHAR_LENGTH(" + columnName + ")), 0)";
+            return "IFNULL(SUM(CHAR_LENGTH(" + getQuotedColumnName() + ")), 0)";
         }
         long typeSize = columnType.getTypeSize();
         return "COUNT(1) * " + typeSize;
@@ -34,9 +34,9 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     public String getFullMax() {
         String fn = "MAX";
         if (columnType.getPrimitiveType().isCharFamily()) {
-            fn = fn + "(LEFT(column_key, 200))";
+            fn = fn + "(LEFT(" + getQuotedColumnName() + ", 200))";
         } else {
-            fn = fn + "(column_key)";
+            fn = fn + "(" + getQuotedColumnName() + ")";
         }
         fn = "IFNULL(" + fn + ", '')";
         return fn;
@@ -46,9 +46,9 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     public String getFullMin() {
         String fn = "MIN";
         if (columnType.getPrimitiveType().isCharFamily()) {
-            fn = fn + "(LEFT(column_key, 200))";
+            fn = fn + "(LEFT(" + getQuotedColumnName() + ", 200))";
         } else {
-            fn = fn + "(column_key)";
+            fn = fn + "(" + getQuotedColumnName() + ")";
         }
         fn = "IFNULL(" + fn + ", '')";
         return fn;
