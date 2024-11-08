@@ -154,4 +154,15 @@ public class DatabaseTest {
         db3.setCatalogName("hive");
         Assert.assertEquals("hive.db3", db3.getUUID());
     }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
+    }
 }
