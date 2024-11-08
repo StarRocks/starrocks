@@ -15,6 +15,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -293,9 +294,12 @@ public class PartitionUtil {
         return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
 
-    public static Map<String, PListCell> getPartitionList(Table table, Column partitionColumn)
+    /**
+     * NOTE: Ensure result list cell's order is the same with partitionColumns.
+     */
+    public static Map<String, PListCell> getPartitionList(Table table, List<Column> partitionColumns)
             throws UserException {
-        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumn);
+        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumns);
     }
 
     // check the partitionColumn exist in the partitionColumns
@@ -318,13 +322,21 @@ public class PartitionUtil {
     /**
      * NOTE:
      * this method may generate the same partition name:
-     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
-     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p0_20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p1_20200101
      */
     public static String generateMVPartitionName(PartitionKey partitionKey) {
-        String partitionName = "p" + partitionKey.getKeys().get(0).getStringValue();
-        // generate legal partition name
-        return partitionName.replaceAll("[^a-zA-Z0-9_]*", "");
+        StringBuilder sb = new StringBuilder("p");
+        List<String> partitionNames = partitionKey.getKeys()
+                .stream()
+                .map(literalExpr -> generateLiteralPartitionName(literalExpr))
+                .collect(Collectors.toList());
+        sb.append(Joiner.on("_").join(partitionNames));
+        return sb.toString();
+    }
+
+    private static String generateLiteralPartitionName(LiteralExpr literalExpr) {
+        return literalExpr.getStringValue().replaceAll("[^a-zA-Z0-9_]*", "");
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
@@ -346,7 +358,7 @@ public class PartitionUtil {
                                                  Expr partitionExpr) throws AnalysisException {
 
         if (isListPartition) {
-            Map<String, PListCell> partitionNameWithList = getMVPartitionNameWithList(table, partitionColumn,
+            Map<String, PListCell> partitionNameWithList = getMVPartitionNameWithList(table, ImmutableList.of(partitionColumn),
                     partitionNames);
             return Sets.newHashSet(partitionNameWithList.keySet());
         } else {
@@ -376,19 +388,24 @@ public class PartitionUtil {
      *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
     public static Map<String, Set<String>> getMVPartitionNameMapOfExternalTable(Table table,
-                                                                                Column partitionColumn,
+                                                                                List<Column> refPartitionColumns,
                                                                                 List<String> partitionNames)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
         // Get the index of partitionColumn when table has multi partition columns.
-        int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+        List<Integer> partitionColumnIdxes = Lists.newArrayList();
+        for (Column refPartitionColumn : refPartitionColumns) {
+            partitionColumnIdxes.add(checkAndGetPartitionColumnIndex(partitionColumns, refPartitionColumn));
+        }
+
         Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
-                partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
                 PartitionKey partitionKey = createPartitionKey(
-                        ImmutableList.of(partitionName),
-                        ImmutableList.of(partitionColumn),
+                        partitionColumnIdxes.stream()
+                                .map(p -> getPartitionNameForJDBCTable(partitionColumns.get(p), partitionName))
+                                .collect(Collectors.toList()),
+                        partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
                         table.getType());
                 String mvPartitionName = generateMVPartitionName(partitionKey);
                 mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
@@ -398,8 +415,8 @@ public class PartitionUtil {
             for (String partitionName : partitionNames) {
                 List<String> partitionNameValues = toPartitionValues(partitionName);
                 PartitionKey partitionKey = createPartitionKey(
-                        ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
-                        ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                        partitionColumnIdxes.stream().map(partitionNameValues::get).collect(Collectors.toList()),
+                        partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
                         table);
                 String mvPartitionName = generateMVPartitionName(partitionKey);
                 mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
@@ -689,23 +706,29 @@ public class PartitionUtil {
         mvPartitionKeyMap.put(mvPartitionName, partitionKey);
     }
 
+    /**
+     * NOTE: Ensure output plist cell's order is the same with partitionColumns.
+     */
     public static Map<String, PListCell> getMVPartitionNameWithList(Table table,
-                                                                    Column partitionColumn,
+                                                                    List<Column> refPartitionColumns,
                                                                     List<String> partitionNames)
             throws AnalysisException {
         Map<String, PListCell> partitionListMap = new LinkedHashMap<>();
         List<Column> partitionColumns = getPartitionColumns(table);
 
         // Get the index of partitionColumn when table has multi partition columns.
-        int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+        List<Integer> partitionColumnIdxes = Lists.newArrayList();
+        for (Column refPartitionColumn : refPartitionColumns) {
+            partitionColumnIdxes.add(checkAndGetPartitionColumnIndex(partitionColumns, refPartitionColumn));
+        }
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
         for (String partitionName : partitionNames) {
             List<String> partitionNameValues = toPartitionValues(partitionName);
             PartitionKey partitionKey = createPartitionKey(
-                    ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
-                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
-                    table.getType());
+                    partitionColumnIdxes.stream().map(partitionNameValues::get).collect(Collectors.toList()),
+                    partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
+                    table);
             partitionKeys.add(partitionKey);
             String mvPartitionName = generateMVPartitionName(partitionKey);
             List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);

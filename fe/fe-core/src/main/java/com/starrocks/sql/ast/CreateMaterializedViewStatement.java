@@ -52,7 +52,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private RefreshSchemeClause refreshSchemeDesc;
 
     // partition by clause which may be list or range partition expr.
-    private final Expr partitionByExpr;
+    private final List<Expr> partitionByExprs;
     // partition type of the mv which is deduced by its referred base table.
     private PartitionType partitionType;
 
@@ -77,9 +77,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<Index> mvIndexes = Lists.newArrayList();
-    private Column partitionColumn;
-    // record expression which related with partition by clause
-    private Expr partitionRefTableExpr;
+    // MV's output columns that are referred by mv's partition expressions
+    private List<Column> partitionColumns;
+    // Ref base table partition expression referred by mv's partition by expressions
+    private List<Expr> partitionRefTableExprs;
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -94,7 +95,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
-                                           Expr partitionByExpr,
+                                           List<Expr> partitionByExprs,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
@@ -107,7 +108,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.partitionByExpr = partitionByExpr;
+        this.partitionByExprs = partitionByExprs;
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
@@ -158,8 +159,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     /**
      * Get partition by expr of the mv
      */
-    public Expr getPartitionByExpr() {
-        return partitionByExpr;
+    public List<Expr> getPartitionByExprs() {
+        return partitionByExprs;
     }
 
     /**
@@ -262,20 +263,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.baseTableInfos = baseTableInfos;
     }
 
-    public Column getPartitionColumn() {
-        return partitionColumn;
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
     }
 
-    public void setPartitionColumn(Column partitionColumn) {
-        this.partitionColumn = partitionColumn;
+    public void setPartitionColumns(List<Column> partitionColumns) {
+        this.partitionColumns = partitionColumns;
     }
 
-    public Expr getPartitionRefTableExpr() {
-        return partitionRefTableExpr;
+    public List<Expr> getPartitionRefTableExpr() {
+        return partitionRefTableExprs;
     }
 
-    public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
-        this.partitionRefTableExpr = partitionRefTableExpr;
+    public void setPartitionRefTableExpr(List<Expr> partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
     public ExecPlan getMaintenancePlan() {

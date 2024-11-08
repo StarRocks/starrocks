@@ -102,8 +102,8 @@ public class MVCompensationBuilder {
         }
 
         MaterializedView mv = mvContext.getMv();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        if (CollectionUtils.sizeIsEmpty(refBaseTableAndColumns)) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (CollectionUtils.sizeIsEmpty(refBaseTablePartitionColumns)) {
             logMVRewrite("MV's not partitioned, failed to get partition keys: {}", mv.getName());
             return MVCompensation.createUnkownState(sessionVariable);
         }
@@ -111,7 +111,7 @@ public class MVCompensationBuilder {
         Map<Table, BaseCompensation<?>> compensations = Maps.newHashMap();
         for (LogicalScanOperator scanOperator : scanOperators) {
             Table refBaseTable = scanOperator.getTable();
-            if (!refBaseTableAndColumns.containsKey(refBaseTable)) {
+            if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
                 continue;
             }
             // If the ref table contains no partitions to refresh, no need compensate.
@@ -151,8 +151,8 @@ public class MVCompensationBuilder {
         }
 
         MaterializedView mv = mvContext.getMv();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        if (CollectionUtils.sizeIsEmpty(refBaseTableAndColumns)) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (CollectionUtils.sizeIsEmpty(refBaseTablePartitionColumns)) {
             logMVRewrite("MV's not partitioned, failed to get partition keys: {}", mv.getName());
             return MVCompensation.createUnkownState(sessionVariable);
         }
@@ -160,7 +160,7 @@ public class MVCompensationBuilder {
         Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap = mvUpdateInfo.getBaseTableUpdateInfos();
         for (Map.Entry<Table, MvBaseTableUpdateInfo> e : baseTableUpdateInfoMap.entrySet()) {
             Table refBaseTable = e.getKey();
-            if (!refBaseTableAndColumns.containsKey(refBaseTable)) {
+            if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
                 continue;
             }
             // If the ref table contains no partitions to refresh, no need compensate.

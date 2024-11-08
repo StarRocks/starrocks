@@ -373,7 +373,7 @@ public class MaterializationContext {
                 if (!partitionInfo.isRangePartition()) {
                     return LOWEST_ORDERING;
                 }
-                Expr mvPartitionExpr = mv.getPartitionExpr();
+                Expr mvPartitionExpr = mv.getRangePartitionExpr();
                 if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
                     return LOWEST_ORDERING;
                 }

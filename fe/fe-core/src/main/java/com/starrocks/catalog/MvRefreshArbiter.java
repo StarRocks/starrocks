@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
@@ -186,23 +187,26 @@ public class MvRefreshArbiter {
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
-            Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
-            if (!partitionTableAndColumns.containsKey(baseTable)) {
+            Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+            if (!refBaseTablePartitionColumns.containsKey(baseTable)) {
                 baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
                 return baseTableUpdateInfo;
             }
 
             try {
                 List<String> updatedPartitionNamesList = Lists.newArrayList(baseUpdatedPartitionNames);
-                Column partitionColumn = partitionTableAndColumns.get(baseTable);
+                List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
                     Map<String, PListCell> partitionNameWithRange = getMVPartitionNameWithList(baseTable,
-                            partitionColumn, updatedPartitionNamesList);
+                            refPartitionColumns, updatedPartitionNamesList);
                     baseTableUpdateInfo.addListPartitionKeys(partitionNameWithRange);
                     baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
                 } else if (mvPartitionInfo.isRangePartition()) {
-                    Expr partitionExpr = MaterializedView.getPartitionExpr(mv);
+                    Expr partitionExpr = mv.getRangePartitionExpr();
+                    Preconditions.checkArgument(refPartitionColumns.size() == 1,
+                            "Range partition column size must be 1");
+                    Column partitionColumn = refPartitionColumns.get(0);
                     Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
                             partitionColumn, updatedPartitionNamesList, partitionExpr);
                     for (Map.Entry<String, Range<PartitionKey>> e : partitionNameWithRange.entrySet()) {
