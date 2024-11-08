@@ -22,6 +22,7 @@
 #include "storage/olap_common.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -86,6 +87,28 @@ double SortableZoneMap::width(const ZoneMapDetail& zone) {
     return width(zone.min_value(), zone.max_value());
 }
 
+bool SortableZoneMap::is_support_data_type(LogicalType type) {
+    // TODO: support decimal type
+    switch (type) {
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_LARGEINT:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+        return true;
+    default:
+        return false;
+    }
+}
+
 double SortableZoneMap::width(const Datum& lhs, const Datum& rhs) {
     if (lhs.is_null() || rhs.is_null()) {
         return 0;
@@ -113,11 +136,6 @@ double SortableZoneMap::width(const Datum& lhs, const Datum& rhs) {
         return rhs.get_float() - lhs.get_float();
     case TYPE_DOUBLE:
         return rhs.get_double() - lhs.get_double();
-    case TYPE_DECIMAL:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-        return rhs.get_decimal() - lhs.get_decimal();
     case TYPE_DATE:
         return rhs.get_date().julian() - lhs.get_date().julian();
     case TYPE_DATETIME:

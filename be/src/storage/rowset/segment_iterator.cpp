@@ -2089,7 +2089,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     int64_t random_seed = _opts.sample_options.random_seed;
     auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
 
-    if (column_reader->has_zone_map()) {
+    if (column_reader->has_zone_map() && SortableZoneMap::is_support_data_type(column_reader->column_type())) {
         IndexReadOptions opts = _index_read_options(cid);
         ASSIGN_OR_RETURN(auto zonemap, column_reader->get_raw_zone_map(opts));
         auto sorted = std::make_shared<SortableZoneMap>(column_reader->column_type(), std::move(zonemap));

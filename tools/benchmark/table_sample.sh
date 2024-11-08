@@ -6,9 +6,10 @@
 mysql_user=${MYSQL_USER:-"root"}
 mysql_host=${MYSQL_HOST:-"127.0.0.1"}
 mysql_port=${MYSQL_PORT:-"9030"}
-mysql_database=ssb_100g
+mysql_database=tpcds_100g
 
-query_columns="select table_name, column_name from information_schema.columns where table_schema='ssb_100g' and table_name='lineorder'"
+query_columns="select table_name, column_name from information_schema.columns where table_schema='tpcds_100g' \
+  and table_name in ('catalog_sales', 'store_returns', 'store_sales', 'web_sales') "
 
 
 percents=(
@@ -33,6 +34,10 @@ execute_sql() {
   local query="$2"
 
   result=$(mysql -u ${mysql_user} -P ${mysql_port} -h ${mysql_host} ${mysql_database} -vvv -e "$query" 2>&1)
+  if [ $? -ne 0 ]; then
+    echo "MySQL execution failed: ${result}"
+    exit 1;
+  fi
 
   execution_time=$(echo "$result" | grep -oP '\(\K[0-9]+\.[0-9]+(?= sec\))')
   count=$(echo "$result" | grep -A2 "count" | tail -n1 | awk '{print $2}')
@@ -44,7 +49,7 @@ execute_sql() {
 
 
 while read table col; do
-    full_column="table=$table.$col"
+    full_column="column=$table.$col"
     method="method=full"
     percent="percent=100"
 

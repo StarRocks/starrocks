@@ -82,6 +82,8 @@ struct SortableZoneMap {
     std::vector<size_t> page_indices;        // Keep zonemap immutable, sort by this page_indices
     std::vector<PagesWithZoneMap> histogram; // Only exist if the zonemap is diverse enough
 
+    static bool is_support_data_type(LogicalType type);
+
     void sort();
     bool is_diverse();
     void build_histogram(size_t buckets);
@@ -107,6 +109,7 @@ public:
     void with_zonemap(std::shared_ptr<SortableZoneMap> zonemap) { _zonemap = std::move(zonemap); }
 
 private:
+    bool _is_histogram_supported_type(LogicalType type) const;
     void _prepare_histogram(OlapReaderStatistics* stats);
     bool _has_histogram() const;
     StatusOr<RowIdSparseRange> _bernoulli_sample(OlapReaderStatistics* stats);
