@@ -50,6 +50,8 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     LambdaFunction::ExtractContext extract_ctx;
     // assign slot ids to outer common exprs starting with max_used_slot_id + 1
     extract_ctx.next_slot_id = context->root()->max_used_slot_id() + 1;
+    // @TODO not enough....need global slot id
+    LOG(INFO) << "max_used_slot_id: " << context->root()->max_used_slot_id() << ", ctx:" << (void*)context;
 
     RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, context, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
@@ -67,10 +69,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                                                        const NullColumnPtr& result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
+    auto tmp_chunk = std::make_shared<Chunk>();
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
-        chunk->append_column(col, slot_id);
+        // chunk->append_column(col, slot_id);
+        tmp_chunk->append_column(col, slot_id);
     }
 
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
@@ -80,7 +84,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
         DCHECK(slot_id > 0);
-        auto captured_column = chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id): tmp_chunk->get_column_by_slot_id(slot_id);
+        // auto captured_column = chunk->get_column_by_slot_id(slot_id);
         if (UNLIKELY(captured_column->size() < input_elements[0]->size())) {
             return Status::InternalError(fmt::format("The size of the captured column {} is less than array's size.",
                                                      captured_column->get_name()));
