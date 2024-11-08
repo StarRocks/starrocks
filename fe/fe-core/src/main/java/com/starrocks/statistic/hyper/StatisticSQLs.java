@@ -80,10 +80,6 @@ public class StatisticSQLs {
             ", '' " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`)";
 
-    public static final String DELETE_PARTITION_TEMPLATE =
-            "DELETE FROM " + TABLE_NAME + "\n" +
-                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
-
     public static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);

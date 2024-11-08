@@ -93,15 +93,16 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
                 queryTotals += queryJob.getTotals();
                 queryFailures += queryJob.getFailures();
             } catch (Exception e) {
-                if (queryFailures > Config.statistic_full_statistics_failure_tolerance_ratio * queryTotals) {
-                    String message = String.format("query statistic job failed due to " +
-                                    "too many failed tasks: %d/%d, the last failure is %s",
-                            queryFailures, queryTotals, queryJob.getLastFailure());
-                    LOG.warn(message, queryJob.getLastFailure());
-                    throw new RuntimeException(message, queryJob.getLastFailure());
-                } else {
-                    LOG.warn("query statistics task failed in job: {}, {}", this, queryJob, e);
-                }
+                LOG.warn("query statistics task failed in job: {}, {}", this, queryJob, e);
+                throw e;
+            }
+
+            if (queryFailures > Config.statistic_full_statistics_failure_tolerance_ratio * queryTotals) {
+                String message = String.format("query statistic job failed due to " +
+                                "too many failed tasks: %d/%d, the last failure is %s",
+                        queryFailures, queryTotals, queryJob.getLastFailure());
+                LOG.warn(message, queryJob.getLastFailure());
+                throw new RuntimeException(message, queryJob.getLastFailure());
             }
 
             try {

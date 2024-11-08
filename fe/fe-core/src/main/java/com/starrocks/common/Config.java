@@ -2059,9 +2059,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_full_collect_buffer = 1024L * 1024 * 20; // 20MB
 
-    @ConfField(mutable = true)
-    public static long statistic_meta_collect_limit = 10; // 10
-
     // If the health in statistic_full_collect_interval is lower than this value,
     // choose collect sample statistics first
     @ConfField(mutable = true)
