@@ -22,6 +22,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
+import com.starrocks.metric.MetricRepo;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -154,7 +155,7 @@ public class HiveMetaClient {
     public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
-
+        long startTime = System.currentTimeMillis();
         try {
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
@@ -175,6 +176,11 @@ public class HiveMetaClient {
             } else if (client != null) {
                 client.finish();
             }
+            long elapseMs = System.currentTimeMillis() - startTime;
+            if (MetricRepo.HISTO_CALL_HMS_LATENCY != null) {
+                MetricRepo.HISTO_CALL_HMS_LATENCY.update(elapseMs);
+            }
+
         }
     }
 
