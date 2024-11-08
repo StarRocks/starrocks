@@ -154,4 +154,66 @@ public class DatabaseTest {
         db3.setCatalogName("hive");
         Assert.assertEquals("hive.db3", db3.getUUID());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAddFunction() throws UserException {
+        // Add addIntInt function to database
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        db.addFunction(f);
+
+        // Add addDoubleDouble function to database
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setDb(db.getCatalogName());
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        db.addFunction(f2);
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExists() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assert.assertThrows(UserException.class, () -> db.addFunction(f));
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, true, false);
+        // Attempt to add the same UDF again
+        db.addFunction(f, true, false);
+
+        List<Function> functions = db.getFunctions();
+        Assert.assertEquals(functions.size(), 1);
+        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
+    }
+>>>>>>> 33b383062e ([Feature] Support db level UDF for backup restore (#52410))
 }

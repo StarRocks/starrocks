@@ -425,6 +425,21 @@ public class Function implements Writable {
         this.couldApplyDictOptimize = couldApplyDictOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public void setFunctionName(FunctionName name) {
+        this.name = name;
+    }
+
+>>>>>>> 33b383062e ([Feature] Support db level UDF for backup restore (#52410))
     // Compares this to 'other' for mode.
     public boolean compare(Function other, CompareMode mode) {
         switch (mode) {
