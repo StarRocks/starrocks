@@ -509,10 +509,16 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
-            executor.execute();
 
             if (enableAudit) {
+                if (ctx.getIsLastStmt()) {
+                    executor.addRunningQueryDetail(executeStmt);
+                }
+                executor.execute();
+                executor.addFinishedQueryDetail();
                 auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            } else {
+                executor.execute();
             }
         } catch (Throwable e) {
             // Catch all throwable.

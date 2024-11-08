@@ -84,6 +84,20 @@ public class PreparedStmtTest{
     }
 
     @Test
+    public void testIsQuery() throws Exception {
+        String selectSql = "select * from demo.prepare_stmt";
+        QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
+        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+
+        String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
+        ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
+
+        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
+    }
+
+    @Test
     public void testPrepareEnable() {
         ctx.getSessionVariable().setEnablePrepareStmt(false);
         String prepareSql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";

@@ -488,7 +488,7 @@ public class StmtExecutor {
         }
 
         try {
-            boolean isQuery = parsedStmt instanceof QueryStatement;
+            boolean isQuery = context.isQueryStmt(parsedStmt);
             // set isQuery before `forwardToLeader` to make it right for audit log.
             context.getState().setIsQuery(isQuery);
 
@@ -2748,7 +2748,7 @@ public class StmtExecutor {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
 
-        boolean isQuery = parsedStmt instanceof QueryStatement;
+        boolean isQuery = context.isQueryStmt(parsedStmt);
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
