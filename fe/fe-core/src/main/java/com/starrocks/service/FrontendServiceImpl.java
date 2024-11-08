@@ -2386,7 +2386,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             Partition partition = olapTable.getPartition(partitionName, isTemp);
             tPartition = new TOlapTablePartition();
-            tPartition.setId(partition.getId());
+            tPartition.setId(partition.getDefaultPhysicalPartition().getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());

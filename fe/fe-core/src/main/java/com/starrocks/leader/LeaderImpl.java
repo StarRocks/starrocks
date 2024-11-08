@@ -519,7 +519,7 @@ public class LeaderImpl {
         }
 
         long tableId = pushTask.getTableId();
-        long partitionId = pushTask.getPartitionId();
+        long physicalPartitionId = pushTask.getPartitionId();
         long pushIndexId = pushTask.getIndexId();
         long pushTabletId = pushTask.getTabletId();
         // push finish type:
@@ -552,9 +552,9 @@ public class LeaderImpl {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
 
-            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null) {
-                throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
+                throw new MetaNotFoundException("cannot find partition[" + physicalPartitionId + "] when push finished");
             }
 
             MaterializedIndex pushIndex = physicalPartition.getIndex(pushIndexId);
@@ -592,7 +592,7 @@ public class LeaderImpl {
                     Replica replica = findRelatedReplica(olapTable, physicalPartition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
-                        olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
+                        olapDeleteJob.addFinishedReplica(physicalPartitionId, pushTabletId, replica);
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }

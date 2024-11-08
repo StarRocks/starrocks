@@ -151,7 +151,7 @@ public class OlapTableSinkTest {
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
-        Partition partition = new Partition(2, "p1", index, distInfo);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
         new Expectations() {
             {
@@ -186,8 +186,8 @@ public class OlapTableSinkTest {
         Column partKey = new Column("k2", Type.VARCHAR);
         PartitionKey key = PartitionKey
                 .createPartitionKey(Lists.newArrayList(new PartitionValue("123")), Lists.newArrayList(partKey));
-        Partition p1 = new Partition(1, "p1", index, distInfo);
-        Partition p2 = new Partition(2, "p2", index, distInfo);
+        Partition p1 = new Partition(1, 21, "p1", index, distInfo);
+        Partition p2 = new Partition(2, 22, "p2", index, distInfo);
 
         new Expectations() {
             {
@@ -248,6 +248,7 @@ public class OlapTableSinkTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -279,11 +280,11 @@ public class OlapTableSinkTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 0, TStorageMedium.SSD);
         index.addTablet(tablet, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -308,7 +309,7 @@ public class OlapTableSinkTest {
 
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
-        tPartition.setId(partitionId);
+        tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, false);
@@ -332,6 +333,7 @@ public class OlapTableSinkTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+        long physicalPartitionId = 6L;
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -357,7 +359,7 @@ public class OlapTableSinkTest {
             tablet.addReplica(replica3);
 
             // Index
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 0, TStorageMedium.SSD);
             index.addTablet(tablet, tabletMeta);
         }
 
@@ -370,7 +372,7 @@ public class OlapTableSinkTest {
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -395,7 +397,7 @@ public class OlapTableSinkTest {
 
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
-        tPartition.setId(partitionId);
+        tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, true);
@@ -428,7 +430,7 @@ public class OlapTableSinkTest {
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
@@ -463,7 +465,7 @@ public class OlapTableSinkTest {
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
-        Partition partition = new Partition(2, "p1", index, distInfo);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
@@ -503,7 +505,7 @@ public class OlapTableSinkTest {
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
-        Partition partition = new Partition(2, "p1", index, distInfo);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);

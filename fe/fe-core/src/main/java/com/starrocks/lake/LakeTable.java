@@ -173,11 +173,11 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId, Database db) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
-        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
+                                          long physicalPartitionId, long shardGroupId, Database db) {
+        FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
+        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
         Map<String, String> properties = new HashMap<>();
-        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
+        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         List<Long> shardIds = null;
         try {

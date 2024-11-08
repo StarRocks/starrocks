@@ -184,7 +184,7 @@ public class GlobalStateMgrTestUtil {
 
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId + 100, indexId, 0, TStorageMedium.HDD);
         index.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -193,7 +193,7 @@ public class GlobalStateMgrTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, testPartition1, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100, testPartition1, index, distributionInfo);
         partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
         partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 

@@ -129,6 +129,7 @@ public abstract class StarRocksHttpTestCase {
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
     protected static long testPartitionId = 201L;
+    protected static long testPhysicalPartitionId = 202L;
     public static long testIndexId = testTableId; // the base indexid == tableid
     protected static long tabletId = 400L;
 
@@ -171,7 +172,8 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
         partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
@@ -228,7 +230,8 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
         partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 

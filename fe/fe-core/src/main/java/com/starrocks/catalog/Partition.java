@@ -94,13 +94,13 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private Partition() {
     }
 
-    public Partition(long id, String name,
+    public Partition(long id, long physicalPartitionId, String name,
                      MaterializedIndex baseIndex,
                      DistributionInfo distributionInfo) {
-        this(id, name, baseIndex, distributionInfo, 0);
+        this(id, physicalPartitionId, name, baseIndex, distributionInfo, 0);
     }
 
-    public Partition(long id, String name,
+    public Partition(long id, long physicalPartitionId, String name,
                      MaterializedIndex baseIndex,
                      DistributionInfo distributionInfo, long shardGroupId) {
         this.id = id;
@@ -120,9 +120,9 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.distributionInfo = distributionInfo;
         this.shardGroupId = shardGroupId;
 
-        long physicalPartitionId = id;
         this.defaultPhysicalPartitionId = physicalPartitionId;
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, name, id, this.shardGroupId, baseIndex);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
+                generatePhysicalPartitionName(physicalPartitionId), id, shardGroupId, baseIndex);
         this.idToSubPartition.put(physicalPartitionId, physicalPartition);
         this.nameToSubPartition.put(name, physicalPartition);
     }
@@ -189,6 +189,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         if (subPartition.getName() == null) {
             subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
         }
+
         idToSubPartition.put(subPartition.getId(), subPartition);
         nameToSubPartition.put(subPartition.getName(), subPartition);
     }
@@ -251,7 +252,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id, visibleVersion, baseIndex, distributionInfo);
+        return Objects.hashCode(id, distributionInfo);
     }
 
     @Override
@@ -264,11 +265,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         }
 
         Partition partition = (Partition) obj;
-        return (id == partition.id)
-                && (visibleVersion == partition.visibleVersion)
-                && (baseIndex.equals(partition.baseIndex)
-                && distributionInfo.equals(partition.distributionInfo))
-                && Objects.equal(idToVisibleRollupIndex, partition.idToVisibleRollupIndex);
+        return (id == partition.id) && distributionInfo.equals(partition.distributionInfo);
     }
 
     @Override
@@ -314,11 +311,23 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             PhysicalPartition physicalPartition = GsonUtils.GSON.fromJson(partitionJson, PhysicalPartition.class);
             physicalPartition.setParentId(id);
 
-            long nextId = GlobalStateMgr.getCurrentState().getNextId();
-            defaultPhysicalPartitionId = nextId;
-            idToSubPartition.put(nextId, physicalPartition);
-            nameToSubPartition.put(name, physicalPartition);
+            long physicalPartitionId = id;
+            defaultPhysicalPartitionId = physicalPartitionId;
+            idToSubPartition.put(physicalPartitionId, physicalPartition);
+            nameToSubPartition.put(generatePhysicalPartitionName(physicalPartitionId), physicalPartition);
         }
+    }
+
+    public void setDefaultPhysicalPartitionId(long defaultPhysicalPartitionId) {
+        PhysicalPartition physicalPartition = getDefaultPhysicalPartition();
+        physicalPartition.setIdForRestore(defaultPhysicalPartitionId);
+
+        idToSubPartition.remove(this.defaultPhysicalPartitionId);
+        nameToSubPartition.remove(generatePhysicalPartitionName(defaultPhysicalPartitionId));
+
+        this.defaultPhysicalPartitionId = defaultPhysicalPartitionId;
+        idToSubPartition.put(defaultPhysicalPartitionId, physicalPartition);
+        nameToSubPartition.put(generatePhysicalPartitionName(defaultPhysicalPartitionId), physicalPartition);
     }
 
     /**************************************PhysicalPartition **********************************************/

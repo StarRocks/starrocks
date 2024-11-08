@@ -106,7 +106,7 @@ public class StarMgrMetaSyncerTest {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
-
+        long physicalPartitionId = 4L;
 
 
         new Expectations() {
@@ -202,7 +202,8 @@ public class StarMgrMetaSyncerTest {
             public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable tbl) {
                 MaterializedIndex baseIndex = new MaterializedIndex();
                 DistributionInfo distributionInfo = new HashDistributionInfo();
-                return Lists.newArrayList(new Partition(partitionId, "p1", baseIndex, distributionInfo, shardGroupId));
+                return Lists.newArrayList(new Partition(partitionId, physicalPartitionId,
+                        "p1", baseIndex, distributionInfo, shardGroupId));
             }
         };
 

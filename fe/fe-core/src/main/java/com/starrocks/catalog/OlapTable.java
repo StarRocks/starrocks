@@ -865,7 +865,7 @@ public class OlapTable extends Table {
             });
             origPhysicalPartitions.forEach(physicalPartition -> {
                 if (physicalPartition.getId() != newPartitionId) {
-                    physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
                     physicalPartition.setParentId(newPartitionId);
                     partition.addSubPartition(physicalPartition);
                 }
@@ -1357,6 +1357,7 @@ public class OlapTable extends Table {
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
         physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
+        physicalPartitionNameToPartitionId.put(physicalPartition.getName(), physicalPartition.getParentId());
     }
 
     // This is a private method.
@@ -2250,9 +2251,11 @@ public class OlapTable extends Table {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
-            PhysicalPartition partition = optionalPartition.get().getDefaultPhysicalPartition();
+            Partition partition = optionalPartition.get();
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
-            MaterializedIndex baseIdx = partition.getBaseIndex();
+            MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
@@ -3439,10 +3442,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
         }
         return null;
     }

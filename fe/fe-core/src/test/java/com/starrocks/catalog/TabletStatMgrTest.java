@@ -62,6 +62,7 @@ public class TabletStatMgrTest {
     private static final long TABLE_ID = 2;
     private static final long PARTITION_ID = 3;
     private static final long INDEX_ID = 4;
+    private static final long PH_PARTITION_ID = 5;
 
     @Before
     public void before() {
@@ -136,7 +137,7 @@ public class TabletStatMgrTest {
 
         // Table
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(PARTITION_ID, "p1", index, distributionInfo);
+        Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
         OlapTable table = new OlapTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
         table.addPartition(partition);
@@ -199,7 +200,7 @@ public class TabletStatMgrTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
-        Partition partition = new Partition(PARTITION_ID, "p1", index, distributionInfo);
+        Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
         partition.getDefaultPhysicalPartition().setVisibleVersion(2L, visibleVersionTime);
 
         // Lake table

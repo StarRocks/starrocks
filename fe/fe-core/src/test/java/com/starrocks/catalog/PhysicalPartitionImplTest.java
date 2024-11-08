@@ -105,7 +105,7 @@ public class PhysicalPartitionImplTest {
         Assert.assertTrue(p.visualiseShadowIndex(3, true));
 
         Assert.assertTrue(p.equals(p));
-        Assert.assertFalse(p.equals(new Partition(0, "", null, null)));
+        Assert.assertFalse(p.equals(new Partition(0, 11, "", null, null)));
 
         PhysicalPartition p2 = new PhysicalPartition(1, "", 1, 0, new MaterializedIndex());
         Assert.assertFalse(p.equals(p2));

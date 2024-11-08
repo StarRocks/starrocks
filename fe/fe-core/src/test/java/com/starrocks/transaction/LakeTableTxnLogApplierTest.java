@@ -25,7 +25,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
         TransactionState state = newTransactionState();
         state.setTransactionStatus(TransactionStatus.COMMITTED);
-        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, 2, 0);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
 

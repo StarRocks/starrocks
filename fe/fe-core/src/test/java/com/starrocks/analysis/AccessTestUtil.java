@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -74,10 +75,12 @@ public class AccessTestUtil {
         EditLog editLog = new EditLog(journalQueue);
         globalStateMgr.setEditLog(editLog);
 
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
         Database db = new Database(50000L, "testCluster:testDb");
         MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
+        Partition partition = new Partition(20000L, 20001L,"testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
         Column column = new Column("k1", Type.INT);
         baseSchema.add(column);

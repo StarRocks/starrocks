@@ -46,6 +46,7 @@ public class ConsistencyCheckerTest {
         long tabletId = 5L;
         long replicaId = 6L;
         long backendId = 7L;
+        long physicalPartitionId = 8L;
         TStorageMedium medium = TStorageMedium.HDD;
 
         MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -59,7 +60,7 @@ public class ConsistencyCheckerTest {
         DataProperty dataProperty = new DataProperty(medium);
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
-        Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
         partition.getDefaultPhysicalPartition().setVisibleVersion(2L, System.currentTimeMillis());
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);

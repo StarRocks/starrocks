@@ -52,6 +52,7 @@ public class CatalogRecycleBinLakeTableTest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -571,7 +572,7 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public boolean isSharedDirectory(String path, long partitionId) {
                 Assert.assertTrue(path.endsWith("/" + partitionId));
-                return partitionId == p1.getId();
+                return partitionId == p1.getDefaultPhysicalPartition().getId();
             }
         };
         new MockUp<BrpcProxy>() {
