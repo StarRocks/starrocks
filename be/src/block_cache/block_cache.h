@@ -92,6 +92,8 @@ public:
 
     bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
 
+    void disk_spaces(std::vector<DirSpace>* spaces);
+
     DataCacheEngineType engine_type();
 
     std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
@@ -107,6 +109,7 @@ private:
     size_t _block_size = 0;
     std::shared_ptr<KvCache> _kv_cache;
     std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
+    std::vector<std::string> _disk_paths;
     std::atomic<bool> _initialized = false;
     std::atomic<size_t> _mem_quota = 0;
     std::atomic<size_t> _disk_quota = 0;
