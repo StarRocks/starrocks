@@ -666,6 +666,169 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
+    if (this->is_compilable(context->_runtime_state)) {
+        return this->generate_ir_impl(context, jit_ctx);
+    } else {
+        return Expr::generate_ir_impl(context, jit_ctx);
+    }
+}
+
+StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    if (is_compilable(context->_runtime_state)) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
+#else
+        return Status::NotSupported("[JIT] compilable expressions must override generate_ir_impl()");
+#endif
+    }
+    if (jit_ctx->input_index >= jit_ctx->columns.size() - 1) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] vector overflow for expr :" + debug_string());
+#else
+        return Status::RuntimeError("[JIT] vector overflow for uncompilable expr");
+#endif
+    }
+    LLVMDatum datum(jit_ctx->builder);
+    datum.value = jit_ctx->builder.CreateLoad(
+            jit_ctx->columns[jit_ctx->input_index].value_type,
+            jit_ctx->builder.CreateInBoundsGEP(jit_ctx->columns[jit_ctx->input_index].value_type,
+                                               jit_ctx->columns[jit_ctx->input_index].values, jit_ctx->index_phi));
+    if (is_nullable()) {
+        datum.null_flag = jit_ctx->builder.CreateLoad(
+                jit_ctx->builder.getInt8Ty(),
+                jit_ctx->builder.CreateInBoundsGEP(jit_ctx->builder.getInt8Ty(),
+                                                   jit_ctx->columns[jit_ctx->input_index].null_flags,
+                                                   jit_ctx->index_phi));
+    }
+    jit_ctx->input_index++;
+    return datum;
+}
+
+void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state) {
+    if (!this->is_compilable(state)) {
+        exprs.emplace_back(this);
+        return;
+    }
+    for (auto child : this->children()) {
+        child->get_uncompilable_exprs(exprs, state);
+    }
+}
+
+std::string Expr::jit_func_name(RuntimeState* state) const {
+    if (this->is_compilable(state)) {
+        return this->jit_func_name_impl(state);
+    } else {
+        return Expr::jit_func_name_impl(state);
+    }
+}
+
+std::string Expr::jit_func_name_impl(RuntimeState* state) const {
+    DCHECK(!is_compilable(state));
+    // uncompilable inputs, reducing string size.
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
+}
+
+// This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
+// This method searches from top to bottom for compilable expressions.
+// Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR ||
+        _node_type == TExprNodeType::MATCH_EXPR) {
+        return Status::OK();
+    }
+    DCHECK(JITEngine::get_instance()->support_jit());
+    if ((*expr)->should_compile(state)) {
+        // If the current expression is compilable, we will replace it with a JITExpr.
+        // This expression and its compilable subexpressions will be compiled into a single function.
+        auto* jit_expr = JITExpr::create(pool, *expr);
+        jit_expr->set_uncompilable_children(state);
+        *expr = jit_expr;
+        replaced = true;
+    }
+
+    for (auto& child : (*expr)->_children) {
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool, state, replaced));
+    }
+    return Status::OK();
+}
+
+JitScore Expr::compute_jit_score(RuntimeState* state) const {
+    JitScore jit_score = {0, 0};
+    if (!is_compilable(state)) {
+        return jit_score;
+    }
+    for (auto child : _children) {
+        auto tmp = child->compute_jit_score(state);
+        jit_score.score += tmp.score;
+        jit_score.num += tmp.num;
+    }
+    jit_score.num++;
+    jit_score.score++; // helpful by default.
+    return jit_score;
+}
+
+bool Expr::should_compile(RuntimeState* state) const {
+    if (!is_compilable(state) || _children.empty() || is_constant()) {
+        return false;
+    }
+
+    if (state->is_adaptive_jit()) {
+        auto score = compute_jit_score(state);
+        auto valid = (score.score > score.num * IRHelper::jit_score_ratio && score.num > 2);
+        VLOG_QUERY << "JIT score expr: score = " << score.score << " / " << score.num << " = "
+                   << score.score * 1.0 / score.num << " valid = " << valid << "  " << jit_func_name(state);
+        if (!valid) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter(context)) {
+            return true;
+        }
+    }
+    return support;
+}
+
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                              const NgramBloomFilterReaderOptions& reader_options) const {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, reader_options)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
+}
+
+SlotId Expr::max_used_slot_id() const {
+    SlotId max_slot_id = 0;
+    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
+    return max_slot_id;
+}
+
+>>>>>>> 59dc2e14df ([BugFix] fix slot id conflicts in array_map (#52692))
 } // namespace starrocks
 
 #pragma clang diagnostic pop
