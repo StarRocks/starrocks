@@ -1,0 +1,195 @@
+-- name: test_map_agg
+CREATE TABLE t1 (
+    c1 int,
+    c2 boolean,
+    c3 tinyint,
+    c4 int,
+    c5 bigint,
+    c6 largeint,
+    c7 string,
+    c8 double,
+    c9 date,
+    c10 datetime,
+    c11 array<int>,
+    c12 map<varchar(5), double>,
+    c13 struct<a bigint, b string>
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 values
+    (1, true, 11, 111, 1111, 11111, "111111", 1.1, "2024-09-01", "2024-09-01 18:00:00", [1, 2, 3], map('key', 5.5), row(100, "abc")),
+    (2, false, 22, 222, 2222, 22222, "222222", 2.2, "2024-09-02", "2024-09-02 11:00:00", [3, 4, 5], map('key', 511.2), row(200, "bcd")),
+    (3, true, 33, 333, 3333, 33333, "333333", 3.3,  "2024-09-03", "2024-09-03 00:00:00", [4, 1, 2], map('key', 666.6), row(300, "cccecd")),
+    (4, false, 11, 444, 4444, 44444, "444444", 4.4, "2024-09-04", "2024-09-04 12:00:00", [7, 7, 5], map('key', 444.4), row(400, "efdg")),
+    (5, null, null, null, null, null, null, null, null, null, null, null, null);
+-- result:
+-- !result
+set streaming_preaggregation_mode=force_preaggregation;
+-- result:
+-- !result
+select map_size(map_agg(c1, c3)) from t1;
+-- result:
+5
+-- !result
+select map_agg(c1, c3)[1] from t1;
+-- result:
+11
+-- !result
+select map_agg(c1, c3)[2] from t1;
+-- result:
+22
+-- !result
+select map_agg(c1, c3)[3] from t1;
+-- result:
+33
+-- !result
+select map_agg(c1, c3)[4] from t1;
+-- result:
+11
+-- !result
+select map_agg(c1, c3)[5] from t1;
+-- result:
+None
+-- !result
+select map_size(map_agg(c5, c6)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c5, c6)[1111] from t1;
+-- result:
+11111
+-- !result
+select map_size(map_agg(c6, c10)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c6, c10)[11111] from t1;
+-- result:
+2024-09-01 18:00:00
+-- !result
+select map_agg(c6, c10)[22222] from t1;
+-- result:
+2024-09-02 11:00:00
+-- !result
+select map_size(map_agg(c8, c5)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c8, c5)[1.1] from t1;
+-- result:
+1111
+-- !result
+select map_agg(c8, c5)[4.4] from t1;
+-- result:
+4444
+-- !result
+select c11, map_agg(c10, c11) res from t1 group by c11 order by c11[1];
+-- result:
+None	{}
+[1,2,3]	{"2024-09-01 18:00:00":[1,2,3]}
+[3,4,5]	{"2024-09-02 11:00:00":[3,4,5]}
+[4,1,2]	{"2024-09-03 00:00:00":[4,1,2]}
+[7,7,5]	{"2024-09-04 12:00:00":[7,7,5]}
+-- !result
+select c12, map_agg(c9, c12) res from t1 group by c12 order by c12['key'];
+-- result:
+None	{}
+{"key":5.5}	{"2024-09-01":{"key":5.5}}
+{"key":444.4}	{"2024-09-04":{"key":444.4}}
+{"key":511.2}	{"2024-09-02":{"key":511.2}}
+{"key":666.6}	{"2024-09-03":{"key":666.6}}
+-- !result
+select c13, map_agg(c9, c13) res from t1 group by c13 order by c13.a;
+-- result:
+None	{}
+{"a":100,"b":"abc"}	{"2024-09-01":{"a":100,"b":"abc"}}
+{"a":200,"b":"bcd"}	{"2024-09-02":{"a":200,"b":"bcd"}}
+{"a":300,"b":"cccecd"}	{"2024-09-03":{"a":300,"b":"cccecd"}}
+{"a":400,"b":"efdg"}	{"2024-09-04":{"a":400,"b":"efdg"}}
+-- !result
+set streaming_preaggregation_mode=force_streaming;
+-- result:
+-- !result
+select map_size(map_agg(c1, c3)) from t1;
+-- result:
+5
+-- !result
+select map_agg(c1, c3)[1] from t1;
+-- result:
+11
+-- !result
+select map_agg(c1, c3)[2] from t1;
+-- result:
+22
+-- !result
+select map_agg(c1, c3)[3] from t1;
+-- result:
+33
+-- !result
+select map_agg(c1, c3)[4] from t1;
+-- result:
+11
+-- !result
+select map_agg(c1, c3)[5] from t1;
+-- result:
+None
+-- !result
+select map_size(map_agg(c5, c6)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c5, c6)[1111] from t1;
+-- result:
+11111
+-- !result
+select map_size(map_agg(c6, c10)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c6, c10)[11111] from t1;
+-- result:
+2024-09-01 18:00:00
+-- !result
+select map_agg(c6, c10)[22222] from t1;
+-- result:
+2024-09-02 11:00:00
+-- !result
+select map_size(map_agg(c8, c5)) from t1;
+-- result:
+4
+-- !result
+select map_agg(c8, c5)[1.1] from t1;
+-- result:
+1111
+-- !result
+select map_agg(c8, c5)[4.4] from t1;
+-- result:
+4444
+-- !result
+select c11, map_agg(c10, c11) res from t1 group by c11 order by c11[1];
+-- result:
+None	{}
+[1,2,3]	{"2024-09-01 18:00:00":[1,2,3]}
+[3,4,5]	{"2024-09-02 11:00:00":[3,4,5]}
+[4,1,2]	{"2024-09-03 00:00:00":[4,1,2]}
+[7,7,5]	{"2024-09-04 12:00:00":[7,7,5]}
+-- !result
+select c12, map_agg(c9, c12) res from t1 group by c12 order by c12['key'];
+-- result:
+None	{}
+{"key":5.5}	{"2024-09-01":{"key":5.5}}
+{"key":444.4}	{"2024-09-04":{"key":444.4}}
+{"key":511.2}	{"2024-09-02":{"key":511.2}}
+{"key":666.6}	{"2024-09-03":{"key":666.6}}
+-- !result
+select c13, map_agg(c9, c13) res from t1 group by c13 order by c13.a;
+-- result:
+None	{}
+{"a":100,"b":"abc"}	{"2024-09-01":{"a":100,"b":"abc"}}
+{"a":200,"b":"bcd"}	{"2024-09-02":{"a":200,"b":"bcd"}}
+{"a":300,"b":"cccecd"}	{"2024-09-03":{"a":300,"b":"cccecd"}}
+{"a":400,"b":"efdg"}	{"2024-09-04":{"a":400,"b":"efdg"}}
+-- !result
