@@ -496,6 +496,7 @@ public class ComputeNode implements IComputable, Writable {
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
+<<<<<<< HEAD
             if (!isAlive.get()) {
                 isChanged = true;
                 // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
@@ -507,6 +508,9 @@ public class ComputeNode implements IComputable, Writable {
                 this.lastStartTime = hbResponse.getHbTime();
             }
 
+=======
+            // RebootTime will be `-1` if not set from backend.
+>>>>>>> b2cf5e7cd2 ([BugFix] fix backend node lastStartTime updated by hbTime unexpectedly (#52704))
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
@@ -514,6 +518,18 @@ public class ComputeNode implements IComputable, Writable {
                 // but alive state may be not changed since the BE may be restarted in a short time
                 // we need notify coordinator to cancel query
                 becomeDead = true;
+            }
+
+            if (!isAlive.get()) {
+                isChanged = true;
+                if (hbResponse.getRebootTime() == -1) {
+                    // Only update lastStartTime by hbResponse.hbTime if the RebootTime is not set from an OK-response.
+                    // Just for backwards compatibility purpose in case the response is from an ancient version
+                    this.lastStartTime = hbResponse.getHbTime();
+                }
+                LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
+                        hbResponse.getHbTime());
+                setAlive(true);
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
