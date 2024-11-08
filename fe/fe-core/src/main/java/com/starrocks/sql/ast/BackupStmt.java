@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -29,13 +30,14 @@ public class BackupStmt extends AbstractBackupStmt {
 
     private BackupType type = BackupType.FULL;
 
-    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
+    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
+                      Map<String, String> properties) {
+        super(labelName, repoName, tblRefs, fnRefs, properties, NodePosition.ZERO);
     }
 
-    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
+    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
                       Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, properties, pos);
+        super(labelName, repoName, tblRefs, fnRefs, properties, pos);
     }
 
     public long getTimeoutMs() {

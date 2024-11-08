@@ -204,4 +204,15 @@ public class DatabaseTest {
         Assert.assertEquals(functions.size(), 1);
         Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
+    }
 }

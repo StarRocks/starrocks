@@ -651,6 +651,15 @@ public class Database extends MetaObject implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
 
+    public synchronized void dropFunctionForRestore(Function function) {
+        FunctionSearchDesc fnDesc = new FunctionSearchDesc(function.getFunctionName(), function.getArgs(),
+                                                           function.hasVarArgs());
+        try {
+            dropFunctionImpl(fnDesc, true);
+        } catch (UserException ignore) {
+        }
+    }
+
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
         try {
             dropFunctionImpl(functionSearchDesc, false);
@@ -731,6 +740,10 @@ public class Database extends MetaObject implements Writable {
             functions.addAll(entry.getValue());
         }
         return functions;
+    }
+
+    public synchronized List<Function> getFunctionsByName(String functionName) {
+        return name2Function.getOrDefault(functionName, ImmutableList.of());
     }
 
     public boolean isSystemDatabase() {

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -28,12 +29,14 @@ public class AbstractBackupStmt extends DdlStmt {
     protected LabelName labelName;
     protected String repoName;
     protected List<TableRef> tblRefs;
+    protected List<FunctionRef> fnRefs;
+    protected boolean withOnClause;
     protected Map<String, String> properties;
 
     protected long timeoutMs;
 
     public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRef> tableRefs,
-                              Map<String, String> properties, NodePosition pos) {
+                              List<FunctionRef> fnRefs, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.labelName = labelName;
         this.repoName = repoName;
@@ -41,7 +44,12 @@ public class AbstractBackupStmt extends DdlStmt {
         if (this.tblRefs == null) {
             this.tblRefs = Lists.newArrayList();
         }
+        this.fnRefs = fnRefs;
+        if (this.fnRefs == null) {
+            this.fnRefs = Lists.newArrayList();
+        }
 
+        this.withOnClause = !(this.tblRefs.isEmpty() && this.fnRefs.isEmpty());
         this.properties = properties == null ? Maps.newHashMap() : properties;
     }
 
@@ -65,8 +73,16 @@ public class AbstractBackupStmt extends DdlStmt {
         return tblRefs;
     }
 
+    public List<FunctionRef> getFnRefs() {
+        return fnRefs;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public boolean withOnClause() {
+        return withOnClause;
     }
 
     public long getTimeoutMs() {
