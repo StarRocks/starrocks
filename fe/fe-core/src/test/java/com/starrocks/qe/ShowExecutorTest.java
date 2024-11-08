@@ -191,7 +191,7 @@ public class ShowExecutorTest {
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition().getBaseIndex();
                 minTimes = 0;
                 result = index1;
             }

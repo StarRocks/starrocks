@@ -60,7 +60,7 @@ public class ConsistencyCheckerTest {
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
-        partition.setVisibleVersion(2L, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, System.currentTimeMillis());
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);

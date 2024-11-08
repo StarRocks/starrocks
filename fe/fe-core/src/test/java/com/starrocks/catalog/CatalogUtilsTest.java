@@ -61,7 +61,7 @@ public class CatalogUtilsTest {
         partitions.add(partition);
         when(olapTable.getPartitions()).thenReturn(partitions);
         when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
-        when(partition.getVisibleVersion()).thenReturn(2L);
+        when(partition.getDefaultPhysicalPartition().getVisibleVersion()).thenReturn(2L);
         when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);

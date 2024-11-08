@@ -36,6 +36,7 @@ import org.junit.runners.MethodSorters;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -165,8 +166,11 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
         ExecPlan execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "3: date >= '2020-01-02', 3: date < '2020-01-03'");
 
-        Map<String, Long> partitionVersionMap = partitionedMaterializedView.getPartitions().stream()
-                    .collect(Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+        Map<String, Long> partitionVersionMap = new HashMap<>();
+        for (Partition p : partitionedMaterializedView.getPartitions()) {
+            partitionVersionMap.put(p.getName(), p.getDefaultPhysicalPartition().getVisibleVersion());
+        }
+
         Assert.assertEquals(
                     ImmutableMap.of("p20200104_20200105", 2L,
                                 "p20200101_20200102", 2L,

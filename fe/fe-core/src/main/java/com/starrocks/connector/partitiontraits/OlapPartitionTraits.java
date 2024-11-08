@@ -84,8 +84,9 @@ public class OlapPartitionTraits extends DefaultTraits {
             List<String> baseTablePartitionInfos = Lists.newArrayList();
             for (String p : baseTable.getVisiblePartitionNames()) {
                 Partition partition = baseTable.getPartition(p);
-                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(), partition.getVisibleVersion(),
-                        partition.getVisibleVersionTime()));
+                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersionTime()));
             }
             LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
                     baseTable.getName(), baseTablePartitionInfos, mvBaseTableVisibleVersionMap);
@@ -96,7 +97,7 @@ public class OlapPartitionTraits extends DefaultTraits {
         for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
-                if (partition.getVisibleVersion() != 1) {
+                if (partition.getDefaultPhysicalPartition().getVisibleVersion() != 1) {
                     result.add(partitionName);
                 }
             }
@@ -134,8 +135,9 @@ public class OlapPartitionTraits extends DefaultTraits {
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         return mvRefreshedPartitionInfo.getId() != partition.getId()
-                || partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
+                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
+                > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {

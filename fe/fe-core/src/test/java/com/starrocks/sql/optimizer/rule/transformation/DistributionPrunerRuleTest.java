@@ -171,7 +171,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(partition);
 
-                partition.getIndex(anyLong);
+                partition.getDefaultPhysicalPartition().getIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
