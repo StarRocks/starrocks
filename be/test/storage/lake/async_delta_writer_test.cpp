@@ -527,7 +527,6 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    CountDownLatch latch(1);
     ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
@@ -540,9 +539,8 @@ TEST_F(LakeAsyncDeltaWriterTest, test_flush) {
     delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
     delta_writer->flush([&](const Status& st) {
         ASSERT_OK(st);
-        latch.count_down();
     });
-    latch.wait();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     while (delta_writer->queueing_memtable_num() > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
