@@ -443,6 +443,10 @@ public class Function implements Writable {
         this.aggStateDesc = aggStateDesc;
     }
 
+    public void setFunctionName(FunctionName name) {
+        this.name = name;
+    }
+
     // Compares this to 'other' for mode.
     public boolean compare(Function other, CompareMode mode) {
         switch (mode) {
