@@ -92,6 +92,13 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+<<<<<<< HEAD
+=======
+    @ConfField
+    public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
+>>>>>>> a40c00f130 ([Enhancement] support sys_log_warn_modules in fe conf (#52709))
     /**
      * Log to file by default. set to `true` if you want to log to console
      */

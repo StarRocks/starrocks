@@ -197,9 +197,6 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
             "    </Logger>\n" +
-            "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
-            "      <AppenderRef ref=\"SysWF\"/>\n" +
-            "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
             "</Configuration>";
@@ -219,6 +216,17 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
     private static String[] bigQueryModules;
     private static String[] internalModules;
+<<<<<<< HEAD
+=======
+    private static boolean compressSysLog;
+    private static boolean compressAuditLog;
+    private static String[] warnModules;
+    private static String[] builtinWarnModules = {
+            "org.apache.kafka",
+            "org.apache.hudi",
+            "org.apache.hadoop.io.compress",
+    };
+>>>>>>> a40c00f130 ([Enhancement] support sys_log_warn_modules in fe conf (#52709))
 
     private static void reconfig() throws IOException {
         Map<String, String> properties = Maps.newHashMap();
@@ -321,6 +329,12 @@ public class Log4jConfig extends XmlConfiguration {
         for (String s : bigQueryModules) {
             sb.append("    <Logger name='big_query.").append(s).append("' level='INFO'/>\n");
         }
+        for (String s : builtinWarnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
+        for (String s : warnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
 
         String newXmlConfTemplate = APPENDER_TEMPLATE;
         newXmlConfTemplate += log2Console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
@@ -355,6 +369,12 @@ public class Log4jConfig extends XmlConfiguration {
         dumpModules = Config.dump_log_modules;
         bigQueryModules = Config.big_query_log_modules;
         internalModules = Config.internal_log_modules;
+<<<<<<< HEAD
+=======
+        compressSysLog = Config.sys_log_enable_compress;
+        compressAuditLog = Config.audit_log_enable_compress;
+        warnModules = Config.sys_log_warn_modules;
+>>>>>>> a40c00f130 ([Enhancement] support sys_log_warn_modules in fe conf (#52709))
         reconfig();
     }
 
