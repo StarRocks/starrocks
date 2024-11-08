@@ -11,8 +11,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
-import com.starrocks.epack.sql.ast.AddBackendClauseEPack;
-import com.starrocks.epack.sql.ast.AddComputeNodeClauseEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -35,8 +33,6 @@ import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DisableDiskClause;
-import com.starrocks.epack.sql.ast.DropBackendClauseEPack;
-import com.starrocks.epack.sql.ast.DropComputeNodeClauseEPack;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
@@ -54,17 +50,12 @@ import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AddBackendClause;
-import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.DropBackendClause;
-import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
@@ -926,7 +917,9 @@ public class AstBuilderEPack extends AstBuilder {
     }
 
     private static void convertTableNames(List<TableName> originTableNames,
-            List<String> catalogNames, List<DatabaseName> databaseNames, List<TableName> tableNames) {
+                                          List<String> catalogNames,
+                                          List<DatabaseName> databaseNames,
+                                          List<TableName> tableNames) {
         if (originTableNames == null) {
             return;
         }
@@ -952,54 +945,6 @@ public class AstBuilderEPack extends AstBuilder {
                 tableNames.add(tableName);
             }
         }
-    }
-
-    @Override
-    public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
-            whName = identifier.getValue();
-        }
-
-        AddBackendClause addBackendClause = (AddBackendClause) super.visitAddBackendClause(context);
-        return new AddBackendClauseEPack(addBackendClause, whName);
-    }
-
-    @Override
-    public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
-            whName = identifier.getValue();
-        }
-
-        DropBackendClause dropBackendClause = (DropBackendClause) super.visitDropBackendClause(context);
-        return new DropBackendClauseEPack(dropBackendClause, whName);
-    }
-
-    @Override
-    public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
-            whName = identifier.getValue();
-        }
-
-        AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) super.visitAddComputeNodeClause(context);
-        return new AddComputeNodeClauseEPack(addComputeNodeClause, whName);
-    }
-
-    @Override
-    public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (context.warehouseName != null) {
-            Identifier identifier = (Identifier) visit(context.identifierOrString());
-            whName = identifier.getValue();
-        }
-
-        DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) super.visitDropComputeNodeClause(context);
-        return new DropComputeNodeClauseEPack(dropComputeNodeClause, whName);
     }
 
     @Override

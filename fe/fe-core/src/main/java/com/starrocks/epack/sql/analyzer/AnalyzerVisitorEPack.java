@@ -28,10 +28,8 @@ import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
-import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -66,20 +64,6 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                      ConnectContext context) {
         MaterializedViewAnalyzerEPack.analyze(statement, context);
-        return null;
-    }
-
-    // ------------------------------------------- Cluster Management Statement ----------------------------------------
-
-    @Override
-    public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-        new AlterSystemStmtAnalyzerEPack().analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
-        new AlterSystemStmtAnalyzerEPack().analyze(statement, context);
         return null;
     }
 
