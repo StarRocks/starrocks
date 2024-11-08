@@ -1978,7 +1978,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
         List<TableRef> tableRefs = statement.getTableRefs();
-        if (tableRefs.size() == 0) {
+        if (statement.withOnClause() && tableRefs.isEmpty() && statement.getFnRefs().isEmpty()) {
             String dBName = statement.getDbName();
             throw new SemanticException("Database: %s is empty", dBName);
         }
@@ -2067,7 +2067,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
         List<TableRef> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
-        if (tableRefs == null || tableRefs.isEmpty()) {
+        if (!statement.withOnClause() && (tableRefs == null || tableRefs.isEmpty())) {
             try {
                 Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);

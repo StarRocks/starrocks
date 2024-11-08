@@ -340,6 +340,10 @@ public class Function implements Writable {
         this.couldApplyDictOptimize = couldApplyDictOptimize;
     }
 
+    public void setFunctionName(FunctionName name) {
+        this.name = name;
+    }
+
     // Compares this to 'other' for mode.
     public boolean compare(Function other, CompareMode mode) {
         switch (mode) {

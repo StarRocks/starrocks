@@ -1733,7 +1733,7 @@ policySignature : identifier type;
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    (ON '(' tableDesc (',' tableDesc) * ')')?
+    (ON '(' backupObjectDesc (',' backupObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1748,7 +1748,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM identifier
-    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
+    (ON '(' restoreObjectDesc (',' restoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -2390,8 +2390,16 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+backupObjectDesc
+    : tableDesc | FUNCTION qualifiedName
+    ;
+
 tableDesc
     : qualifiedName partitionNames?
+    ;
+
+restoreObjectDesc
+    : restoreTableDesc | FUNCTION qualifiedName (AS identifier)?
     ;
 
 restoreTableDesc
