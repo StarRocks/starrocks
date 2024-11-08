@@ -13,8 +13,6 @@
 // limitations under the License.
 
 package com.starrocks.connector.parser.trino;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.parser.SqlParser;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
