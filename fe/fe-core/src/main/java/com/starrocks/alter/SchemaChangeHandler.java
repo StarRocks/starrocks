@@ -2017,14 +2017,17 @@ public class SchemaChangeHandler extends AlterHandler {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
-                boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
-                if (oldEnablePersistentIndex == enablePersistentIndex) {
-                    LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
-                            olapTable.getName(), enablePersistentIndex));
-                    return null;
-                }
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                if (oldEnablePersistentIndex == enablePersistentIndex
+                        && persistentIndexType == oldPersistentIndexType) {
+                    LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
+                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                    return null;
+                }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 // only support set persistent_index_type when enable_persistent_index is true
                 enablePersistentIndex = olapTable.enablePersistentIndex();
