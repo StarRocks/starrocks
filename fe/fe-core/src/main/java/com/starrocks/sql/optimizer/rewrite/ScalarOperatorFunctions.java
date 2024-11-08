@@ -392,18 +392,13 @@ public class ScalarOperatorFunctions {
         if (format.isEmpty()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        try {
-            // unix style
-            if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-                DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
-                return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
-            } else {
-                String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
-                return ConstantOperator.createVarchar(result);
-            }
-        } catch (IllegalArgumentException e) {
-            // Handle invalid datetime format pattern
-            return ConstantOperator.createNull(Type.VARCHAR);
+        // unix style
+        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
+            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
+            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
+        } else {
+            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
+            return ConstantOperator.createVarchar(result);
         }
     }
 
