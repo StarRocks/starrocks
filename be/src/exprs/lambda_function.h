@@ -68,8 +68,6 @@ public:
     Expr* get_lambda_expr() const { return _children[0]; }
     std::string debug_string() const override;
 
-    SlotId max_used_slot_id() const;
-
     struct ExtractContext {
         std::unordered_set<SlotId> lambda_arguments;
         // slot id of common sub expr inside lambda expr
@@ -87,13 +85,13 @@ public:
     // `any_match(array_map(x->x<10, arr1))` is an outer common expr. it will create 2 column ref exprs to replace them.
     // 1. slot 1 -> array_map(x->x<10, arr1)
     // 2. slot 2 -> any_match(slot 1, arr1)
-    Status extract_outer_common_exprs(RuntimeState* state, ExtractContext* ctx);
+    Status extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, ExtractContext* ctx);
 
 private:
     Status collect_lambda_argument_ids();
     Status collect_capture_slot_ids();
     Status collect_common_sub_exprs();
-    Status extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx);
+    Status extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, Expr* expr, ExtractContext* ctx);
 
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;

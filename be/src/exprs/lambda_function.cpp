@@ -32,7 +32,8 @@ namespace starrocks {
 
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
-Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* expr, ExtractContext* ctx) {
+Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, Expr* expr,
+                                                  ExtractContext* ctx) {
     if (expr->is_lambda_function()) {
         auto lambda_function = static_cast<LambdaFunction*>(expr);
         RETURN_IF_ERROR(lambda_function->collect_lambda_argument_ids());
@@ -65,7 +66,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
     for (int i = 0; i < child_num; i++) {
         auto child = expr->get_child(i);
 
-        RETURN_IF_ERROR(extract_outer_common_exprs(state, child, ctx));
+        RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, child, ctx));
         // if child is a slotref or a lambda function or a literal, we can't replace it.
         if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant()) {
             continue;
@@ -80,6 +81,11 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
 
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
+#ifdef DEBUG
+            expr_ctx->root()->for_each_slot_id([expr_ctx, new_slot_id = slot_id](SlotId slot_id) {
+                DCHECK_NE(new_slot_id, slot_id) << "slot_id " << new_slot_id << " already exists in expr_ctx";
+            });
+#endif
             ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
             VLOG(2) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
                     << ", old expr: " << child->debug_string();
@@ -91,8 +97,8 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, Expr* exp
     return Status::OK();
 }
 
-Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExtractContext* ctx) {
-    RETURN_IF_ERROR(extract_outer_common_exprs(state, this, ctx));
+Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, ExtractContext* ctx) {
+    RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, this, ctx));
     return Status::OK();
 }
 
@@ -109,12 +115,6 @@ Status LambdaFunction::collect_lambda_argument_ids() {
                                                  _arguments_ids.size(), child_num - 1));
     }
     return Status::OK();
-}
-
-SlotId LambdaFunction::max_used_slot_id() const {
-    SlotId max_slot_id = 0;
-    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
-    return max_slot_id;
 }
 
 Status LambdaFunction::collect_common_sub_exprs() {
@@ -235,4 +235,5 @@ std::string LambdaFunction::debug_string() const {
     out << ")";
     return out.str();
 }
+
 } // namespace starrocks
