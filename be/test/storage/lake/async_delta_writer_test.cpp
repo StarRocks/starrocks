@@ -515,5 +515,4 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
 
     SyncPoint::GetInstance()->DisableProcessing();
 }
-
 } // namespace starrocks::lake

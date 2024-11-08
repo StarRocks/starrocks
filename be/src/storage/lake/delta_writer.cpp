@@ -112,6 +112,8 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
+    Status manual_flush();
+
     Status flush();
 
     Status flush_async();
@@ -297,6 +299,11 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     } else {
         return res.status();
     }
+}
+
+inline Status DeltaWriterImpl::manual_flush() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    return flush_async();
 }
 
 inline Status DeltaWriterImpl::flush() {
@@ -655,6 +662,11 @@ int64_t DeltaWriter::txn_id() const {
 
 MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
+}
+
+Status DeltaWriter::manual_flush() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::manual_flush() in a bthread";
+    return _impl->manual_flush();
 }
 
 Status DeltaWriter::flush() {
