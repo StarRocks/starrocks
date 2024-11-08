@@ -516,8 +516,8 @@ public final class MetricRepo {
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
-        HISTO_GET_REMOT_FILES_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("get","remotefiles", "latency", "ms"));
-        HISTO_CALL_HMS_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("call","hms", "latency", "ms"));
+        HISTO_GET_REMOT_FILES_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("get", "remotefiles", "latency", "ms"));
+        HISTO_CALL_HMS_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("call", "hms", "latency", "ms"));
 
         // init system metrics
         initSystemMetrics();
