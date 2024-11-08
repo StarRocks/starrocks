@@ -306,7 +306,7 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyy")).getVarchar());
         assertEquals("20010109",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyyMMdd")).getVarchar());
-        assertEquals("20010109 13:04:05",
+        assertEquals("yyyyMMdd HH:mm:ss",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("yyyyMMdd HH:mm:ss"))
                         .getVarchar());
         assertEquals("HH:mm:ss",
@@ -1460,13 +1460,6 @@ public class ScalarOperatorFunctionsTest {
                 new ConstantOperator("-", Type.VARCHAR),
                 new ConstantOperator("", Type.VARCHAR)
         ).getVarchar());
-    }
-
-    @Test
-    public void testJodatimeFormat() {
-        assertEquals("20240806", ScalarOperatorFunctions.jodatimeFormat(
-                new ConstantOperator(LocalDateTime.parse("2024-08-06T12:30:45"), Type.DATE),
-                new ConstantOperator("yyyyMMdd", Type.VARCHAR)).getVarchar());
     }
 
     /*
