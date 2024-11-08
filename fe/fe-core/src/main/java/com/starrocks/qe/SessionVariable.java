@@ -624,7 +624,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_DIALECT = "sql_dialect";
 
     // Is Trino dialect downgraded to Starrocks
-    public static final String ENABLE_DIALECT_DOWNGRADE ="enable_dialect_downgrade";
+    public static final String ENABLE_DIALECT_DOWNGRADE = "enable_dialect_downgrade";
 
     public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
 
