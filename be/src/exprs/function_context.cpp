@@ -191,49 +191,6 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     }
 }
 
-std::mt19937_64* FunctionContext::driver_local_random_generator() {
-    int32_t driver_id = CurrentThread::current().get_driver_id();
-
-    std::lock_guard<std::mutex> lock(_rnd_mu);
-    std::mt19937_64* res;
-    auto iter = _driver_local_generators.find(driver_id);
-    if (iter == _driver_local_generators.end()) {
-        if (_global_seed == 0) {
-            // init global seed
-            std::random_device rnd;
-            _global_seed = rnd();
-            _default_generator.seed(_global_seed);
-        }
-        // use default generator to generate seed for driver-local generators
-        // this way can make sure all seeds and generated number are deterministic
-        std::uniform_int_distribution<> dist;
-        auto gen = std::make_unique<std::mt19937_64>(dist(_default_generator));
-        res = gen.get();
-        _driver_local_generators.emplace(driver_id, std::move(gen));
-    } else {
-        res = iter->second.get();
-    }
-
-    return res;
-}
-
-void FunctionContext::reseed_random_number(int64_t seed) {
-    // Use (seed + be_id) to guarantee every backend will generate different random number even if user provide the seed
-    // why seq? be_id is unique but not deterministic when deploying a new cluster, so use a sequence instead of be_id
-    // the basic assumption, the biggest cluster is 1024
-    auto be_id = get_backend_id();
-    if (be_id.has_value()) {
-        int64_t seq = std::hash<int64_t>()(be_id.value()) % 1024;
-        seed += seq;
-    }
-    std::lock_guard<std::mutex> lock(_rnd_mu);
-
-    _global_seed = seed;
-    _default_generator.seed(seed);
-    _driver_local_generators.clear();
-    VLOG(2) << "reseed_random_number to " << seed;
-}
-
 bool FunctionContext::add_warning(const char* warning_msg) {
     if (_num_warnings++ >= MAX_WARNINGS) {
         return false;
@@ -314,6 +271,49 @@ ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_d
         return NullableColumn::create(p, NullColumn::create());
     }
     return p;
+}
+
+std::mt19937_64* FunctionContext::local_random_generator() {
+    int32_t uid = CurrentThread::current().get_unique_execution_id();
+
+    std::lock_guard<std::mutex> lock(_rnd_mu);
+    std::mt19937_64* res;
+    auto iter = _local_generators.find(uid);
+    if (iter == _local_generators.end()) {
+        if (!_global_seed.has_value()) {
+            // init global seed
+            std::random_device rnd;
+            _global_seed = rnd();
+            _default_generator.seed(_global_seed.value());
+        }
+        // use default generator to generate seed for driver-local generators
+        // this way can make sure all seeds and generated number are deterministic
+        std::uniform_int_distribution<> dist;
+        auto gen = std::make_unique<std::mt19937_64>(dist(_default_generator));
+        res = gen.get();
+        _local_generators.emplace(uid, std::move(gen));
+    } else {
+        res = iter->second.get();
+    }
+
+    return res;
+}
+
+void FunctionContext::reseed_random_number(int64_t seed) {
+    // Use (seed + be_id) to guarantee every backend will generate different random number even if user provide the seed
+    // why seq? be_id is unique but not deterministic when deploying a new cluster, so use a sequence instead of be_id
+    // the basic assumption, the biggest cluster is 1024
+    auto be_id = get_backend_id();
+    if (be_id.has_value()) {
+        int64_t seq = std::hash<int64_t>()(be_id.value()) % 1024;
+        seed += seq;
+    }
+    std::lock_guard<std::mutex> lock(_rnd_mu);
+
+    _global_seed = seed;
+    _default_generator.seed(seed);
+    _local_generators.clear();
+    VLOG(2) << "reseed_random_number to " << seed;
 }
 
 } // namespace starrocks

@@ -88,6 +88,7 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_query_id({});
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
+        CurrentThread::current().set_scan_seq(0, 0);
 
         if (current_thread != nullptr) {
             current_thread->set_idle(true);

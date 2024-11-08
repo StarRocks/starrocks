@@ -741,7 +741,7 @@ static StatusOr<ColumnPtr> rand_impl(FunctionContext* context, const Columns& co
     int32_t num_rows = columns[0]->size();
     ColumnBuilder<type> result(num_rows);
 
-    std::mt19937_64* generator = context->driver_local_random_generator();
+    std::mt19937_64* generator = context->local_random_generator();
     for (int i = 0; i < num_rows; ++i) {
         result.append(dist(*generator));
     }

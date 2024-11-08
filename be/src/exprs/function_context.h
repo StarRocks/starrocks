@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -171,7 +172,7 @@ public:
     // Returns a driver-local random number generator
     // Driver-local: each pipeline-driver will only initialie one generator, and be kept during the lifecycle
     // By default it will be seed a random number, you can re-seed it with a specified value
-    std::mt19937_64* driver_local_random_generator();
+    std::mt19937_64* local_random_generator();
     void reseed_random_number(int64_t seed);
 
     void release_mems();
@@ -208,9 +209,9 @@ private:
 
     // Random number
     std::mutex _rnd_mu;
-    int64_t _global_seed = 0; // 0 means uninitialized
+    std::optional<int64_t> _global_seed;
     std::mt19937_64 _default_generator;
-    std::map<int32_t, std::unique_ptr<std::mt19937_64>> _driver_local_generators;
+    std::map<int32_t, std::unique_ptr<std::mt19937_64>> _local_generators;
 
     // Type descriptor for the return type of the function.
     FunctionContext::TypeDesc _return_type;
