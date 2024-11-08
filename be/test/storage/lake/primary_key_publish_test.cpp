@@ -1574,6 +1574,8 @@ INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::LOCAL,
+                                                           PartialUpdateMode::ROW_MODE, true},
+                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
                                                            PartialUpdateMode::ROW_MODE, true}));
 
 } // namespace starrocks::lake
