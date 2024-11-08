@@ -817,7 +817,7 @@ public class CTEPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testDisableLambdaPushdownTrue() throws Exception {
+    public void testEnableLambdaPushdownFalse() throws Exception {
         String sql =
                 "with input1 as (\n" +
                 "  select [1,2,3] as x\n" +
@@ -846,7 +846,7 @@ public class CTEPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testDisableLambdaPushdownFalse() throws Exception {
+    public void testEnableLambdaPushdownTrue() throws Exception {
         String sql =
                 "with input1 as (\n" +
                         "  select [1,2,3] as x\n" +
