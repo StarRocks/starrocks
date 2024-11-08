@@ -308,6 +308,10 @@ public class AggregateFunction extends Function {
         }
     }
 
+    public boolean isAggregateFn() {
+        return isAggregateFn;
+    }
+
     public boolean isAnalyticFn() {
         return isAnalyticFn;
     }

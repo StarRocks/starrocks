@@ -444,6 +444,16 @@ public class BackupJobInfo implements Writable {
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
         String[] tblNames = JSONObject.getNames(backupObjs);
+        if (tblNames == null) {
+            // means that pure snapshot for functions
+            String result = root.getString("backup_result");
+            if (result.equals("succeed")) {
+                jobInfo.success = true;
+            } else {
+                jobInfo.success = false;
+            }
+            return;
+        }
         for (String tblName : tblNames) {
             BackupTableInfo tblInfo = new BackupTableInfo();
             tblInfo.name = tblName;

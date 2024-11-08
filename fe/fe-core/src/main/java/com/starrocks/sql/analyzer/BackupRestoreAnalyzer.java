@@ -35,6 +35,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
@@ -78,11 +79,12 @@ public class BackupRestoreAnalyzer {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
+            boolean withOnClause = backupStmt.withOnClause();
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
-            // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
+            // If TableRefs is empty and withOnClause is not true, it means that we do not specify any table in Backup stmt.
             // We should backup all table in current database.
-            if (tableRefs.size() == 0) {
+            if (!withOnClause && tableRefs.isEmpty()) {
                 for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +
@@ -130,6 +132,14 @@ public class BackupRestoreAnalyzer {
             } else {
                 tableRefs.clear();
                 tableRefs.addAll(tblPartsMap.values());
+            }
+
+            // analyze and get Function for stmt
+            List<FunctionRef> fnRefs = backupStmt.getFnRefs();
+            if (!withOnClause) {
+                fnRefs.add(new FunctionRef(database.getFunctions()));
+            } else {
+                backupStmt.getFnRefs().stream().forEach(x -> x.analyzeForBackup(database));
             }
 
             Map<String, String> properties = backupStmt.getProperties();
