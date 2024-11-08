@@ -58,6 +58,7 @@ struct CacheOptions {
     size_t max_flying_memory_mb = 0;
     double scheduler_threads_per_cpu = 0;
     double skip_read_factor = 0;
+    uint32_t inline_item_count_limit = 0;
 };
 
 struct WriteCacheOptions {
