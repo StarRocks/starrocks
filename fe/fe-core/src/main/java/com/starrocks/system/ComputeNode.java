@@ -333,9 +333,27 @@ public class ComputeNode implements IComputable, Writable {
         this.heartbeatPort = heartbeatPort;
     }
 
-    public void setAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-        this.status = isAlive ? Status.OK : Status.DISCONNECTED;
+    /** Set liveness and adjust the Internal status accordingly
+     * |    Status    |  IsAlive |
+     * |  CONNECTING  |   false  |
+     * |     OK       |   true   |
+     * |  SHUTDOWN    |   false  |
+     * | DISCONNECTED |   false  |
+     */
+    public boolean setAlive(boolean isAlive) {
+        boolean success = this.isAlive.compareAndSet(!isAlive, isAlive);
+        if (success) {
+            if (isAlive) {
+                // force reset the status to OK under no condition
+                this.status = Status.OK;
+            } else {
+                if (this.status == Status.OK) {
+                    // force set to disconnected if target status is not alive but current status is OK
+                    this.status = Status.DISCONNECTED;
+                }
+            }
+        }
+        return success;
     }
 
     public void setBePort(int agentPort) {
@@ -561,17 +579,7 @@ public class ComputeNode implements IComputable, Writable {
             }
 
             this.lastUpdateMs = hbResponse.getHbTime();
-            if (!isAlive.get()) {
-                isChanged = true;
-                // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
-                // This line to set 'lastStartTime' will be removed in due time
-                this.lastStartTime = hbResponse.getHbTime();
-                LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
-                setAlive(true);
-            } else if (this.lastStartTime <= 0) {
-                this.lastStartTime = hbResponse.getHbTime();
-            }
-
+            // RebootTime will be `-1` if not set from backend.
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
@@ -579,6 +587,18 @@ public class ComputeNode implements IComputable, Writable {
                 // but alive state may be not changed since the BE may be restarted in a short time
                 // we need notify coordinator to cancel query
                 becomeDead = true;
+            }
+
+            if (!isAlive.get()) {
+                isChanged = true;
+                if (hbResponse.getRebootTime() == -1) {
+                    // Only update lastStartTime by hbResponse.hbTime if the RebootTime is not set from an OK-response.
+                    // Just for backwards compatibility purpose in case the response is from an ancient version
+                    this.lastStartTime = hbResponse.getHbTime();
+                }
+                LOG.info("{} is alive, last start time: {}, hbTime: {}", this.toString(), this.lastStartTime,
+                        hbResponse.getHbTime());
+                setAlive(true);
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
@@ -614,7 +634,7 @@ public class ComputeNode implements IComputable, Writable {
                 needSetAlive = true;
             } else {
                 this.heartbeatRetryTimes++;
-                if (this.heartbeatRetryTimes >= Config.heartbeat_retry_times) {
+                if (this.heartbeatRetryTimes > Config.heartbeat_retry_times) {
                     deadMessage = "exceed heartbeatRetryTimes";
                     needSetAlive = true;
                     lastMissingHeartbeatTime = System.currentTimeMillis();
@@ -651,10 +671,12 @@ public class ComputeNode implements IComputable, Writable {
                     HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
-                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
-                // in which case the alive status needs to be handled according to the original logic
+                // Override the aliveStatus detected by the counter `heartbeatRetryTimes`, in two cases
+                // 1. the follower has a different `heartbeatRetryTimes` value compared to the Leader, the follower
+                //    must follow the leader's aliveStatus decision.
+                // 2. editLog replay in leader FE's startup, where the value of `heartbeatRetryTimes` is changed.
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
-                if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
+                if (setAlive(newIsAlive)) {
                     LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
             }

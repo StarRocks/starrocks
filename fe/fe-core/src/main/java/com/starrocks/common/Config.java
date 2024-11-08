@@ -97,6 +97,8 @@ public class Config extends ConfigBase {
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     @ConfField
     public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
