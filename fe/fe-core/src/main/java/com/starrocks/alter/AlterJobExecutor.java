@@ -362,6 +362,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                     isSynchronous = false;
                 } else {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                        throw new DdlException("StarRocks doesn't support alter persistent_index_type under shared-nothing mode");
+                    }
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 }
