@@ -2786,6 +2786,10 @@ public class StmtExecutor {
             queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
         } else {
             queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
+            // only finished query without profile need to wait for profile to report
+            if (queryDetail.getProfile() == null) {
+                queryDetail.setNeed_wait_profile_to_report(ctx.isProfileEnabled());
+            }
         }
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);

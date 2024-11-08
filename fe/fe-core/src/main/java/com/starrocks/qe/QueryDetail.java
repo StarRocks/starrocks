@@ -72,6 +72,9 @@ public class QueryDetail implements Serializable {
     private String errorMessage;
     private String explain;
     private String profile;
+    // only valid if state is "finished"
+    // when query finished, profile maybe still not ready, so need wait
+    private boolean need_wait_profile_to_report = false;
     private String resourceGroupName;
     private long scanRows = -1;
     private long scanBytes = -1;
@@ -148,6 +151,7 @@ public class QueryDetail implements Serializable {
         queryDetail.digest = this.digest;
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
+        queryDetail.need_wait_profile_to_report = this.need_wait_profile_to_report;
         return queryDetail;
     }
 
@@ -261,6 +265,7 @@ public class QueryDetail implements Serializable {
 
     public void setProfile(String profile) {
         this.profile = profile;
+        this.need_wait_profile_to_report = false;
     }
 
     public String getResourceGroupName() {
@@ -337,5 +342,9 @@ public class QueryDetail implements Serializable {
 
     public void setCatalog(String catalog) {
         this.catalog = catalog;
+    }
+
+    public void setNeed_wait_profile_to_report(boolean need_wait_profile_to_report) {
+        this.need_wait_profile_to_report = need_wait_profile_to_report;
     }
 }

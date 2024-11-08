@@ -76,6 +76,7 @@ import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
 import com.starrocks.http.rest.ProfileAction;
 import com.starrocks.http.rest.QueryDetailAction;
+import com.starrocks.http.rest.QueryDetailProfileAction;
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.http.rest.RowCountAction;
 import com.starrocks.http.rest.SetConfigAction;
@@ -191,6 +192,7 @@ public class HttpServer {
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
+        QueryDetailProfileAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
