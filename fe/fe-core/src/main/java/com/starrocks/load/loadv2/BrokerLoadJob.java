@@ -49,6 +49,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -311,6 +312,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
                 // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
+                loadIds.add(DebugUtil.printId(loadId));
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
@@ -350,7 +352,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .build());
                 return;
             }
-            if (retryTime <= 0 || !txnStatusChangeReason.contains("timeout") || !isTimeout()) {
+            boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
+                    && (LoadErrorUtils.isTimeoutFromLoadingTaskExecution(txnStatusChangeReason) || isTimeout());
+            if (!shouldRetry) {
                 // record attachment in load job
                 unprotectUpdateLoadingStatus(txnState);
                 // cancel load job

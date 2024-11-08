@@ -508,7 +508,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY date_trunc('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -540,7 +540,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY date_trunc('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -570,4 +570,18 @@ E: (5064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: 
 alter table t set('mutable_bucket_num'='a');
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+-- !result
+
+-- name: test_stale_flush @sequential
+create table t(k int)properties('bucket_size'='1');
+-- result:
+-- !result
+update information_schema.be_configs set value=102400 where name='write_buffer_size';
+-- result:
+-- !result
+insert into t select generate_series from TABLE(generate_series(1, 10000000));
+-- result:
+-- !result
+update information_schema.be_configs set value=104857600 where name='write_buffer_size';
+-- result:
 -- !result

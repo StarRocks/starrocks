@@ -598,49 +598,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### upload_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点上传任务的最大线程数，用于备份作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### download_worker_count
 
-- 默认值：1
+- 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点下载任务的最大线程数，用于恢复作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
 - 引入版本：-
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
+- 描述：BE 节点快照任务的最大线程数。
 - 引入版本：-
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - 默认值：5
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：
+- 是否动态：是
+- 描述：BE 节点释放快照任务的最大线程数。
 - 引入版本：-
--->
 
 ##### max_download_speed_kbps
 
@@ -716,27 +708,50 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：磁盘健康状态检测的间隔。
 - 引入版本：-
 
-<!--
 ##### replication_threads
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
+- 引入版本：v3.3.5
 
-<!--
-##### clear_expired_replcation_snapshots_interval_seconds
+##### replication_max_speed_limit_kbps
+
+- 默认值：50000
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最大速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- 默认值：50
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最小速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_time_seconds
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步线程低于最低速度所允许的持续时间。如果实际速度低于 `replication_min_speed_limit_kbps` 的时间超过此值，同步将失败。
+- 引入版本：v3.3.5
+
+##### clear_expired_replication_snapshots_interval_seconds
 
 - 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：系统清除异常同步遗留的过期快照的时间间隔。
+- 引入版本：v3.3.5
 
 ##### unused_rowset_monitor_interval
 
@@ -1104,7 +1119,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。
+- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。开启 Event-based Compaction Framework 时，该参数才支持动态设置。
 - 引入版本：-
 
 ##### compaction_trace_threshold
@@ -3672,11 +3687,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- 默认值：1000
+- 默认值：500
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。从 v3.2.4 和 v3.1.10 版本开始，该参数默认值从 `5` 变更为 `1000`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
+- 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
 <!--

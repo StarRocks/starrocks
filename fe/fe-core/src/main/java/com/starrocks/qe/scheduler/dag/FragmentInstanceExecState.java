@@ -141,6 +141,10 @@ public class FragmentInstanceExecState {
                                       TNetworkAddress address,
                                       long lastMissingHeartbeatTime) {
         this.jobSpec = jobSpec;
+        // fake fragment instance exec state
+        if (jobSpec == null) {
+            state = State.EXECUTING;
+        }
         this.fragmentId = fragmentId;
         this.fragmentIndex = fragmentIndex;
         this.instanceId = instanceId;
@@ -320,9 +324,6 @@ public class FragmentInstanceExecState {
             case EXECUTING:
             case CANCELLING:
             default:
-                if (params.isSetProfile()) {
-                    profile.update(params.profile);
-                }
                 if (params.isDone()) {
                     if (params.getStatus() == null || params.getStatus().getStatus_code() == TStatusCode.OK) {
                         transitionState(State.FINISHED);
@@ -331,6 +332,12 @@ public class FragmentInstanceExecState {
                     }
                 }
                 return true;
+        }
+    }
+
+    public synchronized void updateRunningProfile(TReportExecStatusParams execStatusParams) {
+        if (execStatusParams.isSetProfile()) {
+            profile.update(execStatusParams.profile);
         }
     }
 

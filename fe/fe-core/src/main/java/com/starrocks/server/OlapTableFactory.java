@@ -52,6 +52,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -81,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import javax.validation.constraints.NotNull;
 
 public class OlapTableFactory implements AbstractTableFactory {
@@ -179,7 +181,9 @@ public class OlapTableFactory implements AbstractTableFactory {
             Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (String column : stmt.getSortKeys()) {
-                int idx = baseSchemaNames.indexOf(column);
+                int idx = IntStream.range(0, baseSchemaNames.size())
+                        .filter(i -> baseSchemaNames.get(i).equalsIgnoreCase(column))
+                        .findFirst().orElse(-1);
                 if (idx == -1) {
                     throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
                 }
@@ -263,6 +267,12 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
+                // check reserved column for PK table
+                if (table.getKeysType() == KeysType.PRIMARY_KEYS
+                        && FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(column.getName())) {
+                    throw new DdlException("Column name '" + column.getName()
+                            + "' is reserved for primary key table");
+                }
             }
             List<Integer> sortKeyUniqueIds = new ArrayList<>();
             if (useFastSchemaEvolution) {
@@ -410,6 +420,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Illegal mutable bucket num: " + mutableBucketNum);
                 }
             } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
+            if (PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, false)) {
+                table.setEnableLoadProfile(true);
+            }
+
+            try {
+                table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
+                if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                                || olapTable.isCloudNativeTableOrMaterializedView()) {
+                            throw new SemanticException("Property " +
+                                    PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
+                                    " not support primary keys table or cloud native table");
+                        }
+                    }
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            table.getId(), table.getBaseCompactionForbiddenTimeRanges());
+                }
+                if (properties != null) {
+                    properties.remove(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                }
+            } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
 

@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import org.apache.commons.lang3.StringUtils;
+import org.junit.Test;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +66,18 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         check(1, sql, force);
         check(2, sql, mid);
         check(3, sql, high);
+    }
+
+    @Test
+    public void testQuery58() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        String sql = getTPCDS("Q58");
+        String plan = getCostExplain(sql);
+        assertContains(plan, "|----5:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 73049\n" +
+                "  |       probe runtime filters:\n" +
+                "  |       - filter_id = 3, probe_expr = (48: d_date)");
     }
 
     //    @ParameterizedTest(name = "{0}")

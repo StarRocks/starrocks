@@ -1,4 +1,4 @@
--- name: test_transparent_mv_mysql
+-- name: test_transparent_mv_mysql @slow
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database mv_mysql_db_${uuid0};'
 -- result:
 0

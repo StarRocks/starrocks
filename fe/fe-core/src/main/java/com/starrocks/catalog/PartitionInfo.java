@@ -49,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import javax.validation.constraints.NotNull;
@@ -151,11 +152,13 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     }
 
     public short getReplicationNum(long partitionId) {
-        if (!idToReplicationNum.containsKey(partitionId)) {
+        // Perform the op under no lock, the formal containsKey() call can't guarantee the later get() op success.
+        Short replicationNum = idToReplicationNum.get(partitionId);
+        if (replicationNum == null) {
             LOG.debug("failed to get replica num for partition: {}", partitionId);
             return (short) -1;
         }
-        return idToReplicationNum.get(partitionId);
+        return replicationNum;
     }
 
     public short getMinReplicationNum() {
@@ -200,6 +203,7 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
@@ -256,6 +260,17 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // NOTE: clean dirty data in idToStorageCacheInfo due to historic bugs.
+        // Taking idToReplicationNum as reference, remove all the items of idToStorageCacheInfo
+        // that doesn't have the corresponding key in idToReplicationNum, ASSUMING that all valid
+        // partitions should have a record in idToReplicationNum.
+        //
+        // Can be removed after several major releases.
+        if (idToStorageCacheInfo.size() > idToReplicationNum.size()) {
+            HashSet<Long> keyToDelete = new HashSet<>(idToStorageCacheInfo.keySet());
+            keyToDelete.removeAll(idToReplicationNum.keySet());
+            keyToDelete.forEach(idToStorageCacheInfo::remove);
+        }
     }
 
     @Override
@@ -294,6 +309,46 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        Map<Long, DataProperty> oldIdToDataProperty = this.idToDataProperty;
+        Map<Long, Short> oldIdToReplicationNum = this.idToReplicationNum;
+        Map<Long, Boolean> oldIdToInMemory = this.idToInMemory;
+        Map<Long, TTabletType> oldIdToTabletType = this.idToTabletType;
+        Map<Long, DataCacheInfo> oldIdToStorageCacheInfo = this.idToStorageCacheInfo;
+
+        this.idToDataProperty = new HashMap<>();
+        this.idToReplicationNum = new HashMap<>();
+        this.idToInMemory = new HashMap<>();
+        this.idToTabletType = new HashMap<>();
+        this.idToStorageCacheInfo = new HashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            DataProperty dataProperty = oldIdToDataProperty.get(oldId);
+            if (dataProperty != null) {
+                this.idToDataProperty.put(newId, dataProperty);
+            }
+            Short replicationNum = oldIdToReplicationNum.get(oldId);
+            if (replicationNum != null) {
+                this.idToReplicationNum.put(newId, replicationNum);
+            }
+            Boolean inMemory = oldIdToInMemory.get(oldId);
+            if (inMemory != null) {
+                this.idToInMemory.put(newId, inMemory);
+            }
+            TTabletType tabletType = oldIdToTabletType.get(oldId);
+            if (tabletType != null) {
+                this.idToTabletType.put(newId, tabletType);
+            }
+            DataCacheInfo dataCacheInfo = oldIdToStorageCacheInfo.get(oldId);
+            if (dataCacheInfo != null) {
+                this.idToStorageCacheInfo.put(newId, dataCacheInfo);
+            }
         }
     }
 }

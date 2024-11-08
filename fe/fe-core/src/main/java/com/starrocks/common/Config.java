@@ -97,6 +97,8 @@ public class Config extends ConfigBase {
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     @ConfField
     public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
@@ -360,6 +362,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
+
+    /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
+     * The default retention days of load history.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_retained_days = 30;
 
     /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
@@ -2054,6 +2068,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
+    @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
+    public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
+
     @ConfField(mutable = true)
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
@@ -2136,6 +2153,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_automatic_partition_number = 4096;
+
+    /**
+     * Used to limit num of partition for load open partition number
+     */
+    @ConfField(mutable = true)
+    public static long max_load_initial_open_partition_number = 32;
 
     /**
      * enable automatic bucket for random distribution table
@@ -2403,6 +2426,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    @ConfField(mutable = true,
+            comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
+    public static boolean enable_sql_digest = false;
+
     @ConfField(mutable = true, comment = "explain level of query plan in this detail")
     public static String query_detail_explain_level = "COSTS";
 
@@ -2657,6 +2684,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
+    public static String lake_background_warehouse = "default_warehouse";
+
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2711,7 +2744,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
-    public static boolean lake_enable_ingest_slowdown = false;
+    public static boolean lake_enable_ingest_slowdown = true;
 
     @ConfField(mutable = true, comment =
             "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
@@ -2728,12 +2761,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment =
             "The upper limit for compaction score, only takes effect when lake_enable_ingest_slowdown=true.\n" +
-                    "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
-                    "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
-                    "The effective value will be set to the higher of the configured value here and " +
-                    "lake_compaction_score_selector_min_score.\n" +
+                    "When the compaction score exceeds this value, ingestion will be rejected.\n" +
                     "A value of 0 represents no limit.")
-    public static long lake_compaction_score_upper_bound = 0;
+    public static long lake_compaction_score_upper_bound = 2000;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2922,11 +2952,17 @@ public class Config extends ConfigBase {
     public static int routine_load_scheduler_interval_millisecond = 10000;
 
     /**
-     * Only when the stream load time exceeds this value,
+     * Only when the stream/routine load time exceeds this value,
      * the profile will be put into the profileManager
      */
+    @ConfField(mutable = true, aliases = {"stream_load_profile_collect_second"})
+    public static long stream_load_profile_collect_threshold_second = 0;
+
+    /**
+     * The interval of collecting load profile through table granularity
+     */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_second = 10; //10s
+    public static long load_profile_collect_interval_second = 0;
 
     /**
      * If set to <= 0, means that no limitation.
@@ -2945,6 +2981,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_persistent_index_by_default = true;
+
+    /*
+     * Using cloud native persistent index in primary key table by default when creating table.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_cloud_native_persistent_index_by_default = false;
 
     /**
      * timeout for external table commit
@@ -3057,8 +3099,12 @@ public class Config extends ConfigBase {
     /**
      * mv plan cache expire interval in seconds
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
+    public static int mv_plan_cache_thread_pool_size = 3;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3174,6 +3220,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
     @ConfField
     public static boolean enable_parser_context_cache = true;
 
@@ -3200,4 +3247,16 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
+
+    @ConfField(mutable = true)
+    public static int max_column_number_per_table = 10000;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
 }

@@ -130,6 +130,7 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
@@ -145,6 +146,7 @@ import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.PipeListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.PipeScheduler;
@@ -389,6 +391,7 @@ public class GlobalStateMgr {
     private final LoadJobScheduler loadJobScheduler;
 
     private final LoadTimeoutChecker loadTimeoutChecker;
+    private final LoadsHistorySyncer loadsHistorySyncer;
     private final LoadEtlChecker loadEtlChecker;
     private final LoadLoadingChecker loadLoadingChecker;
     private final LockChecker lockChecker;
@@ -450,6 +453,9 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private final CompactionMgr compactionMgr;
+
+    // For compaction forbidden policy
+    private final CompactionControlScheduler compactionControlScheduler;
 
     private final WarehouseManager warehouseMgr;
 
@@ -571,6 +577,10 @@ public class GlobalStateMgr {
         return compactionMgr;
     }
 
+    public CompactionControlScheduler getCompactionControlScheduler() {
+        return compactionControlScheduler;
+    }
+
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
         return configRefreshDaemon;
     }
@@ -685,6 +695,7 @@ public class GlobalStateMgr {
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadMgr = new LoadMgr(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
+        this.loadsHistorySyncer = new LoadsHistorySyncer();
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
         this.lockChecker = new LockChecker();
@@ -714,6 +725,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
+        this.compactionControlScheduler = new CompactionControlScheduler();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
         this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
@@ -892,6 +904,10 @@ public class GlobalStateMgr {
 
     public StatisticStorage getStatisticStorage() {
         return statisticStorage;
+    }
+
+    public StatisticAutoCollector getStatisticAutoCollector() {
+        return statisticAutoCollector;
     }
 
     public TabletStatMgr getTabletStatMgr() {
@@ -1291,6 +1307,15 @@ public class GlobalStateMgr {
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
             }
+            if (nodeMgr.isFirstTimeStartUp()) {
+                // When the cluster is initially deployed, we use cloud native persistent index by default
+                variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                                        SessionVariable.ENABLE_CLOUD_NATIVE_PERSISTENT_INDEX_BY_DEFAULT,
+                                        LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
+            }
+            Config.enable_cloud_native_persistent_index_by_default = variableMgr.getDefaultSessionVariable()
+                    .getEnableCloudNativePersistentIndexByDefault();
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
@@ -1339,6 +1364,7 @@ public class GlobalStateMgr {
         loadMgr.prepareJobs();
         loadJobScheduler.start();
         loadTimeoutChecker.start();
+        loadsHistorySyncer.start();
         loadEtlChecker.start();
         loadLoadingChecker.start();
         // Export checker
@@ -1516,6 +1542,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                     .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                     .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                    .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                     .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1715,6 +1742,7 @@ public class GlobalStateMgr {
                 replicationMgr.save(imageWriter);
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
+                warehouseMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

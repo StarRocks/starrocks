@@ -533,6 +533,11 @@ Status DeltaWriter::close() {
     return Status::OK();
 }
 
+Status DeltaWriter::manual_flush() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    return flush_memtable_async(false);
+}
+
 Status DeltaWriter::flush_memtable_async(bool eos) {
     _last_write_ts = 0;
     _write_buffer_size = 0;

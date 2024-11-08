@@ -87,7 +87,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case FLOAT:
             case DOUBLE:
-                literalExpr = new FloatLiteral(value);
+                literalExpr = new FloatLiteral(value, type);
                 break;
             case DECIMALV2:
             case DECIMAL32:

@@ -20,6 +20,7 @@
 #include <sstream>
 
 #include "column/array_column.h"
+#include "column/array_view_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -139,32 +140,22 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
     DCHECK(aligned_offsets != nullptr);
 
-    // 4. prepare outer common exprs
-    for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        auto column = chunk->get_column_by_slot_id(slot_id);
-        column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-        if constexpr (independent_lambda_expr) {
-            // if lambda expr doesn't rely on arguments, we don't need to align offset
-            cur_chunk->append_column(column, slot_id);
-        } else {
-            cur_chunk->append_column(column->replicate(aligned_offsets->get_data()), slot_id);
-        }
-    }
-
-    // 5. prepare capture columns
+    // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
-        if (cur_chunk->is_slot_exist(slot_id)) {
-            continue;
-        }
         auto captured_column = chunk->get_column_by_slot_id(slot_id);
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
-            cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+            if (captured_column->is_array()) {
+                auto view_column = ArrayViewColumn::from_array_column(captured_column);
+                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+            } else {
+                cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+            }
         }
     }
 
-    // 6. evaluate lambda expr
+    // 5. evaluate lambda expr
     ColumnPtr column = nullptr;
     if constexpr (independent_lambda_expr) {
         // if lambda expr doesn't rely on arguments, we evaluate it first, and then align offsets
@@ -192,6 +183,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 tmp_chunk->check_or_die();
+                for (auto& column : tmp_chunk->columns()) {
+                    // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
+                    // in the future, this copy can be removed when we solve this problem.
+                    if (column->is_array_view()) {
+                        column = ArrayViewColumn::to_array_column(column);
+                    }
+                }
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);

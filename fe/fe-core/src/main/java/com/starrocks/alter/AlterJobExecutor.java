@@ -362,6 +362,19 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.MUTABLE_BUCKET_NUM);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+                try {
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            table.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                            TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                } catch (Exception e) {
+                    LOG.warn("Failed to update base compaction forbidden time ranges: ", e);
+                    throw new DdlException("Failed to update base compaction forbidden time ranges: " + e.getMessage());
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -703,7 +716,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
 
-            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+            // skip change storage_cooldown_ttl for shadow partition
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)
+                    && newDataProperty != null) {
                 continue;
             }
 

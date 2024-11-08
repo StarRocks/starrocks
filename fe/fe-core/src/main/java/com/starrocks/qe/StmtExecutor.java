@@ -119,6 +119,8 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -170,6 +172,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
@@ -675,6 +678,8 @@ public class StmtExecutor {
                 handleSetStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
+            } else if (parsedStmt instanceof SetWarehouseStmt) {
+                handleSetWarehouseStmt();
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
             } else if (parsedStmt instanceof SetCatalogStmt) {
@@ -1142,7 +1147,7 @@ public class StmtExecutor {
         RowBatch batch;
 
         if (context instanceof HttpConnectContext) {
-            batch = httpResultSender.sendQueryResult(coord, execPlan);
+            batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
         } else {
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -1293,7 +1298,8 @@ public class StmtExecutor {
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
         // For short circuit query, 'ProfileElement#plan' is null
-        if (profileElement.plan == null) {
+        if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
+                !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
             throw new UserException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
@@ -1350,8 +1356,7 @@ public class StmtExecutor {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(),
-                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
@@ -1551,6 +1556,27 @@ public class StmtExecutor {
         try {
             String catalogName = setCatalogStmt.getCatalogName();
             context.changeCatalog(catalogName);
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process use warehouse statement
+    private void handleSetWarehouseStmt() throws AnalysisException {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+        }
+
+        SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;
+        try {
+            WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            String newWarehouseName = setWarehouseStmt.getWarehouseName();
+            if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+            }
+            context.setCurrentWarehouse(newWarehouseName);
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
@@ -2100,6 +2126,8 @@ public class StmtExecutor {
                         database.getFullName(),
                         targetTable.getId(),
                         transactionId,
+                        DebugUtil.printId(context.getExecutionId()),
+                        context.getQualifiedUser(),
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
@@ -2108,6 +2136,9 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
+                if (txnState != null) {
+                    txnState.setCallbackId(jobId);
+                }
             }
 
             coord.setLoadJobId(jobId);

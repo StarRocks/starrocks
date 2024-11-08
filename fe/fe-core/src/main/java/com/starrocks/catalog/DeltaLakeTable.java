@@ -123,7 +123,7 @@ public class DeltaLakeTable extends Table {
     }
 
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
     }
 
     @Override

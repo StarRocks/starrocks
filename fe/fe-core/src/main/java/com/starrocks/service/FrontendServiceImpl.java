@@ -99,6 +99,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -312,15 +313,15 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
+import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -535,7 +536,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                Table tbl = db.getTable(tableName.getTbl());
+                                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
@@ -1236,32 +1238,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             warehouseId = warehouse.getId();
         }
 
-        // just use default value of session variable
-        // as there is no connectContext for sync stream load
-        ConnectContext connectContext = new ConnectContext();
-        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
-            TransactionResult resp = new TransactionResult();
-            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
-                    timeoutSecond * 1000, resp, false, warehouseId);
-            if (!resp.stateOK()) {
-                LOG.warn(resp.msg);
-                throw new UserException(resp.msg);
-            }
-
-            StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
-            // this should't open
-            if (task == null || task.getTxnId() == -1) {
-                throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
-            }
-            return task.getTxnId();
+        TransactionResult resp = new TransactionResult();
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), request.getUser(), request.getUser_ip(),
+                timeoutSecond * 1000, resp, false, warehouseId);
+        if (!resp.stateOK()) {
+            LOG.warn(resp.msg);
+            throw new UserException(resp.msg);
         }
 
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
-                new TxnCoordinator(TxnSourceType.BE, clientIp),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond,
-                warehouseId);
+        StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
+        // this should't open
+        if (task == null || task.getTxnId() == -1) {
+            throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+        }
+        return task.getTxnId();
     }
 
     @Override
@@ -1374,11 +1365,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
-                            routineAttachment.getLoadedRows(),
-                            routineAttachment.getFilteredRows(),
-                            routineAttachment.getUnselectedRows(),
-                            routineAttachment.getErrorLogUrl(), "");
+                    streamLoadtask.setLoadState(routineAttachment, "");
                 }
 
                 break;
@@ -1392,11 +1379,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
-                            streamAttachment.getLoadedRows(),
-                            streamAttachment.getFilteredRows(),
-                            streamAttachment.getUnselectedRows(),
-                            streamAttachment.getErrorLogUrl(), "");
+                    streamLoadtask.setLoadState(streamAttachment, "");
                 }
 
                 break;
@@ -1569,11 +1552,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
-                            routineAttachment.getLoadedRows(),
-                            routineAttachment.getFilteredRows(),
-                            routineAttachment.getUnselectedRows(),
-                            routineAttachment.getErrorLogUrl(), request.getReason());
+                    streamLoadtask.setLoadState(routineAttachment, request.getReason());
 
                 }
 
@@ -1585,11 +1564,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
-                            streamAttachment.getLoadedRows(),
-                            streamAttachment.getFilteredRows(),
-                            streamAttachment.getUnselectedRows(),
-                            streamAttachment.getErrorLogUrl(), request.getReason());
+                    streamLoadtask.setLoadState(streamAttachment, request.getReason());
                 }
 
                 break;
@@ -1674,20 +1649,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
-            if (plan.query_options.enable_profile) {
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                        getSyncSteamLoadTaskByTxnId(request.getTxnId());
-                if (streamLoadTask == null) {
-                    throw new UserException("can not find stream load task by txnId " + request.getTxnId());
-                }
-
-                streamLoadTask.setTUniqueId(request.getLoadId());
-
-                Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
-                streamLoadTask.setCoordinator(coord);
-
-                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                    getSyncSteamLoadTaskByTxnId(request.getTxnId());
+            if (streamLoadTask == null) {
+                throw new UserException("can not find stream load task by txnId " + request.getTxnId());
             }
+
+            streamLoadTask.setTUniqueId(request.getLoadId());
+
+            Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
+            streamLoadTask.setCoordinator(coord);
+
+            QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
@@ -2497,15 +2470,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
-    /**
-     * Returns the empty warehouse info.
-     * Maintaining this method is just to avoid problems at grayscale upgrading.
-     */
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
+        Map<Long, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
+        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
+                .map(WarehouseInfo::toThrift)
+                .collect(Collectors.toList());
+
         TGetWarehousesResponse res = new TGetWarehousesResponse();
         res.setStatus(new TStatus(OK));
-        res.setWarehouse_infos(Collections.emptyList());
+        res.setWarehouse_infos(warehouseInfos);
 
         return res;
     }
@@ -2571,6 +2545,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             }
+
+            if (request.isSetJob_id()) {
+                StreamLoadTask task = GlobalStateMgr.getCurrentState().getStreamLoadMgr().getTaskById(request.getJob_id());
+                if (task != null) {
+                    loads.add(task.toThrift());
+                }
+            } else {
+                List<StreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                        .getTaskByName(request.getLabel());
+                if (streamLoadTaskList != null) {
+                    loads.addAll(
+                            streamLoadTaskList.stream().map(StreamLoadTask::toThrift).collect(Collectors.toList()));
+                }
+            }
+
             result.setLoads(loads);
         } catch (Exception e) {
             LOG.warn("Failed to getLoads", e);
@@ -2720,13 +2709,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (request.isSetJob_id()) {
                 StreamLoadTask task = loadManager.getTaskById(request.getJob_id());
                 if (task != null) {
-                    loads.add(task.toThrift());
+                    loads.add(task.toStreamLoadThrift());
                 }
             } else {
                 List<StreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
                     loads.addAll(
-                            streamLoadTaskList.stream().map(StreamLoadTask::toThrift).collect(Collectors.toList()));
+                            streamLoadTaskList.stream().map(StreamLoadTask::toStreamLoadThrift).collect(Collectors.toList()));
                 }
             }
             result.setLoads(loads);

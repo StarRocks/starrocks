@@ -602,49 +602,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: -
 -->
 
-<!--
 ##### upload_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the upload tasks of backup jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### download_worker_count
 
-- Default: 1
+- Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the download tasks of restore jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
 - Introduced in: -
--->
 
-<!--
 ##### make_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
+- Description: The maximum number of threads for the make snapshot tasks on a BE node.
 - Introduced in: -
--->
 
-<!--
 ##### release_snapshot_worker_count
 
 - Default: 5
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description:
+- Is mutable: Yes
+- Description: The maximum number of threads for the release snapshot tasks on a BE node.
 - Introduced in: -
--->
 
 ##### max_download_speed_kbps
 
@@ -720,27 +712,49 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which to monitor health status of disks.
 - Introduced in: -
 
-<!--
 ##### replication_threads
 
 - Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
+- Introduced in: v3.3.5
 
-<!--
+##### replication_max_speed_limit_kbps
+
+- Default: 50000
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The maximum speed of each replication thread.
+- Introduced in: v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- Default: 50
+- Type: Int
+- Unit: KB/s
+- Is mutable: Yes
+- Description: The minimum speed of each replication thread.
+- Introduced in: v3.3.5
+##### replication_min_speed_time_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration allowed for a replication thread to be under the minimum speed. Replication will fail if the time when the actual speed is lower than `replication_min_speed_limit_kbps` exceeds this value.
+- Introduced in: v3.3.5
+
 ##### clear_expired_replication_snapshots_interval_seconds
 
 - Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The time interval at which the system clears the expired snapshots left by abnormal replications.
+- Introduced in: v3.3.5
 
 ##### unused_rowset_monitor_interval
 
@@ -1108,7 +1122,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction.
+- Description: The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency. `0` indicates disabling compaction. This parameter is mutable when the Event-based Compaction Framework is enabled.
 - Introduced in: -
 
 ##### compaction_trace_threshold
@@ -3714,11 +3728,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_pk_compaction_max_input_rowsets
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
 <!--

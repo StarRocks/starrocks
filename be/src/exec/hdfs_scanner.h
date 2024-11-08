@@ -121,6 +121,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
     RuntimeProfile::Counter* datacache_write_counter = nullptr;
@@ -232,6 +234,8 @@ struct HdfsScannerContext {
             return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
         const std::string& name() const { return slot_desc->col_name(); }
+        int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
+        const std::string& col_physical_name() const { return slot_desc->col_physical_name(); }
         const SlotId slot_id() const { return slot_desc->id(); }
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };

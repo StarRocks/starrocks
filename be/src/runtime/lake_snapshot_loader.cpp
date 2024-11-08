@@ -14,6 +14,7 @@
 
 #include <runtime/lake_snapshot_loader.h>
 
+#include "common/config.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -82,6 +83,7 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -116,6 +118,7 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();

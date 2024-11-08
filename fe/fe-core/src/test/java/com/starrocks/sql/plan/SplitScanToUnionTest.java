@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -83,55 +84,77 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         assertContains(getFragmentPlan(sql), "UNION");
     }
 
+    @Test
+    void testForceUnion() throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 10; i++) {
+            sb.append(i).append(", ");
+        }
+        String sql = "select * from t0 where v1 in (" + sb + "1);";
+        connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+        FilterSelectivityEvaluator.IN_CHILDREN_THRESHOLD = 5;
+        String plan = getVerboseExplain(sql);
+        FilterSelectivityEvaluator.IN_CHILDREN_THRESHOLD = 1024;
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: v1, BIGINT, true] | [5: v2, BIGINT, true] | [6: v3, BIGINT, true]\n" +
+                "  |      [7: v1, BIGINT, true] | [8: v2, BIGINT, true] | [9: v3, BIGINT, true]");
+        assertContains(plan, "Predicates: 4: v1 IN (0, 1, 2, 3, 4)");
+        assertContains(plan, "Predicates: 7: v1 IN (5, 6, 7, 8, 9)");
+    }
+
     private static Stream<Arguments> testSplitUnionSqls() {
         List<Arguments> list = Lists.newArrayList();
         String sql = "select * from orders where (O_TOTALPRICE != 1 or O_ORDERPRIORITY > 'a') " +
                 "and (O_CUSTKEY = 1 or O_ORDERKEY = 2)";
         Arguments arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 1: O_ORDERKEY = 2, (4: O_TOTALPRICE != 1.0) OR (6: O_ORDERPRIORITY > 'a')",
-                "PREDICATES: 2: O_CUSTKEY = 1, 1: O_ORDERKEY != 2, (4: O_TOTALPRICE != 1.0) OR (6: O_ORDERPRIORITY > 'a')"));
+                "PREDICATES: 11: O_ORDERKEY = 2, (14: O_TOTALPRICE != 1.0) OR (16: O_ORDERPRIORITY > 'a')",
+                "PREDICATES: 22: O_CUSTKEY = 1, 21: O_ORDERKEY != 2, (24: O_TOTALPRICE != 1.0) OR (26: O_ORDERPRIORITY > 'a')"));
         list.add(arguments);
 
         sql = "select * from orders where (O_CUSTKEY = abs(1) or O_ORDERKEY <=> null or " +
                 "O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m')) and O_CLERK > O_ORDERPRIORITY";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 1: O_ORDERKEY <=> NULL, 7: O_CLERK > 6: O_ORDERPRIORITY",
-                "PREDICATES: 2: O_CUSTKEY = CAST(abs(1) AS INT), NOT (1: O_ORDERKEY <=> NULL), 7: O_CLERK > 6: O_ORDERPRIORITY",
-                "PREDICATES: 5: O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m'), NOT (1: O_ORDERKEY <=> NULL), " +
-                        "(2: O_CUSTKEY != CAST(abs(1) AS INT)) OR (2: O_CUSTKEY = CAST(abs(1) AS INT) IS NULL), " +
-                        "7: O_CLERK > 6: O_ORDERPRIORITY"));
+                "PREDICATES: 11: O_ORDERKEY <=> NULL, 17: O_CLERK > 16: O_ORDERPRIORITY",
+                "PREDICATES: 22: O_CUSTKEY = CAST(abs(1) AS INT), NOT (21: O_ORDERKEY <=> NULL), " +
+                        "27: O_CLERK > 26: O_ORDERPRIORITY",
+                "PREDICATES: 35: O_ORDERDATE = str_to_date('2014-12-21', '%Y-%m'), NOT (31: O_ORDERKEY <=> NULL), " +
+                        "(32: O_CUSTKEY != CAST(abs(1) AS INT)) OR (32: O_CUSTKEY = CAST(abs(1) AS INT) IS NULL), " +
+                        "37: O_CLERK > 36: O_ORDERPRIORITY"));
         list.add(arguments);
 
         sql = "select * from orders where O_CUSTKEY in (1, 100, 1000, 2000) or O_COMMENT in ('a', 'b')";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 2: O_CUSTKEY IN (1, 100, 1000, 2000)",
-                "PREDICATES: 9: O_COMMENT IN ('a', 'b'), 2: O_CUSTKEY NOT IN (1, 100, 1000, 2000)"));
+                "PREDICATES: 12: O_CUSTKEY IN (1, 100, 1000, 2000)",
+                "PREDICATES: 29: O_COMMENT IN ('a', 'b'), 22: O_CUSTKEY NOT IN (1, 100, 1000, 2000)"));
         list.add(arguments);
 
         sql = "select * from orders where O_CUSTKEY in " + generateMultipleValues(2048);
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 2: O_CUSTKEY IN", "PREDICATES: 2: O_CUSTKEY IN"));
+                "PREDICATES: 22: O_CUSTKEY IN", "PREDICATES: 12: O_CUSTKEY IN"));
         list.add(arguments);
 
         sql = "select * from orders where O_CUSTKEY in " + generateMultipleValues(2048) + " and O_COMMENT != 'a'";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 2: O_CUSTKEY IN", "PREDICATES: 2: O_CUSTKEY IN"));
+                "PREDICATES: 22: O_CUSTKEY IN (", "PREDICATES: 12: O_CUSTKEY IN"));
         list.add(arguments);
 
 
         sql = "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY <=> NULL",
-                "PREDICATES: 1: O_ORDERKEY < 1, 7: O_CLERK = 'a', NOT ((9: O_COMMENT = 'c') AND (2: O_CUSTKEY <=> NULL))"));
+                "PREDICATES: 19: O_COMMENT = 'c', 12: O_CUSTKEY <=> NULL",
+                "PREDICATES: 21: O_ORDERKEY < 1, 27: O_CLERK = 'a', NOT ((29: O_COMMENT = 'c') AND (22: O_CUSTKEY <=> NULL))"));
         list.add(arguments);
 
         sql = "select * from orders where ((O_COMMENT = 'c' and O_CUSTKEY in (1, 100, 1000)) " +
                 "or (O_CLERK = 'a')) or (O_ORDERKEY in (200, 300))";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
-                "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY IN (1, 100, 1000)",
-                "PREDICATES: 1: O_ORDERKEY IN (200, 300), NOT ((9: O_COMMENT = 'c') AND (2: O_CUSTKEY IN (1, 100, 1000)))",
-                "PREDICATES: 7: O_CLERK = 'a', NOT ((9: O_COMMENT = 'c') AND (2: O_CUSTKEY IN (1, 100, 1000))), " +
-                        "1: O_ORDERKEY NOT IN (200, 300)"));
+                "PREDICATES: 19: O_COMMENT = 'c', 12: O_CUSTKEY IN (1, 100, 1000)",
+                "PREDICATES: 21: O_ORDERKEY IN (200, 300), NOT ((29: O_COMMENT = 'c') AND (22: O_CUSTKEY IN (1, 100, 1000)))",
+                "PREDICATES: 37: O_CLERK = 'a', NOT ((39: O_COMMENT = 'c') AND (32: O_CUSTKEY IN (1, 100, 1000))), " +
+                        "31: O_ORDERKEY NOT IN (200, 300)"));
         list.add(arguments);
 
         sql = "select max(p_type) from part where p_name = 'a' or p_size = 1 group by p_name";

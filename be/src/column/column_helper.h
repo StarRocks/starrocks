@@ -534,6 +534,8 @@ public:
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
 
 // Hold a slice of chunk

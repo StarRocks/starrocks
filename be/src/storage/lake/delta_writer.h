@@ -63,6 +63,10 @@ public:
     // NOTE: Do NOT invoke this method in a bthread.
     Status finish(FinishMode mode = kWriteTxnLog);
 
+    // Manual flush used by stale memtable flush
+    // different from `flush()`, this method will reduce memory usage in `mem_tracker`
+    Status manual_flush();
+
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
     Status flush();

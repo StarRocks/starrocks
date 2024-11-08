@@ -358,6 +358,10 @@ public class ScalarType extends Type implements Cloneable {
         return new ScalarType(PrimitiveType.UNKNOWN_TYPE);
     }
 
+    public static ScalarType createJsonType() {
+        return new ScalarType(PrimitiveType.JSON);
+    }
+
     // A common type for two decimal v3 types means that if t2 = getCommonTypeForDecimalV3(t0, t1),
     // two invariants following is always holds:
     // 1. t2's integer part is sufficient to hold both t0 and t1's counterparts: i.e.

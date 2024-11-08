@@ -167,7 +167,7 @@ import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.privilege.WarehousePEntryObject;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
@@ -338,7 +338,7 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
-                    .registerSubtype(WarehouseFCPEntryObject.class, "WarehousePEntryObject")
+                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
                     .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
                     .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
 

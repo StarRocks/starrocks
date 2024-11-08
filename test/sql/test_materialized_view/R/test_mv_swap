@@ -1,4 +1,7 @@
--- name: test_mv_swap
+-- name: test_mv_swap @sequential
+admin set frontend config('enable_mv_automatic_active_check'='false');
+-- result:
+-- !result
 create database db_${uuid0};
 -- result:
 -- !result
@@ -176,5 +179,8 @@ SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHE
 true	
 -- !result
 [UC]drop database db_${uuid0} force;
+-- result:
+-- !result
+admin set frontend config('enable_mv_automatic_active_check'='true');
 -- result:
 -- !result

@@ -518,10 +518,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 44> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
     }
 
     @Test
@@ -529,10 +529,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 44> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
     }
 
     @Test
@@ -700,15 +700,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (1: mock_004)"));
+                "     - filter_id = 4, probe_expr = (80: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (24: mock_004)"));
+                "     - filter_id = 3, probe_expr = (62: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (1: mock_004)"));
+                "     - filter_id = 1, probe_expr = (116: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (24: mock_004)"));
+                "     - filter_id = 0, probe_expr = (98: mock_004)\n"));
 
     }
 
@@ -955,5 +955,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         } finally {
             connectContext.getSessionVariable().replayFromJson(savedSv);
         }
+    }
+
+    @Test
+    public void testJoinInitError() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
     }
 }

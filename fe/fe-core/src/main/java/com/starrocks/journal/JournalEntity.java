@@ -102,6 +102,7 @@ import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ImpersonatePrivInfo;
@@ -161,6 +162,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -711,6 +713,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_BUCKET_SIZE:
             case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+            case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+            case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -951,6 +955,14 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_ADD_KEY: {
                 data = new Text(Text.readBinary(in));
+                break;
+            }
+            case OperationType.OP_CREATE_WAREHOUSE:
+            case OperationType.OP_ALTER_WAREHOUSE:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), Warehouse.class);
+                break;
+            case OperationType.OP_DROP_WAREHOUSE: {
+                data = DropWarehouseLog.read(in);
                 break;
             }
             default: {

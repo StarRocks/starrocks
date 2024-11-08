@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -250,6 +251,7 @@ public abstract class BulkLoadJob extends LoadJob {
 
     @Override
     public void onTaskFailed(long taskId, FailMsg failMsg) {
+        boolean timeoutFailure = false;
         writeLock();
         try {
             // check if job has been completed
@@ -264,9 +266,25 @@ public abstract class BulkLoadJob extends LoadJob {
             if (!failMsg.getMsg().contains("timeout") || failMsg.getCancelType() == FailMsg.CancelType.USER_CANCEL) {
                 unprotectedExecuteCancel(failMsg, true);
                 logFinalOperation();
+            } else {
+                timeoutFailure = true;
             }
         } finally {
             writeUnlock();
+        }
+
+        // For timeout failure, should abort the transaction and retry as soon as possible
+        if (timeoutFailure) {
+            try {
+                LOG.debug("Loading task with timeout failure try to abort transaction, " +
+                                "job_id: {}, task_id: {}, txn_id: {}, task fail message: {}",
+                        id, taskId, transactionId, failMsg.getMsg());
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        dbId, transactionId, failMsg.getMsg());
+            } catch (UserException e) {
+                LOG.warn("Loading task failed to abort transaction, job_id: {}, task_id: {}, txn_id: {}, " +
+                        "task fail message: {}, abort exception:", id, taskId, transactionId, failMsg.getMsg(), e);
+            }
         }
     }
 

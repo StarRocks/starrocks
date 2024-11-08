@@ -47,6 +47,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -493,5 +494,49 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testInitialOpenPartition() throws UserException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, "p1", index, distInfo);
+
+        PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        LOG.info("partition is {}", partition);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+            }
+        };
+
+        Config.max_load_initial_open_partition_number = 1;
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setAutomaticBucketSize(1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+
+        Config.max_load_initial_open_partition_number = 32;
     }
 }

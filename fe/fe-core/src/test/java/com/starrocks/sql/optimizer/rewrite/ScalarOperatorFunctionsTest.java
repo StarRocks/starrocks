@@ -126,6 +126,26 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void to_days() {
+        assertEquals(734443, ScalarOperatorFunctions.to_days(O_DT_20101102_183010).getInt());
+    }
+
+    @Test
+    public void dayofweek() {
+        ConstantOperator testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 3, 13, 4, 5));
+        assertEquals(7,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
+
+        testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 4, 13, 4, 5));
+        assertEquals(1,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
+
+        testDate = ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 5, 13, 4, 5));
+        assertEquals(2,
+                ScalarOperatorFunctions.dayofweek(testDate).getInt());
+    }
+
+    @Test
     public void yearsAdd() {
         assertEquals("2025-03-23T09:23:55",
                 ScalarOperatorFunctions.yearsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
@@ -1507,11 +1527,11 @@ public class ScalarOperatorFunctionsTest {
     static class WeekFunctionTestCase {
         int mode;
         LocalDateTime dt;
-        int week;
+        int value;
 
         @Override
         public String toString() {
-            return String.format("mode = %d, input = %s, week = %d", mode, dt, week);
+            return String.format("mode = %d, input = %s, value = %d", mode, dt, value);
         }
 
         public static List<WeekFunctionTestCase> readTestCases(String filePath) {
@@ -1525,7 +1545,7 @@ public class ScalarOperatorFunctionsTest {
                         WeekFunctionTestCase tc = new WeekFunctionTestCase();
                         tc.mode = mode;
                         tc.dt = LocalDateTime.parse(columns[i], DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                        tc.week = Integer.parseInt(columns[i + 1]);
+                        tc.value = Integer.parseInt(columns[i + 1]);
                         testCaseList.add(tc);
                     }
                 }
@@ -1545,7 +1565,21 @@ public class ScalarOperatorFunctionsTest {
             LocalDateTime dt = tc.dt;
             long result = ScalarOperatorFunctions.TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(),
                     tc.mode);
-            assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.week, result);
+            assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.value, result);
+        }
+    }
+
+    @Test
+    public void testYearWeekFunction() {
+        String testPath = Objects.requireNonNull(
+                ClassLoader.getSystemClassLoader().getResource("sql/optimizer/rewrite/year-week-function-test.dat")).getPath();
+        List<WeekFunctionTestCase> testCaseList = WeekFunctionTestCase.readTestCases(testPath);
+        for (WeekFunctionTestCase tc : testCaseList) {
+            LocalDateTime dt = tc.dt;
+            long result =
+                    ScalarOperatorFunctions.TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(),
+                            tc.mode);
+            assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.value, result);
         }
     }
 }

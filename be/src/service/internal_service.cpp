@@ -49,6 +49,7 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
@@ -85,9 +86,6 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
-
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
@@ -297,7 +295,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -329,6 +327,12 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (process_exit_in_progress()) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
@@ -1228,7 +1232,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }

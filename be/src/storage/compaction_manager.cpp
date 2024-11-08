@@ -17,6 +17,7 @@
 #include <chrono>
 #include <thread>
 
+#include "compaction_manager.h"
 #include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
@@ -56,7 +57,7 @@ void CompactionManager::schedule() {
 
     st = ThreadPoolBuilder("compact_pool")
                  .set_min_threads(1)
-                 .set_max_threads(std::max(1, max_task_num()))
+                 .set_max_threads(std::max(1, _max_task_num))
                  .set_max_queue_size(1000)
                  .build(&_compaction_pool);
     DCHECK(st.ok());
@@ -209,6 +210,19 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
                 << ", not RUNNING";
         return false;
+    }
+
+    // check if the table base compaction is disabled
+    if (candidate.type == CompactionType::BASE_COMPACTION &&
+        _table_to_disable_deadline_map.find(tablet->tablet_meta()->table_id()) !=
+                _table_to_disable_deadline_map.end()) {
+        int64_t deadline = _table_to_disable_deadline_map[tablet->tablet_meta()->table_id()];
+        if (deadline > 0 && UnixSeconds() < deadline) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because table is disabled";
+            return false;
+        } else {
+            _table_to_disable_deadline_map.erase(tablet->tablet_meta()->table_id());
+        }
     }
 
     int64_t last_failure_ts = 0;
@@ -561,9 +575,50 @@ std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const Ta
     return res;
 }
 
+int32_t CompactionManager::compute_max_compaction_task_num() const {
+    int32_t max_task_num = 0;
+    // new compaction framework
+    if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
+        max_task_num = static_cast<int32_t>(
+                StorageEngine::instance()->get_store_num() *
+                (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
+    } else {
+        // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
+        // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
+        max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
+    }
+
+    {
+        std::lock_guard lg(_compact_threads_mutex);
+        if (_max_compaction_concurrency > 0 && _max_compaction_concurrency < max_task_num) {
+            max_task_num = _max_compaction_concurrency;
+        }
+    }
+
+    return max_task_num;
+}
+
+void CompactionManager::set_max_compaction_concurrency(int threads_num) {
+    std::lock_guard lg(_compact_threads_mutex);
+    _max_compaction_concurrency = threads_num;
+}
+
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
-        return _compaction_pool->update_max_threads(max_threads);
+        int32 max_thread_num = 0;
+        set_max_compaction_concurrency(max_threads);
+        {
+            std::lock_guard lg(_tasks_mutex);
+            if (max_threads == 0) {
+                _max_task_num = 0;
+                return Status::OK();
+            }
+
+            _max_task_num = compute_max_compaction_task_num();
+            max_thread_num = _max_task_num;
+        }
+
+        return _compaction_pool->update_max_threads(std::max(1, max_thread_num));
     } else {
         return Status::InternalError("Thread pool not exist");
     }
@@ -595,6 +650,12 @@ int64_t CompactionManager::cumulative_compaction_concurrency() {
 
 int CompactionManager::get_waiting_task_num() {
     return _compaction_candidates.size();
+}
+
+void CompactionManager::disable_table_compaction(int64_t table_id, int64_t deadline) {
+    std::lock_guard lg(_candidates_mutex);
+    VLOG(2) << "disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
+    _table_to_disable_deadline_map[table_id] = deadline;
 }
 
 } // namespace starrocks

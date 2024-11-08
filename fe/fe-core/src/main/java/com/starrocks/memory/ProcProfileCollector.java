@@ -77,8 +77,9 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
+        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
                 "-e", "alloc",
+                "--alloc", "2m",
                 "-d", String.valueOf(Config.proc_profile_collect_time_s),
                 "-f", profileLogDir + "/" +  fileName,
                 getPid());
@@ -92,7 +93,7 @@ public class ProcProfileCollector extends FrontendDaemon {
 
     private void collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
+        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/async-profiler/bin/asprof",
                 "-e", "cpu",
                 "-d", String.valueOf(Config.proc_profile_collect_time_s),
                 "-f", profileLogDir + "/" +  fileName,

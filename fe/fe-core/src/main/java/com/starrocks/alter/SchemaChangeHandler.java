@@ -93,6 +93,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -1047,6 +1048,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException(
                         "Can not assign aggregation method on column in Primary data model table: " + newColName);
             }
+            // check reserved column for PK table
+            if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(newColName)) {
+                throw new DdlException("Column name '" + newColName + "' is reserved for primary key table");
+            }
             newColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (newColumn.isKey() && newColumn.getAggregationType() != null) {
@@ -1981,7 +1986,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+            olapTable.setState(OlapTableState.OPTIMIZE);
+        } else {
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+        }
 
         // 2. add schemaChangeJob
         addAlterJobV2(schemaChangeJob);
@@ -2093,6 +2102,17 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (metaType == TTabletMetaType.MUTABLE_BUCKET_NUM) {
             long mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
             if (mutableBucketNum == olapTable.getMutableBucketNum()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.ENABLE_LOAD_PROFILE) {
+            boolean enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+            if (enableLoadProfile == olapTable.enableLoadProfile()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+            String baseCompactionForbiddenTimeRanges = properties.get(
+                    PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+            if (baseCompactionForbiddenTimeRanges.equals(olapTable.getBaseCompactionForbiddenTimeRanges())) {
                 return;
             }
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
@@ -2549,6 +2569,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.OPTIMIZE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
                 throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }

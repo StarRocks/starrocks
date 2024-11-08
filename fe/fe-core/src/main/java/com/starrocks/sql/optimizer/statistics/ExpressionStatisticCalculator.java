@@ -643,8 +643,8 @@ public class ExpressionStatisticCalculator {
                     distinctValues = Math.min(rowCount,
                             childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
                     averageRowSize = childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize).sum();
-                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getAverageRowSize)
-                            .reduce(1, (a, b) -> (1 - a) * (1 - b));
+                    nullsFraction = 1 - childColumnStatisticList.stream().mapToDouble(ColumnStatistic::getNullsFraction)
+                            .reduce(1.0, (accumulator, nullFraction) -> accumulator * (1 - nullFraction));
                     return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                             nullsFraction, averageRowSize, distinctValues);
                 default:

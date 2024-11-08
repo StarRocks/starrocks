@@ -59,7 +59,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 }
 
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result);
+                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result);
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
