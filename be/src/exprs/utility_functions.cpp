@@ -347,7 +347,7 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
         RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
         RETURN_IF(buckets <= 0, Status::InvalidArgument("requirement: buckets > 0"));
 
-        size_t bucket = (size - min) % std::max<size_t>(1, ((max - min) / buckets));
+        size_t bucket = (size - min) / std::max<size_t>(1, ((max - min) / buckets));
         builder.append(bucket);
     }
     return builder.build(false);
