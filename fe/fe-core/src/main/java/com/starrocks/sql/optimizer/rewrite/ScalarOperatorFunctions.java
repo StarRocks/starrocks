@@ -51,6 +51,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -106,8 +108,7 @@ import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
  */
 public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
-            ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").
-                    add("yyyyMMdd HH:mm:ss").add("yyyy-MM-dd'T'HH:mm:ssZZ").add("yyyy-MM-dd hh:mm:ssa").build();
+            ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
@@ -392,14 +393,9 @@ public class ScalarOperatorFunctions {
         if (format.isEmpty()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        // unix style
-        if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
-            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
-        } else {
-            String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
-            return ConstantOperator.createVarchar(result);
-        }
+        org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
+        DateTime dateTime = new DateTime(date.getDatetime().toLocalDate());
+        return ConstantOperator.createVarchar(dateTime.toString(formatter));
     }
 
 
