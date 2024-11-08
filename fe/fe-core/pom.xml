@@ -42,7 +42,7 @@ under the License.
         <paimon.version>0.8.2</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <staros.version>3.3-rc5</staros.version>
-        <python>python</python>
+        <python>python3</python>
     </properties>
 
     <profiles>
