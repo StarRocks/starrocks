@@ -43,6 +43,11 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 import static java.util.Objects.requireNonNull;
 
 public class UnifiedMetadata implements ConnectorMetadata {
@@ -89,6 +94,15 @@ public class UnifiedMetadata implements ConnectorMetadata {
         if (isDeltaLakeTable(table.getProperties())) {
             return DELTALAKE;
         }
+<<<<<<< HEAD
+=======
+        if (isPaimonTable(table.getProperties())) {
+            return PAIMON;
+        }
+        if (table.isKuduTable()) {
+            return KUDU;
+        }
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
         return HIVE;
     }
 

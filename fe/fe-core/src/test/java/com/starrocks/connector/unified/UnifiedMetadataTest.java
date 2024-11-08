@@ -31,6 +31,11 @@ import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.kudu.KuduMetadata;
+import com.starrocks.connector.paimon.PaimonMetadata;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -46,6 +51,11 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 import static com.starrocks.connector.unified.UnifiedMetadata.DELTA_LAKE_PROVIDER;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
@@ -54,10 +64,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UnifiedMetadataTest {
+<<<<<<< HEAD
     @Mocked private HiveMetadata hiveMetadata;
     @Mocked private IcebergMetadata icebergMetadata;
     @Mocked private HudiMetadata hudiMetadata;
     @Mocked private DeltaLakeMetadata deltaLakeMetadata;
+=======
+    @Mocked
+    private HiveMetadata hiveMetadata;
+    @Mocked
+    private IcebergMetadata icebergMetadata;
+    @Mocked
+    private HudiMetadata hudiMetadata;
+    @Mocked
+    private DeltaLakeMetadata deltaLakeMetadata;
+    @Mocked
+    private PaimonMetadata paimonMetadata;
+    @Mocked
+    private KuduMetadata kuduMetadata;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
     private final CreateTableStmt createTableStmt = new CreateTableStmt(false, true,
             new TableName("test_db", "test_tbl"), ImmutableList.of(), "hive",
             null, null, null, null, null, null);
@@ -70,7 +95,13 @@ public class UnifiedMetadataTest {
             HIVE, hiveMetadata,
             ICEBERG, icebergMetadata,
             HUDI, hudiMetadata,
+<<<<<<< HEAD
             DELTALAKE, deltaLakeMetadata
+=======
+            DELTALAKE, deltaLakeMetadata,
+            PAIMON, paimonMetadata,
+            KUDU, kuduMetadata
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
         )
         );
     }

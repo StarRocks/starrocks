@@ -25,6 +25,11 @@ import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.kudu.KuduConnector;
+import com.starrocks.connector.paimon.PaimonConnector;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
@@ -35,13 +40,23 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+<<<<<<< HEAD
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+=======
+import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.kudu.KuduConnector.KUDU_CATALOG_TYPE;
+import static com.starrocks.connector.paimon.PaimonConnector.PAIMON_CATALOG_TYPE;
+import static com.starrocks.connector.paimon.PaimonConnector.PAIMON_CATALOG_WAREHOUSE;
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 
 public class UnifiedConnector implements Connector {
     public static final String UNIFIED_METASTORE_TYPE = "unified.metastore.type";
     public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
-    private final Map<Table.TableType, Connector> connectorMap;
+    private Map<Table.TableType, Connector> connectorMap;
 
     public UnifiedConnector(ConnectorContext context) {
         String metastoreType = context.getProperties().get(UNIFIED_METASTORE_TYPE);
@@ -53,16 +68,36 @@ public class UnifiedConnector implements Connector {
         derivedProperties.putAll(context.getProperties());
         derivedProperties.put(HIVE_METASTORE_TYPE, metastoreType);
         derivedProperties.put(ICEBERG_CATALOG_TYPE, metastoreType);
+<<<<<<< HEAD
+=======
+        derivedProperties.put(PAIMON_CATALOG_TYPE, metastoreType);
+        derivedProperties.put(KUDU_CATALOG_TYPE, metastoreType);
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
 
         ConnectorContext derivedContext = new ConnectorContext(context.getCatalogName(), context.getType(),
                 derivedProperties.build());
 
+<<<<<<< HEAD
         connectorMap = ImmutableMap.of(
                 HIVE, new HiveConnector(derivedContext),
                 ICEBERG, new IcebergConnector(derivedContext),
                 HUDI, new HudiConnector(derivedContext),
                 DELTALAKE, new DeltaLakeConnector(derivedContext)
         );
+=======
+        ImmutableMap.Builder<Table.TableType, Connector> builder = ImmutableMap.builder();
+
+        builder.put(HIVE, new HiveConnector(derivedContext))
+                .put(ICEBERG, new IcebergConnector(derivedContext))
+                .put(HUDI, new HudiConnector(derivedContext))
+                .put(DELTALAKE, new DeltaLakeConnector(derivedContext))
+                .put(KUDU, new KuduConnector(derivedContext));
+        boolean containsPaimon = null != context.getProperties().get(PAIMON_CATALOG_WAREHOUSE);
+        if (containsPaimon) {
+            builder.put(PAIMON, new PaimonConnector(derivedContext));
+        }
+        connectorMap = builder.build();
+>>>>>>> 2e50513c2d ([Enhancement] Unified Catalog support Paimon (#47398))
     }
 
     @Override
