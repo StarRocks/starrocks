@@ -38,10 +38,10 @@ public class OperatorEqualsTest {
         Assert.assertNotEquals(logicalA, logicalB);
 
         PhysicalTopNOperator physicalA = new PhysicalTopNOperator(null, 10, 10, null,
-                0, null, null, true, true, null, null);
+                0, null, null, true, true, null, null, null);
         PhysicalTopNOperator physicalB = new PhysicalTopNOperator(null, 10, 10, null,
                 0, null, null, true, true,
-                null, new Projection(Maps.newHashMap()));
+                null, new Projection(Maps.newHashMap()), null);
         Assert.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
         Assert.assertNotEquals(physicalA, physicalB);
     }

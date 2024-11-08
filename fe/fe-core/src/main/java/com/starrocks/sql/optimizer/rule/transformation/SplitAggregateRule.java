@@ -49,7 +49,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
     }
 
-    protected Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
+    public Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
                                                                    Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {

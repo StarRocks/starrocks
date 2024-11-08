@@ -133,6 +133,8 @@ public:
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
+    size_t get_next_output_row() { return _next_output_row; }
+
     virtual int64_t mem_usage() const = 0;
 
     virtual bool is_full() { return false; }

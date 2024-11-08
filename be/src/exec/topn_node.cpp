@@ -72,6 +72,13 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
             }
         }
     }
+
+    // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
+    if (tnode.sort_node.__isset.partition_exprs) {
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
+    }
+
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
     _is_null_first = tnode.sort_node.sort_info.nulls_first;
     bool has_outer_join_child = tnode.sort_node.__isset.has_outer_join_child && tnode.sort_node.has_outer_join_child;
@@ -271,9 +278,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
 
     if (is_partition_topn) {
         partition_limit = _tnode.sort_node.partition_limit;
-    }
-
-    if (need_merge) {
+        if (_tnode.sort_node.__isset.pre_agg_insert_local_shuffle && _tnode.sort_node.pre_agg_insert_local_shuffle) {
+            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                    runtime_state(), id(), ops_sink_with_sort, _local_partition_exprs);
+        }
+    } else if (need_merge) {
         if (enable_parallel_merge) {
             ops_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(
                     runtime_state(), id(), ops_sink_with_sort, context->degree_of_parallelism(), is_partition_skewed);
@@ -301,10 +310,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     }
 
     // create context factory
+    bool enable_pre_agg = _tnode.sort_node.__isset.pre_agg_exprs && (!_tnode.sort_node.pre_agg_exprs.empty());
     auto context_factory = std::make_shared<ContextFactory>(
             runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
-            _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, _offset, partition_limit, _sort_keys,
-            _order_by_types, _build_runtime_filters);
+            _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, enable_pre_agg,
+            _tnode.sort_node.pre_agg_exprs, _tnode.sort_node.pre_agg_output_slot_id, _offset, partition_limit,
+            _sort_keys, _order_by_types, _build_runtime_filters);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
