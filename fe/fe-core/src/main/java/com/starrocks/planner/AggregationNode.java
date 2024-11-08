@@ -235,7 +235,6 @@ public class AggregationNode extends PlanNode {
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
         msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
-
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
             msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));

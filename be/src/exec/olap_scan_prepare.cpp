@@ -391,6 +391,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
+
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
                     _normalized_exprs[i] = true;
                 }
@@ -592,10 +593,13 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
         const JoinRuntimeFilter* rf = desc->runtime_filter(_opts.driver_sequence);
         using RangeType = ColumnValueRange<RangeValueType>;
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+        using ColumnType = typename RunTimeTypeTraits<SlotType>::ColumnType;
         SlotId slot_id;
 
         // probe expr is slot ref and slot id matches.
-        if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
+        if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) {
+            continue;
+        }
 
         // runtime filter existed and does not have null.
         if (rf == nullptr) {
@@ -603,7 +607,19 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             continue;
         }
 
-        if (rf->has_null()) continue;
+        if (rf->has_null()) {
+            continue;
+        }
+
+        if (rf->in_values() != nullptr) {
+            std::set<RangeValueType> values;
+            auto datas = GetContainer<SlotType>::get_data(ColumnHelper::get_data_column(rf->in_values().get()));
+            for (int i = 0; i < rf->in_values()->size(); i++) {
+                values.insert(static_cast<RangeValueType>(datas[i]));
+            }
+
+            (void)range->add_fixed_values(FILTER_IN, values);
+        }
 
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
@@ -616,20 +632,22 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
         // the rest of the runtime filters will be normalized here
 
         auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
-        if constexpr (SlotType == TYPE_VARCHAR) {
-            if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
-                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                        RangeType, ValueType, LowCardDictType,
-                        detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, &iter->second.first);
+        if (rf->in_values() == nullptr) {
+            if constexpr (SlotType == TYPE_VARCHAR) {
+                if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
+                    detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                            RangeType, ValueType, LowCardDictType,
+                            detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, &iter->second.first);
+                } else {
+                    detail::RuntimeColumnPredicateBuilder::build_minmax_range<
+                            RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
+                                                                                                                 nullptr);
+                }
             } else {
                 detail::RuntimeColumnPredicateBuilder::build_minmax_range<
                         RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
                                                                                                              nullptr);
             }
-        } else {
-            detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                    RangeType, ValueType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(*range, rf,
-                                                                                                         nullptr);
         }
     }
 

@@ -104,6 +104,7 @@ private:
     OlapScanKeys scan_keys;                                          // from _column_value_ranges
     std::vector<TCondition> olap_filters;                            // from _column_value_ranges
     std::vector<TCondition> is_null_vector;                          // from conjunct_ctxs
+    std::set<ColumnPtr> seen_columns;
 
     std::map<int, std::vector<ExprContext*>> slot_index_to_expr_ctxs; // from conjunct_ctxs
 
