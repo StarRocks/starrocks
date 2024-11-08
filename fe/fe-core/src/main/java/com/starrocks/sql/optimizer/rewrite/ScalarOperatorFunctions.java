@@ -175,7 +175,12 @@ public class ScalarOperatorFunctions {
                     : NUMBER_OF_NON_LEAP_YEAR;
         }
 
-        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+        static class YearWeekValue {
+            long year;
+            long week;
+        }
+
+        public static YearWeekValue computeYearWeekValue(long year, long month, long day, int weekBehaviour) {
             weekBehaviour = weekBehaviour & 0x7;
             if ((weekBehaviour & 0x1) == 0) {
                 weekBehaviour ^= 0x4;
@@ -190,9 +195,12 @@ public class ScalarOperatorFunctions {
 
             long weekDay = computeWeekDay(firstDayNR, !bMondayFirst);
             long yearLocal = year;
+            YearWeekValue result = new YearWeekValue();
             if (month == 1 && day <= (7 - weekDay)) {
                 if (!bWeekYear && ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4))) {
-                    return 0;
+                    result.year = yearLocal;
+                    result.week = 0;
+                    return result;
                 }
                 bWeekYear = true;
                 yearLocal--;
@@ -210,10 +218,24 @@ public class ScalarOperatorFunctions {
                 weekDay = (weekDay + computeDaysInYear(yearLocal)) % 7;
                 if ((!bFirstWeekDay && weekDay < 4) || (bFirstWeekDay && weekDay == 0)) {
                     yearLocal++;
-                    return 1;
+                    result.year = yearLocal;
+                    result.week = 1;
+                    return result;
                 }
             }
-            return days / 7 + 1;
+            result.year = yearLocal;
+            result.week = days / 7 + 1;
+            return result;
+        }
+
+        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+            TimeFunctions.YearWeekValue value = computeYearWeekValue(year, month, day, weekBehaviour);
+            return value.week;
+        }
+
+        public static long computeYearWeek(long year, long month, long day, int weekBehaviour) {
+            TimeFunctions.YearWeekValue value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
+            return value.year * 100 + value.week;
         }
     }
 
@@ -517,7 +539,8 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator week(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
-        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        long result =
+                TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
         return ConstantOperator.createInt((int) result);
     }
 
@@ -528,6 +551,27 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
         LocalDateTime dt = arg.getDatetime();
         long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "yearweek", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "yearweek", argTypes = {DATE}, returnType = INT)
+    })
+    public static ConstantOperator yearWeek(ConstantOperator arg) {
+        LocalDateTime dt = arg.getDatetime();
+        long result =
+                TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "yearweek", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "yearweek", argTypes = {DATE, INT}, returnType = INT)
+    })
+    public static ConstantOperator yearWeekWithMode(ConstantOperator arg, ConstantOperator mode) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
         return ConstantOperator.createInt((int) result);
     }
 
