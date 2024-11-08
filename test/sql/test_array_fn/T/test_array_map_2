@@ -45,8 +45,10 @@ select array_map((x,y,z)->x+y+z, arr_0, arr_1, arr_2) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1,2]) from t order by k;
 select array_map((x,y,z,d)->x+y+z+d, arr_0, arr_1, arr_2, [1]) from t order by k;
 select array_map((x)->x*x, arr_0) from t order by k;
-
-
+select k from t where coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1))=2 order by k;
+select k from t where coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1))>0 and coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1)) < 10  order by k;
+select k, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1)) as col1 from t order by k;
+select k, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_0)), arr_0), 1)) as col1, coalesce(element_at(array_map(x->x+any_match(array_map(x->x<10,arr_1)), arr_1), 1),element_at(array_map(x->x+any_match(array_map(x->x<10,arr_2)), arr_2), 1)) as col2 from t order by k;
 select array_map(x->x, arr_0) from t order by k;
 -- independent expr
 select array_map((x,y,z)->10, arr_0, arr_1, arr_2) from t;
