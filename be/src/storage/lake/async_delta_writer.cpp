@@ -136,7 +136,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         iter->cb(st);
     }
     if (flush_after_write) {
-        st = delta_writer->flush_async();
+        st = delta_writer->manual_flush();
         LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
                                 << " txn_id: " << delta_writer->txn_id() << ": " << st;
     }

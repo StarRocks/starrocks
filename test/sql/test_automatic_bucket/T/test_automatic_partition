@@ -183,3 +183,9 @@ select * from t;
 
 alter table t set('mutable_bucket_num'='-1');
 alter table t set('mutable_bucket_num'='a');
+
+-- name: test_stale_flush @sequential
+create table t(k int)properties('bucket_size'='1');
+update information_schema.be_configs set value=102400 where name='write_buffer_size';
+insert into t select generate_series from TABLE(generate_series(1, 10000000));
+update information_schema.be_configs set value=104857600 where name='write_buffer_size';

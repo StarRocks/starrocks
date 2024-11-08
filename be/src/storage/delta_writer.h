@@ -112,6 +112,9 @@ public:
 
     [[nodiscard]] Status flush_memtable_async(bool eos = false);
 
+    // Manual flush used by stale memtable flush
+    Status manual_flush();
+
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
     //
