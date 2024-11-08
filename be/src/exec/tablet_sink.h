@@ -244,6 +244,7 @@ private:
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
     std::vector<std::vector<std::string>> _partition_not_exist_row_values;
     bool _enable_automatic_partition = false;
+    bool _dynamic_overwrite = false;
     bool _has_automatic_partition = false;
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;

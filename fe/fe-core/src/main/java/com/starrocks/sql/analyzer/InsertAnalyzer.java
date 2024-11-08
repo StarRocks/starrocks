@@ -57,6 +57,8 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.SnapshotRef;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +73,7 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
+    private static final Logger LOG = LogManager.getLogger(InsertAnalyzer.class);
     private static final ImmutableSet<String> PUSH_DOWN_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(LoadStmt.STRICT_MODE)
             .build();
@@ -160,13 +163,17 @@ public class InsertAnalyzer {
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
                 checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             } else {
-                for (Partition partition : olapTable.getPartitions()) {
-                    targetPartitionIds.add(partition.getId());
-                }
-                if (targetPartitionIds.isEmpty()) {
-                    throw new SemanticException("data cannot be inserted into table with empty partition." +
-                            "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ",
-                            olapTable.getName());
+                if ((insertStmt.isOverwrite() && session.getSessionVariable().isDynamicOverwrite())) {
+                    insertStmt.setIsDynamicOverwrite(true);
+                } else {
+                    for (Partition partition : olapTable.getPartitions()) {
+                        targetPartitionIds.add(partition.getId());
+                    }
+                    if (targetPartitionIds.isEmpty()) {
+                        throw new SemanticException("data cannot be inserted into table with empty partition." +
+                                "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ",
+                                olapTable.getName());
+                    }
                 }
             }
             insertStmt.setTargetPartitionIds(targetPartitionIds);
