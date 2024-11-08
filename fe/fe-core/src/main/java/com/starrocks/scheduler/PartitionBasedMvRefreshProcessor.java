@@ -123,9 +123,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // session.insert_timeout
     private static final String MV_SESSION_INSERT_TIMEOUT =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.INSERT_TIMEOUT;
-    // default insert timeout for mv: 1 hour
-    private static final int MV_DEFAULT_INSERT_TIMEOUT = 3600;
-
 
     private Database db;
     private MaterializedView materializedView;
@@ -583,15 +580,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setEnableSpill(true);
         }
 
-        if (!mvProperty.getProperties().containsKey(MV_SESSION_INSERT_TIMEOUT)) {
-            if (!mvProperty.getProperties().containsKey(MV_SESSION_QUERY_TIMEOUT)) {
-                // change `insert_timeout` to 1 hour by default for better user experience.
-                mvSessionVariable.setInsertTimeoutS(MV_DEFAULT_INSERT_TIMEOUT);
-            } else {
-                // for compatibility
-                mvProperty.getProperties().put(MV_SESSION_INSERT_TIMEOUT,
-                        mvProperty.getProperties().remove(MV_SESSION_QUERY_TIMEOUT));
-            }
+        if (!mvProperty.getProperties().containsKey(MV_SESSION_INSERT_TIMEOUT)
+                && mvProperty.getProperties().containsKey(MV_SESSION_QUERY_TIMEOUT)) {
+            // for compatibility
+            mvProperty.getProperties().put(MV_SESSION_INSERT_TIMEOUT, mvProperty.getProperties().get(MV_SESSION_QUERY_TIMEOUT));
         }
 
         // set insert_max_filter_ratio by default

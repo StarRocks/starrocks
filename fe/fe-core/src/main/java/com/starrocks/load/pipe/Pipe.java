@@ -16,7 +16,6 @@ package com.starrocks.load.pipe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -36,7 +35,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -82,11 +80,6 @@ public class Pipe implements GsonPostProcessable {
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
-    private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
-            ImmutableMap.<String, String>builder()
-                    .put(SessionVariable.INSERT_TIMEOUT, "3600")
-                    .build();
-
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "id")
@@ -129,7 +122,6 @@ public class Pipe implements GsonPostProcessable {
         this.createdTime = TimeUtils.getEpochSeconds();
         this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        this.taskExecutionVariables.putAll(DEFAULT_TASK_EXECUTION_VARIABLES);
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {

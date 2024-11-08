@@ -783,7 +783,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         SessionVariable sessionVariable = context.getSessionVariable();
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
-        sessionVariable.setQueryTimeoutS((int) timeoutMs / 2000);
+        sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
 
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
