@@ -45,4 +45,8 @@ public class RemoteFileScanContext {
     public HoodieTableFileSystemView hudiFsView = null;
     public HoodieTimeline hudiTimeline = null;
     public HoodieInstant hudiLastInstant = null;
+
+    public void close() {
+        hudiFsView.close();
+    }
 }

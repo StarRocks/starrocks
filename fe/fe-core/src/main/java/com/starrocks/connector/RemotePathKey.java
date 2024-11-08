@@ -80,6 +80,7 @@ public class RemotePathKey {
 
     public void drop() {
         if (scanContext != null) {
+            scanContext.close();
             scanContext = null;
         }
     }
