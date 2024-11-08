@@ -92,7 +92,7 @@ public class PushDownPredicateProjectRule extends TransformationRule {
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
 
-        if (context.getSessionVariable().getDisableLambdaPushDown()) {
+        if (!context.getSessionVariable().getEnableLambdaPushDown()) {
             Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
             for (var entry : m.entrySet()) {
                 if (hasLambda(entry.getValue())) {

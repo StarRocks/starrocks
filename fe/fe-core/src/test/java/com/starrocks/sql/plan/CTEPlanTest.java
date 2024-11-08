@@ -835,10 +835,10 @@ public class CTEPlanTest extends PlanTestBase {
                 "SELECT * from input3\n" +
                 "where a + b + c <10";
 
-        connectContext.getSessionVariable().setDisableLambdaPushdown(true);
+        connectContext.getSessionVariable().setEnableLambdaPushdown(false);
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
-        connectContext.getSessionVariable().setDisableLambdaPushdown(false);
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
 
         assertContains(plan, "predicates: CAST(CAST(CAST(4: array_min AS SMALLINT) + 1 AS INT) + " +
                 "CAST(CAST(4: array_min AS SMALLINT) + 2 AS INT) AS BIGINT) + CAST(CAST(4: array_min AS SMALLINT) + " +
@@ -864,7 +864,7 @@ public class CTEPlanTest extends PlanTestBase {
                         "SELECT * from input3\n" +
                         "where a + b + c <10";
 
-        connectContext.getSessionVariable().setDisableLambdaPushdown(false);
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
 
