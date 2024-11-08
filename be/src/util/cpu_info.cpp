@@ -461,7 +461,7 @@ std::string CpuInfo::debug_string() {
         stream << std::endl;
     };
 
-    print_cores("CPUSET form CGroup", cpuset_cores_);
+    print_cores("Cores from CGroup CPUSET", cpuset_cores_);
     print_cores("Offline Cores", offline_cores_);
 
     return stream.str();
