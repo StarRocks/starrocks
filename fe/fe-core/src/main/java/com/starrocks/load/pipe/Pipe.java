@@ -80,6 +80,8 @@ public class Pipe implements GsonPostProcessable {
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
+    private static final String TASK_PROPERTY_PREFIX = "task.";
+
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "id")
@@ -138,9 +140,9 @@ public class Pipe implements GsonPostProcessable {
 
     public void processProperties(Map<String, String> properties) {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
+            String key = entry.getKey().toLowerCase();
             String value = entry.getValue();
-            switch (key.toLowerCase()) {
+            switch (key) {
                 case PipeAnalyzer.PROPERTY_POLL_INTERVAL: {
                     this.pollIntervalSecond = Integer.parseInt(value);
                     break;
@@ -164,11 +166,11 @@ public class Pipe implements GsonPostProcessable {
                 }
                 default: {
                     // task execution variables
-                    if (key.toUpperCase().startsWith("TASK.")) {
-                        String taskVariable = StringUtils.removeStart(key.toUpperCase(), "TASK.");
+                    if (key.startsWith(TASK_PROPERTY_PREFIX)) {
+                        String taskVariable = StringUtils.removeStart(key, TASK_PROPERTY_PREFIX);
                         this.taskExecutionVariables.put(taskVariable, value);
                     } else {
-                        throw new IllegalArgumentException("unsupported property: " + key);
+                        throw new IllegalArgumentException("unsupported property: " + entry.getKey());
                     }
                 }
             }
