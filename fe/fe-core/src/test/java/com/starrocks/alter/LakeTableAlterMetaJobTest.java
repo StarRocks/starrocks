@@ -354,6 +354,21 @@ public class LakeTableAlterMetaJobTest {
         // success
         AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
         Assert.assertNotNull(job2);
-        db.dropTable(table2.getName());
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexTypeFailure() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // should throw exception
+        ExceptionChecker.expectThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
+
     }
 }

@@ -2028,6 +2028,10 @@ public class SchemaChangeHandler extends AlterHandler {
                             +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
                 }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                        && !enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 // only support set persistent_index_type when enable_persistent_index is true
                 enablePersistentIndex = olapTable.enablePersistentIndex();
