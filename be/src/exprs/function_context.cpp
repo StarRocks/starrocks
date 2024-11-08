@@ -17,6 +17,7 @@
 #include <iostream>
 #include <random>
 
+#include "agent/master_info.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -217,6 +218,14 @@ std::mt19937_64* FunctionContext::driver_local_random_generator() {
 }
 
 void FunctionContext::reseed_random_number(int64_t seed) {
+    // Use (seed + be_id) to guarantee every backend will generate different random number even if user provide the seed
+    // why seq? be_id is unique but not deterministic when deploying a new cluster, so use a sequence instead of be_id
+    // the basic assumption, the biggest cluster is 1024
+    auto be_id = get_backend_id();
+    if (be_id.has_value()) {
+        int64_t seq = std::hash<int64_t>()(be_id.value()) % 1024;
+        seed += seq;
+    }
     std::lock_guard<std::mutex> lock(_rnd_mu);
 
     _global_seed = seed;

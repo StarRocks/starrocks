@@ -167,6 +167,7 @@ public:
 
     JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
+    // NOTE: returned generator will be invalid if reseed
     // Returns a driver-local random number generator
     // Driver-local: each pipeline-driver will only initialie one generator, and be kept during the lifecycle
     // By default it will be seed a random number, you can re-seed it with a specified value

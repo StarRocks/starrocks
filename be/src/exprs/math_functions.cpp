@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/constexpr.h"
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -28,7 +27,6 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/math_functions.h"
-#include "util/time.h"
 
 namespace starrocks {
 
