@@ -59,6 +59,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -783,6 +784,12 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
+        // add all restored functions
+        addRestoredFunctions(db);
+        if (!status.ok()) {
+            return;
+        }
+
         LOG.info("finished to prepare meta. begin to make snapshot. {}", this);
 
         // begin to make snapshots for all replicas
@@ -837,6 +844,18 @@ public class RestoreJob extends AbstractJob {
             String idStr = Joiner.on(", ").join(subList);
             status = new Status(ErrCode.COMMON_ERROR,
                     "Failed to create replicas for restore. unfinished marks: " + idStr);
+        }
+    }
+
+    protected void addRestoredFunctions(Database db) {
+        List<Function> functions = backupMeta.getFunctions();
+        for (Function fn : functions) {
+            try {
+                db.addFunction(fn, true, false);
+            } catch (UserException e) {
+                status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
+                                    " failed when restore");
+            }
         }
     }
 
@@ -1262,9 +1281,6 @@ public class RestoreJob extends AbstractJob {
             downloadFinishedTime = System.currentTimeMillis();
             state = RestoreJobState.COMMIT;
 
-            // backupMeta is useless now
-            backupMeta = null;
-
             globalStateMgr.getEditLog().logRestoreJob(this);
             LOG.info("finished to download. {}", this);
         }
@@ -1681,6 +1697,12 @@ public class RestoreJob extends AbstractJob {
             } finally {
                 db.writeUnlock();
             }
+
+            if (backupMeta != null) {
+                for (Function fn : backupMeta.getFunctions()) {
+                    db.dropFunctionForRestore(fn);
+                }
+            }
         }
 
         for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
@@ -1693,9 +1715,6 @@ public class RestoreJob extends AbstractJob {
         }
 
         if (!isReplay) {
-            // backupMeta is useless
-            backupMeta = null;
-
             releaseSnapshots();
 
             snapshotInfos.clear();
