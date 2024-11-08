@@ -4897,7 +4897,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### replication_transaction_timeout_sec
 
-
 - 默认值：86400
 - 类型：Int
 - 单位：Seconds

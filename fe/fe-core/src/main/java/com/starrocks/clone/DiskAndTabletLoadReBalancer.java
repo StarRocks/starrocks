@@ -807,7 +807,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 // NOTICE: state has been changed, the tablet must be selected
                 destPathUsedCap += replica.getDataSize();
                 srcPathUsedCap -= replica.getDataSize();
-
                 Pair<Long, Long> p = Pair.create(tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId());
                 // p: partition <physicalPartitionId, indexId>
                 // k: partition same to p

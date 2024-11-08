@@ -144,3 +144,4 @@ select array_contains_seq(@arr0, @arr1);
 
 select array_contains_seq(['abc'],'a');
 select array_contains_seq('abc',['a']);
+
