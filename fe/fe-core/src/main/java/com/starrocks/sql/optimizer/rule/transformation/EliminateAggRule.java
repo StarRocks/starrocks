@@ -18,8 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -154,21 +152,23 @@ public class EliminateAggRule extends TransformationRule {
         } else if (fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.AVG) ||
                 fnName.equals(FunctionSet.FIRST_VALUE) || fnName.equals(FunctionSet.MAX) ||
                 fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
-            return rewriteCastFunction(callOperator);
+            return rewriteNormalFunction(callOperator);
         }
         return callOperator;
     }
 
     private ScalarOperator rewriteCountFunction(CallOperator callOperator) {
+        Type outType = callOperator.getType();
+
         if (callOperator.getArguments().isEmpty()) {
-            return ConstantOperator.createInt(1);
+            return rewriteCastFunction(outType, ConstantOperator.createInt(1));
         }
 
         IsNullPredicateOperator isNullPredicateOperator =
                 new IsNullPredicateOperator(callOperator.getArguments().get(0));
         ArrayList<ScalarOperator> ifArgs = Lists.newArrayList();
-        ScalarOperator thenExpr = ConstantOperator.createInt(0);
-        ScalarOperator elseExpr = ConstantOperator.createInt(1);
+        ScalarOperator thenExpr = rewriteCastFunction(outType, ConstantOperator.createInt(0));
+        ScalarOperator elseExpr = rewriteCastFunction(outType, ConstantOperator.createInt(1));
         ifArgs.add(isNullPredicateOperator);
         ifArgs.add(thenExpr);
         ifArgs.add(elseExpr);
@@ -176,16 +176,19 @@ public class EliminateAggRule extends TransformationRule {
         Type[] argumentTypes = ifArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
         Function fn =
                 Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        return new CallOperator(FunctionSet.IF, ScalarType.createType(PrimitiveType.TINYINT), ifArgs, fn);
+        return new CallOperator(FunctionSet.IF, outType, ifArgs, fn);
     }
 
-    private ScalarOperator rewriteCastFunction(CallOperator callOperator) {
+    private ScalarOperator rewriteNormalFunction(CallOperator callOperator) {
         ScalarOperator argument = callOperator.getArguments().get(0);
-        if (callOperator.getType().equals(argument.getType())) {
-            return argument;
+        return rewriteCastFunction(callOperator.getType(), argument);
+    }
+
+    private ScalarOperator rewriteCastFunction(Type outType, ScalarOperator func) {
+        if (outType.equals(func.getType())) {
+            return func;
         }
-        ScalarOperator scalarOperator = new CastOperator(callOperator.getType(), argument);
-        return scalarOperator;
+        return new CastOperator(outType, func);
     }
 
 }
