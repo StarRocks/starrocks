@@ -512,7 +512,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     sstable_pb.set_max_rss_rowid(
             op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf,
+                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
