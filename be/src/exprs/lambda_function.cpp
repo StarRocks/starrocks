@@ -87,7 +87,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
             });
 #endif
             ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
-            LOG(INFO) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
+            VLOG(2) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
                     << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
             ctx->outer_common_exprs.insert({slot_id, child});
