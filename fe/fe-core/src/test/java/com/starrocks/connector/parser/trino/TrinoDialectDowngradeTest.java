@@ -24,13 +24,13 @@ public class TrinoDialectDowngradeTest extends TrinoTestBase {
 
     @Test
     public void testTrinoDialectDowngrade() throws Exception {
-        String querySql = "select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);";
+        String querySql = "select date_add('2010-11-30 23:59:59', INTERVAL 3 DAY);";
         try {
             connectContext.getSessionVariable().setEnableDialectDowngrade(true);
             connectContext.getSessionVariable().setSqlDialect("trino");
             analyzeSuccess(querySql);
             connectContext.getSessionVariable().setEnableDialectDowngrade(false);
-            analyzeFail(querySql, "mismatched input '2'. Expecting: '+', '-', <string>");
+            analyzeFail(querySql, "mismatched input '3'. Expecting: '+', '-', <string>");
         } finally {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }
