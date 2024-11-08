@@ -38,7 +38,9 @@ Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profil
     }
 
     _acc.set_max_size(state->chunk_size());
-    _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
+    _mem_pool = std::make_unique<MemPool>();
+    _chunks_partitioner =
+            std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types, _mem_pool.get());
     return _chunks_partitioner->prepare(state, profile);
 }
 
@@ -47,6 +49,7 @@ Status HashPartitionContext::push_one_chunk_to_partitioner(RuntimeState* state, 
 }
 
 void HashPartitionContext::sink_complete() {
+    _mem_pool.reset();
     _is_sink_complete = true;
 }
 

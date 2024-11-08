@@ -43,6 +43,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.IdGenerator;
@@ -65,6 +66,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
@@ -88,6 +90,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private boolean withRuntimeFilters = false;
 
+    private List<Expr> preAggFnCalls;
+
+    private List<SlotId> preAggOutputColumnId;
+
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
@@ -108,6 +114,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.nullableTupleIds.addAll(input.getNullableTupleIds());
         this.children.add(input);
         this.offset = offset;
+        if (info.getPreAggTupleDesc_() != null && !info.getPreAggTupleDesc_().getSlots().isEmpty()) {
+            this.tupleIds.addAll(Lists.newArrayList(info.getPreAggTupleDesc_().getId()));
+        }
         Preconditions.checkArgument(info.getOrderingExprs().size() == info.getIsAscOrder().size());
     }
 
@@ -133,6 +142,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     public SortInfo getSortInfo() {
         return info;
+    }
+
+    public void setPreAggFnCalls(List<Expr> preAggFnCalls) {
+        this.preAggFnCalls = preAggFnCalls;
     }
 
     @Override
@@ -180,6 +193,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         buildRuntimeFilters.clear();
     }
 
+    public void setPreAggOutputColumnId(List<SlotId> preAggOutputColumnId) {
+        this.preAggOutputColumnId = preAggOutputColumnId;
+    }
+
     @Override
     protected String debugString() {
         List<String> strings = Lists.newArrayList();
@@ -198,7 +215,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 Expr.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
-        Preconditions.checkState(tupleIds.size() == 1, "Incorrect size for tupleIds in SortNode");
         sortInfo.setSort_tuple_slot_exprs(Expr.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
@@ -238,10 +254,22 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         if (sqlSortKeysBuilder.length() > 0) {
             msg.sort_node.setSql_sort_keys(sqlSortKeysBuilder.toString());
         }
+
         if (!buildRuntimeFilters.isEmpty()) {
             List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
+        }
+
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
+            msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
+            msg.sort_node.setPre_agg_insert_local_shuffle(
+                    ConnectContext.get().getSessionVariable().isInsertLocalShuffleForWindowPreAgg());
+        }
+        if (preAggOutputColumnId != null && !preAggOutputColumnId.isEmpty()) {
+            List<Integer> outputColumnsId = preAggOutputColumnId.stream().map(slotId -> slotId.asInt()).collect(
+                    Collectors.toList());
+            msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
         }
     }
 
@@ -288,6 +316,23 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             output.append(isAsc.next() ? "ASC" : "DESC");
         }
         output.append("\n");
+
+        if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
+            output.append(detailPrefix).append("pre agg functions: ");
+            List<String> strings = Lists.newArrayList();
+
+            for (Expr fnCall : preAggFnCalls) {
+                strings.add("[");
+                if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                    strings.add(fnCall.toSql());
+                } else {
+                    strings.add(fnCall.explain());
+                }
+                strings.add("]");
+            }
+            output.append(Joiner.on(", ").join(strings));
+            output.append("\n");
+        }
 
         if (!analyticPartitionExprs.isEmpty()) {
             output.append(detailPrefix).append("analytic partition by: ");

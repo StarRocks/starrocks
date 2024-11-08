@@ -59,6 +59,7 @@ private:
     bool _is_sink_complete = false;
 
     ChunksPartitionerPtr _chunks_partitioner;
+    std::unique_ptr<MemPool> _mem_pool;
 
     ChunkPipelineAccumulator _acc;
 };

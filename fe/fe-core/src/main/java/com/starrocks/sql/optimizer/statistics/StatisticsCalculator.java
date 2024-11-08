@@ -1614,6 +1614,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
+        Map<ColumnRefOperator, CallOperator> preAggFnCall = null;
+        if (node instanceof PhysicalTopNOperator) {
+            PhysicalTopNOperator physicalTopNOperator = (PhysicalTopNOperator) node;
+            preAggFnCall = physicalTopNOperator.getPreAggCall();
+        } else {
+            LogicalTopNOperator logicalTopNOperator = (LogicalTopNOperator) node;
+            preAggFnCall = logicalTopNOperator.getPartitionPreAggCall();
+        }
+        if (preAggFnCall != null) {
+            preAggFnCall.forEach((key, value) -> builder
+                    .addColumnStatistic(key,
+                            ExpressionStatisticCalculator.calculate(value, inputStatistics,
+                                    inputStatistics.getOutputRowCount())));
+        }
+
         if (partitionLimit > 0 && !partitions.isEmpty()
                 && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
             double partitionNums = partitions.stream()

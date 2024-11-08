@@ -48,7 +48,9 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.isSplit(),
                         false,
                         logicalTopN.getPredicate(),
-                        logicalTopN.getProjection());
+                        logicalTopN.getProjection(),
+                        logicalTopN.getPartitionPreAggCall());
+
         return Lists.newArrayList(OptExpression.create(physicalTopN, input.getInputs()));
     }
 }

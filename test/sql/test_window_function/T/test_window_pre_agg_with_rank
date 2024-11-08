@@ -1,0 +1,79 @@
+-- name: test_window_pre_agg_with_rank
+CREATE TABLE t1 (
+    c1 INT NOT NULL,
+    c2 INT NOT NULL,
+    c3 INT NOT NULL
+)
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+CREATE TABLE t2 (
+    c4 INT NOT NULL,
+    c5 INT NOT NULL,
+    c6 INT NOT NULL
+)
+DUPLICATE KEY(c4)
+DISTRIBUTED BY HASH(c4) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t1 (c1, c2, c3) VALUES
+(1, 1, 1),
+(2, 1, 11),
+(3, 1, 111),
+(4, 2, 2),
+(5, 2, 22),
+(6, 2, 222);
+
+INSERT INTO t2 (c4, c5, c6) VALUES
+(1, 1, 1),
+(2, 1, 11),
+(3, 1, 111),
+(4, 2, 2),
+(5, 2, 22),
+(6, 2, 222);
+
+-- case1: row number <= 1 without agg function
+SELECT *
+FROM (
+        SELECT c1, c2, c3, c4, c5
+                , c6, row_number() OVER (PARTITION BY c2 ORDER BY c1,c6 ) AS _rowid
+        FROM (
+                SELECT *
+                FROM t1
+                        JOIN t2 ON c2 = c5
+        ) t3
+) t4
+WHERE _rowid  <= 2 order by c4;
+
+-- case 2: pre agg with sum
+SELECT *
+FROM (
+        SELECT c1, c2, c3, c4, c5
+                , c6, row_number() OVER (PARTITION BY t3.c2 ORDER BY c1,c6 ) AS _rowid
+                , sum(t3.c2) OVER (PARTITION BY t3.c2) AS _sum
+        FROM (
+                SELECT *
+                FROM t1
+                        JOIN t2 ON c2 = c5
+        ) t3
+) t4
+WHERE _rowid  <= 2 order by c4,c6;
+
+-- case 3: pre agg with sum,avg,count
+SELECT *
+FROM (
+        SELECT c1, c2, c3, c4, c5,c6, row_number() OVER (PARTITION BY c2 ORDER BY c1,c6 ) AS _rowid
+                , sum(c2) OVER (PARTITION BY t3.c2) AS _sum, 
+                	avg(c2) OVER (PARTITION BY t3.c2) AS _avg
+        FROM (
+                SELECT *
+                FROM t1
+                        JOIN t2 ON c2 = c5
+        ) t3
+) t4
+WHERE _rowid <= 2 order by c4,c6;
