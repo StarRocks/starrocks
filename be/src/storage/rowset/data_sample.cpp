@@ -43,6 +43,13 @@ StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) 
         }
     }
 
+    if (sampled_blocks == 0) {
+        std::uniform_int_distribution<size_t> uniform(0, total_blocks);
+        size_t block = uniform(mt);
+        sampled_blocks++;
+        sampled_ranges.add(RowIdRange(block, std::min(block + _rows_per_block, _total_rows)));
+    }
+
     stats->sample_size += sampled_blocks;
     stats->sample_population_size += total_blocks;
 
@@ -103,6 +110,9 @@ bool SortableZoneMap::is_support_data_type(LogicalType type) {
     case TYPE_DOUBLE:
     case TYPE_DATE:
     case TYPE_DATETIME:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
         return true;
     default:
         return false;
@@ -140,6 +150,12 @@ double SortableZoneMap::width(const Datum& lhs, const Datum& rhs) {
         return rhs.get_date().julian() - lhs.get_date().julian();
     case TYPE_DATETIME:
         return rhs.get_timestamp().timestamp() - lhs.get_timestamp().timestamp();
+    case TYPE_DECIMAL32:
+        return rhs.get_int32() - lhs.get_int32();
+    case TYPE_DECIMAL64:
+        return rhs.get_int64() - lhs.get_int64();
+    case TYPE_DECIMAL128:
+        return rhs.get_int128() - lhs.get_int128();
     default:
         throw std::runtime_error(fmt::format("unsupported SortableZoneMap type: {}", type));
     }
@@ -296,12 +312,11 @@ void PageDataSample::_prepare_histogram(OlapReaderStatistics* stats) {
 }
 
 StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample(OlapReaderStatistics* stats) {
-    size_t num_data_pages = _num_pages;
     size_t sampled_pages = 0;
     std::mt19937 mt(_random_seed);
     std::bernoulli_distribution dist(_probability_percent / 100.0);
     RowIdSparseRange sampled_ranges;
-    for (size_t i = 0; i < num_data_pages; i++) {
+    for (size_t i = 0; i < _num_pages; i++) {
         if (dist(mt)) {
             // FIXME(murphy) use rowid_t rather than ordinal_t
             auto [first_ordinal, last_ordinal] = _page_indexer(i);
@@ -310,8 +325,16 @@ StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample(OlapReaderStatistic
         }
     }
 
+    if (sampled_pages == 0) {
+        // provide at least one page
+        std::uniform_int_distribution<size_t> uniform(0, _num_pages);
+        auto [first_ordinal, last_ordinal] = _page_indexer(uniform(mt));
+        sampled_ranges.add(RowIdRange(first_ordinal, last_ordinal));
+        sampled_pages++;
+    }
+
     stats->sample_size += sampled_pages;
-    stats->sample_population_size += num_data_pages;
+    stats->sample_population_size += _num_pages;
 
     return sampled_ranges;
 }
