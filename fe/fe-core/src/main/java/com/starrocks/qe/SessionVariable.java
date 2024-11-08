@@ -3466,6 +3466,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableLambdaPushdown;
     }
 
+    public void setDisableLambdaPushdown(boolean disableLambdaPushdown) {
+        this.disableLambdaPushdown = disableLambdaPushdown;
+    }
+
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
     }
