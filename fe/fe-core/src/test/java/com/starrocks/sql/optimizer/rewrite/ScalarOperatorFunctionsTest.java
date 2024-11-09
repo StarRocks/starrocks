@@ -1470,7 +1470,7 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("20241109", ScalarOperatorFunctions.jodatimeFormat(
                 new ConstantOperator(LocalDateTime.of(2024, 11, 9, 15, 30, 45),
                         Type.DATE),
-                new ConstantOperator("20241109", Type.VARCHAR)).getVarchar());
+                new ConstantOperator("0123456789012345678901234567890123456789--yyyyMMdd--2345678901234567890123456789012345678901234567890123456789012345678901234567", Type.VARCHAR)).getVarchar());
     }
 
     /*
