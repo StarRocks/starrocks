@@ -41,12 +41,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
-<<<<<<< HEAD
-=======
 import com.starrocks.http.WebUtils;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
->>>>>>> a0b2d3538a ([BugFix] Avoid token print in FE log. (#52511))
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
