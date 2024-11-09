@@ -269,6 +269,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -2769,6 +2770,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return null;
         }
         return database.getTable(tblName);
+    }
+
+    public Optional<Table> mayGetTable(String dbName, String tblName) {
+        return Optional.ofNullable(getTable(dbName, tblName));
     }
 
     @Override

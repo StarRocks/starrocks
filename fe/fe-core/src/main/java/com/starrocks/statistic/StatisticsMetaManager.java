@@ -75,45 +75,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return db.getTable(tableName) != null;
     }
 
-<<<<<<< HEAD
-    private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
-        // maybe cluster just shutdown, ignore
-        if (aliveSize <= total / 2) {
-            lossTableCount = 0;
-            return true;
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
-        Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        Preconditions.checkState(table != null);
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            return true;
-        }
-
-        boolean check = true;
-        for (Partition partition : table.getPartitions()) {
-            // check replicate miss
-            if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                check = false;
-                break;
-            }
-        }
-
-        if (!check) {
-            lossTableCount++;
-        } else {
-            lossTableCount = 0;
-        }
-
-        return lossTableCount < 3;
-    }
-
-=======
->>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     private static final List<String> KEY_COLUMN_NAMES = ImmutableList.of(
             "table_id", "column_name", "db_id"
     );
@@ -319,24 +280,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-<<<<<<< HEAD
-    private boolean dropTable(String tableName) {
-        LOG.info("drop statistics table start");
-        DropTableStmt stmt = new DropTableStmt(true,
-                new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
-
-        try {
-            GlobalStateMgr.getCurrentState().dropTable(stmt);
-        } catch (DdlException e) {
-            LOG.warn("Failed to drop table" + e.getMessage());
-            return false;
-        }
-        LOG.info("drop statistics table done");
-        return !checkTableExist(tableName);
-    }
-
-=======
->>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     private void trySleep(long millis) {
         try {
             Thread.sleep(millis);

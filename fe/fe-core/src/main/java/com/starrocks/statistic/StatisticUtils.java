@@ -63,12 +63,8 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-<<<<<<< HEAD
-import org.apache.iceberg.Snapshot;
-=======
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
->>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

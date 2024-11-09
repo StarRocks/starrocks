@@ -67,28 +67,7 @@ public class RepoCreator {
     }
 
     public static boolean correctTable() {
-<<<<<<< HEAD
-        int numBackends = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
-        int replica = GlobalStateMgr.getCurrentState()
-                .mayGetDb(FileListTableRepo.FILE_LIST_DB_NAME)
-                .flatMap(db -> db.mayGetTable(FileListTableRepo.FILE_LIST_TABLE_NAME))
-                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
-                .orElse((short) 1);
-        if (numBackends < 3) {
-            LOG.info("not enough backends in the cluster, expected 3 but got {}", numBackends);
-            return false;
-        }
-        if (replica < 3) {
-            String sql = FileListTableRepo.SQLBuilder.buildAlterTableSql();
-            RepoExecutor.getInstance().executeDDL(sql);
-        } else {
-            LOG.info("table {} already has {} replicas, no need to alter replication_num",
-                    FileListTableRepo.FILE_LIST_FULL_NAME, replica);
-        }
-        return true;
-=======
         return StatisticUtils.alterSystemTableReplicationNumIfNecessary(FileListTableRepo.FILE_LIST_TABLE_NAME);
->>>>>>> 0c0ea45ed1 ([Enhancement] auto change replication_num of system tables (#51799))
     }
 
     public boolean isDatabaseExists() {
