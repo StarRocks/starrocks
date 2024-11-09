@@ -49,6 +49,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
@@ -62,6 +63,7 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -562,6 +564,32 @@ public class StatisticUtils {
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
         GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+    }
+
+    /**
+     * Change the replication_num of system table according to cluster status
+     * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
+     * 3. When scale-in to less than 3 node, change it to retainedBackendNum
+     */
+    public static boolean alterSystemTableReplicationNumIfNecessary(String tableName) {
+        int expectedReplicationNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
+        int replica = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().mayGetTable(StatsConstants.STATISTICS_DB_NAME, tableName)
+                .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
+                .orElse((short) 1);
+
+        if (replica != expectedReplicationNum) {
+            String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
+                    StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
+            if (StringUtils.isNotEmpty(sql)) {
+                RepoExecutor.getInstance().executeDDL(sql);
+            }
+            LOG.info("changed replication_number of table {} from {} to {}",
+                    tableName, replica, expectedReplicationNum);
+            return true;
+        }
+        return false;
     }
 
     // only support collect statistics for slotRef and subfield expr
