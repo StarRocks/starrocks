@@ -394,8 +394,11 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
         org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
-        DateTime dateTime = new DateTime(date.getDatetime().toLocalDate());
-        return ConstantOperator.createVarchar(dateTime.toString(formatter));
+        DateTime jodaDateTime = new DateTime(date.getDatetime()
+                .atZone(ZoneId.systemDefault()) // 将 LocalDateTime 与系统默认时区关联
+                .toInstant() // 转换为 Instant
+                .toEpochMilli());
+        return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
     }
 
 
