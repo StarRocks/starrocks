@@ -1639,7 +1639,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     private void addSubPartitions(Database db, OlapTable table, Partition partition,
-                                 int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
+                                  int numSubPartition, String[] subPartitionNames, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
 
@@ -1706,7 +1706,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
             // the shardGrouId may invalid when upgrade from old version
-            if (physicalPartition.getBaseIndex().getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+            if (olapTable.isCloudNativeTable() &&
+                    physicalPartition.getBaseIndex().getShardGroupId() ==
+                            PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
                 physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
             }
             olapTable.addPhysicalPartition(physicalPartition);
@@ -3339,7 +3341,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
+                    .getTable(db.getId(), mvId.getId());
             if (mv != null) {
                 LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
                 mv.setInactiveAndReason(reason);
