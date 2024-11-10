@@ -78,13 +78,6 @@ public class RemotePathKey {
         return sb.toString();
     }
 
-    public void drop() {
-        if (scanContext != null) {
-            scanContext.close();
-            scanContext = null;
-        }
-    }
-
     public void setScanContext(RemoteFileScanContext ctx) {
         scanContext = ctx;
         tableLocation = ctx.tableLocation;
