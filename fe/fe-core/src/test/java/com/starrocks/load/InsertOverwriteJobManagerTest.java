@@ -75,7 +75,7 @@ public class InsertOverwriteJobManagerTest {
 
     @Test
     public void testBasic() throws Exception {
-        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(1100L, 100L, 110L, targetPartitionIds);
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(1100L, 100L, 110L, targetPartitionIds, false);
 
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
@@ -114,7 +114,7 @@ public class InsertOverwriteJobManagerTest {
         };
 
         CreateInsertOverwriteJobLog jobInfo = new CreateInsertOverwriteJobLog(
-                1100L, 100L, 110L, targetPartitionIds);
+                1100L, 100L, 110L, targetPartitionIds, false);
         Assert.assertEquals(1100L, jobInfo.getJobId());
         Assert.assertEquals(100L, jobInfo.getDbId());
         Assert.assertEquals(110L, jobInfo.getTableId());
@@ -143,7 +143,7 @@ public class InsertOverwriteJobManagerTest {
 
     @Test
     public void testSerialization() throws IOException {
-        InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(1000L, 100L, 110L, targetPartitionIds);
+        InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(1000L, 100L, 110L, targetPartitionIds, false);
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob1);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
 
