@@ -41,9 +41,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
@@ -77,6 +79,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -446,6 +449,37 @@ public class TransactionState implements Writable {
             return true;
         }
         return this.tabletCommitInfos.contains(info);
+    }
+
+    public boolean checkTransactionDependencyReplicasNotCommited(LocalTablet tablet, int quorumReplicaNum) {
+        // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
+        // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
+        //    The tablet's repliace are replicaA, replicaB.
+        // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
+        //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
+        // 3. The machine where beB is located hangs and is not recoverable.
+        //   Therefore PublishVersionTaskA is finished,PublishVersionTaskB is unfinished.
+        // 4. FE clone replicaC from replicaA, BE report replicaC info.
+        //    So transactions must rely on replicaA and replicaC to accomplish visible state.
+        List<Replica> immutableReplicas = tablet.getImmutableReplicas();
+        if (tabletCommitInfos != null) {
+            List<Replica> replicaCommitedDecommission = immutableReplicas.stream().filter(replica -> {
+                if (replica.getState() == ReplicaState.DECOMMISSION) {
+                    TabletCommitInfo info = new TabletCommitInfo(tablet.getId(), replica.getBackendId());
+                    if (this.tabletCommitInfos.contains(info)) {
+                        return true;
+                    }
+                    return false;
+                }
+                return false;
+            }).collect(Collectors.toList());
+
+            if (tabletCommitInfos.size() - replicaCommitedDecommission.size() < quorumReplicaNum) {
+                LOG.warn("transaction {} has dependency replicas not commited, tablet {}", this, tablet.getId());
+                return true;
+            }
+        }
+        return false;
     }
 
     // Only for OlapTable

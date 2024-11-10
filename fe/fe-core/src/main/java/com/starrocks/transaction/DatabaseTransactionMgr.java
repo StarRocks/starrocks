@@ -919,17 +919,7 @@ public class DatabaseTransactionMgr {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica
-                            for (Replica replica : ((LocalTablet) tablet).getAllReplicas()) {
-                                // Using getAllReplicas() instead of getImmutableReplicas
-                                // In order for the transaction to complete in time for this scenario: the server machine is not recovered.
-                                // 1. Transaction TA writes to a two-replicas tablet and enters the committed state.
-                                //    The tablet's repliace are replicaA, replicaB.
-                                // 2. replicaA, replicaB generate tasks: PublishVersionTaskA, PublishVersionTaskB.
-                                //    PublishVersionTaskA/PublishVersionTaskB successfully submitted to the beA/beB via RPC.
-                                // 3. The machine where beB is located hangs and is not recoverable.
-                                //   Therefore PublishVersionTaskA is finished,PublishVersionTaskB is unfinished.
-                                // 4. FE clone replicaC from replicaA, BE report replicaC info.
-                                //    However, the update of immutableReplicas must wait for the checkpoint
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
@@ -1089,6 +1079,8 @@ public class DatabaseTransactionMgr {
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
+                                boolean isDependencyReplicasNotCommited = transactionState.
+                                        checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum);
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     if (transactionState.isVersionOverwrite()) {
                                         ++healthReplicaNum;
@@ -1103,7 +1095,9 @@ public class DatabaseTransactionMgr {
                                         // if replica not commit yet, skip it. This may happen when it's just create by clone.
                                         if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
                                                 replica.getBackendId(), replica.getState())) {
-                                            continue;
+                                            if (!isDependencyReplicasNotCommited) {
+                                                continue;
+                                            }
                                         }
                                         // this means the replica is a healthy replica,
                                         // it is healthy in the past and does not have error in current load

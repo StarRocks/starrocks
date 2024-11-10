@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -107,14 +108,16 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
                 continue;
             }
-            short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
+            PartitionInfo partitionInfo = table.getPartitionInfo();
+            short replicationNum = partitionInfo.getReplicationNum(partitionId);
+            int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
-                    List<Replica> replicas = ((LocalTablet) tablet).getAllReplicas();
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                     for (Replica replica : replicas) {
                         if (txnState.isNewFinish()) {
                             updateReplicaVersion(version, replica, txnState.getFinishState());
@@ -123,8 +126,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
                         long lastSucessVersion = replica.getLastSuccessVersion();
-                        if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
-                                replica.getState())
+                        if ((!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
+                                replica.getState()) && !txnState.
+                                checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum))
                                 || errorReplicaIds.contains(replica.getId())) {
                             // There are 2 cases that we can't update version to visible version and need to 
                             // set lastFailedVersion.
