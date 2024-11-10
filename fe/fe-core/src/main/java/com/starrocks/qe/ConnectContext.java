@@ -988,8 +988,9 @@ public class ConnectContext {
         } else {
             long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill {} timeout, remote: {}, query timeout: {}, query id: {}, sql: {}", getExecType(),
-                        getMysqlChannel().getRemoteHostPortString(), timeoutSecond, queryId, sql);
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, sql);
 
                 // Only kill
                 killFlag = true;
