@@ -1332,18 +1332,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Unsupported partition type: " + partitionType.name());
             }
 
-            // ShardGroupId of BaseIndex may be invalid if `alter table add partition` operation performed
-            // and then upgraded from old version.
-            if (olapTable.isCloudNativeTable() &&
-                    partition.getBaseIndex().getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
-                if (partition.getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
-                    // this shouldn't happen
-                    LOG.warn(String.format("ShardGroupId in Partition and baseIndex are both not valid, " +
-                            "tableName: {}, partitionName: {}", olapTable.getName(), partition.getName()));
-                }
-                partition.getBaseIndex().setShardGroupId(partition.getShardGroupId());
-            }
-
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
