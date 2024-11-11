@@ -1286,7 +1286,6 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("drop_db");
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
         starRocksAssert.waitRefreshFinished(mv1.getId());
-
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
         count = mvEntity.histRefreshJobDuration.getCount();
