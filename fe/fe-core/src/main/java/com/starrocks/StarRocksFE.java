@@ -165,7 +165,7 @@ public class StarRocksFE {
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             ArrowFlightSqlService arrowFlightSqlService =
-                    new ArrowFlightSqlService(Config.arrow_flight_port, Config.arrow_flight_be_port);
+                    new ArrowFlightSqlService(Config.arrow_flight_port);
 
             httpServer.setup();
 

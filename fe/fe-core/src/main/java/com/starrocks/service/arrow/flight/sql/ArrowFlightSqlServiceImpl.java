@@ -18,15 +18,16 @@ import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.starrocks.common.util.ArrowUtil;
-import com.starrocks.encryption.EncryptionUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.flight.CallStatus;
@@ -68,16 +69,11 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final Location location;
     private final SqlInfoBuilder sqlInfoBuilder;
     private final ExecutorService executorService = Executors.newFixedThreadPool(200);
-    private final int arrowFlightBePort;
-    private final String arrowFlightSqlAseKey;
 
     public ArrowFlightSqlServiceImpl(final ArrowFlightSqlSessionManager arrowFlightSqlSessionManager,
-                                     final Location location, final int arrowFlightBePort,
-                                     final String arrowFlightSqlAseKey) {
+                                     final Location location) {
         this.arrowFlightSqlSessionManager = arrowFlightSqlSessionManager;
         this.location = location;
-        this.arrowFlightBePort = arrowFlightBePort;
-        this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
         sqlInfoBuilder = new SqlInfoBuilder();
         sqlInfoBuilder.withFlightSqlServerName("StarRocks").withFlightSqlServerVersion("1.0")
                 .withFlightSqlServerArrowVersion("16.0.0")
@@ -373,7 +369,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private FlightInfo getFlightInfoFromQuery(String peerIdentity, ArrowFlightSqlConnectContext ctx,
                                               FlightDescriptor flightDescriptor) {
         try {
-            String query = ctx.getPreparedQuery();
             StatementBase parsedStmt = parse(ctx.getPreparedQuery(), ctx.getSessionVariable());
             ctx.setStatement(parsedStmt);
             ctx.setThreadLocalInfo();
@@ -398,24 +393,31 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getCoordinator();
             TNetworkAddress address = coordinator.getReceiver().getAddress();
-            TUniqueId finstId = coordinator.getExecutionDAG().getFragmentInstanceInfos().get(0).getInstanceId();
+            long beId = coordinator.getReceiver().getBackendId();
+            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+            if (be == null) {
+                throw CallStatus.INTERNAL.withDescription("Backend information unavailable for BE ID: " + beId)
+                        .toRuntimeException();
+            }
 
+            TUniqueId resultFragmentId =
+                    coordinator.getExecutionDAG().getFragmentInstanceInfos().get(0).getInstanceId();
             PUniqueId pUniqueId = new PUniqueId();
-            pUniqueId.hi = finstId.hi;
-            pUniqueId.lo = finstId.lo;
+            pUniqueId.hi = resultFragmentId.hi;
+            pUniqueId.lo = resultFragmentId.lo;
 
-            Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
-
-            String encryptData = EncryptionUtil.aesEncrypt(hexStringFromUniqueId(finstId) + ":" + query,
-                    arrowFlightSqlAseKey);
-
-            final ByteString handle = ByteString.copyFromUtf8(encryptData);
+            TUniqueId queryId = coordinator.getQueryId();
+            String queryIdentifier = hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(resultFragmentId);
+            final ByteString handle = ByteString.copyFromUtf8(queryIdentifier);
             FlightSql.TicketStatementQuery ticketStatementQuery =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
 
-            Location grpcLocation = Location.forGrpcInsecure(address.hostname, this.arrowFlightBePort);
+            int beArrowPort = be.getBeArrowPort();
+            Location grpcLocation = Location.forGrpcInsecure(address.hostname, beArrowPort);
             Ticket ticket = new Ticket(Any.pack(ticketStatementQuery).toByteArray());
             List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, grpcLocation));
+
+            Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
             return new FlightInfo(schema, flightDescriptor, endpoints, -1, -1);
         } catch (Exception e) {
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();

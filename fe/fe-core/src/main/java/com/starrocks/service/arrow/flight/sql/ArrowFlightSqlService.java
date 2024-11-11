@@ -14,7 +14,6 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.common.Config;
 import com.starrocks.service.arrow.flight.sql.auth.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
@@ -35,21 +34,18 @@ public class ArrowFlightSqlService {
 
     protected volatile boolean running;
 
-    public ArrowFlightSqlService(int port, int arrowFlightBePort) {
+    public ArrowFlightSqlService(int port) {
         BufferAllocator allocator = new RootAllocator();
         Location location = Location.forGrpcInsecure("0.0.0.0", port);
 
-        String arrowFlightSqlAseKey = Config.arrow_flight_sql_ase_key;
-        ArrowFlightSqlTokenManager arrowFlightSqlTokenManager = new ArrowFlightSqlTokenManager(arrowFlightSqlAseKey);
+        ArrowFlightSqlTokenManager arrowFlightSqlTokenManager = new ArrowFlightSqlTokenManager();
         ArrowFlightSqlSessionManager arrowFlightSqlSessionManager =
                 new ArrowFlightSqlSessionManager(arrowFlightSqlTokenManager);
 
         ArrowFlightSqlServiceImpl producer =
-                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, location,
-                        arrowFlightBePort,
-                        arrowFlightSqlAseKey);
+                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, location);
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
-                new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager, arrowFlightSqlAseKey);
+                new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
 
         flightServer = FlightServer.builder(allocator, location, producer)
                 .headerAuthenticator(arrowFlightSqlAuthenticator)

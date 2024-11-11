@@ -169,4 +169,7 @@ public class ResultReceiver {
         return address;
     }
 
+    public Long getBackendId() {
+        return backendId;
+    }
 }

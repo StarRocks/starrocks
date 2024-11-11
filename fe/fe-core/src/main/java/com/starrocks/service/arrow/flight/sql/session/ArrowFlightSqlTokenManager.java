@@ -21,25 +21,18 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
-import com.starrocks.encryption.EncryptionUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.UserIdentity;
 
-import java.math.BigInteger;
-import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlTokenManager implements AutoCloseable {
 
-    private final String arrowFlightSqlAseKey;
-
     private LoadingCache<String, ArrowFlightSqlTokenInfo> tokenCache;
 
-    private final SecureRandom generator = new SecureRandom();
-
-    public ArrowFlightSqlTokenManager(String arrowFlightSqlAseKey) {
-        this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
+    public ArrowFlightSqlTokenManager() {
         this.tokenCache =
                 CacheBuilder.newBuilder()
                         .maximumSize(1024)
@@ -61,22 +54,20 @@ public class ArrowFlightSqlTokenManager implements AutoCloseable {
     }
 
     public String createToken(UserIdentity currentUser) throws Exception {
-        String token = new BigInteger(130, generator).toString(32);
-        String encryptedToken = EncryptionUtil.aesEncrypt(token, arrowFlightSqlAseKey);
+        String token = UUIDUtil.genUUID().toString();
         ArrowFlightSqlTokenInfo arrowFlightSqlTokenInfo = new ArrowFlightSqlTokenInfo();
         arrowFlightSqlTokenInfo.setToken(token);
         arrowFlightSqlTokenInfo.setCurrentUser(currentUser);
         tokenCache.put(token, arrowFlightSqlTokenInfo);
-        return encryptedToken;
+        return token;
     }
 
-    public ArrowFlightSqlTokenInfo validateToken(String encryptedToken) {
-        if (encryptedToken == null || encryptedToken.isEmpty()) {
+    public ArrowFlightSqlTokenInfo validateToken(String token) {
+        if (token == null || token.isEmpty()) {
             throw new IllegalArgumentException("Invalid Token");
         }
 
         try {
-            String token = EncryptionUtil.aesDecrypt(encryptedToken, arrowFlightSqlAseKey);
             return tokenCache.getIfPresent(token);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid Token");

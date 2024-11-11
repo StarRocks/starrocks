@@ -26,21 +26,13 @@ import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 public class ArrowFlightSqlAuthenticator implements org.apache.arrow.flight.auth2.CallHeaderAuthenticator {
 
     private final ArrowFlightSqlTokenManager arrowFlightSqlTokenManager;
-    private final String arrowFlightSqlAseKey;
 
-    public ArrowFlightSqlAuthenticator(ArrowFlightSqlTokenManager arrowFlightSqlTokenManager,
-                                       String arrowFlightSqlAseKey) {
+    public ArrowFlightSqlAuthenticator(ArrowFlightSqlTokenManager arrowFlightSqlTokenManager) {
         this.arrowFlightSqlTokenManager = arrowFlightSqlTokenManager;
-        this.arrowFlightSqlAseKey = arrowFlightSqlAseKey;
     }
 
     @Override
     public AuthResult authenticate(CallHeaders incomingHeaders) {
-        if (arrowFlightSqlAseKey.length() != 43) {
-            throw CallStatus.UNAUTHENTICATED
-                    .withDescription("FE configuration item arrow_flight_sql_ase_key is invalid.").toRuntimeException();
-        }
-
         final String token = AuthUtilities.getValueFromAuthHeader(incomingHeaders,
                 Auth2Constants.BEARER_PREFIX);
         if (token == null) {
