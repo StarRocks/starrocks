@@ -1023,12 +1023,24 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("No key column left. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
             }
 
+            Map<String, Column> originSchemaMap = Maps.newHashMap();
+            for (Column col : originSchema) {
+                originSchemaMap.put(Column.removeNamePrefix(col.getName()).toLowerCase(), col);
+            }
+
             // 2. check compatible
             for (Column alterColumn : alterSchema) {
+                Column col = originSchemaMap.get(Column.removeNamePrefix(alterColumn.getName()).toLowerCase());
+                if (col != null && !alterColumn.equals(col)) {
+                    col.checkSchemaChangeAllowed(alterColumn);
+                }
+
+                /*
                 Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
                 if (col.isPresent() && !alterColumn.equals(col.get())) {
                     col.get().checkSchemaChangeAllowed(alterColumn);
                 }
+                */
             }
 
             // 3. check partition key
