@@ -815,4 +815,64 @@ public class CTEPlanTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0");
     }
+
+    @Test
+    public void testEnableLambdaPushdownFalse() throws Exception {
+        String sql =
+                "with input1 as (\n" +
+                "  select [1,2,3] as x\n" +
+                "),\n" +
+                "input2 AS (\n" +
+                "  SELECT\n" +
+                "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                "  FROM\n" +
+                "    input1\n" +
+                "),\n" +
+                "input3 as (\n" +
+                "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                "  from input2\n" +
+                ")\n" +
+                "SELECT * from input3\n" +
+                "where a + b + c <10";
+
+        connectContext.getSessionVariable().setEnableLambdaPushdown(false);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
+
+        assertContains(plan, "predicates: CAST(CAST(CAST(4: array_min AS SMALLINT) + 1 AS INT) + " +
+                "CAST(CAST(4: array_min AS SMALLINT) + 2 AS INT) AS BIGINT) + CAST(CAST(4: array_min AS SMALLINT) + " +
+                "3 AS BIGINT) < 10");
+    }
+
+    @Test
+    public void testEnableLambdaPushdownTrue() throws Exception {
+        String sql =
+                "with input1 as (\n" +
+                        "  select [1,2,3] as x\n" +
+                        "),\n" +
+                        "input2 AS (\n" +
+                        "  SELECT\n" +
+                        "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                        "  FROM\n" +
+                        "    input1\n" +
+                        "),\n" +
+                        "input3 as (\n" +
+                        "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                        "  from input2\n" +
+                        ")\n" +
+                        "SELECT * from input3\n" +
+                        "where a + b + c <10";
+
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan,
+                "CAST(CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) " +
+                        "AS SMALLINT) + 1 AS INT) + CAST(CAST(array_min(array_map(<slot 3> -> " +
+                        "coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + 2 AS INT) AS BIGINT) + " +
+                        "CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + " +
+                        "3 AS BIGINT) < 10");
+    }
 }
