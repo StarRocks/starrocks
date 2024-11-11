@@ -21,14 +21,15 @@ public class EquivalentShuttleContext {
     private final boolean isRollup;
     private boolean isUseEquivalent;
     private boolean isRewrittenByEquivalent;
+    private IRewriteEquivalent.RewriteEquivalentType rewriteEquivalentType;
 
-    public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent) {
+    public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent,
+                                    IRewriteEquivalent.RewriteEquivalentType type) {
         this.rewriteContext = rewriteContext;
         this.isRollup = isRollup;
         this.isUseEquivalent = isRewrittenByEquivalent;
-    }
-
-    public boolean isUseEquivalent() {
+        this.rewriteEquivalentType = type;
+    }    public boolean isUseEquivalent() {
         return isUseEquivalent;
     }
 

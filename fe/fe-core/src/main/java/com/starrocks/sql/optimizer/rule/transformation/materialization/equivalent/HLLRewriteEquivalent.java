@@ -20,11 +20,11 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
 import java.util.Arrays;
 
@@ -34,6 +34,7 @@ import static com.starrocks.catalog.FunctionSet.HLL_CARDINALITY;
 import static com.starrocks.catalog.FunctionSet.HLL_HASH;
 import static com.starrocks.catalog.FunctionSet.HLL_UNION;
 import static com.starrocks.catalog.FunctionSet.HLL_UNION_AGG;
+import static com.starrocks.catalog.FunctionSet.MULTI_DISTINCT_COUNT;
 import static com.starrocks.catalog.FunctionSet.NDV;
 
 public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
@@ -79,7 +80,12 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
-    public static ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(APPROX_COUNT_DISTINCT, NDV, HLL_UNION_AGG);
+    public static ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(
+            APPROX_COUNT_DISTINCT,
+            NDV,
+            HLL_UNION_AGG,
+            MULTI_DISTINCT_COUNT
+    );
 
     @Override
     public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
@@ -89,6 +95,10 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
 
         String aggFuncName = aggFunc.getFnName();
         if (SUPPORT_AGG_FUNC.contains(aggFuncName)) {
+            return true;
+        }
+        // count distinct
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
             return true;
         }
         return false;
@@ -106,7 +116,6 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
-        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
         if (aggFuncName.equals(APPROX_COUNT_DISTINCT) || aggFuncName.equals(NDV)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
@@ -132,7 +141,17 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
                     eqArg = arg0;
                 }
             }
-
+            if (!eqArg.equals(eqChild)) {
+                return null;
+            }
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+        } else if ((aggFuncName.equalsIgnoreCase(FunctionSet.COUNT) && aggFunc.isDistinct()
+                && aggFunc.getChildren().size() == 1) || aggFuncName.equalsIgnoreCase(MULTI_DISTINCT_COUNT)) {
+            SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
+            if (!sessionVariable.isEnableCountDistinctRewriteByHllBitmap()) {
+                return null;
+            }
+            ScalarOperator eqArg = aggFunc.getChild(0);
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
