@@ -89,6 +89,12 @@ public class QueryDetailQueue {
         return results;
     }
 
+    /* for async profile, when calling addFinishQueryDetail, profile is not ready
+     * so if queryDetail's needWaitProfileToReport is true, then we need to call
+     * getQueryProfilesByQueryIds with queryIds to get profile in batch manner
+     * @param queryIds
+     * @return  query profile if it's ready, else null
+     */
     public static List<String> getQueryProfilesByQueryIds(List<String> queryIds) {
         List<String> results = Lists.newArrayList();
         for (String queryId : queryIds) {

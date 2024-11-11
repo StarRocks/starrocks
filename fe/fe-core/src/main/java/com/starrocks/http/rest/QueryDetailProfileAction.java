@@ -14,6 +14,7 @@
 package com.starrocks.http.rest;
 
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -23,6 +24,7 @@ import com.starrocks.qe.QueryDetailQueue;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
 public class QueryDetailProfileAction extends RestBaseAction {
@@ -32,7 +34,7 @@ public class QueryDetailProfileAction extends RestBaseAction {
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.GET, "/api/query_detail_profile",
+        controller.registerHandler(HttpMethod.POST, "/api/query_detail_profile",
                 new QueryDetailProfileAction(controller));
     }
 
@@ -40,15 +42,19 @@ public class QueryDetailProfileAction extends RestBaseAction {
     public void execute(BaseRequest request, BaseResponse response) throws DdlException {
         String jsonStr = request.getContent();
 
-        class ProfileRequest {
-            List<String> profileIds;
-        }
-
         Gson gson = new Gson();
         ProfileRequest profileRequest;
 
         try {
-            profileRequest = gson.fromJson(jsonStr, ProfileRequest.class);
+            Type type = new TypeToken<ProfileRequest>() {
+            }.getType();
+            profileRequest = gson.fromJson(jsonStr, type);
+
+            if (profileRequest == null || profileRequest.profileIds == null || profileRequest.profileIds.isEmpty()) {
+                response.getContent().append("profileIds cannot be empty");
+                sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
         } catch (Exception e) {
             response.getContent().append("not valid parameter");
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -61,5 +67,9 @@ public class QueryDetailProfileAction extends RestBaseAction {
         String jsonString = gson.toJson(profiles);
         response.getContent().append(jsonString);
         sendResult(request, response);
+    }
+
+    private static class ProfileRequest {
+        List<String> profileIds;
     }
 }
