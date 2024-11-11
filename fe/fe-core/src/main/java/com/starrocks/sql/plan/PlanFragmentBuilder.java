@@ -3413,6 +3413,7 @@ public class PlanFragmentBuilder {
                         .collect(Collectors.toList());
                 SelectNode selectNode =
                         new SelectNode(context.getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
+                this.currentExecGroup.add(selectNode, true);
                 selectNode.computeStatistics(optExpression.getStatistics());
                 consumeFragment.setPlanRoot(selectNode);
             }
