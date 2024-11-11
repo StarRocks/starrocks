@@ -231,6 +231,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
+    public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -820,6 +821,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
 
     public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+    
+    public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
+
+    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1270,6 +1275,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+    @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
+    private boolean enableLambdaPushdown = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -2230,6 +2237,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
+
+    @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
+    private boolean enablePushDownPreAggWithRank = true;
+
+    @VarAttr(name = INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG)
+    private boolean insertLocalShuffleForWindowPreAgg = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -3493,6 +3506,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownAggregateMode;
     }
 
+    public boolean getEnableLambdaPushDown() {
+        return enableLambdaPushdown;
+    }
+
+    public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
+        this.enableLambdaPushdown = enableLambdaPushdown;
+    }
+
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
     }
@@ -3741,7 +3762,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
-    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(
+            boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
         this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
@@ -4344,6 +4366,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConnectorIncrementalScanRanges(boolean v) {
         enableConnectorIncrementalScanRanges = v;
+    }
+
+    public boolean getEnablePushDownPreAggWithRank() {
+        return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
     }
 
     // Serialize to thrift object

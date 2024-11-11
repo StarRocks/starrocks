@@ -36,7 +36,6 @@ package com.starrocks.qe;
 
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
@@ -148,11 +147,8 @@ public class ResultReceiver {
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
-            status.setInternalErrorStatus(String.format("Query exceeded time limit of %d seconds",
+            status.setTimeOutStatus(String.format("Query exceeded time limit of %d seconds",
                     ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
-            }
         }
 
         if (isCancel) {

@@ -47,12 +47,11 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
 
     auto lambda_expr = down_cast<LambdaFunction*>(_children[0]);
-
     LambdaFunction::ExtractContext extract_ctx;
     // assign slot ids to outer common exprs starting with max_used_slot_id + 1
-    extract_ctx.next_slot_id = lambda_expr->max_used_slot_id() + 1;
+    extract_ctx.next_slot_id = context->root()->max_used_slot_id() + 1;
 
-    RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
+    RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, context, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
     for (auto [_, expr] : _outer_common_exprs) {
         RETURN_IF_ERROR(expr->prepare(state, context));
@@ -68,10 +67,18 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                                                        const NullColumnPtr& result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
+    auto tmp_chunk = std::make_shared<Chunk>();
+    {
+        // see more details: https://github.com/StarRocks/starrocks/pull/52692
+        for (const auto& [slot_id, _] : chunk->get_slot_id_to_index_map()) {
+            tmp_chunk->append_column(chunk->get_column_by_slot_id(slot_id), slot_id);
+        }
+    }
+
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
-        chunk->append_column(col, slot_id);
+        ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
+        tmp_chunk->append_column(col, slot_id);
     }
 
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
@@ -81,7 +88,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
         DCHECK(slot_id > 0);
-        auto captured_column = chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
+                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
         if (UNLIKELY(captured_column->size() < input_elements[0]->size())) {
             return Status::InternalError(fmt::format("The size of the captured column {} is less than array's size.",
                                                      captured_column->get_name()));
@@ -141,7 +149,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
     // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
-        auto captured_column = chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
+                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
