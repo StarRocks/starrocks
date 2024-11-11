@@ -1195,7 +1195,12 @@ public class ExpressionAnalyzer {
                         }
                     }
                 }
-            } else if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
+
+            } else {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            }
+
+            if (FunctionSet.COUNT.equalsIgnoreCase(fnName) && node.isDistinct() && node.getChildren().size() == 1) {
                 SessionVariableConstants.CountDistinctImplMode countDistinctImplementation =
                         session.getSessionVariable().getCountDistinctImplementation();
                 if (countDistinctImplementation != null) {
@@ -1214,8 +1219,6 @@ public class ExpressionAnalyzer {
                             break;
                     }
                 }
-            } else {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
             if (fn == null) {
