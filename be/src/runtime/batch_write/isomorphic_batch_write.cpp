@@ -15,14 +15,17 @@
 #include "runtime/batch_write/isomorphic_batch_write.h"
 
 #include <brpc/controller.h>
+#include <bthread/bthread.h>
 #include <fmt/format.h>
 
 #include <atomic>
 #include <utility>
 
 #include "agent/master_info.h"
+#include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "http/http_common.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -52,6 +55,16 @@ public:
         std::lock_guard l(_result_lock);
         _txn_id = txn_id;
         _label = label;
+    }
+
+    void cancel() {
+        std::lock_guard l(_result_lock);
+        _canceled = true;
+    }
+
+    bool is_canceled() {
+        std::lock_guard l(_result_lock);
+        return _canceled;
     }
 
     // called after async process finishes
@@ -102,6 +115,7 @@ private:
     BThreadCountDownLatch _latch;
     std::atomic<int> _refs{0};
     mutable bthread::Mutex _result_lock;
+    bool _canceled{false};
     bool _async_finished{false};
     Status _status;
     // the txn and label that data belongs to if success (_status is OK)
@@ -126,7 +140,10 @@ IsomorphicBatchWrite::IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads
 
 Status IsomorphicBatchWrite::init() {
     TEST_ERROR_POINT("IsomorphicBatchWrite::init::error");
-    bthread::ExecutionQueueOptions opts;
+    if (_batch_write_id.load_params.find(HTTP_BATCH_WRITE_ASYNC) != _batch_write_id.load_params.end()) {
+        _batch_write_async = _batch_write_id.load_params.find(HTTP_BATCH_WRITE_ASYNC) == "true";
+    }
+    _batch_write_id.load_params.find(HTTP_BATCH_WRITE_ASYNC) bthread::ExecutionQueueOptions opts;
     opts.executor = _executor;
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute_tasks, this); r != 0) {
         LOG(ERROR) << "Fail to start execution queue for batch write, " << _batch_write_id << ", result: " << r;
@@ -212,6 +229,7 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     if (_stopped.load(std::memory_order_acquire)) {
         return Status::ServiceUnavailable("Batch write is stopped");
     }
+    int64_t start_ts = MonotonicNanos();
     AsyncAppendDataContext* async_ctx = new AsyncAppendDataContext(data_ctx);
     async_ctx->ref();
     async_ctx->create_time_ts.store(MonotonicNanos());
@@ -226,8 +244,10 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                    << ", result: " << r;
         return Status::InternalError(fmt::format("Failed to add task to execution queue, result: {}", r));
     }
-    // TODO timeout
-    async_ctx->latch().wait();
+
+    int64_t timeout_ms =
+            data_ctx->timeout_second > 0 ? data_ctx->timeout_second * 1000 : config::batch_write_default_timeout_ms;
+    async_ctx->latch().wait_for(std::chrono::milliseconds(timeout_ms));
     async_ctx->total_cost_ns.store(MonotonicNanos() - async_ctx->create_time_ts);
     TRACE_BATCH_WRITE << "append data finish, " << _batch_write_id << ", user label: " << async_ctx->data_ctx()->label
                       << ", data size: " << data_ctx->receive_bytes
@@ -243,12 +263,24 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                       << ", async_status: " << async_ctx->get_status() << ", txn_id: " << async_ctx->txn_id()
                       << ", label: " << async_ctx->label();
     bool async_finished = async_ctx->async_finished();
-    if (async_finished && async_ctx->get_status().ok()) {
-        data_ctx->txn_id = async_ctx->txn_id();
-        data_ctx->batch_write_label = async_ctx->label();
-        data_ctx->batch_left_time_nanos = async_ctx->pipe_left_active_ns;
+    if (!async_finished) {
+        async_ctx->cancel();
+        TRACE_BATCH_WRITE << "Cancel append data task because of timeout, " << _batch_write_id
+                          << ", user label: " << data_ctx->label << ", wait: " << timeout_ms << "ms";
+        return Status::TimedOut(fmt::format("Batch write append data timeout, wait {} ms", timeout_ms));
     }
-    return async_ctx->get_status();
+    auto async_st = async_ctx->get_status();
+    if (!async_st.ok()) {
+        return async_st;
+    }
+    data_ctx->txn_id = async_ctx->txn_id();
+    data_ctx->batch_write_label = async_ctx->label();
+    data_ctx->batch_left_time_nanos = async_ctx->pipe_left_active_ns;
+    if (_batch_write_async) {
+        return Status::OK();
+    }
+    int64_t left_timeout_ns = timeout_ms * 1000 * 1000 - (MonotonicNanos() - start_ts);
+    return _wait_for_load_status(data_ctx, left_timeout_ns);
 }
 
 int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>& iter) {
@@ -282,15 +314,18 @@ int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>
 }
 
 Status IsomorphicBatchWrite::_execute_write(AsyncAppendDataContext* async_ctx) {
-    if (_stopped.load(std::memory_order_acquire)) {
-        return Status::ServiceUnavailable("Batch write is stopped");
-    }
     Status st;
     int64_t append_pipe_cost_ns = 0;
     int64_t rpc_cost_ns = 0;
     int64_t wait_pipe_cost_ns = 0;
     int num_retries = 0;
     while (num_retries <= config::batch_write_rpc_request_retry_num) {
+        if (_stopped.load(std::memory_order_acquire)) {
+            return Status::ServiceUnavailable("Batch write is stopped");
+        }
+        if (async_ctx->is_canceled()) {
+            return Status::Cancelled("append data is canceled");
+        }
         int64_t append_ts = MonotonicNanos();
         st = _write_data(async_ctx);
         int64_t rpc_ts = MonotonicNanos();
@@ -370,9 +405,10 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
             master_addr.hostname, master_addr.port,
             [&request, &response](FrontendServiceConnection& client) { client->requestBatchWrite(response, request); },
             config::batch_write_rpc_reqeust_timeout_ms);
-    TRACE_BATCH_WRITE << "receive rpc response, " << _batch_write_id << ", user label: " << data_ctx->label
-                      << ", master: " << master_addr << ", cost: " << ((MonotonicNanos() - start_ts) / 1000)
-                      << "us, status: " << st << ", response: " << response;
+    TRACE_BATCH_WRITE << "receive requestBatchWrite response, " << _batch_write_id
+                      << ", user label: " << data_ctx->label << ", master: " << master_addr
+                      << ", cost: " << ((MonotonicNanos() - start_ts) / 1000) << "us, status: " << st
+                      << ", response: " << response;
 #else
     TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::send_rpc_request::request", &request);
     TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::send_rpc_request::status", &st);
@@ -380,6 +416,67 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
 #endif
 
     return st.ok() ? Status(response.status) : st;
+}
+
+// TODO just poll the load status periodically. improve it later
+Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns) {
+    int64_t start_ts = MonotonicNanos();
+    if (data_ctx->batch_left_time_nanos > 0) {
+        bthread_usleep(std::min(data_ctx->batch_left_time_nanos, timeout_ns) / 1000);
+    }
+    TGetLoadTxnStatusRequest request;
+    request.__set_db(_batch_write_id.db);
+    request.__set_tbl(_batch_write_id.table);
+    request.__set_txnId(data_ctx->txn_id);
+    set_request_auth(&request, data_ctx->auth);
+    TGetLoadTxnStatusResult response;
+    Status st;
+    do {
+#ifndef BE_TEST
+        int64_t rpc_ts = MonotonicNanos();
+        TNetworkAddress master_addr = get_master_address();
+        st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                master_addr.hostname, master_addr.port,
+                [&request, &response](FrontendServiceConnection& client) {
+                    client->getLoadTxnStatus(response, request);
+                },
+                config::batch_write_rpc_reqeust_timeout_ms);
+        TRACE_BATCH_WRITE << "receive getLoadTxnStatus response, " << _batch_write_id
+                          << ", user label: " << data_ctx->label << ", txn_id: " << data_ctx->txn_id
+                          << ", label: " << data_ctx->batch_write_label << ", master: " << master_addr
+                          << ", cost: " << ((MonotonicNanos() - rpc_ts) / 1000) << "us, status: " << st
+                          << ", response: " << response;
+#else
+        TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::_wait_for_load_status::request", &request);
+        TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::_wait_for_load_status::status", &st);
+        TEST_SYNC_POINT_CALLBACK("IsomorphicBatchWrite::_wait_for_load_status::response", &response);
+#endif
+        if (st.ok() &&
+            (response.status != TTransactionStatus::PREPARE && response.status != TTransactionStatus::PREPARED &&
+             response.status != TTransactionStatus::COMMITTED)) {
+            break;
+        }
+        int64_t left_timeout_ns = timeout_ns - (MonotonicNanos() - start_ts);
+        if (left_timeout_ns <= 0) {
+            break;
+        }
+        bthread_usleep(
+                std::min(config::batch_write_poll_load_status_interval_ms * (int64_t)1000, left_timeout_ns / 1000));
+    } while (true);
+    if (!st.ok()) {
+        return Status::InternalError("Failed to get load status, error: " + st.to_string());
+    }
+    switch (response.status) {
+    case TTransactionStatus::PREPARE:
+    case TTransactionStatus::PREPARED:
+        return Status::TimedOut("load timeout, txn status: " + std::to_string(response.status));
+    case TTransactionStatus::COMMITTED:
+        return Status::PublishTimeout("");
+    case TTransactionStatus::VISIBLE:
+        return Status::OK();
+    default:
+        return Status::InternalError("Unknown load status: " + std::to_string(response.status));
+    }
 }
 
 } // namespace starrocks

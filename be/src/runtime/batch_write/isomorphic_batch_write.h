@@ -67,9 +67,11 @@ private:
     Status _write_data(AsyncAppendDataContext* data_ctx);
     Status _wait_for_stream_load_pipe();
     Status _send_rpc_request(StreamLoadContext* data_ctx);
+    Status _wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns);
 
     BatchWriteId _batch_write_id;
     bthreads::ThreadPoolExecutor* _executor;
+    bool _batch_write_async{false};
 
     std::mutex _mutex;
     std::condition_variable _cv;
