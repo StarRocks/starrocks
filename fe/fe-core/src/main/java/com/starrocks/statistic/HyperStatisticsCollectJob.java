@@ -52,15 +52,6 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
-    public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
-                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                     Map<String, String> properties) {
-        super(db, table, columns, type, scheduleType, properties);
-        this.partitionIdList = partitionIdList;
-        // hll serialize to hex, about 32kb
-        this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
-    }
-
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {

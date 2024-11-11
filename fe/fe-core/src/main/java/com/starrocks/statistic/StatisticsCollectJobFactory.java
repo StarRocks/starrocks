@@ -108,6 +108,11 @@ public class StatisticsCollectJobFactory {
 
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            if (partitionIdList == null) {
+                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
+                        .map(Partition::getId).collect(Collectors.toList());
+            }
+            
             if (Config.statistic_use_meta_statistics) {
                 return new HyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);

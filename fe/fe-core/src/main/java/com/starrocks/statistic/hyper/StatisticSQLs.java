@@ -116,25 +116,6 @@ public class StatisticSQLs {
         return sw.toString();
     }
 
-    public static String buildFullSQL(Database db, Table table, Partition p, ColumnStats stats, String template) {
-        VelocityContext context = new VelocityContext();
-        String columnNameStr = stats.getColumnNameStr();
-        String quoteColumnName = stats.getQuotedColumnName();
-        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
-        context.put("partitionId", p.getId());
-        context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", stats.getFullDateSize());
-        context.put("partitionName", p.getName());
-        context.put("dbName", db.getOriginName());
-        context.put("tableName", table.getName());
-        context.put("quoteColumnName", quoteColumnName);
-        context.put("countNullFunction", stats.getFullNullCount());
-        context.put("hllFunction", stats.getNDV());
-        context.put("maxFunction", stats.getMax());
-        context.put("minFunction", stats.getMin());
-        return StatisticSQLs.build(context, template);
-    }
-
     public static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
         VelocityContext context = new VelocityContext();
         String columnNameStr = stats.getColumnNameStr();
@@ -174,14 +155,10 @@ public class StatisticSQLs {
         sqlBuilder.append("with base_cte_table as (");
         sqlBuilder.append(groupSQLs.stream().filter(Objects::nonNull).collect(Collectors.joining(" UNION ALL ")));
         sqlBuilder.append(") ");
-
         groupSQLs.clear();
 
-        VelocityContext context = new VelocityContext();
         for (ColumnStats stat : stats) {
-            String columnNameStr = stat.getColumnNameStr();
-            context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
-            context.put("columnNameStr", columnNameStr);
+            VelocityContext context = buildBaseContext(db, table, p, stat);
             context.put("rowCount", info.getTotalRowCount());
             context.put("dataSize", stat.getSampleDateSize(info));
             context.put("hllFunction", stat.getNDV());
