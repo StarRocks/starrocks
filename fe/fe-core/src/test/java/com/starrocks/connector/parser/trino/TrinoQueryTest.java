@@ -1219,4 +1219,25 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select rand(10, 100);";
         assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
     }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
+    }
 }
