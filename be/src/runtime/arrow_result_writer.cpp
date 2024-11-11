@@ -33,9 +33,7 @@ namespace starrocks {
 
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
                                      RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
-        : BufferControlResultWriter(sinker, parent_profile),
-          _output_expr_ctxs(output_expr_ctxs),
-          _row_desc(row_desc) {}
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs), _row_desc(row_desc) {}
 
 Status ArrowResultWriter::init(RuntimeState* state) {
     _init_profile();

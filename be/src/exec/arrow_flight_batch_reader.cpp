@@ -31,7 +31,8 @@ arrow::Status ArrowFlightBatchReader::ReadNext(std::shared_ptr<arrow::RecordBatc
     *out = nullptr;
     auto status = ExecEnv::GetInstance()->result_mgr()->fetch_arrow_data(_query_id, out);
     if (!status.ok()) {
-        return arrow::Status::IOError("Failed to fetch arrow data for query ID ", print_id(_query_id), ": ", status.to_string());
+        return arrow::Status::IOError("Failed to fetch arrow data for query ID ", print_id(_query_id), ": ",
+                                      status.to_string());
     }
 
     return arrow::Status::OK();
