@@ -2079,28 +2079,6 @@ public class CreateTableTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testDefaultValueHasEscapeStringNonPK() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
-        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
-                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
-                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`id`)\n" +
-                "COMMENT \"news\"\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert.withTable(sql1);
-        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
-        starRocksAssert.dropTable("news_rt_non_pk");
-        starRocksAssert.withTable(createTableSql);
-    }
-
-    @Test
     public void testDefaultValueHasChineseChars() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
@@ -2143,7 +2121,6 @@ public class CreateTableTest {
     }
 
     @Test
->>>>>>> a532d00ad3 ([BugFix] show create table displays Unicode encoding for default value of the field is entered in Chinese characters (#51997))
     public void testCreateTableWithNullableColumns1() throws Exception {
         String createSQL = "CREATE TABLE list_partition_tbl1 (\n" +
                 "      id BIGINT,\n" +

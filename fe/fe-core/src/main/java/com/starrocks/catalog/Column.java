@@ -603,12 +603,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-<<<<<<< HEAD
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
-=======
             sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
                     .append("\" ");
->>>>>>> a532d00ad3 ([BugFix] show create table displays Unicode encoding for default value of the field is entered in Chinese characters (#51997))
         } else if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
