@@ -60,27 +60,36 @@ public class HudiRemoteFileIO implements RemoteFileIO {
     }
 
     private void createHudiContext(RemoteFileScanContext ctx) {
-        if (ctx.init.get()) {
-            return;
-        }
         try {
             ctx.lock.lock();
-            if (ctx.init.get()) {
-                return;
+            ctx.usedCount++;
+            if (ctx.usedCount == 1) {
+                HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(configuration);
+                HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().enable(true).build();
+                HoodieTableMetaClient metaClient =
+                        HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.tableLocation).build();
+                // metaClient.reloadActiveTimeline();
+                HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
+                Option<HoodieInstant> lastInstant = timeline.lastInstant();
+                if (lastInstant.isPresent()) {
+                    ctx.hudiFsView =
+                            createInMemoryFileSystemViewWithTimeline(engineContext, metaClient, metadataConfig, timeline);
+                    ctx.hudiLastInstant = lastInstant.get();
+                    ctx.hudiTimeline = timeline;
+                }
             }
-            HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(configuration);
-            HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().enable(true).build();
-            HoodieTableMetaClient metaClient =
-                    HoodieTableMetaClient.builder().setConf(configuration).setBasePath(ctx.tableLocation).build();
-            // metaClient.reloadActiveTimeline();
-            HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
-            Option<HoodieInstant> lastInstant = timeline.lastInstant();
-            if (lastInstant.isPresent()) {
-                ctx.hudiFsView = createInMemoryFileSystemViewWithTimeline(engineContext, metaClient, metadataConfig, timeline);
-                ctx.hudiLastInstant = lastInstant.get();
-                ctx.hudiTimeline = timeline;
+        } finally {
+            ctx.lock.unlock();
+        }
+    }
+
+    private void destroyHudiContext(RemoteFileScanContext ctx) {
+        try {
+            ctx.lock.lock();
+            ctx.usedCount--;
+            if (ctx.usedCount == 0) {
+                ctx.close();
             }
-            ctx.init.set(true);
         } finally {
             ctx.lock.unlock();
         }
@@ -101,12 +110,13 @@ public class HudiRemoteFileIO implements RemoteFileIO {
 
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
-        createHudiContext(scanContext);
-        if (scanContext.hudiLastInstant == null) {
-            return resultPartitions.put(pathKey, fileDescs).build();
-        }
 
         try {
+            createHudiContext(scanContext);
+            if (scanContext.hudiLastInstant == null) {
+                return resultPartitions.put(pathKey, fileDescs).build();
+            }
+
             Iterator<FileSlice> hoodieFileSliceIterator = scanContext.hudiFsView
                     .getLatestMergedFileSlicesBeforeOrOn(partitionName, scanContext.hudiLastInstant.getTimestamp()).iterator();
             while (hoodieFileSliceIterator.hasNext()) {
@@ -120,12 +130,14 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                         ImmutableList.of(), ImmutableList.copyOf(logs), scanContext.hudiLastInstant);
                 fileDescs.add(res);
             }
+            return resultPartitions.put(pathKey, fileDescs).build();
         } catch (Exception e) {
             LOG.error("Failed to get hudi remote file's metadata on path: {}", partitionPath, e);
             throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s. msg: %s",
                     pathKey, e.getMessage());
+        } finally {
+            destroyHudiContext(scanContext);
         }
-        return resultPartitions.put(pathKey, fileDescs).build();
     }
 
     @NotNull
