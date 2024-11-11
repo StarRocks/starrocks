@@ -146,6 +146,11 @@ public class Status {
         this.errorMsg = msg;
     }
 
+    public void setTimeOutStatus(String msg) {
+        this.errorCode = TStatusCode.TIMEOUT;
+        this.errorMsg = msg;
+    }
+
     public void rewriteErrorMsg() {
         if (ok()) {
             return;

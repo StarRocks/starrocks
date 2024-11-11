@@ -174,6 +174,10 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
     public static GaugeMetricImpl<Double> GAUGE_REQUEST_PER_SECOND;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_ERR_RATE;
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_INTERNAL_ERR_RATE;
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_ANALYSIS_ERR_RATE;
+    public static GaugeMetricImpl<Double> GAUGE_QUERY_TIMEOUT_RATE;
+
     // these query latency is different from HISTO_QUERY_LATENCY, for these only summarize the latest queries, but HISTO_QUERY_LATENCY summarizes all queries.
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEAN;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEDIAN;
@@ -333,6 +337,21 @@ public final class MetricRepo {
         GAUGE_QUERY_ERR_RATE.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_ERR_RATE);
 
+        GAUGE_QUERY_INTERNAL_ERR_RATE =
+                new GaugeMetricImpl<>("query_internal_err_rate", MetricUnit.NOUNIT, "query internal error rate");
+        GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_INTERNAL_ERR_RATE);
+
+        GAUGE_QUERY_ANALYSIS_ERR_RATE =
+                new GaugeMetricImpl<>("query_analysis_err_rate", MetricUnit.NOUNIT, "query analysis error rate");
+        GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_ANALYSIS_ERR_RATE);
+
+        GAUGE_QUERY_TIMEOUT_RATE =
+                new GaugeMetricImpl<>("query_timeout_rate", MetricUnit.NOUNIT, "query timeout rate");
+        GAUGE_QUERY_TIMEOUT_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_TIMEOUT_RATE);
+
         GAUGE_MAX_TABLET_COMPACTION_SCORE = new GaugeMetricImpl<>("max_tablet_compaction_score",
                 MetricUnit.NOUNIT, "max tablet compaction score of all backends");
         GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0L);
@@ -455,6 +474,7 @@ public final class MetricRepo {
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
+
         COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
                                                            "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);

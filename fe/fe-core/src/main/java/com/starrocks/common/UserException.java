@@ -37,7 +37,9 @@ package com.starrocks.common;
 import com.google.common.base.Strings;
 
 /**
- * Thrown for internal server errors.
+ * Thrown for non-internal server errors.
+ * such as analyze error/parser error
+ * which implies this is a user error.so we don't need to pay attention to it
  */
 public class UserException extends Exception {
     private final InternalErrorCode errorCode;

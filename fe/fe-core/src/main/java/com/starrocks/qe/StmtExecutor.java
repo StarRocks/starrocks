@@ -68,9 +68,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
 import com.starrocks.common.Status;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
@@ -488,10 +490,6 @@ public class StmtExecutor {
         }
 
         try {
-            boolean isQuery = parsedStmt instanceof QueryStatement;
-            // set isQuery before `forwardToLeader` to make it right for audit log.
-            context.getState().setIsQuery(isQuery);
-
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -584,7 +582,7 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
-            if ((isQuery || parsedStmt instanceof InsertStmt)
+            if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt)
                     && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (origStmt != null) {
@@ -755,7 +753,13 @@ public class StmtExecutor {
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else if (e instanceof TimeoutException) {
+                context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
+            } else if (e instanceof NoAliveBackendException) {
+                context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             } else {
+                // TODO: some UserException doesn't belong to analysis error
+                // we should set such error type to internal error
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } catch (Throwable e) {
@@ -2323,17 +2327,17 @@ public class StmtExecutor {
                     }
 
                     coord.cancel(ErrorCode.ERR_QUERY_EXCEPTION.formatErrorMsg());
-                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
+                    ErrorReport.reportNoAliveBackendException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
                     coord.cancel(ErrorCode.ERR_QUERY_TIMEOUT.formatErrorMsg());
                     if (coord.isThriftServerHighLoad()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                        ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT,
                                 "Please check the thrift-server-pool metrics, " +
                                         "if the pool size reaches thrift_server_max_worker_threads(default is 4096), " +
                                         "you can set the config to a higher value in fe.conf, " +
                                         "or set parallel_fragment_exec_instance_num to a lower value in session variable");
                     } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                        ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT,
                                 "Increase the query_timeout session variable and retry");
                     }
                 }
