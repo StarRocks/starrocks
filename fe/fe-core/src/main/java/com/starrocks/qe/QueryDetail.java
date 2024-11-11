@@ -347,4 +347,8 @@ public class QueryDetail implements Serializable {
     public void setNeedWaitProfileToReport(boolean needWaitProfileToReport) {
         this.needWaitProfileToReport = needWaitProfileToReport;
     }
+
+    public boolean isNeedWaitProfileToReport() {
+        return needWaitProfileToReport;
+    }
 }

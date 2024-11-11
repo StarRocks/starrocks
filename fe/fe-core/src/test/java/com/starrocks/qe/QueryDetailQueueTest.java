@@ -90,7 +90,6 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail endQueryDetail = startQueryDetail.copy();
         endQueryDetail.setLatency(1);
         endQueryDetail.setState(QueryDetail.QueryMemState.FINISHED);
-        endQueryDetail.setProfile("profile");
         QueryDetailQueue.addQueryDetail(endQueryDetail);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
@@ -98,12 +97,18 @@ public class QueryDetailQueueTest extends PlanTestBase {
 
         List<String> profiles = QueryDetailQueue.getQueryProfilesByQueryIds(List.of(endQueryDetail.getQueryId()));
         Assert.assertEquals(1, profiles.size());
+        Assert.assertNull(profiles.get(0));
+
+        endQueryDetail.setProfile("profile");
+        profiles = QueryDetailQueue.getQueryProfilesByQueryIds(List.of(endQueryDetail.getQueryId()));
         Assert.assertEquals("profile", profiles.get(0));
     }
 
     @Test
     public void testExecutor() throws Exception {
+        boolean originalEnableProfile = connectContext.getSessionVariable().isEnableProfile();
         boolean old = Config.enable_collect_query_detail_info;
+        connectContext.getSessionVariable().setEnableProfile(true);
         Config.enable_collect_query_detail_info = true;
         starRocksAssert.withDatabase("db1")
                 .useDatabase("db1")
@@ -123,12 +128,15 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail runningDetail = queryDetails.get(0);
         Assert.assertEquals(QueryDetail.QueryMemState.RUNNING, runningDetail.getState());
         Assert.assertEquals(sql, runningDetail.getSql());
+        Assert.assertFalse(runningDetail.isNeedWaitProfileToReport());
 
         QueryDetail finishedDetail = queryDetails.get(1);
         Assert.assertEquals(QueryDetail.QueryMemState.FINISHED, finishedDetail.getState());
         Assert.assertEquals(sql, finishedDetail.getSql());
+        Assert.assertTrue(finishedDetail.isNeedWaitProfileToReport());
 
         Config.enable_collect_query_detail_info = old;
+        connectContext.getSessionVariable().setEnableProfile(originalEnableProfile);
     }
 
 }
