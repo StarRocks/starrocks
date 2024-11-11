@@ -83,7 +83,11 @@ Status ExprContext::open(RuntimeState* state) {
     // original's fragment state and only need to have thread-local state initialized.
     FunctionContext::FunctionStateScope scope =
             _is_clone ? FunctionContext::THREAD_LOCAL : FunctionContext::FRAGMENT_LOCAL;
-    return _root->open(state, this, scope);
+    try {
+        return _root->open(state, this, scope);
+    } catch (std::runtime_error& e) {
+        return Status::RuntimeError(fmt::format("Expr evaluate meet error: {}", e.what()));
+    }
 }
 
 Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
