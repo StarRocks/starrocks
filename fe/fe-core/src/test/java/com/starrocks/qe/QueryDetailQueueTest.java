@@ -79,7 +79,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 + "\"memCostBytes\":100003,"
                 + "\"spillBytes\":-1,"
                 + "\"warehouse\":\"default_warehouse\","
-                + "\"catalog\":\"default_catalog\""
+                + "\"catalog\":\"default_catalog\","
+                + "\"needWaitProfileToReport\":false"
                 + "}]";
         Assert.assertEquals(jsonString, queryDetailString);
 
@@ -89,10 +90,15 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail endQueryDetail = startQueryDetail.copy();
         endQueryDetail.setLatency(1);
         endQueryDetail.setState(QueryDetail.QueryMemState.FINISHED);
+        endQueryDetail.setProfile("profile");
         QueryDetailQueue.addQueryDetail(endQueryDetail);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(2, queryDetails.size());
+
+        List<String> profiles = QueryDetailQueue.getQueryProfilesByQueryIds(List.of(endQueryDetail.getQueryId()));
+        Assert.assertEquals(1, profiles.size());
+        Assert.assertEquals("profile", profiles.get(0));
     }
 
     @Test

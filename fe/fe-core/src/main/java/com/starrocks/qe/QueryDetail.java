@@ -72,9 +72,6 @@ public class QueryDetail implements Serializable {
     private String errorMessage;
     private String explain;
     private String profile;
-    // only valid if state is "finished"
-    // when query finished, profile maybe still not ready, so need wait
-    private boolean needWaitProfileToReport = false;
     private String resourceGroupName;
     private long scanRows = -1;
     private long scanBytes = -1;
@@ -85,6 +82,9 @@ public class QueryDetail implements Serializable {
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
+    // only valid if state is "finished"
+    // when query finished, profile maybe still not ready, so need wait
+    private boolean needWaitProfileToReport = false;
 
     public QueryDetail() {
     }
