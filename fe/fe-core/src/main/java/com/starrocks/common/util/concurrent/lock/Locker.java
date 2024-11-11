@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public class Locker {
     private static final Logger LOG = LogManager.getLogger(Locker.class);
@@ -53,8 +52,9 @@ public class Locker {
     /* The time when the current Locker starts to request for the lock. */
     private long lockRequestTimeMs;
 
-    /* The thread stack that created this locker. */
-    private final String lockerStackTrace;
+    //private final String lockerStackTrace;
+    private final long threadId;
+    private final String threadName;
 
     /* The thread that request lock. */
     private final Thread lockerThread;
@@ -64,9 +64,11 @@ public class Locker {
     public Locker() {
         this.waitingForRid = null;
         this.waitingForType = null;
+
         /* Save the thread used to create the locker and thread stack. */
         this.lockerThread = Thread.currentThread();
-        this.lockerStackTrace = getStackTrace(this.lockerThread);
+        this.threadId = lockerThread.getId();
+        this.threadName = lockerThread.getName();
     }
 
     /**
@@ -85,9 +87,7 @@ public class Locker {
         }
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        LOG.debug(this + " | LockManager request lock : rid " + rid + ", lock type " + lockType);
         lockManager.lock(rid, this, lockType, timeout);
-        LOG.debug(this + " | LockManager acquire lock : rid " + rid + ", lock type " + lockType);
     }
 
     public void lock(long rid, LockType lockType) throws LockException {
@@ -102,7 +102,6 @@ public class Locker {
      */
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
         try {
             lockManager.release(rid, this, lockType);
         } catch (LockException e) {
@@ -500,7 +499,11 @@ public class Locker {
     }
 
     /**
+<<<<<<< HEAD
      * Try lock database and table with intensive db lock.
+=======
+     * Try to lock a database and a table id with intensive db lock.
+>>>>>>> 596f2ff7f1 ([Enhancement] Enhance Lock Manager Memory and CPU resource consumption (#52705))
      *
      * @return try if try lock success, false otherwise.
      */
@@ -569,14 +572,6 @@ public class Locker {
         return waitingForType;
     }
 
-    public Long getThreadID() {
-        return lockerThread.getId();
-    }
-
-    public String getThreadName() {
-        return lockerThread.getName();
-    }
-
     void setWaitingFor(Long rid, LockType type) {
         waitingForRid = rid;
         waitingForType = type;
@@ -587,24 +582,16 @@ public class Locker {
         waitingForType = null;
     }
 
-    private String getStackTrace(Thread thread) {
-        List<String> frames = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
-                .walk(stackFrame -> stackFrame.skip(2).limit(1)
-                        .map(frame -> frame.getClassName() + "." + frame.getMethodName() + "():" + frame.getLineNumber())
-                        .collect(Collectors.toList()));
-        if (frames.size() > 0) {
-            return frames.get(0);
-        } else {
-            return "";
-        }
-    }
-
-    public String getLockerStackTrace() {
-        return lockerStackTrace;
-    }
-
     public Thread getLockerThread() {
         return lockerThread;
+    }
+
+    public long getThreadId() {
+        return threadId;
+    }
+
+    public String getThreadName() {
+        return threadName;
     }
 
     public long getLockRequestTimeMs() {
@@ -617,7 +604,7 @@ public class Locker {
 
     @Override
     public String toString() {
-        return ("(" + lockerThread.getName() + "|" + lockerThread.getId()) + ")" + " [" + lockerStackTrace + "]";
+        return "(" + threadName + "|" + threadId + ")";
     }
 
     @Override
@@ -629,11 +616,11 @@ public class Locker {
             return false;
         }
         Locker locker = (Locker) o;
-        return lockerThread.getId() == locker.lockerThread.getId();
+        return threadId == locker.getThreadId();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(lockerThread.getId());
+        return Objects.hashCode(threadId);
     }
 }
