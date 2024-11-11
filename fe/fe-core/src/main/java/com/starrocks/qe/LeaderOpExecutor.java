@@ -79,6 +79,7 @@ public class LeaderOpExecutor {
     private int waitTimeoutMs;
     // the total time of thrift connectTime add readTime and writeTime
     private int thriftTimeoutMs;
+    private final Pair<String, Integer> ipAndPort;
 
     public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
         this(null, originStmt, ctx, status);
@@ -86,6 +87,13 @@ public class LeaderOpExecutor {
 
     public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
                             ConnectContext ctx, RedirectStatus status) {
+        this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx,
+                status);
+    }
+
+    public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
+                            ConnectContext ctx, RedirectStatus status) {
+        this.ipAndPort = ipAndPort;
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
@@ -111,6 +119,9 @@ public class LeaderOpExecutor {
             MysqlStateType state = MysqlStateType.fromString(result.state);
             if (state != null) {
                 ctx.getState().setStateType(state);
+                if (result.isSetErrorMsg()) {
+                    ctx.getState().setMsg(result.getErrorMsg());
+                }
                 if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
                     afterForward();
                 }
@@ -165,7 +176,6 @@ public class LeaderOpExecutor {
             throw ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
         }
 
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
@@ -233,6 +243,7 @@ public class LeaderOpExecutor {
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);

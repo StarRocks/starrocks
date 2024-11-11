@@ -818,6 +818,7 @@ struct TMasterOpRequest {
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
     35: optional string session_id
+    36: optional i32 connectionId
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -849,6 +850,7 @@ struct TMasterOpResult {
 
     6: optional string resource_group_name;
     7: optional TAuditStatistics audit_statistics;
+    8: optional string errorMsg;
 }
 
 struct TIsMethodSupportedRequest {
@@ -1556,6 +1558,7 @@ struct TQueryStatisticsInfo {
     11: optional i64 spillBytes
     12: optional i64 execTime
     13: optional string wareHouseName
+    14: optional string customQueryId
     15: optional string resourceGroupName
 }
 
