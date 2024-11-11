@@ -231,6 +231,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
+    public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -1274,6 +1275,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+    @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
+    private boolean enableLambdaPushdown = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -3501,6 +3504,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getCboPushDownAggregateMode() {
         return cboPushDownAggregateMode;
+    }
+
+    public boolean getEnableLambdaPushDown() {
+        return enableLambdaPushdown;
+    }
+
+    public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
+        this.enableLambdaPushdown = enableLambdaPushdown;
     }
 
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
