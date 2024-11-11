@@ -35,13 +35,15 @@ struct HdfsScannerContext;
 
 namespace starrocks::parquet {
 
-// contains magic number (4 bytes) and footer length (4 bytes)
-constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
-constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
-constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
-constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
+struct SplitContext : public HdfsSplitContext {
+    FileMetaDataPtr file_metadata;
 
-using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->file_metadata = file_metadata;
+        return ctx;
+    }
+};
 
 class FileReader {
 public:
@@ -62,11 +64,6 @@ public:
 private:
     int _chunk_size;
 
-    // get footer of parquet file from cache or parquet file
-    Status _get_footer();
-
-    std::string _build_metacache_key();
-
     std::shared_ptr<MetaHelper> _build_meta_helper();
 
     Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
@@ -76,13 +73,13 @@ private:
     Status _init_group_readers();
 
     // filter row group by conjuncts
-    bool _filter_group(const tparquet::RowGroup& row_group);
+    bool _filter_group(const GroupReaderPtr& group_reader);
 
-    bool _filter_group_with_min_max_conjuncts(const tparquet::RowGroup& row_group);
+    bool _filter_group_with_min_max_conjuncts(const GroupReaderPtr& group_reader);
 
-    bool _filter_group_with_bloom_filter_min_max_conjuncts(const tparquet::RowGroup& row_group);
+    bool _filter_group_with_bloom_filter_min_max_conjuncts(const GroupReaderPtr& group_reader);
 
-    bool _filter_group_with_more_filter(const tparquet::RowGroup& row_group);
+    bool _filter_group_with_more_filter(const GroupReaderPtr& group_reader);
 
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
@@ -91,7 +88,7 @@ private:
 
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
-    Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
+    Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
                                ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
 
     // only scan partition column + not exist column

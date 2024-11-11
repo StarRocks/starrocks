@@ -16,7 +16,9 @@
 
 #include <sstream>
 
+#include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -423,6 +425,159 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     }
 
     return true;
+}
+
+StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
+    // return from split_context directly
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+        return split_ctx->file_metadata;
+    }
+
+    // parse FileMetadata from remote
+    if (!_cache) {
+        int64_t file_metadata_size = 0;
+        FileMetaDataPtr file_metadata_ptr = nullptr;
+        RETURN_IF_ERROR(_parse_footer(&file_metadata_ptr, &file_metadata_size));
+        return file_metadata_ptr;
+    }
+
+    DataCacheHandle cache_handle;
+    std::string metacache_key =
+            _build_metacache_key(_file->filename(), _datacache_options->modification_time, _file_size);
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
+        Status st = _cache->read_object(metacache_key, &cache_handle);
+        if (st.ok()) {
+            _scanner_ctx->stats->footer_cache_read_count += 1;
+            return *(static_cast<const FileMetaDataPtr*>(cache_handle.ptr()));
+        }
+    }
+
+    FileMetaDataPtr file_metadata = nullptr;
+    int64_t file_metadata_size = 0;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
+    if (file_metadata_size > 0) {
+        // cache does not understand shared ptr at all.
+        // so we have to new a object to hold this shared ptr.
+        FileMetaDataPtr* capture = new FileMetaDataPtr(file_metadata);
+        Status st = Status::InternalError("write footer cache failed");
+        DeferOp op([&st, this, capture, file_metadata_size]() {
+            if (st.ok()) {
+                _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
+                _scanner_ctx->stats->footer_cache_write_count += 1;
+            } else {
+                _scanner_ctx->stats->footer_cache_write_fail_count += 1;
+                delete capture;
+            }
+        });
+        auto deleter = [capture]() { delete capture; };
+        WriteCacheOptions options;
+        options.evict_probability = _datacache_options->datacache_evict_probability;
+        st = _cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
+    } else {
+        LOG(ERROR) << "Parsing unexpected parquet file metadata size";
+    }
+    return file_metadata;
+}
+
+Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
+    std::vector<char> footer_buffer;
+    ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
+    footer_buffer.resize(footer_read_size);
+
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
+        RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
+    }
+
+    ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
+
+    if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
+        // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
+        size_t re_read_size = metadata_length + PARQUET_FOOTER_SIZE;
+        footer_buffer.resize(re_read_size);
+        {
+            SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
+            RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
+        }
+    }
+
+    // NOTICE: When you need to modify the logic within this scope (including the subfuctions), you should be
+    // particularly careful to ensure that it does not affect the correctness of the footer's memory statistics.
+    {
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        tparquet::FileMetaData t_metadata;
+        // deserialize footer
+        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) +
+                                                       footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
+                                               &metadata_length, TProtocolType::COMPACT, &t_metadata));
+
+        *file_metadata_ptr = std::make_shared<FileMetaData>();
+        FileMetaData* file_metadata = file_metadata_ptr->get();
+        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+        *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    }
+#ifdef BE_TEST
+    *file_metadata_size = sizeof(FileMetaData);
+#endif
+    return Status::OK();
+}
+
+StatusOr<uint32_t> FileMetaDataParser::_get_footer_read_size() const {
+    if (_file_size == 0) {
+        return Status::Corruption("Parquet file size is 0 bytes");
+    } else if (_file_size < PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the minimum parquet file footer ($1 bytes)", _file_size,
+                PARQUET_FOOTER_SIZE));
+    }
+    return std::min(_file_size, DEFAULT_FOOTER_BUFFER_SIZE);
+}
+
+StatusOr<uint32_t> FileMetaDataParser::_parse_metadata_length(const std::vector<char>& footer_buff) const {
+    size_t size = footer_buff.size();
+    if (memequal(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
+        return Status::NotSupported("StarRocks parquet reader not support encrypted parquet file yet");
+    }
+
+    if (!memequal(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
+        return Status::Corruption("Parquet file magic not matched");
+    }
+
+    uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buff.data()) + size - 8);
+    if (metadata_length > _file_size - PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size,
+                metadata_length));
+    }
+    return metadata_length;
+}
+
+std::string FileMetaDataParser::_build_metacache_key(const std::string& filename, int64_t modification_time,
+                                                     uint64_t file_size) {
+    std::string metacache_key;
+    metacache_key.resize(14);
+    char* data = metacache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (modification_time > 0) {
+        uint32_t mtime_s = (modification_time >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+    return metacache_key;
 }
 
 // reference both be/src/formats/parquet/column_converter.cpp

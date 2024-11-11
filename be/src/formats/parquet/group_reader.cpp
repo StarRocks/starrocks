@@ -17,16 +17,15 @@
 #include <memory>
 #include <sstream>
 
-#include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
@@ -40,12 +39,29 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const st
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
 }
 
+GroupReader::~GroupReader() {
+    if (_param.sb_stream) {
+        _param.sb_stream->release_to_offset(_end_offset);
+    }
+    // If GroupReader is filtered by statistics, it's _has_prepared = false
+    if (_has_prepared) {
+        if (_lazy_column_needed) {
+            _param.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+        } else {
+            _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+        }
+        _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
+                                                     ? _column_read_order_ctx->get_min_round_cost()
+                                                     : std::min(_param.stats->group_min_round_cost,
+                                                                int64_t(_column_read_order_ctx->get_min_round_cost()));
+    }
+}
+
 Status GroupReader::init() {
-    // the calling order matters, do not change unless you know why.
-    RETURN_IF_ERROR(_init_column_readers());
+    // Create column readers and bind ParquetField & ColumnChunkMetaData(except complex type) to each ColumnReader
+    RETURN_IF_ERROR(_create_column_readers());
     _process_columns_and_conjunct_ctxs();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
-
     return Status::OK();
 }
 
@@ -66,6 +82,7 @@ Status GroupReader::_deal_with_pageindex() {
 }
 
 Status GroupReader::prepare() {
+    RETURN_IF_ERROR(_prepare_column_readers());
     // we need deal with page index first, so that it can work on collect_io_range,
     // and pageindex's io has been collected in FileReader
     RETURN_IF_ERROR(_deal_with_pageindex());
@@ -94,7 +111,29 @@ Status GroupReader::prepare() {
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
     }
+
+    _has_prepared = true;
     return Status::OK();
+}
+
+const tparquet::ColumnChunk* GroupReader::get_chunk_metadata(SlotId slot_id) {
+    const auto& it = _column_readers.find(slot_id);
+    if (it == _column_readers.end()) {
+        return nullptr;
+    }
+    return it->second->get_chunk_metadata();
+}
+
+const ParquetField* GroupReader::get_column_parquet_field(SlotId slot_id) {
+    const auto& it = _column_readers.find(slot_id);
+    if (it == _column_readers.end()) {
+        return nullptr;
+    }
+    return it->second->get_column_parquet_field();
+}
+
+const tparquet::RowGroup* GroupReader::get_row_group_metadata() const {
+    return _row_group_metadata;
 }
 
 Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
@@ -248,23 +287,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
     return hit_count;
 }
 
-void GroupReader::close() {
-    if (_param.sb_stream) {
-        _param.sb_stream->release_to_offset(_end_offset);
-    }
-    if (_lazy_column_needed) {
-        _param.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
-    } else {
-        _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
-    }
-    _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
-                                                 ? _column_read_order_ctx->get_min_round_cost()
-                                                 : std::min(_param.stats->group_min_round_cost,
-                                                            int64_t(_column_read_order_ctx->get_min_round_cost()));
-    _column_readers.clear();
-}
-
-Status GroupReader::_init_column_readers() {
+Status GroupReader::_create_column_readers() {
+    SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
@@ -275,35 +299,43 @@ Status GroupReader::_init_column_readers() {
     opts.row_group_meta = _row_group_metadata;
     opts.first_row_index = _row_group_first_row;
     for (const auto& column : _param.read_cols) {
-        RETURN_IF_ERROR(_create_column_reader(column));
+        ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
+        _column_readers[column.slot_id()] = std::move(column_reader);
     }
     return Status::OK();
 }
 
-Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
+StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
-        SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         if (column.t_iceberg_schema_field == nullptr) {
-            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(), &column_reader));
+            ASSIGN_OR_RETURN(column_reader,
+                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
-            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
-                                                 column.t_iceberg_schema_field, &column_reader));
+            ASSIGN_OR_RETURN(column_reader,
+                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
+                                                         column.t_iceberg_schema_field));
         }
         if (column_reader == nullptr) {
             // this shouldn't happen but guard
             return Status::InternalError("No valid column reader.");
         }
+    }
+    return column_reader;
+}
 
-        if (column.slot_type().is_complex_type()) {
+Status GroupReader::_prepare_column_readers() const {
+    SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
+    for (const auto& [slot_id, column_reader] : _column_readers) {
+        RETURN_IF_ERROR(column_reader->prepare());
+        if (column_reader->get_column_parquet_field()->is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
             // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
             // column is a complex type, we have to parse def level to calculate nullability.
             column_reader->set_need_parse_levels(true);
         }
     }
-    _column_readers[column.slot_id()] = std::move(column_reader);
     return Status::OK();
 }
 

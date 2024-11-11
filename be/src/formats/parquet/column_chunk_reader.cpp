@@ -52,7 +52,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
-    auto compress_type = convert_compression_codec(metadata().codec);
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;

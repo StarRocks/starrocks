@@ -23,7 +23,7 @@
 namespace starrocks::parquet {
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) {
-    DCHECK(_field->is_nullable ? dst->is_nullable() : true);
+    DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
     ColumnContentType content_type =
             _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     if (!_converter->need_convert) {
@@ -115,8 +115,7 @@ bool ScalarColumnReader::_column_all_pages_dict_encoded() {
     //    and does not include unexpected encodings (i.e. encodings not
     //    associated with definition/repetition levels), then it is entirely
     //    dictionary encoded.
-    const tparquet::ColumnMetaData& column_metadata =
-            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    const tparquet::ColumnMetaData& column_metadata = get_chunk_metadata()->meta_data;
     if (column_metadata.__isset.encoding_stats) {
         // Condition #1 above
         for (const tparquet::PageEncodingStats& enc_stat : column_metadata.encoding_stats) {
@@ -157,7 +156,7 @@ bool ScalarColumnReader::_column_all_pages_dict_encoded() {
 
 void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                                  int64_t* end_offset, ColumnIOType type, bool active) {
-    const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
+    const auto& column = *get_chunk_metadata();
     if (type == ColumnIOType::PAGES) {
         const tparquet::ColumnMetaData& column_metadata = column.meta_data;
         if (_offset_index_ctx != nullptr && !_offset_index_ctx->page_selected.empty()) {
@@ -198,7 +197,7 @@ void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedI
 
 void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
     if (_offset_index_ctx == nullptr) {
-        if (!_chunk_metadata->__isset.offset_index_offset) {
+        if (!get_chunk_metadata()->__isset.offset_index_offset) {
             return;
         }
         auto st = get_offset_index(rg_first_row);
@@ -235,8 +234,7 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
         }
         _offset_index_ctx->page_selected.emplace_back(first_row < r.end() && end_row > r.begin());
     }
-    const tparquet::ColumnMetaData& column_metadata =
-            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    const tparquet::ColumnMetaData& column_metadata = get_chunk_metadata()->meta_data;
     bool has_dict_page = column_metadata.__isset.dictionary_page_offset;
     // be compatible with PARQUET-1850
     has_dict_page |= _offset_index_ctx->check_dictionary_page(column_metadata.data_page_offset);

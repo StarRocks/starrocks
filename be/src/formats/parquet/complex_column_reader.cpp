@@ -72,7 +72,7 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
         array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_array());
-        DCHECK(!_field->is_nullable);
+        DCHECK(!get_column_parquet_field()->is_nullable);
         array_column = down_cast<ArrayColumn*>(dst);
     }
     auto* child_column = array_column->elements_column().get();
@@ -89,8 +89,8 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     auto& is_nulls = null_column.get_data();
     size_t num_offsets = 0;
     bool has_null = false;
-    def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0], &num_offsets,
-                      &has_null);
+    def_rep_to_offset(get_column_parquet_field()->level_info, def_levels, rep_levels, num_levels, &offsets[0],
+                      &is_nulls[0], &num_offsets, &has_null);
     offsets.resize(num_offsets + 1);
     is_nulls.resize(num_offsets);
 
@@ -112,7 +112,7 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
         map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_map());
-        DCHECK(!_field->is_nullable);
+        DCHECK(!get_column_parquet_field()->is_nullable);
         map_column = down_cast<MapColumn*>(dst);
     }
     auto* key_column = map_column->keys_column().get();
@@ -148,8 +148,8 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
     bool has_null = false;
 
     // ParquetFiled Map -> Map<Struct<key,value>>
-    def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0], &num_offsets,
-                      &has_null);
+    def_rep_to_offset(get_column_parquet_field()->level_info, def_levels, rep_levels, num_levels, &offsets[0],
+                      &is_nulls[0], &num_offsets, &has_null);
     offsets.resize(num_offsets + 1);
     is_nulls.resize(num_offsets);
 
@@ -179,7 +179,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(dst->is_struct());
-        DCHECK(!_field->is_nullable);
+        DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(dst);
     }
 
@@ -205,8 +205,8 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     }
 
     if (UNLIKELY(first_read)) {
-        return Status::InternalError(
-                strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
+        return Status::InternalError(strings::Substitute("All used subfield of struct type $1 is not exist",
+                                                         get_column_parquet_field()->name));
     }
 
     for (size_t i = 0; i < field_names.size(); i++) {
@@ -257,7 +257,7 @@ Status StructColumnReader::filter_dict_column(const ColumnPtr& column, Filter* f
         struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
     } else {
         DCHECK(column->is_struct());
-        DCHECK(!_field->is_nullable);
+        DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(column.get());
     }
     return _child_readers[sub_field]->filter_dict_column(struct_column->field_column(sub_field), filter, sub_field_path,
@@ -282,7 +282,7 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, const ColumnPtr& src)
     } else {
         DCHECK(src->is_struct());
         DCHECK(dst->is_struct());
-        DCHECK(!_field->is_nullable);
+        DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column_src = down_cast<StructColumn*>(src.get());
         struct_column_dst = down_cast<StructColumn*>(dst.get());
     }
@@ -316,7 +316,7 @@ void StructColumnReader::_handle_null_rows(uint8_t* is_nulls, bool* has_null, si
         return;
     }
 
-    LevelInfo level_info = _field->level_info;
+    LevelInfo level_info = get_column_parquet_field()->level_info;
 
     if (rep_levels != nullptr) {
         // It's a RepeatedStoredColumnReader

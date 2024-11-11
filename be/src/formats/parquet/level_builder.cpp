@@ -23,11 +23,14 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/logging.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "gutil/endian.h"
+#include "types/date_value.h"
 #include "util/defer_op.h"
 #include "utils.h"
 
@@ -263,7 +266,7 @@ Status LevelBuilder::_write_decimal_to_flba_column_chunk(const LevelBuilderConte
     auto flba_values = new ::parquet::FixedLenByteArray[col->size()];
     DeferOp flba_defer([&] { delete[] flba_values; });
 
-    size_t padding = sizeof(cpp_type) - decimal_precision_to_byte_count(type_desc.precision);
+    size_t padding = sizeof(cpp_type) - ParquetUtils::decimal_precision_to_byte_count(type_desc.precision);
     for (size_t i = 0; i < col->size(); i++) {
         flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i) + padding;
     }
