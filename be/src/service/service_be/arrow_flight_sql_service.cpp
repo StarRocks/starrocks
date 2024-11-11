@@ -17,8 +17,10 @@
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
+#include <exec/pipeline/query_context.h>
 #include <netinet/in.h>
 #include <openssl/aes.h>
+#include <runtime/exec_env.h>
 #include <util/aes_util.h>
 #include <util/arrow/utils.h>
 #include <util/defer_op.h>
@@ -53,88 +55,39 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
         const arrow::flight::ServerCallContext& context, const arrow::flight::sql::StatementQueryTicket& command) {
     ARROW_ASSIGN_OR_RAISE(auto pair, decode_ticket(command.statement_handle));
 
-    const std::string query_id = pair.second;
+    const std::string query_id = pair.first;
+    const std::string result_fragment_id = pair.second;
     TUniqueId queryid;
-    parse_id(query_id, &queryid);
+    if (!parse_id(query_id, &queryid)) {
+        return arrow::Status::Invalid("Invalid query ID format:", query_id);
+    }
+    TUniqueId resultfragmentid;
+    if (!parse_id(result_fragment_id, &resultfragmentid)) {
+        return arrow::Status::Invalid("Invalid fragment ID format:", result_fragment_id);
+    }
 
-    std::shared_ptr<ArrowFlightBatchReader> reader = std::make_shared<ArrowFlightBatchReader>(queryid);
+    // auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(queryid, true);
+    // if (query_ctx == nullptr) {
+    //     return arrow::Status::Invalid("Query context not found for query ID:", query_id);
+    // }
+    // if (query_ctx->is_cancelled()) {
+    //     return arrow::Status::Invalid("Query is has been cancelled for query ID: ", query_id);
+    // }
+
+    std::shared_ptr<ArrowFlightBatchReader> reader = std::make_shared<ArrowFlightBatchReader>(resultfragmentid);
     return std::make_unique<arrow::flight::RecordBatchStream>(reader);
 }
 
-arrow::Result<std::vector<unsigned char>> ArrowFlightSqlServer::pkcs7_unpadding(
-        const std::vector<unsigned char>& data) {
-    if (data.empty()) {
-        return arrow::Status::Invalid("Data is empty");
-    }
-
-    int padding_length = data.back(); // Use back() for the last element
-    if (padding_length <= 0 || padding_length > 32) {
-        return arrow::Status::Invalid("Invalid PKCS7 padding");
-    }
-
-    for (int i = 0; i < padding_length; ++i) {
-        if (data[data.size() - 1 - i] != padding_length) {
-            return arrow::Status::Invalid("Invalid PKCS7 padding");
-        }
-    }
-
-    return std::vector<unsigned char>(data.begin(), data.end() - padding_length);
-}
-
 arrow::Result<std::pair<std::string, std::string>> ArrowFlightSqlServer::decode_ticket(const std::string& ticket) {
-    if (config::arrow_flight_sql_ase_key.size() != 43) {
-        return arrow::Status::Invalid("BE configuration item arrow_flight_sql_ase_key is invalid.");
-    }
-
-    const std::string encoding_aes_key = config::arrow_flight_sql_ase_key + "=";
-    std::string aes_key_decode;
-    aes_key_decode.resize(encoding_aes_key.size() + 3);
-    int64_t len = base64_decode2(encoding_aes_key.data(), encoding_aes_key.size(), aes_key_decode.data());
-    aes_key_decode.resize(len);
-
-    std::string encrypted_data;
-    encrypted_data.resize(ticket.size() + 3);
-    len = base64_decode2(ticket.data(), ticket.size(), encrypted_data.data());
-    encrypted_data.resize(len);
-
-    std::vector<unsigned char> decrypted_data(encrypted_data.size() + 3);
-    unsigned char iv[AES_BLOCK_SIZE];
-    memcpy(iv, aes_key_decode.data(), AES_BLOCK_SIZE);
-    len = AesUtil::decrypt(AES_256_CBC, (unsigned char*)encrypted_data.data(), encrypted_data.size(),
-                           (unsigned char*)aes_key_decode.data(), aes_key_decode.size(), iv, false,
-                           decrypted_data.data());
-    if (len < 0) {
-        return arrow::Status::Invalid("Malformed ticket");
-    }
-    decrypted_data.resize(len);
-
-    ARROW_ASSIGN_OR_RAISE(decrypted_data, pkcs7_unpadding(decrypted_data));
-    if (decrypted_data.size() < 4) {
-        return arrow::Status::Invalid("Malformed ticket");
-    }
-
-    std::string decrypted_string(decrypted_data.begin(), decrypted_data.end());
-    if (decrypted_data.size() < 20) {
-        return arrow::Status::Invalid("Malformed ticket");
-    }
-
-    uint32_t msg_len = 0;
-    memcpy(&msg_len, decrypted_data.data() + 16, 4);
-    msg_len = ntohl(msg_len);
-    if (decrypted_string.size() < 16 + 4 + msg_len) {
-        return arrow::Status::Invalid("Malformed ticket");
-    }
-
-    std::string message = decrypted_string.substr(16 + 4, msg_len);
-    auto divider = message.find(':');
+    auto divider = ticket.find(':');
     if (divider == std::string::npos) {
         return arrow::Status::Invalid("Malformed ticket");
     }
 
-    std::string query_id = message.substr(0, divider);
-    std::string sql = message.substr(divider + 1);
+    std::string query_id = ticket.substr(0, divider);
+    std::string result_fragment_id = ticket.substr(divider + 1);
 
-    return std::make_pair(std::move(sql), std::move(query_id));
+    return std::make_pair(std::move(query_id), std::move(result_fragment_id));
 }
 
 } // namespace starrocks

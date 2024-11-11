@@ -35,7 +35,7 @@
 #pragma once
 
 #include <butil/iobuf.h>
-
+#include <column/chunk.h>
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -154,6 +154,8 @@ private:
     std::atomic_int64_t _buffer_bytes;
     int _buffer_limit;
     std::atomic<int64_t> _packet_num;
+    int _arrow_rows_limit;
+    int _arrow_rows;
 
     // blocking queue for batch
     ResultQueue _batch_queue;

@@ -62,7 +62,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
         break;
     case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
-        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _row_desc);
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, profile, _row_desc);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

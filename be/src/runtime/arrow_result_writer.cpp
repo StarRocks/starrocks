@@ -20,23 +20,22 @@
 #include <util/arrow/row_batch.h>
 #include <util/arrow/starrocks_column_to_arrow.h>
 
-#include "column/chunk.h"
 #include "column/const_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
-#include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
 ArrowResultWriter::ArrowResultWriter(BufferControlBlock* sinker, std::vector<ExprContext*>& output_expr_ctxs,
                                      RuntimeProfile* parent_profile, const RowDescriptor& row_desc)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile), _row_desc(row_desc) {}
+        : BufferControlResultWriter(sinker, parent_profile),
+          _output_expr_ctxs(output_expr_ctxs),
+          _row_desc(row_desc) {}
 
 Status ArrowResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -54,9 +53,6 @@ Status ArrowResultWriter::init(RuntimeState* state) {
 
 void ArrowResultWriter::_init_profile() {
     _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
-    _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
-    _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
 Status ArrowResultWriter::append_chunk(Chunk* chunk) {
@@ -64,20 +60,16 @@ Status ArrowResultWriter::append_chunk(Chunk* chunk) {
 }
 
 Status ArrowResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
 StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
+    SCOPED_TIMER(_append_chunk_timer);
     std::shared_ptr<arrow::RecordBatch> result;
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
-    Status status = _sinker->add_arrow_batch(result);
+    RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
     return TFetchDataResultPtrs{};
-}
-
-StatusOr<bool> ArrowResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    return true;
 }
 
 void ArrowResultWriter::_prepare_id_to_col_name_map() {

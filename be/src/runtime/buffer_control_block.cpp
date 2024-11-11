@@ -35,6 +35,7 @@
 #include "runtime/buffer_control_block.h"
 
 #include <arrow/record_batch.h>
+#include <arrow/type.h>
 
 #include <utility>
 
@@ -99,13 +100,17 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _is_cancelled(false),
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
-          _packet_num(0) {}
+          _packet_num(0),
+          _arrow_rows_limit(buffer_size * 4096),
+          _arrow_rows(0) {}
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
 
     _batch_queue.clear();
+    _arrow_batch_queue.clear();
     _buffer_bytes = 0;
+    _arrow_rows = 0;
 }
 
 Status BufferControlBlock::init() {
@@ -136,13 +141,20 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
 }
 
 Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result) {
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
     std::unique_lock<std::mutex> l(_lock);
+    while ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
+        _data_removal.wait(l);
+    }
+
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
     }
 
     _process_arrow_batch_without_lock(result);
-    _data_arriaval.notify_one();
 
     return Status::OK();
 }
@@ -176,7 +188,9 @@ void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRe
 }
 
 void BufferControlBlock::_process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result) {
+    _arrow_rows += result->num_rows();
     _arrow_batch_queue.push_back(std::move(result));
+    _data_arriaval.notify_one();
 }
 
 Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results) {
@@ -316,6 +330,7 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     if (!_status.ok()) {
         return _status;
     }
+
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
     }
@@ -329,8 +344,11 @@ Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* 
     }
 
     if (!_arrow_batch_queue.empty()) {
-        *result = std::move(_arrow_batch_queue.front());
+        const auto batch = std::move(_arrow_batch_queue.front());
+        *result = batch;
         _arrow_batch_queue.pop_front();
+        _arrow_rows -= batch->num_rows();
+        _data_removal.notify_one();
         return Status::OK();
     }
 
