@@ -177,10 +177,11 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         
         // patition columns should not be included in orderByElements when it's not the only column in orderByElements
         List<Ordering> orderByElements;
-        if (windowOperator.getOrderByElements() != null && !windowOperator.getOrderByElements().isEmpty()) {
-            orderByElements = windowOperator.getOrderByElements();
+        if (rankRelatedWindowOperator.getOrderByElements() != null &&
+                !rankRelatedWindowOperator.getOrderByElements().isEmpty()) {
+            orderByElements = rankRelatedWindowOperator.getOrderByElements();
         } else {
-            orderByElements = windowOperator.getEnforceSortColumns();
+            orderByElements = rankRelatedWindowOperator.getEnforceSortColumns();
         }
 
         Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
