@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -60,7 +61,10 @@ struct Bucket {
 
 template <LogicalType LT>
 struct HistogramState {
-    HistogramState() { column = RunTimeColumnType<LT>::create(); }
+    HistogramState() {
+        auto data = RunTimeColumnType<LT>::create();
+        column = NullableColumn::create(data, NullColumn::create());
+    }
 
     ColumnPtr column;
 };
@@ -78,8 +82,7 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
-        this->data(state).column->append(*column, 0, chunk_size);
+        this->data(state).column->append(*columns[0], 0, chunk_size);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -124,6 +127,9 @@ public:
         ColumnViewer<LT> viewer(this->data(state).column);
         for (size_t i = 0; i < viewer.size(); ++i) {
             auto v = viewer.value(i);
+            if (viewer.is_null(i)) {
+                continue;
+            }
             if (buckets.empty()) {
                 Bucket<LT> bucket(v, v, 1, 1);
                 buckets.emplace_back(bucket);
