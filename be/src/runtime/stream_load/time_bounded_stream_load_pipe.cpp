@@ -14,6 +14,8 @@
 
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
+#include "runtime/batch_write/batch_write_util.h"
+
 namespace starrocks {
 
 StatusOr<ByteBufferPtr> TimeBoundedStreamLoadPipe::read() {
@@ -28,8 +30,13 @@ Status TimeBoundedStreamLoadPipe::read(uint8_t* data, size_t* data_size, bool* e
 
 Status TimeBoundedStreamLoadPipe::_finish_pipe_if_needed() {
     auto current_ts = _get_current_ns();
-    if (_start_time_ns + _active_time_ns <= current_ts) {
-        return StreamLoadPipe::finish();
+    if (_start_time_ns + _active_window_ns <= current_ts) {
+        auto st = StreamLoadPipe::finish();
+        TRACE_BATCH_WRITE << "finish pipe: " << _name << ", expect active: " << (_active_window_ns / 1000000)
+                          << " ms, actual active: " << (current_ts - _start_time_ns) / 1000000
+                          << " ms, num appends: " << num_append_buffers() << ", bytes: " << append_buffer_bytes()
+                          << ", status: " << st;
+        return st;
     }
     return Status::OK();
 }

@@ -106,8 +106,10 @@ TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    StreamLoadContext* pipe_ctx1 = build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
-    StreamLoadContext* pipe_ctx2 = build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx1 =
+            build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>("p1", 1000));
+    StreamLoadContext* pipe_ctx2 =
+            build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>("p2", 1000));
 
     ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx1));
     ASSERT_EQ(2, pipe_ctx1->num_refs());
@@ -140,7 +142,8 @@ TEST_F(IsomorphicBatchWriteTest, append_data) {
 
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 0; });
-    StreamLoadContext* pipe_ctx1 = build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx1 =
+            build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>("p1", 1000));
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
@@ -169,7 +172,8 @@ TEST_F(IsomorphicBatchWriteTest, append_data) {
                                           [&](void* arg) { *((int64_t*)arg) = 2000000000; });
     ASSERT_TRUE(static_cast<TimeBoundedStreamLoadPipe*>(pipe_ctx1->body_sink.get())->read().status().is_end_of_file());
 
-    StreamLoadContext* pipe_ctx2 = build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx2 =
+            build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>("p2", 1000));
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
@@ -190,8 +194,10 @@ TEST_F(IsomorphicBatchWriteTest, append_data) {
 }
 
 TEST_F(IsomorphicBatchWriteTest, stop_write) {
-    StreamLoadContext* pipe_ctx1 = build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
-    StreamLoadContext* pipe_ctx2 = build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx1 =
+            build_pipe_context("label1", 1, std::make_shared<TimeBoundedStreamLoadPipe>("p1", 1000));
+    StreamLoadContext* pipe_ctx2 =
+            build_pipe_context("label2", 2, std::make_shared<TimeBoundedStreamLoadPipe>("p2", 1000));
     ASSERT_OK(_batch_write->register_stream_load_pipe(pipe_ctx1));
     ASSERT_EQ(2, pipe_ctx1->num_refs());
     ASSERT_TRUE(_batch_write->contain_pipe(pipe_ctx1));
@@ -205,7 +211,8 @@ TEST_F(IsomorphicBatchWriteTest, stop_write) {
     ASSERT_EQ(1, pipe_ctx2->num_refs());
     ASSERT_FALSE(_batch_write->contain_pipe(pipe_ctx2));
 
-    StreamLoadContext* pipe_ctx3 = build_pipe_context("label3", 3, std::make_shared<TimeBoundedStreamLoadPipe>(1000));
+    StreamLoadContext* pipe_ctx3 =
+            build_pipe_context("label3", 3, std::make_shared<TimeBoundedStreamLoadPipe>("p3", 1000));
     ASSERT_TRUE(_batch_write->register_stream_load_pipe(pipe_ctx3).is_service_unavailable());
     StreamLoadContext* data_ctx = build_data_context("data");
     ASSERT_TRUE(_batch_write->append_data(data_ctx).is_service_unavailable());

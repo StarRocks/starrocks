@@ -18,7 +18,11 @@
 #include <optional>
 #include <string>
 
+#include "common/config.h"
+
 namespace starrocks {
+
+#define TRACE_BATCH_WRITE LOG_IF(INFO, config::batch_write_trace_log_enable)
 
 using BatchWriteLoadParams = std::map<std::string, std::string>;
 

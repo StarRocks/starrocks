@@ -18,8 +18,6 @@
 #include "butil/endpoint.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
-#include "http/http_request.h"
-#include "http/utils.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
@@ -113,10 +111,12 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
         ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const std::string& db, const std::string& table,
         const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
         const TUniqueId& load_id, int32_t batch_write_interval_ms) {
-    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(batch_write_interval_ms);
+    std::string pipe_name = fmt::format("txn_{}_label_{}_id_{}", txn_id, label, print_id(load_id));
+    auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms);
     RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
     StreamLoadContext* ctx = new StreamLoadContext(exec_env, load_id);
     ctx->ref();
+    ctx->id = load_id;
     ctx->db = db;
     ctx->table = table;
     ctx->label = label;

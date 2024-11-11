@@ -43,13 +43,13 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
 
-        _num_waiting_append += 1;
+        _num_waiting_append_buffer += 1;
         // if _buf_queue is empty, we append this buf without size check
         _put_cond.wait(l, [&]() {
             return _cancelled || _finished || _buf_queue.empty() ||
                    _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
-        _num_waiting_append -= 1;
+        _num_waiting_append_buffer -= 1;
 
         if (_finished) {
             return Status::CapacityLimitExceed("Stream load pipe is finished");
@@ -58,6 +58,8 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         if (_cancelled) {
             return _err_st;
         }
+        _num_append_buffers += 1;
+        _append_buffer_bytes += buf->remaining();
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();

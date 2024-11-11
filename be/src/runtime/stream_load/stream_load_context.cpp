@@ -136,7 +136,13 @@ std::string StreamLoadContext::to_json() const {
 
     // label
     writer.Key("Label");
-    writer.String(label.c_str());
+    writer.String(enable_batch_write ? batch_write_label.c_str() : label.c_str());
+
+    // if enable batch write, the user-provided label is treated as the request id
+    if (enable_batch_write) {
+        writer.Key("RequestId");
+        writer.String(label.c_str());
+    }
 
     // status
     writer.Key("Status");
@@ -196,6 +202,11 @@ std::string StreamLoadContext::to_json() const {
         writer.Key("RejectedRecordPath");
         writer.String(rejected_record_path.c_str());
     }
+    if (enable_batch_write) {
+        writer.Key("LeftTimeMs");
+        writer.Int64(batch_left_time_nanos / 10000000);
+    }
+
     writer.EndObject();
     return s.GetString();
 }

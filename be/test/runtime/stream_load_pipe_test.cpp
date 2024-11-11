@@ -293,7 +293,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
     ASSERT_OK(pipe.append(std::move(buf1)));
 
     auto appender = [&pipe] {
-        while (pipe.num_waiting_append() == 0) {
+        while (pipe.num_waiting_append_buffer() == 0) {
             SleepFor(MonoDelta::FromMilliseconds(1));
         }
         EXPECT_OK(pipe.finish());

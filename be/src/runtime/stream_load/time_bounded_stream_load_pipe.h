@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include <cmath>
+
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "testutil/sync_point.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -23,12 +26,13 @@ static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS = 50;
 
 class TimeBoundedStreamLoadPipe : public StreamLoadPipe {
 public:
-    TimeBoundedStreamLoadPipe(int32_t active_time_ms,
+    TimeBoundedStreamLoadPipe(const std::string& name, int32_t active_window_ms,
                               int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
                               size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES)
             : StreamLoadPipe(true, non_blocking_wait_ms, max_buffered_bytes, DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE) {
+        _name = name;
+        _active_window_ns = active_window_ms * (int64_t)1000000;
         _start_time_ns = _get_current_ns();
-        _active_time_ns = active_time_ms * (int64_t)1000000;
     }
 
     Status append(ByteBufferPtr&& buf) override { return StreamLoadPipe::append(std::move(buf)); }
@@ -41,6 +45,11 @@ public:
 
     Status read(uint8_t* data, size_t* data_size, bool* eof) override;
 
+    int64_t left_active_ns() {
+        int64_t left = _active_window_ns - (_get_current_ns() - _start_time_ns);
+        return std::max((int64_t)0, left);
+    }
+
 private:
     int64_t _get_current_ns() {
         int64_t current_ts = MonotonicNanos();
@@ -50,8 +59,9 @@ private:
 
     Status _finish_pipe_if_needed();
 
+    std::string _name;
     int64_t _start_time_ns;
-    int64_t _active_time_ns;
+    int64_t _active_window_ns;
 };
 
 } // namespace starrocks

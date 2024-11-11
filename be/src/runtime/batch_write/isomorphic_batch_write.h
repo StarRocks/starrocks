@@ -61,12 +61,12 @@ public:
     bool is_stopped() const { return _stopped.load(std::memory_order_relaxed); }
 
 private:
-    static int _execute_bthread_tasks(void* meta, bthread::TaskIterator<Task>& iter);
+    static int _execute_tasks(void* meta, bthread::TaskIterator<Task>& iter);
 
-    Status _execute_write(StreamLoadContext* data_ctx);
-    Status _write_data(StreamLoadContext* data_ctx);
+    Status _execute_write(AsyncAppendDataContext* async_ctx);
+    Status _write_data(AsyncAppendDataContext* data_ctx);
     Status _wait_for_stream_load_pipe();
-    Status _send_rpc_request(StreamLoadContext* context);
+    Status _send_rpc_request(StreamLoadContext* data_ctx);
 
     BatchWriteId _batch_write_id;
     bthreads::ThreadPoolExecutor* _executor;
