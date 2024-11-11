@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.EquivalentShuttleContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -136,6 +137,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
         }
+        rewriteContext.setRollup(isRollup);
 
         // normalize mv's aggs by using query's table ref and query ec
         Map<ColumnRefOperator, ScalarOperator> mvProjection =
@@ -180,7 +182,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // rewrite group by + aggregate functions
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator scalarOp = entry.getValue();
-            ScalarOperator rewritten = rewriteScalarOperator(entry.getValue(),
+            ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, entry.getValue(),
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
             if (rewritten == null) {
@@ -202,7 +204,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 ScalarOperator scalarOp = entry.getValue();
                 ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(scalarOp.clone());
                 ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
-                ScalarOperator rewritten = rewriteScalarOperator(swapped,
+                ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
                 if (rewritten == null) {
@@ -215,7 +217,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             for (ColumnRefOperator groupKey : queryAggregationOperator.getGroupingKeys()) {
                 ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(groupKey.clone());
                 ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
-                ScalarOperator rewritten = rewriteScalarOperator(swapped,
+                ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
                 if (rewritten == null) {
@@ -243,7 +245,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         return mvOptExpr;
     }
 
-    private ScalarOperator rewriteScalarOperator(ScalarOperator scalarOp,
+    private ScalarOperator rewriteScalarOperator(RewriteContext rewriteContext,
+                                                 ScalarOperator scalarOp,
                                                  EquationRewriter equationRewriter,
                                                  Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
                                                  ColumnRefSet originalColumnSet,
@@ -253,7 +256,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
         equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
         equationRewriter.setOutputMapping(columnMapping);
-        ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(scalarOp);
+        Pair<ScalarOperator, EquivalentShuttleContext> result =
+                equationRewriter.replaceExprWithEquivalent(rewriteContext, scalarOp);
+        ScalarOperator rewritten = result.first;
         if (rewritten == null || scalarOp == rewritten) {
             return null;
         }
@@ -370,7 +375,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         // rewrite group by keys by using mv
         List<ScalarOperator> newQueryGroupKeys = rewriteGroupKeys(
-                queryGroupingKeys, equationRewriter, rewriteContext.getOutputMapping(),
+                rewriteContext, queryGroupingKeys, equationRewriter, rewriteContext.getOutputMapping(),
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()));
         if (newQueryGroupKeys == null) {
             OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
@@ -608,14 +613,22 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     /**
      * Rewrite group by keys by using MV.
      */
-    private List<ScalarOperator> rewriteGroupKeys(List<ScalarOperator> groupKeys,
+    private List<ScalarOperator> rewriteGroupKeys(RewriteContext rewriteContext,
+                                                  List<ScalarOperator> groupKeys,
                                                   EquationRewriter equationRewriter,
                                                   Map<ColumnRefOperator, ColumnRefOperator> mapping,
                                                   ColumnRefSet queryColumnSet) {
         List<ScalarOperator> newGroupByKeys = Lists.newArrayList();
         equationRewriter.setOutputMapping(mapping);
         for (ScalarOperator key : groupKeys) {
-            ScalarOperator newGroupByKey = equationRewriter.replaceExprWithTarget(key);
+            Pair<ScalarOperator, EquivalentShuttleContext> result = equationRewriter.replaceExprWithEquivalent(rewriteContext,
+                    key, IRewriteEquivalent.RewriteEquivalentType.PREDICATE);
+            ScalarOperator newGroupByKey = result.first;
+            if (key.isVariable() && key == newGroupByKey) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite group by key failed: {}", key.toString());
+                return null;
+            }
             if (key.isVariable() && key == newGroupByKey) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite group by key failed: {}", key.toString());
