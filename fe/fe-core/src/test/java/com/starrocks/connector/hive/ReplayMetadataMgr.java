@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
@@ -160,7 +161,13 @@ public class ReplayMetadataMgr extends MetadataMgr {
         if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
             catalogName = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive");
         }
-        return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
+
+        HiveTableInfo tableInfo = replayTableMap.get(catalogName).get(dbName).get(tblName);
+        if (tableInfo != null) {
+            return tableInfo.table;
+        }
+        // probably it's a hive view but being created in default catalog.
+        return super.getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
     }
 
     @Override
