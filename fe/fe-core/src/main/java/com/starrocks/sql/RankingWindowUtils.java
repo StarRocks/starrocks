@@ -39,8 +39,7 @@ public class RankingWindowUtils {
         ColumnRefOperator windowCol = Lists.newArrayList(operator.getWindowCall().keySet()).get(0);
         CallOperator callOperator = operator.getWindowCall().get(windowCol);
 
-        return FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) ||
-                FunctionSet.RANK.equals(callOperator.getFnName());
+        return FunctionSet.RANK_RELATED_FUNCTIONS.contains(callOperator.getFnName());
     }
 
     // actually if operator's window partition columns is subset of rankRelatedOperator's window partition columns and operator's window

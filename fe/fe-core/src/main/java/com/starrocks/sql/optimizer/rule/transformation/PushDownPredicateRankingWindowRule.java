@@ -22,11 +22,8 @@ import com.starrocks.sql.RankingWindowUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-=======
 import com.starrocks.sql.optimizer.base.Ordering;
->>>>>>> ee7beb1517 (fix fe test case)
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
@@ -185,12 +182,12 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .collect(Collectors.toList());
 
-        // patition columns should not be included in orderByElements when it's not the only column in orderByElements
+        // partition columns should not be included in orderByElements when it's not the only column in orderByElements
         List<Ordering> orderByElements;
-        if (windowOperator.getOrderByElements() != null && !windowOperator.getOrderByElements().isEmpty()) {
-            orderByElements = windowOperator.getOrderByElements();
+        if (rankRelatedWindowOperator.getOrderByElements() != null && !rankRelatedWindowOperator.getOrderByElements().isEmpty()) {
+            orderByElements = rankRelatedWindowOperator.getOrderByElements();
         } else {
-            orderByElements = windowOperator.getEnforceSortColumns();
+            orderByElements = rankRelatedWindowOperator.getEnforceSortColumns();
         }
 
         TopNType topNType = TopNType.parse(callOperator.getFnName());

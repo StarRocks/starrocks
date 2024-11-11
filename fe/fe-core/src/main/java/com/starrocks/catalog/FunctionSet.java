@@ -796,7 +796,7 @@ public class FunctionSet {
                     .add(MAP_AGG)
                     .build();
 
-    public static final Set<String> RANK_RALATED_FUNCTIONS =
+    public static final Set<String> RANK_RELATED_FUNCTIONS =
             ImmutableSet.<String>builder().add().add(ROW_NUMBER).add(RANK).add(DENSE_RANK).build();
 
     public FunctionSet() {
