@@ -1789,7 +1789,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
+- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.2.0 起弃用。
 - 引入版本：-
 
 ##### max_consumer_num_per_group

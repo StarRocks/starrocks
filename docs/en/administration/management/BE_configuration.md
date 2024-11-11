@@ -1833,7 +1833,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- Description: The timeout for a transaction commit RPC. Since v3.2.0, this parameter is deprecated.
 - Introduced in: -
 
 ##### max_consumer_num_per_group
