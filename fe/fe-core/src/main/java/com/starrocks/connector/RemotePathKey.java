@@ -20,7 +20,6 @@ import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class RemotePathKey {
@@ -32,12 +31,21 @@ public class RemotePathKey {
 
     public static class HudiContext {
         // ---- concurrent initialization -----
-        public AtomicBoolean init = new AtomicBoolean(false);
         public ReentrantLock lock = new ReentrantLock();
+        public int usedCount = 0;
         // ---- actual fields -----
         public HoodieTableFileSystemView fsView = null;
         public HoodieTimeline timeline = null;
         public HoodieInstant lastInstant = null;
+
+        public void close() {
+            if (fsView != null) {
+                fsView.close();
+                fsView = null;
+                timeline = null;
+                lastInstant = null;
+            }
+        }
     }
 
     private HudiContext hudiContext;
@@ -103,12 +111,6 @@ public class RemotePathKey {
         }
         sb.append('}');
         return sb.toString();
-    }
-
-    public void drop() {
-        if (hudiContext != null) {
-            hudiContext = null;
-        }
     }
 
     public void setHudiContext(HudiContext ctx) {
