@@ -66,14 +66,6 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlSe
         return arrow::Status::Invalid("Invalid fragment ID format:", result_fragment_id);
     }
 
-    // auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(queryid, true);
-    // if (query_ctx == nullptr) {
-    //     return arrow::Status::Invalid("Query context not found for query ID:", query_id);
-    // }
-    // if (query_ctx->is_cancelled()) {
-    //     return arrow::Status::Invalid("Query is has been cancelled for query ID: ", query_id);
-    // }
-
     std::shared_ptr<ArrowFlightBatchReader> reader = std::make_shared<ArrowFlightBatchReader>(resultfragmentid);
     return std::make_unique<arrow::flight::RecordBatchStream>(reader);
 }
