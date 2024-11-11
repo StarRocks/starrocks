@@ -43,7 +43,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
 
     @Override
     public String getSampleNullCount(SampleInfo info) {
-        return getFullNullCount() + " * " + info.getTotalRowCount() + " / COUNT(*)";
+        return "(" + getFullNullCount() + ") * " + info.getTotalRowCount() + " / COUNT(*)";
     }
 
     @Override
