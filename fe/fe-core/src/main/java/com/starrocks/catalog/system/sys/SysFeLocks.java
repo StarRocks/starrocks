@@ -15,6 +15,7 @@
 package com.starrocks.catalog.system.sys;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
@@ -104,14 +105,13 @@ public class SysFeLocks {
                     lockItem.setHold_time_ms(currentTime - owner.getLockAcquireTimeMs());
 
                     JsonObject ownerInfo = new JsonObject();
-                    ownerInfo.addProperty("threadId", owner.getLocker().getLockerThread().getId());
-                    ownerInfo.addProperty("threadName", owner.getLocker().getLockerThread().getName());
+                    ownerInfo.addProperty("threadId", owner.getLocker().getThreadId());
+                    ownerInfo.addProperty("threadName", owner.getLocker().getThreadName());
                     lockItem.setThread_info(ownerInfo.toString());
 
-                    Collection<Thread> threads = lockInfo.getWaiters().stream().map(LockHolder::getLocker)
-                            .map(Locker::getLockerThread).collect(Collectors.toList());
-                    lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(threads).toString());
-
+                    List<String> waiters = lockInfo.getWaiters().stream().map(LockHolder::getLocker)
+                            .map(Locker::toString).collect(Collectors.toList());
+                    lockItem.setWaiter_list(Joiner.on(",").join(waiters));
                     response.addToItems(lockItem);
                 }
             }

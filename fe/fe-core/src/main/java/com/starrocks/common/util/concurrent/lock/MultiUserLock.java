@@ -86,11 +86,6 @@ public class MultiUserLock extends Lock {
              * whether there are other Lockers with the same LockType.
              */
             if (lockHolderRequest.getLocker().equals(lockOwner.getLocker())) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Locker {} already holds lock on {} with type {}/{}, detail:{}", lockOwner.getLocker(),
-                            lockOwner.getLocker(), lockOwner.getLockType(), lockHolderRequest.getLockType(), this);
-                }
-
                 LockType lockOwnerLockType = lockOwner.getLockType();
                 LockType lockRequestLockType = lockHolderRequest.getLockType();
 
@@ -105,10 +100,10 @@ public class MultiUserLock extends Lock {
                      */
 
                     if (lockOwnerLockType.isIntentionLock() && !lockRequestLockType.isIntentionLock()) {
-                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock ("
-                                + lockHolderRequest.getLocker().getLockerStackTrace() + ")"
+                        throw new NotSupportLockException("Can't request Database " + lockRequestLockType + " Lock "
+                                + lockHolderRequest.getLocker()
                                 + " in the scope of Database " + lockOwnerLockType
-                                + " Lock (" + lockOwner.getLocker().getLockerStackTrace() + ")");
+                                + " Lock " + lockOwner.getLocker());
                     }
 
                     /*
