@@ -28,8 +28,9 @@ namespace starrocks::lake {
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
     explicit BaseAndCumulativeCompactionPolicy(TabletManager* tablet_mgr,
-                                               std::shared_ptr<const TabletMetadataPB> tablet_metadata)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata)) {}
+                                               std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                               bool force_base_compaction)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
 
     ~BaseAndCumulativeCompactionPolicy() override = default;
 
@@ -55,16 +56,16 @@ struct SizeTieredLevel {
 class SizeTieredCompactionPolicy : public CompactionPolicy {
 public:
     explicit SizeTieredCompactionPolicy(TabletManager* tablet_mgr,
-                                        std::shared_ptr<const TabletMetadataPB> tablet_metadata)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata)),
-              _max_level_size(config::size_tiered_min_level_size *
-                              pow(config::size_tiered_level_multiple, config::size_tiered_level_num)) {}
+                                        std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                        bool force_base_compaction)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
 
     ~SizeTieredCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
 
-    static StatusOr<std::unique_ptr<SizeTieredLevel>> pick_max_level(const TabletMetadataPB& metadata);
+    static StatusOr<std::unique_ptr<SizeTieredLevel>> pick_max_level(const TabletMetadataPB& metadata,
+                                                                     bool force_base_compaction);
 
 private:
     static double cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size,
@@ -75,13 +76,11 @@ private:
             return left->score > right->score || (left->score == right->score && left->rowsets[0] > right->rowsets[0]);
         }
     };
-
-    int64_t _max_level_size;
 };
 
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
                                                       const std::shared_ptr<const TabletMetadataPB>& metadata) {
-    PrimaryCompactionPolicy policy(tablet_mgr, metadata);
+    PrimaryCompactionPolicy policy(tablet_mgr, metadata, false /* force_base_compaction */);
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowset_indexes, policy.pick_rowset_indexes(metadata, true, &has_dels));
     uint32_t segment_num_score = 0;
@@ -211,7 +210,7 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
     DCHECK(_tablet_metadata != nullptr) << "_tablet_metadata is null";
     double cumulative_score = cumulative_compaction_score(_tablet_metadata);
     double base_score = base_compaction_score(_tablet_metadata);
-    if (base_score > cumulative_score) {
+    if (base_score > cumulative_score || _force_base_compaction) {
         return pick_base_rowsets();
     } else {
         return pick_cumulative_rowsets();
@@ -254,8 +253,8 @@ double SizeTieredCompactionPolicy::cal_compaction_score(int64_t segment_num, int
     return score;
 }
 
-StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_level(
-        const TabletMetadataPB& metadata) {
+StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_level(const TabletMetadataPB& metadata,
+                                                                                      bool force_base_compaction) {
     int64_t max_level_size =
             config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
     const auto& rowsets = metadata.rowsets();
@@ -271,7 +270,7 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
             ++num_delete_rowsets;
         }
     }
-    bool force_base_compaction = (num_delete_rowsets >= config::tablet_max_versions / 10);
+    force_base_compaction = force_base_compaction || (num_delete_rowsets >= config::tablet_max_versions / 10);
 
     // check reach max version
     bool reached_max_version = (rowsets.size() > config::tablet_max_versions / 10 * 9);
@@ -383,7 +382,7 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
 }
 
 StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
-    ASSIGN_OR_RETURN(auto selected_level, pick_max_level(*_tablet_metadata));
+    ASSIGN_OR_RETURN(auto selected_level, pick_max_level(*_tablet_metadata, _force_base_compaction));
     std::vector<RowsetPtr> input_rowsets;
     if (selected_level == nullptr) {
         return input_rowsets;
@@ -391,6 +390,9 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
     int64_t level_multiple = config::size_tiered_level_multiple;
     auto min_compaction_segment_num =
             std::max<int64_t>(2, std::min(config::min_cumulative_compaction_num_singleton_deltas, level_multiple));
+    if (_force_base_compaction) { // make sure there is only one rowset
+        min_compaction_segment_num = 2;
+    }
 
     // We need a minimum number of segments that trigger compaction to
     // avoid triggering compaction too frequently compared to the old version
@@ -448,7 +450,7 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
 }
 
 double size_tiered_compaction_score(const std::shared_ptr<const TabletMetadataPB>& metadata) {
-    auto selected_level_or = SizeTieredCompactionPolicy::pick_max_level(*metadata);
+    auto selected_level_or = SizeTieredCompactionPolicy::pick_max_level(*metadata, false /* force_base_compaction */);
     if (!selected_level_or.ok()) {
         return 0;
     }
@@ -490,13 +492,16 @@ StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(cons
 }
 
 StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr,
-                                                       std::shared_ptr<const TabletMetadataPB> tablet_metadata) {
+                                                       std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                                       bool force_base_compaction) {
     if (tablet_metadata->schema().keys_type() == PRIMARY_KEYS) {
-        return std::make_shared<PrimaryCompactionPolicy>(tablet_mgr, std::move(tablet_metadata));
+        return std::make_shared<PrimaryCompactionPolicy>(tablet_mgr, std::move(tablet_metadata), force_base_compaction);
     } else if (config::enable_size_tiered_compaction_strategy) {
-        return std::make_shared<SizeTieredCompactionPolicy>(tablet_mgr, std::move(tablet_metadata));
+        return std::make_shared<SizeTieredCompactionPolicy>(tablet_mgr, std::move(tablet_metadata),
+                                                            force_base_compaction);
     } else {
-        return std::make_shared<BaseAndCumulativeCompactionPolicy>(tablet_mgr, std::move(tablet_metadata));
+        return std::make_shared<BaseAndCumulativeCompactionPolicy>(tablet_mgr, std::move(tablet_metadata),
+                                                                   force_base_compaction);
     }
 }
 
