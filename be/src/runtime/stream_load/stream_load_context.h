@@ -202,6 +202,9 @@ public:
 
     std::string db;
     std::string table;
+    // if enable_batch_write is false, the label represents the txn
+    // otherwise, it just represents the request id of the load, and
+    // the batch_write_label represents the txn
     std::string label;
     // optional
     double max_filter_ratio = 0.0;

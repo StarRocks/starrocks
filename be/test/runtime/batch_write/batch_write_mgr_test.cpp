@@ -227,6 +227,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
     ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
     ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
     ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+    ADD_KEY_VALUE(request, HTTP_TIMEOUT, "60");
     ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
     std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
     cntl.request_attachment().append(data);
@@ -239,9 +240,11 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
         EXPECT_EQ("root", ctx->auth.user);
         EXPECT_EQ("123456", ctx->auth.passwd);
         EXPECT_TRUE(ctx->enable_batch_write);
+        EXPECT_EQ(60, ctx->timeout_second);
         std::map<std::string, std::string> load_params = {{HTTP_ENABLE_BATCH_WRITE, "true"},
                                                           {HTTP_BATCH_WRITE_INTERVAL_MS, "1000"},
                                                           {HTTP_BATCH_WRITE_ASYNC, "true"},
+                                                          {HTTP_TIMEOUT, "60"},
                                                           {HTTP_FORMAT_KEY, "json"}};
         EXPECT_EQ(load_params, ctx->load_parameters);
         EXPECT_NE(nullptr, ctx->buffer);
@@ -294,6 +297,26 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
         ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "RPC interface only support batch write currently"));
+    }
+
+    // timeout format is invalid
+    {
+        brpc::Controller cntl;
+        cntl.request_attachment().append(data);
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, "label", "test1");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
+        ADD_KEY_VALUE(request, HTTP_TIMEOUT, "abc");
+        PStreamLoadResponse response;
+        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid timeout format: abc"));
     }
 
     // data is empty

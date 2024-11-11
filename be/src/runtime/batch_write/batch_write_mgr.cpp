@@ -178,6 +178,16 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
     }
+    std::string timeout = GET_PARAMETER_OR_EMPTY(parameters, HTTP_TIMEOUT);
+    if (!timeout.empty()) {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto timeout_second =
+                StringParser::string_to_unsigned_int<int32_t>(timeout.c_str(), timeout.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+            ASSIGN_AND_RETURN(ctx->status, Status::InvalidArgument(fmt::format("Invalid timeout format: {}", timeout)));
+        }
+        ctx->timeout_second = timeout_second;
+    }
     std::string remote_host;
     butil::ip2hostname(cntl->remote_side().ip, &remote_host);
     ctx->auth.user = request->user();
