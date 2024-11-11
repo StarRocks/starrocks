@@ -118,6 +118,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -2017,13 +2018,38 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             boolean enablePersistentIndex = false;
+            String persistentIndexType = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
-                if (oldEnablePersistentIndex == enablePersistentIndex) {
-                    LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
-                            olapTable.getName(), enablePersistentIndex));
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                if (oldEnablePersistentIndex == enablePersistentIndex
+                        && persistentIndexType == oldPersistentIndexType) {
+                    LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
+                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                    return null;
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                        && !enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                // only support set persistent_index_type when enable_persistent_index is true
+                enablePersistentIndex = olapTable.enablePersistentIndex();
+                if (!enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                if (oldPersistentIndexType.equals(persistentIndexType)) {
+                    LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
+                            olapTable.getName(), persistentIndexType));
                     return null;
                 }
             } else {
@@ -2035,7 +2061,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
