@@ -100,9 +100,9 @@ public:
 private:
     StreamLoadContext* const _data_ctx;
     BThreadCountDownLatch _latch;
-    std::atomic<int> _refs;
+    std::atomic<int> _refs{0};
     mutable bthread::Mutex _result_lock;
-    bool _async_finished;
+    bool _async_finished{false};
     Status _status;
     // the txn and label that data belongs to if success (_status is OK)
     int64_t _txn_id{-1};
@@ -162,9 +162,9 @@ void IsomorphicBatchWrite::stop() {
         _dead_stream_load_pipe_ctxs.clear();
     }
     for (StreamLoadContext* ctx : release_contexts) {
-        StreamLoadContext::release(ctx);
         LOG(INFO) << "Stop stream load pipe, txn_id: " << ctx->txn_id << ", label: " << ctx->label
                   << ", load_id: " << print_id(ctx->id) << ", " << _batch_write_id;
+        StreamLoadContext::release(ctx);
     }
     LOG(INFO) << "Stop batch write, " << _batch_write_id;
 }
@@ -192,11 +192,11 @@ void IsomorphicBatchWrite::unregister_stream_load_pipe(StreamLoadContext* pipe_c
             find = _dead_stream_load_pipe_ctxs.erase(pipe_ctx) > 0;
         }
     }
+    TRACE_BATCH_WRITE << "Unregister stream load pipe, txn_id: " << pipe_ctx->txn_id << ", label: " << pipe_ctx->label
+                      << ", load_id: " << print_id(pipe_ctx->id) << ", " << _batch_write_id << ", find: " << find;
     if (find) {
         StreamLoadContext::release(pipe_ctx);
     }
-    TRACE_BATCH_WRITE << "Unregister stream load pipe, txn_id: " << pipe_ctx->txn_id << ", label: " << pipe_ctx->label
-                      << ", load_id: " << print_id(pipe_ctx->id) << ", " << _batch_write_id;
 }
 
 bool IsomorphicBatchWrite::contain_pipe(StreamLoadContext* pipe_ctx) {

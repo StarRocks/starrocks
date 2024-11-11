@@ -37,7 +37,7 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_buffer_finish) {
 
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 0; });
-    TimeBoundedStreamLoadPipe pipe(1000);
+    TimeBoundedStreamLoadPipe pipe("p", 1000);
 
     auto buf1 = ByteBuffer::allocate_with_tracker(64).value();
     for (int j = 0; j < 64; ++j) {
@@ -71,7 +71,7 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_data_finish) {
 
     SyncPoint::GetInstance()->SetCallBack("TimeBoundedStreamLoadPipe::get_current_ns",
                                           [&](void* arg) { *((int64_t*)arg) = 0; });
-    TimeBoundedStreamLoadPipe pipe(1000);
+    TimeBoundedStreamLoadPipe pipe("p", 1000);
 
     auto buf1 = ByteBuffer::allocate_with_tracker(64).value();
     for (int j = 0; j < 64; ++j) {
@@ -107,7 +107,7 @@ PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, read_data_finish) {
 }
 
 PARALLEL_TEST(TimeBoundedStreamLoadPipeTest, not_support_appending_char_array) {
-    TimeBoundedStreamLoadPipe pipe(50);
+    TimeBoundedStreamLoadPipe pipe("p", 50);
     char ch = '0';
     ASSERT_TRUE(pipe.append(&ch, 1).is_not_supported());
 }
