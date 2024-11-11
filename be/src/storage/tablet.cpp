@@ -1830,7 +1830,7 @@ void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs)
     }
 
     if (_updates) {
-        _updates->rewrite_rs_meta();
+        _updates->rewrite_rs_meta(true);
     }
 }
 
