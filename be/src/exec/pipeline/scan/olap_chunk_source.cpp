@@ -782,7 +782,6 @@ void OlapChunkSource::_update_counter() {
 
     // Data sampling
     if (_params.sample_options.enable_sampling) {
-        static constexpr std::string kSampleProfileName = "DataSample";
         _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
         _runtime_profile->add_info_string("SamplePercent",
                                           std::to_string(_params.sample_options.probability_percent) + "%");
