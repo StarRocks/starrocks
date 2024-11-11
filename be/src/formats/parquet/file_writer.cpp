@@ -315,8 +315,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, decimal_precision_to_byte_count(type_desc.precision),
-                file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
