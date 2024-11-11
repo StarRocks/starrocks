@@ -396,7 +396,7 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
     _params.column_access_paths = &_column_access_paths;
 
     // update counter
-    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
+    COUNTER_UPDATE(_pushdown_access_paths_counter, leaf_size);
     return Status::OK();
 }
 
@@ -647,7 +647,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+    COUNTER_UPDATE(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
