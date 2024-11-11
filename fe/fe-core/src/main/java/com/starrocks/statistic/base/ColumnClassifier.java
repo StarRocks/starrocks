@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.statistic.sample.SampleInfo;
 
 import java.util.List;
 
@@ -29,28 +28,20 @@ public class ColumnClassifier {
 
     private final List<ColumnStats> unSupportStats = Lists.newArrayList();
 
-    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table,
-                                      SampleInfo sampleInfo) {
+    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table) {
         ColumnClassifier columnClassifier = new ColumnClassifier();
-        columnClassifier.classifyColumnStats(columnNames, columnTypes, table, sampleInfo);
+        columnClassifier.classifyColumnStats(columnNames, columnTypes, table);
         return columnClassifier;
     }
 
-    private void classifyColumnStats(List<String> columnNames, List<Type> columnTypes, Table table,
-                                     SampleInfo sampleInfo) {
-        boolean onlyOneDistributionCol = table.getDistributionColumnNames().size() == 1;
+    private void classifyColumnStats(List<String> columnNames, List<Type> columnTypes, Table table) {
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
 
             if (table.getColumn(columnName) != null) {
                 if (columnType.canStatistic()) {
-                    if (onlyOneDistributionCol && table.getDistributionColumnNames().contains(columnName)) {
-                        columnStats.add(new DistributionColumnStats(columnName, columnType, sampleInfo));
-                        onlyOneDistributionCol = false;
-                    } else {
-                        columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
-                    }
+                    columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
                 } else {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
                 }

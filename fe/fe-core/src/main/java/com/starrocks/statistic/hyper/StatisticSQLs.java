@@ -14,15 +14,23 @@
 
 package com.starrocks.statistic.hyper;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.ColumnStats;
+import com.starrocks.statistic.base.PartitionSampler;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletStats;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class StatisticSQLs {
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -62,23 +70,45 @@ public class StatisticSQLs {
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(COUNT(*) as BIGINT)" + // BIGINT, row_count
-            ", cast($dataSize as BIGINT)" + // BIGINT, data_size
+            ", cast(0 as BIGINT)" + // BIGINT, data_size
             ", '00'" + // VARBINARY, ndv
-            ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
+            ", cast(0 as BIGINT)" + // BIGINT, null_count
             ", $maxFunction" + // VARCHAR, max
             ", $minFunction " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
 
-    public static final String BATCH_NDV_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    public static final String BATCH_DATA_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(0 as BIGINT)" + // BIGINT, row_count
-            ", cast(0 as BIGINT)" + // BIGINT, data_size
+            ", cast($dataSize as BIGINT)" + // BIGINT, data_size
             ", $hllFunction" + // VARBINARY, ndv
-            ", cast(0 as BIGINT)" + // BIGINT, null_count
+            ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
             ", ''" + // VARCHAR, max
             ", '' " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`)";
+
+    public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+            ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
+            ", '$columnNameStr'" + // VARCHAR, column_name
+            ", cast(0 as BIGINT)" + // BIGINT, row_count
+            ", cast($dataSize as BIGINT)" + // BIGINT, data_size
+            ", $hllFunction" + // VARBINARY, ndv
+            ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
+            ", ''" + // VARCHAR, max
+            ", '' " + // VARCHAR, min
+            " FROM base_cte_table ";
+
+    public static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+            ", cast($partitionId as BIGINT)" + // BIGINT
+            ", '$columnNameStr'" + // VARCHAR
+            ", cast($rowCount as BIGINT)" + // BIGINT
+            ", cast($dataSize as BIGINT)" + // BIGINT
+            ", $hllFunction" + // VARBINARY
+            ", cast($countNullFunction as BIGINT)" + // BIGINT
+            ", $maxFunction" + // VARCHAR
+            ", $minFunction " + // VARCHAR
+            " FROM base_cte_table ";
 
     public static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
@@ -87,9 +117,7 @@ public class StatisticSQLs {
     }
 
     public static String buildFullSQL(Database db, Table table, Partition p, ColumnStats stats, String template) {
-        StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
-
         String columnNameStr = stats.getColumnNameStr();
         String quoteColumnName = stats.getQuotedColumnName();
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
@@ -101,10 +129,82 @@ public class StatisticSQLs {
         context.put("tableName", table.getName());
         context.put("quoteColumnName", quoteColumnName);
         context.put("countNullFunction", stats.getFullNullCount());
-        context.put("hllFunction", stats.getFullNDV());
-        context.put("maxFunction", stats.getFullMax());
-        context.put("minFunction", stats.getFullMin());
-        builder.append(StatisticSQLs.build(context, template));
-        return builder.toString();
+        context.put("hllFunction", stats.getNDV());
+        context.put("maxFunction", stats.getMax());
+        context.put("minFunction", stats.getMin());
+        return StatisticSQLs.build(context, template);
+    }
+
+    public static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
+        VelocityContext context = new VelocityContext();
+        String columnNameStr = stats.getColumnNameStr();
+        String quoteColumnName = stats.getQuotedColumnName();
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+        context.put("partitionId", p.getId());
+        context.put("columnNameStr", columnNameStr);
+        context.put("partitionName", p.getName());
+        context.put("dbName", db.getOriginName());
+        context.put("tableName", table.getName());
+        context.put("quoteColumnName", quoteColumnName);
+        return context;
+    }
+
+    public static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
+                                        PartitionSampler sampler, String template) {
+        if (p == null || !p.hasData()) {
+            return null;
+        }
+        String tableName = "`" + db.getOriginName() + "`.`" + table.getName() + "`";
+
+        SampleInfo info = sampler.getSampleInfo(p.getId());
+        List<String> groupSQLs = Lists.newArrayList();
+        StringBuilder sqlBuilder = new StringBuilder();
+        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getHighWeightTablets(),
+                sampler.getHighRatio(), "t_high"));
+        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumHighWeightTablets(),
+                sampler.getMediumHighRatio(), "t_medium_high"));
+        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getMediumLowWeightTablets(),
+                sampler.getMediumLowRatio(), "t_medium_low"));
+        groupSQLs.add(generateRatioTable(tableName, sampler.getSampleRowsLimit(), info.getLowWeightTablets(),
+                sampler.getLowRatio(), "t_low"));
+        if (groupSQLs.stream().allMatch(Objects::isNull)) {
+            groupSQLs.add("SELECT * FROM " + tableName + " LIMIT " + Config.statistic_sample_collect_rows);
+        }
+
+        sqlBuilder.append("with base_cte_table as (");
+        sqlBuilder.append(groupSQLs.stream().filter(Objects::nonNull).collect(Collectors.joining(" UNION ALL ")));
+        sqlBuilder.append(") ");
+
+        groupSQLs.clear();
+
+        VelocityContext context = new VelocityContext();
+        for (ColumnStats stat : stats) {
+            String columnNameStr = stat.getColumnNameStr();
+            context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+            context.put("columnNameStr", columnNameStr);
+            context.put("rowCount", info.getTotalRowCount());
+            context.put("dataSize", stat.getSampleDateSize(info));
+            context.put("hllFunction", stat.getNDV());
+            context.put("countNullFunction", stat.getSampleNullCount(info));
+            context.put("maxFunction", stat.getMax());
+            context.put("minFunction", stat.getMin());
+            groupSQLs.add(StatisticSQLs.build(context, template));
+        }
+        sqlBuilder.append(String.join(" UNION ALL ", groupSQLs));
+        return sqlBuilder.toString();
+    }
+
+    private static String generateRatioTable(String table, long limit,
+                                             List<TabletStats> tablets, double ratio, String alias) {
+        if (tablets.isEmpty()) {
+            return null;
+        }
+        return String.format(" SELECT * FROM (SELECT * " +
+                        " FROM %s tablet(%s) " +
+                        " WHERE rand() <= %f " +
+                        " LIMIT %d) %s",
+                table,
+                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", ")),
+                ratio, limit, alias);
     }
 }

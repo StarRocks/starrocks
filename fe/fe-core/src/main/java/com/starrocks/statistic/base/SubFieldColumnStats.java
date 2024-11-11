@@ -15,6 +15,7 @@
 package com.starrocks.statistic.base;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.statistic.sample.SampleInfo;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -45,13 +46,13 @@ public class SubFieldColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullMax() {
-        return columnStats.getFullMax();
+    public String getMax() {
+        return columnStats.getMax();
     }
 
     @Override
-    public String getFullMin() {
-        return columnStats.getFullMin();
+    public String getMin() {
+        return columnStats.getMin();
     }
 
     @Override
@@ -60,7 +61,17 @@ public class SubFieldColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullNDV() {
-        return columnStats.getFullNDV();
+    public String getNDV() {
+        return columnStats.getNDV();
+    }
+
+    @Override
+    public String getSampleDateSize(SampleInfo info) {
+        return columnStats.getSampleDateSize(info);
+    }
+
+    @Override
+    public String getSampleNullCount(SampleInfo info) {
+        return columnStats.getSampleNullCount(info);
     }
 }

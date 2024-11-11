@@ -25,11 +25,6 @@ import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAM
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class SampleInfo {
-
-    private final String dbName;
-
-    private final String tableName;
-
     private final double tabletSampleRatio;
 
     private final long sampleRowCount;
@@ -47,8 +42,6 @@ public class SampleInfo {
     private final List<TabletStats> lowWeightTablets;
 
     public SampleInfo() {
-        this.dbName = null;
-        this.tableName = null;
         this.tabletSampleRatio = 1;
         this.sampleRowCount = 1;
         this.totalRowCount = 1;
@@ -65,8 +58,6 @@ public class SampleInfo {
                       List<TabletStats> mediumHighWeightTablets,
                       List<TabletStats> mediumLowWeightTablets,
                       List<TabletStats> lowWeightTablets) {
-        this.dbName = dbName;
-        this.tableName = tableName;
         this.tabletSampleRatio = tabletSampleRatio;
         this.sampleRowCount = sampleRowCount;
         this.totalRowCount = totalRowCount;
@@ -77,20 +68,36 @@ public class SampleInfo {
         this.lowWeightTablets = lowWeightTablets;
     }
 
-    public double getTabletSampleRatio() {
-        return tabletSampleRatio;
+    public long getTotalRowCount() {
+        return totalRowCount;
     }
 
     public double getRowSampleRatio() {
         return rowSampleRatio;
     }
 
-    public long getSampleRowCount() {
-        return sampleRowCount;
+    public List<TabletStats> getHighWeightTablets() {
+        return highWeightTablets;
     }
 
-    public long getTotalRowCount() {
-        return totalRowCount;
+    public List<TabletStats> getMediumHighWeightTablets() {
+        return mediumHighWeightTablets;
+    }
+
+    public List<TabletStats> getMediumLowWeightTablets() {
+        return mediumLowWeightTablets;
+    }
+
+    public List<TabletStats> getLowWeightTablets() {
+        return lowWeightTablets;
+    }
+
+    public double getTabletSampleRatio() {
+        return tabletSampleRatio;
+    }
+
+    public long getSampleRowCount() {
+        return sampleRowCount;
     }
 
     public int getMaxSampleTabletNum() {

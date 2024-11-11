@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.hyper.HyperQueryJob;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +48,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
 
     private final List<Long> partitionIdList;
 
-    private final int batchLimit;
+    private final int batchRowsLimit;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
@@ -57,7 +58,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columns, type, scheduleType, properties);
         this.partitionIdList = partitionIdList;
         // hll serialize to hex, about 32kb
-        this.batchLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
+        this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
     }
 
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
@@ -65,7 +66,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.partitionIdList = partitionIdList;
-        this.batchLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
+        this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
     }
 
     @Override
@@ -76,8 +77,16 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
         context.getSessionVariable().setPipelineDop(context.getSessionVariable().getStatisticCollectParallelism());
 
-        List<HyperQueryJob> queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames,
-                columnTypes, partitionIdList, batchLimit);
+        int splitSize = Math.max(1, batchRowsLimit / columnNames.size());
+        List<HyperQueryJob> queryJobs;
+        if (type == StatsConstants.AnalyzeType.FULL) {
+            queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
+                    partitionIdList, splitSize);
+        } else {
+            PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
+            queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
+                    partitionIdList, splitSize, sampler);
+        }
 
         long queryTotals = 0;
         long queryFailures = 0;

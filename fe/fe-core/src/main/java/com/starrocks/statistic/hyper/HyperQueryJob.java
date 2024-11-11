@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
@@ -30,7 +31,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.base.ColumnClassifier;
 import com.starrocks.statistic.base.ColumnStats;
-import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -70,7 +71,28 @@ public abstract class HyperQueryJob {
         this.pipelineDop = context.getSessionVariable().getStatisticCollectParallelism();
     }
 
-    public abstract void queryStatistics();
+    public void queryStatistics() {
+        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
+        List<String> sqlList = buildQuerySQL();
+        for (String sql : sqlList) {
+            // execute sql
+            List<TStatisticData> dataList = executeStatisticsQuery(sql, context);
+
+            for (TStatisticData data : dataList) {
+                Partition partition = table.getPartition(data.getPartitionId());
+                if (partition == null) {
+                    continue;
+                }
+                String partitionName = StringEscapeUtils.escapeSql(partition.getName());
+                sqlBuffer.add(createInsertValueSQL(data, tableName, partitionName));
+                rowsBuffer.add(createInsertValueExpr(data, tableName, partitionName));
+            }
+        }
+    }
+
+    protected List<String> buildQuerySQL() {
+        return Collections.emptyList();
+    }
 
     public List<List<Expr>> getStatisticsData() {
         List<List<Expr>> r = rowsBuffer;
@@ -203,10 +225,27 @@ public abstract class HyperQueryJob {
     public static List<HyperQueryJob> createFullQueryJobs(ConnectContext context, Database db, Table table,
                                                           List<String> columnNames, List<Type> columnTypes,
                                                           List<Long> partitionIdList, int batchLimit) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table);
 
-        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, new SampleInfo());
-        int splitSize = Math.max(1, batchLimit / columnNames.size());
+        List<ColumnStats> supportedStats = classifier.getColumnStats();
+        List<ColumnStats> dataCollectColumns =
+                supportedStats.stream().filter(ColumnStats::supportData).collect(Collectors.toList());
 
+        List<List<Long>> pids = Lists.partition(partitionIdList, batchLimit);
+        List<HyperQueryJob> jobs = Lists.newArrayList();
+        for (List<Long> pid : pids) {
+            if (!dataCollectColumns.isEmpty()) {
+                jobs.add(new FullQueryJob(context, db, table, dataCollectColumns, pid));
+            }
+        }
+        return jobs;
+    }
+
+    public static List<HyperQueryJob> createSampleQueryJobs(ConnectContext context, Database db, Table table,
+                                                            List<String> columnNames, List<Type> columnTypes,
+                                                            List<Long> partitionIdList, int batchLimit,
+                                                            PartitionSampler sampler) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table);
         List<ColumnStats> supportedStats = classifier.getColumnStats();
 
         List<ColumnStats> metaCollectColumns =
@@ -214,14 +253,14 @@ public abstract class HyperQueryJob {
         List<ColumnStats> dataCollectColumns =
                 supportedStats.stream().filter(c -> !c.supportMeta() && c.supportData()).collect(Collectors.toList());
 
-        List<List<Long>> pids = Lists.partition(partitionIdList, splitSize);
+        List<List<Long>> pids = Lists.partition(partitionIdList, batchLimit);
         List<HyperQueryJob> jobs = Lists.newArrayList();
         for (List<Long> pid : pids) {
             if (!metaCollectColumns.isEmpty()) {
-                jobs.add(new MetaQueryJob(context, db, table, metaCollectColumns, pid));
+                jobs.add(new MetaQueryJob(context, db, table, metaCollectColumns, pid, sampler));
             }
             if (!dataCollectColumns.isEmpty()) {
-                jobs.add(new FullQueryJob(context, db, table, dataCollectColumns, pid));
+                jobs.add(new SampleQueryJob(context, db, table, dataCollectColumns, pid, sampler));
             }
         }
         return jobs;

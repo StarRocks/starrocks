@@ -15,6 +15,7 @@
 package com.starrocks.statistic.base;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.statistic.sample.SampleInfo;
 
 public class PrimitiveTypeColumnStats extends ColumnStats {
     public PrimitiveTypeColumnStats(String columnName, Type columnType) {
@@ -31,7 +32,22 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullMax() {
+    public String getSampleDateSize(SampleInfo info) {
+        if (columnType.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(" + getQuotedColumnName() + ")) * "
+                    + info.getTotalRowCount() + "/ COUNT(*), 0)";
+        }
+        long typeSize = columnType.getTypeSize();
+        return typeSize + " * " + info.getTotalRowCount();
+    }
+
+    @Override
+    public String getSampleNullCount(SampleInfo info) {
+        return getFullNullCount() + " * " + info.getTotalRowCount() + " / COUNT(*)";
+    }
+
+    @Override
+    public String getMax() {
         String fn = "MAX";
         if (columnType.getPrimitiveType().isCharFamily()) {
             fn = fn + "(LEFT(" + getQuotedColumnName() + ", 200))";
@@ -43,7 +59,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullMin() {
+    public String getMin() {
         String fn = "MIN";
         if (columnType.getPrimitiveType().isCharFamily()) {
             fn = fn + "(LEFT(" + getQuotedColumnName() + ", 200))";
@@ -55,7 +71,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullNDV() {
+    public String getNDV() {
         return "hex(hll_serialize(IFNULL(hll_raw(" + getQuotedColumnName() + "), hll_empty())))";
     }
 }

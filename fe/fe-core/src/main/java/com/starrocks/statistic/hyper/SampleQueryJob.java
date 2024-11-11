@@ -20,44 +20,39 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.base.ColumnStats;
-import org.apache.velocity.VelocityContext;
+import com.starrocks.statistic.base.PartitionSampler;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-public class FullQueryJob extends HyperQueryJob {
-    protected FullQueryJob(ConnectContext context, Database db,
-                           Table table,
-                           List<ColumnStats> columnStats,
-                           List<Long> partitionIdList) {
+public class SampleQueryJob extends HyperQueryJob {
+    private final PartitionSampler sampler;
+
+    protected SampleQueryJob(ConnectContext context, Database db,
+                             Table table,
+                             List<ColumnStats> columnStats,
+                             List<Long> partitionIdList, PartitionSampler sampler) {
         super(context, db, table, columnStats, partitionIdList);
+        this.sampler = sampler;
     }
 
     @Override
     protected List<String> buildQuerySQL() {
-        List<String> metaSQL = Lists.newArrayList();
+        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+
+        List<List<ColumnStats>> partColumns = Lists.partition(columnStats, parts);
+        List<String> sampleSQLs = Lists.newArrayList();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }
-
-            for (ColumnStats columnStat : columnStats) {
-                VelocityContext context = StatisticSQLs.buildBaseContext(db, table, partition, columnStat);
-                context.put("dataSize", columnStat.getFullDateSize());
-                context.put("countNullFunction", columnStat.getFullNullCount());
-                context.put("hllFunction", columnStat.getNDV());
-                context.put("maxFunction", columnStat.getMax());
-                context.put("minFunction", columnStat.getMin());
-                String sql = StatisticSQLs.build(context, StatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
-                metaSQL.add(sql);
+            for (List<ColumnStats> stats : partColumns) {
+                String sql = StatisticSQLs.buildSampleSQL(db, table, partition, stats, sampler,
+                        StatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
+                sampleSQLs.add(sql);
             }
         }
-
-        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> l = Lists.partition(metaSQL, parts);
-        return l.stream().map(sql -> String.join(" UNION ALL ", sql)).collect(Collectors.toList());
+        return sampleSQLs;
     }
-
 }

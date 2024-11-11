@@ -16,47 +16,48 @@ package com.starrocks.statistic.hyper;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.statistic.base.ColumnStats;
+import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.velocity.VelocityContext;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/*
+ * Split sample statistics query:
+ * 1. max/max/count(1) to meta query
+ * 2. length/count null/ndv to data query
+ */
 public class MetaQueryJob extends HyperQueryJob {
     // column_partition -> rows index, for find row
     private final Map<String, Integer> rowsIndex = Maps.newHashMap();
-
-    private final List<String> tempSqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> tempRowsBuffer = Lists.newArrayList();
+    private final List<TStatisticData> tempRowsBuffer = Lists.newArrayList();
+    private final PartitionSampler sampler;
 
     protected MetaQueryJob(ConnectContext context, Database db, Table table, List<ColumnStats> columnStats,
-                           List<Long> partitionIdList) {
+                           List<Long> partitionIdList, PartitionSampler sampler) {
         super(context, db, table, columnStats, partitionIdList);
+        this.sampler = sampler;
     }
 
     @Override
     public void queryStatistics() {
-        tempSqlBuffer.clear();
         tempRowsBuffer.clear();
 
-        queryMeta(columnStats);
-        queryDataNDV(columnStats);
+        queryMetaMetric(columnStats);
+        queryDataMetric(columnStats);
 
-        tempSqlBuffer.clear();
         tempRowsBuffer.clear();
     }
 
-    private void queryMeta(List<ColumnStats> queryColumns) {
-        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
-
+    private void queryMetaMetric(List<ColumnStats> queryColumns) {
         List<String> metaSQL = buildBatchMetaQuerySQL(queryColumns);
         for (String sql : metaSQL) {
             // execute sql
@@ -66,13 +67,10 @@ public class MetaQueryJob extends HyperQueryJob {
                 if (partition == null) {
                     continue;
                 }
-                String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
                 // init
                 rowsIndex.put(data.getColumnName() + "_" + data.getPartitionId(), tempRowsBuffer.size());
-
-                tempSqlBuffer.add(createInsertValueSQL(data, tableName, partitionName));
-                tempRowsBuffer.add(createInsertValueExpr(data, tableName, partitionName));
+                tempRowsBuffer.add(data);
             }
         }
     }
@@ -87,8 +85,10 @@ public class MetaQueryJob extends HyperQueryJob {
             }
 
             for (ColumnStats columnStat : queryColumns) {
-                String sql = StatisticSQLs.buildFullSQL(db, table, partition, columnStat,
-                        StatisticSQLs.BATCH_META_STATISTIC_TEMPLATE);
+                VelocityContext context = StatisticSQLs.buildBaseContext(db, table, partition, columnStat);
+                context.put("maxFunction", columnStat.getMax());
+                context.put("minFunction", columnStat.getMin());
+                String sql = StatisticSQLs.build(context, StatisticSQLs.BATCH_META_STATISTIC_TEMPLATE);
                 metaSQL.add(sql);
             }
         }
@@ -98,7 +98,9 @@ public class MetaQueryJob extends HyperQueryJob {
         return l.stream().map(sql -> String.join(" UNION ALL ", sql)).collect(Collectors.toList());
     }
 
-    private void queryDataNDV(List<ColumnStats> queryColumns) {
+    private void queryDataMetric(List<ColumnStats> queryColumns) {
+        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
+
         List<String> metaSQL = buildBatchNDVQuerySQL(queryColumns);
         for (String sql : metaSQL) {
             // execute sql
@@ -112,17 +114,24 @@ public class MetaQueryJob extends HyperQueryJob {
                 if (!rowsIndex.containsKey(key)) {
                     continue;
                 }
+                String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
                 int index = rowsIndex.get(key);
-                tempRowsBuffer.get(index).set(8, hllDeserialize(data.getHll())); // real hll
-
-                sqlBuffer.add(tempSqlBuffer.get(index));
-                rowsBuffer.add(tempRowsBuffer.get(index));
+                TStatisticData tempData = tempRowsBuffer.get(index);
+                tempData.setNullCount(data.getNullCount()); // real null count
+                tempData.setDataSize(data.getDataSize()); // real data size
+                tempData.setHll(data.getHll()); // real hll
+                sqlBuffer.add(createInsertValueSQL(tempData, tableName, partitionName));
+                rowsBuffer.add(createInsertValueExpr(tempData, tableName, partitionName));
             }
         }
     }
 
     private List<String> buildBatchNDVQuerySQL(List<ColumnStats> queryColumns) {
+        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        List<List<ColumnStats>> partColumns = Lists.partition(queryColumns, parts);
+        pipelineDop = partColumns.size() < parts ? parts / partColumns.size() : 1;
+
         List<String> metaSQL = Lists.newArrayList();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
@@ -130,26 +139,12 @@ public class MetaQueryJob extends HyperQueryJob {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }
-
-            for (ColumnStats columnStat : queryColumns) {
-                if (!rowsIndex.containsKey(columnStat.getColumnNameStr() + "_" + partition.getId())) {
-                    continue;
-                }
-
-                String sql = StatisticSQLs.buildFullSQL(db, table, partition, columnStat,
-                        StatisticSQLs.BATCH_NDV_STATISTIC_TEMPLATE);
+            for (List<ColumnStats> part : partColumns) {
+                String sql = StatisticSQLs.buildSampleSQL(db, table, partition, part, sampler,
+                        StatisticSQLs.BATCH_DATA_STATISTIC_SELECT_TEMPLATE);
                 metaSQL.add(sql);
             }
         }
-
-        if (metaSQL.isEmpty()) {
-            return Collections.emptyList();
-        }
-        
-        int parts = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> l = Lists.partition(metaSQL, parts);
-        pipelineDop = l.size() < parts ? parts / l.size() : 1;
-        return l.stream().map(sql -> String.join(" UNION ALL ", sql)).collect(Collectors.toList());
-
+        return metaSQL;
     }
 }

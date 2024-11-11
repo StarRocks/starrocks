@@ -15,6 +15,7 @@
 package com.starrocks.statistic.base;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.statistic.sample.SampleInfo;
 
 public class ComplexTypeColumnStats extends ColumnStats {
 
@@ -28,12 +29,22 @@ public class ComplexTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullMax() {
+    public String getSampleDateSize(SampleInfo info) {
+        return columnType.getTypeSize() + " * " + info.getTotalRowCount();
+    }
+
+    @Override
+    public String getSampleNullCount(SampleInfo info) {
+        return "0";
+    }
+
+    @Override
+    public String getMax() {
         return "''";
     }
 
     @Override
-    public String getFullMin() {
+    public String getMin() {
         return "''";
     }
 
@@ -43,7 +54,7 @@ public class ComplexTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getFullNDV() {
+    public String getNDV() {
         return "00";
     }
 }

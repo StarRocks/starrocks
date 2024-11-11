@@ -15,6 +15,7 @@
 package com.starrocks.statistic.base;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.statistic.sample.SampleInfo;
 import org.apache.commons.lang.StringEscapeUtils;
 
 public abstract class ColumnStats {
@@ -48,13 +49,9 @@ public abstract class ColumnStats {
         return "`" + columnName + "`";
     }
 
-    public abstract String getFullMax();
+    public abstract String getMax();
 
-    public abstract String getFullMin();
-
-    public String getFullRowCount() {
-        return "COUNT(*)";
-    }
+    public abstract String getMin();
 
     public abstract String getFullDateSize();
 
@@ -62,6 +59,10 @@ public abstract class ColumnStats {
         return "COUNT(*) - COUNT(" + getQuotedColumnName() + ")";
     }
 
-    public abstract String getFullNDV();
+    public abstract String getNDV();
+
+    public abstract String getSampleDateSize(SampleInfo info);
+
+    public abstract String getSampleNullCount(SampleInfo info);
 
 }
