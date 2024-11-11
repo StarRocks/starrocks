@@ -127,6 +127,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
+    // for deserialization
     public PhysicalPartitionImpl() {
     }
 
