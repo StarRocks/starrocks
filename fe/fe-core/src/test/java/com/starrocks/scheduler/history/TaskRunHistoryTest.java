@@ -154,7 +154,6 @@ public class TaskRunHistoryTest {
         assertEquals(StatsConstants.STATISTICS_DB_NAME, keeper.getDatabaseName());
         assertEquals(TaskRunHistoryTable.TABLE_NAME, keeper.getTableName());
         assertEquals(TaskRunHistoryTable.CREATE_TABLE, keeper.getCreateTableSql());
-        assertEquals(TaskRunHistoryTable.TABLE_REPLICAS, keeper.getTableReplicas());
 
         // database not exists
         new Expectations() {

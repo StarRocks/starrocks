@@ -52,7 +52,6 @@ public class TaskRunHistoryTable {
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
     public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
-    public static final int TABLE_REPLICAS = 3;
     public static final String CREATE_TABLE =
             String.format("CREATE TABLE IF NOT EXISTS %s (" +
                     // identifiers
@@ -93,7 +92,7 @@ public class TaskRunHistoryTable {
             "SELECT history_content_json " + "FROM " + TABLE_FULL_NAME + " WHERE ";
 
     private static final TableKeeper KEEPER =
-            new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS,
+            new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE,
                     () -> Math.max(1, Config.task_runs_ttl_second / 3600 / 24));
 
     public static TableKeeper createKeeper() {
