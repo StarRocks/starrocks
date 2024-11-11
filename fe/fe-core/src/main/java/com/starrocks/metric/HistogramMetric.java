@@ -56,10 +56,11 @@ public final class HistogramMetric extends Histogram {
      * Get the histogram name with tags in the format of "name_tag1=value1, tag2=value2"
      */
     public String getHistogramName() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(name);
-        sb.append("_");
-        sb.append(getTagName());
-        return sb.toString();
+        String tagName = getTagName();
+        if (!tagName.isEmpty()) {
+            return name + "_" + tagName;
+        } else {
+            return name;
+        }
     }
 }
