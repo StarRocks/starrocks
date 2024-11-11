@@ -44,6 +44,8 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Status;
@@ -907,6 +909,8 @@ public class DefaultCoordinator extends Coordinator {
                 if (copyStatus.isCancelled() &&
                         copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                } else if (copyStatus.isTimeout()) {
+                    ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT, errMsg);
                 }
                 throw new UserException(ec, errMsg);
             }

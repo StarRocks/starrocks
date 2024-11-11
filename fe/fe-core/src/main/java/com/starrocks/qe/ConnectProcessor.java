@@ -219,6 +219,8 @@ public class ConnectProcessor {
                 //represent analysis err
                 if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
                     MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
                 } else {
                     MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
                 }
@@ -301,6 +303,8 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
+        // set isQuery before `forwardToLeader` to make it right for audit log.
+        ctx.getState().setIsQuery(true);
 
         // execute this query.
         StatementBase parsedStmt = null;
