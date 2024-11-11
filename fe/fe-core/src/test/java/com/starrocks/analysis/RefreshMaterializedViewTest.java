@@ -1238,8 +1238,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         String truncateStr = "truncate table trunc_db.t1;";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, connectContext);
-        // sleep 3s, wait for the refresh job to complete
-        Thread.sleep(3000);
+        starRocksAssert.waitRefreshFinished(mv1.getId());
 
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
@@ -1286,8 +1285,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         dropPartitionClause.setResolvedPartitionNames(ImmutableList.of(p1.getName()));
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("drop_db");
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
-        // sleep 3s, wait for the refresh job to complete
-        Thread.sleep(3000);
+        starRocksAssert.waitRefreshFinished(mv1.getId());
 
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
