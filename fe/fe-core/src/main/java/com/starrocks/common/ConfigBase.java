@@ -36,6 +36,9 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,28 +78,33 @@ public class ConfigBase {
         String[] aliases() default {};
     }
 
-    protected Properties props;
+    protected Properties props = new Properties();
+    private static String mutableConfigPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
     public void init(String propFile) throws Exception {
         configFields = this.getClass().getFields();
-        initAllMutableConfigs();
-        props = new Properties();
-        FileReader reader = null;
-        try {
-            reader = new FileReader(propFile);
+        try (FileReader reader = new FileReader(propFile)) {
             props.load(reader);
-        } catch (Exception e) {
-            throw e;
-        } finally {
-            if (reader != null) {
-                reader.close();
-            }
         }
         replacedByEnv();
+    }
+
+    public void initMutable(String propFile) throws Exception{
+
+        Path path = Path.of(propFile);
+        if (!Files.exists(path)) {
+            Files.createFile(path);
+        }
+        mutableConfigPath = propFile;
+        initAllMutableConfigs();
+        try (FileReader reader = new FileReader(mutableConfigPath)) {
+            props.load(reader);
+        }
         setFields();
     }
+
 
     public static void initAllMutableConfigs() {
         for (Field field : configFields) {
@@ -303,11 +311,23 @@ public class ConfigBase {
 
         try {
             ConfigBase.setConfigField(field, value);
+            ConfigBase.storeMutable(key, value);
         } catch (Exception e) {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
         LOG.info("set config {} to {}", key, value);
+    }
+
+    public static void storeMutable(String key, String value) throws Exception {
+        Properties props = new Properties();
+        try (FileReader reader = new FileReader(mutableConfigPath)) {
+            props.load(reader);
+            props.setProperty(key, value);
+        }
+        try (FileWriter writer = new FileWriter(mutableConfigPath)) {
+            props.store(writer, "Auto save");
+        }
     }
 
     private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {
