@@ -137,6 +137,8 @@ public:
     using RowsetIterateFunc = std::function<bool(RowsetMetaSharedPtr rowset_meta)>;
     static Status rowset_iterate(DataDir* store, TTabletId tablet_id, const RowsetIterateFunc& func);
 
+    static Status put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, int64_t version,
+                                          const RowsetMetaPB& rowset);
     // methods for operating pending commits
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);

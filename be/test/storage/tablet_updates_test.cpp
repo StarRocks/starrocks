@@ -3800,7 +3800,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_TRUE(rs_meta.tablet_schema() == nullptr);
     }
 
-    _tablet->updates()->rewrite_rs_meta();
+    _tablet->updates()->rewrite_rs_meta(true);
     {
         std::string rs1_meta_value;
         ASSERT_TRUE(TabletMetaManager::get_committed_rowset_meta_value(_tablet->data_dir(), _tablet->tablet_id(),

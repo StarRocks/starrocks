@@ -384,7 +384,7 @@ public:
         }
     }
 
-    void rewrite_rs_meta();
+    void rewrite_rs_meta(bool is_fatal);
 
 private:
     friend class Tablet;
