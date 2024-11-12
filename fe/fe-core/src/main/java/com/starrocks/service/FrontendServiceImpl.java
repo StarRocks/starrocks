@@ -2006,7 +2006,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             updatePartitionIds.add(p.getParentId());
             p.setImmutable(true);
 
-            List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
+            List<PhysicalPartition> mutablePartitions;
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()

@@ -357,7 +357,7 @@ public class StarOSAgentTest {
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test create shard group
-        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1));
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1, 1));
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();

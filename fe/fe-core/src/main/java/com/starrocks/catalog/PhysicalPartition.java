@@ -39,6 +39,10 @@ public interface PhysicalPartition {
 
     public long getShardGroupId();
 
+    public void setShardGroupId(long shardGroupId);
+
+    public List<Long> getShardGroupIds();
+
     public void setImmutable(boolean isImmutable);
     public boolean isImmutable();
 

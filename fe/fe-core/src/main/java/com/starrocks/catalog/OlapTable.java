@@ -48,6 +48,7 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -905,7 +906,7 @@ public class OlapTable extends Table {
                     idx.clearTabletsForRestore();
                     Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                             partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
-                            schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), db);
+                            schemaHash, physicalPartition.getId(), db);
                     if (!status.ok()) {
                         return status;
                     }
@@ -918,7 +919,7 @@ public class OlapTable extends Table {
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId, Database db) {
+                                          long partitionId, Database db) {
         Preconditions.checkArgument(replicationNum > 0);
         boolean isColocate = (this.colocateGroup != null && !this.colocateGroup.isEmpty() && db != null);
 
@@ -2045,6 +2046,13 @@ public class OlapTable extends Table {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
                 physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
+
+                // Every partition has a ShardGroup previously,
+                // and now every Materialized index has a shardGroup.
+                // So the original partition's shardGroup is moved to the base materialized index for compatibility
+                if (partition.getShardGroupId() != PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                    partition.getBaseIndex().setShardGroupId(partition.getShardGroupId());
+                }
             }
         }
 
@@ -3244,6 +3252,10 @@ public class OlapTable extends Table {
 
     public AlterJobV2Builder alterTable() {
         return new OlapTableAlterJobV2Builder(this);
+    }
+
+    public AlterJobV2Builder rollUp() {
+        return new OlapTableRollupJobBuilder(this);
     }
 
     public OptimizeJobV2Builder optimizeTable() {
