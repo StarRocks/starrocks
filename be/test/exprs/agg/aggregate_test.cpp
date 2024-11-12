@@ -1724,9 +1724,11 @@ TEST_F(AggregateTest, test_histogram) {
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
     raw_columns[3] = const3.get();
-    for (int i = 0; i < data_column->size(); ++i) {
-        histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
-    }
+    histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                  state->state());
+    // for (int i = 0; i < data_column->size(); ++i) {
+    //     histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
+    // }
 
     auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());

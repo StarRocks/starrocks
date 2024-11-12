@@ -82,7 +82,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         if (is_independent) {
             SlotId slot_id = ctx->next_slot_id++;
 #ifdef DEBUG
-            expr_ctx->root()->for_each_slot_id([expr_ctx, new_slot_id = slot_id](SlotId slot_id) {
+            expr_ctx->root()->for_each_slot_id([new_slot_id = slot_id](SlotId slot_id) {
                 DCHECK_NE(new_slot_id, slot_id) << "slot_id " << new_slot_id << " already exists in expr_ctx";
             });
 #endif

@@ -266,6 +266,11 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
 
+    template <LogicalType Type>
+    static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+        return down_cast<const RunTimeColumnType<Type>*>(value);
+    }
+
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
