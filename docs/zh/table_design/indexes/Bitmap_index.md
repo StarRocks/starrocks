@@ -409,7 +409,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_partkey` 列数据的 page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.43 ms，**其中加载数据花了 0.39 ms**，谓词过滤花了 0.02 ms。
+总共耗时约 0.43 s，**其中加载数据花了 0.39 s**，谓词过滤花了 0.02 s。
 
 ```Bash
 PullRowNum: 255 // 返回结果集的行数。
