@@ -295,6 +295,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             size_t cur_old = old_del_vec->cardinality();
             size_t cur_add = new_delete.second.size();
             size_t cur_new = new_del_vecs[idx].second->cardinality();
+            // For test purpose, we can set recover flag to test recover mode.
+            Status test_status = Status::OK();
+            TEST_SYNC_POINT_CALLBACK("delvec_inconsistent", &test_status);
+            if (!test_status.ok()) {
+                builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+                return test_status;
+            }
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
                 std::string error_msg = strings::Substitute(
