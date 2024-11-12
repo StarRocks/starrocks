@@ -149,6 +149,23 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             auto&& in_filters = _partial_rf_merger->get_total_in_filters();
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
+            if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+                auto in_filter_it = in_filters.begin();
+                auto bloom_filter_it = bloom_filters.begin();
+                while (in_filter_it != in_filters.end() && bloom_filter_it != bloom_filters.end()) {
+                    DeferOp defer([&] {
+                        ++in_filter_it;
+                        ++bloom_filter_it;
+                    });
+                    auto* in_filter = *in_filter_it;
+                    auto* bloom_filter = *bloom_filter_it;
+                    if (in_filter == nullptr || bloom_filter == nullptr || bloom_filter->runtime_filter() == nullptr) {
+                        continue;
+                    }
+                    bloom_filter->runtime_filter()->set_in_values(in_filter);
+                }
+            }
+
             {
                 size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
                                                         [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {

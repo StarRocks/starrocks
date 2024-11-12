@@ -30,6 +30,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
+#include "serde/column_array_serde.h"
 
 namespace starrocks {
 // 0x1. initial global runtime filter impl
@@ -39,6 +40,7 @@ inline const constexpr uint8_t RF_VERSION = 0x2;
 inline const constexpr uint8_t RF_VERSION_V2 = 0x3;
 static_assert(sizeof(RF_VERSION_V2) == sizeof(RF_VERSION));
 inline const constexpr int32_t RF_VERSION_SZ = sizeof(RF_VERSION_V2);
+class ExprContext;
 
 // compatible code from 2.5 to 3.0
 // TODO: remove it
@@ -343,6 +345,10 @@ public:
                 [](size_t total, const SimdBlockFilter& bf) -> size_t { return total + bf.get_alloc_size(); });
     }
 
+    virtual void set_in_values(ExprContext* in_filter) = 0;
+    ColumnPtr in_values() const { return _in_values; }
+    bool is_in_null_safe() const { return _is_in_null_safe; }
+
     // RuntimeFilter version
     // if the RuntimeFilter is updated, the version will be updated as well,
     // (usually used for TopN Filter)
@@ -393,6 +399,9 @@ protected:
     size_t _rf_version = 0;
     // local colocate filters is local filter we don't have to serialize them
     std::vector<JoinRuntimeFilter*> _group_colocate_filters;
+
+    ColumnPtr _in_values = nullptr;
+    bool _is_in_null_safe = false;
 };
 
 template <typename ModuloFunc>
@@ -603,6 +612,8 @@ public:
         return ss.str();
     }
 
+    void set_in_values(ExprContext* in_filter) override;
+
     size_t max_serialized_size() const override {
         size_t size = sizeof(Type) + JoinRuntimeFilter::max_serialized_size();
         // _has_min_max. for backward compatibility.
@@ -614,6 +625,12 @@ public:
             // slice format = | min_size | max_size | min_data | max_data |
             size += sizeof(_min.size) + _min.size;
             size += sizeof(_max.size) + _max.size;
+        }
+
+        size += sizeof(bool); // has_in_values
+        if (_in_values != nullptr) {
+            size += serde::ColumnArraySerde::max_serialized_size(*_in_values);
+            size += sizeof(bool); // _is_in_null_safe
         }
 
         return size;
@@ -656,6 +673,21 @@ public:
                 offset += _max.size;
             }
         }
+
+        if (_in_values != nullptr) {
+            const bool has_data = true;
+            memcpy(data + offset, &has_data, sizeof(has_data));
+            offset += sizeof(has_data);
+            auto* buf = data + offset;
+            offset += serde::ColumnArraySerde::serialize(*_in_values, buf) - buf;
+            memcpy(data + offset, &_is_in_null_safe, sizeof(_is_in_null_safe));
+            offset += sizeof(_is_in_null_safe);
+        } else {
+            const bool has_data = false;
+            memcpy(data + offset, &has_data, sizeof(has_data));
+            offset += sizeof(has_data);
+        }
+
         return offset;
     }
 
@@ -704,6 +736,19 @@ public:
                     offset += _max.size;
                     _max.data = _slice_max.data();
                 }
+            }
+        }
+
+        {
+            bool has_in_values = false;
+            memcpy(&has_in_values, data + offset, sizeof(has_in_values));
+            offset += sizeof(has_in_values);
+            if (has_in_values) {
+                _in_values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+                auto* buf = data + offset;
+                offset += serde::ColumnArraySerde::deserialize(buf, _in_values.get()) - buf;
+                memcpy(&_is_in_null_safe, data + offset, sizeof(_is_in_null_safe));
+                offset += sizeof(_is_in_null_safe);
             }
         }
 

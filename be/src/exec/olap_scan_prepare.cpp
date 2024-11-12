@@ -391,6 +391,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
+
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
                     _normalized_exprs[i] = true;
                 }
@@ -604,6 +605,15 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
         }
 
         if (rf->has_null()) continue;
+
+        if (rf->in_values() != nullptr) {
+            std::set<RangeValueType> values;
+            const auto& datas = GetContainer<SlotType>::get_data(rf->in_values());
+            for (int i = 0; i < rf->in_values()->size(); i++) {
+                values.insert(static_cast<RangeValueType>(datas[i]));
+            }
+            (void)range->add_fixed_values(FILTER_IN, values);
+        }
 
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine

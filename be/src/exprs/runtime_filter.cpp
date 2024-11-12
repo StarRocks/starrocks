@@ -15,6 +15,7 @@
 #include "exprs/runtime_filter.h"
 
 #include "types/logical_type_infra.h"
+#include "in_const_predicate.hpp"
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
@@ -246,5 +247,17 @@ void JoinRuntimeFilter::clear_bf() {
     }
     _size = 0;
 }
+
+template <LogicalType Type>
+void RuntimeBloomFilter<Type>::set_in_values(ExprContext* in_filter) {
+    if (auto* cast_in_filter = dynamic_cast<VectorizedInConstPredicate<Type>*>(in_filter->root());
+        cast_in_filter != nullptr) {
+        _in_values = cast_in_filter->get_all_values();
+        _is_in_null_safe = cast_in_filter->is_eq_null();
+    }
+}
+#define INSTANTIATE_RUNTIME_BLOOM_FILTER(TYPE) template class RuntimeBloomFilter<TYPE>;
+    APPLY_FOR_ALL_SCALAR_TYPE(INSTANTIATE_RUNTIME_BLOOM_FILTER);
+#undef INSTANTIATE_RUNTIME_BLOOM_FILTER
 
 } // namespace starrocks

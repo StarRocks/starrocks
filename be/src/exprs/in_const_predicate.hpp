@@ -393,6 +393,8 @@ public:
 
     bool is_use_array() const { return _array_size != 0; }
 
+    bool is_eq_null() const { return _eq_null; }
+
 private:
     // Note(yan): It's very tempting to use real bitmap, but the real scenario is, the array size is usually small like dict codes.
     // To usse real bitmap involves bit shift, and/or ops, which eats much cpu cycles.
