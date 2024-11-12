@@ -14,6 +14,8 @@
 
 #include "io_profiler.h"
 
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_set>
@@ -98,13 +100,8 @@ struct IOStatEntry {
     }
 };
 
-class IOStatEntryHash {
-public:
-    size_t operator()(const IOStatEntry& entry) const { return std::hash<uint64_t>()(entry.id); }
-};
-
 static std::mutex _io_stats_mutex;
-static std::unordered_set<IOStatEntry, IOStatEntryHash> _io_stats;
+static std::unordered_map<uint64_t, std::unique_ptr<IOStatEntry>> _io_stats;
 
 bool IOProfiler::is_empty() {
     return _io_stats.empty();
@@ -126,16 +123,16 @@ void IOProfiler::reset() {
 thread_local IOStatEntry* current_io_stat = nullptr;
 
 void IOProfiler::set_context(uint32_t tag, uint64_t tablet_id) {
-    if (tablet_id == 0) {
+    if (tablet_id == 0 || _context_io_mode == IOMode::IOMODE_NONE) {
         return;
     }
     uint64_t key = ((uint64_t)tag << 48UL) | tablet_id;
     std::lock_guard<std::mutex> l(_io_stats_mutex);
-    auto it = _io_stats.find(IOStatEntry{key});
+    auto it = _io_stats.find(key);
     if (it == _io_stats.end()) {
-        it = _io_stats.emplace(key).first;
+        it = _io_stats.emplace(key, std::make_unique<IOStatEntry>(key)).first;
     }
-    current_io_stat = const_cast<IOStatEntry*>(&(*it));
+    current_io_stat = it->second.get();
 }
 
 IOStatEntry* IOProfiler::get_context() {
@@ -244,9 +241,9 @@ StatusOr<std::vector<std::string>> IOProfiler::get_topn_stats(size_t n,
     }
     stats.reserve(_io_stats.size());
     for (auto& it : _io_stats) {
-        auto v = func(it);
+        auto v = func(*it.second);
         if (v > 0) {
-            stats.emplace_back(v, &it);
+            stats.emplace_back(v, it.second.get());
         }
     }
     std::sort(stats.begin(), stats.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
