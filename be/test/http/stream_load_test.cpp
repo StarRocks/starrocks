@@ -530,7 +530,7 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Fail", doc["Status"].GetString());
-    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_batch_write"));
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
 }
 
 } // namespace starrocks

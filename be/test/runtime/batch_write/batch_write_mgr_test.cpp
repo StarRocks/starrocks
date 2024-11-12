@@ -278,7 +278,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
-        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_batch_write"));
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
     }
 
     // HTTP_ENABLE_BATCH_WRITE is false
