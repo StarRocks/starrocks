@@ -193,7 +193,7 @@ select
 from
   part,
   supplier,
-  partsup,
+  partsupp,
   nation,
   region
 where
@@ -208,7 +208,7 @@ where
     select
       min(ps_supplycost)
     from
-      partsup,
+      partsupp,
       supplier,
       nation,
       region
@@ -281,7 +281,7 @@ select
 from
   customer,
   orders,
-  line item,
+  lineitem,
   supplier,
   nation,
   region
@@ -326,7 +326,7 @@ from
       l_extendedprice * (1 - l_discount) as volume
     from
       supplier,
-      line item,
+      lineitem,
       orders,
       customer,
       nation n1,
@@ -368,7 +368,7 @@ from
     from
       part,
       supplier,
-      line item,
+      lineitem,
       orders,
       customer,
       nation n1,
@@ -405,8 +405,8 @@ from
     from
       part,
       supplier,
-      line item,
-      partsup,
+      lineitem,
+      partsupp,
       orders,
       nation
     where
@@ -438,7 +438,7 @@ select
     from
       customer,
       orders,
-      line item,
+      lineitem,
       nation
     where
       c_custkey = o_custkey
@@ -464,7 +464,7 @@ select
   ps_partkey,
   sum(ps_supplycost * ps_availqty) as value
 from
-  partsup,
+  partsupp,
   supplier,
   nation
 where
@@ -477,7 +477,7 @@ group by
       select
         sum(ps_supplycost * ps_availqty) * 0.000001
       from
-        partsup,
+        partsupp,
         supplier,
         nation
       where
@@ -545,7 +545,7 @@ select
     else 0
   end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
 from
-  line item,
+  lineitem,
   part
 where
   l_partkey = p_partkey
@@ -580,7 +580,7 @@ select
   p_size,
   count(distinct ps_suppkey) as supplier_cnt
 from
-  partsup,
+  partsupp,
   part
 where
   p_partkey = ps_partkey
@@ -609,7 +609,7 @@ order by
 select
   sum(l_extendedprice) / 7.0 as avg_yearly
 from
-  line item,
+  lineitem,
   part
 where
   p_partkey = l_partkey
@@ -663,7 +663,7 @@ limit 100;
 select
   sum(l_extendedprice* (1 - l_discount)) as revenue
 from
-  line item,
+  lineitem,
   part
 where
   (
@@ -773,7 +773,7 @@ where
 group by
         s_name
 order by
-        numwaitdesc,
+        numwait DESC,
         s_name
 limit 100;
 
@@ -927,7 +927,7 @@ PROPERTIES (
 
 #Create table partsupp
 drop table if exists partsupp;
-CREATE TABLE partsup (
+CREATE TABLE partsupp (
     ps_partkey int NOT NULL,
     ps_suppkey int NOT NULL,
     ps_availqty int NOT NULL,
