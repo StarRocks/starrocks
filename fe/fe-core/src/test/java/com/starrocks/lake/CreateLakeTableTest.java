@@ -24,6 +24,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -42,6 +43,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
 import java.util.Objects;
 
 public class CreateLakeTableTest {
@@ -396,5 +398,46 @@ public class CreateLakeTableTest {
         Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
         Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
         Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
+    }
+
+    @Test
+    public void testCreateTableWithUKFK() {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE lake_test.region (\n" +
+                        "  r_regionkey  INT NOT NULL,\n" +
+                        "  r_name       VARCHAR(25) NOT NULL,\n" +
+                        "  r_comment    VARCHAR(152)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`r_regionkey`)\n" +
+                        "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " 'replication_num' = '1',\n " +
+                        " 'enable_persistent_index' = 'true', \n" +
+                        " 'persistent_index_type' = 'cloud_native', \n" +
+                        " 'unique_constraints' = 'r_regionkey'\n" +
+                        ");"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE lake_test.nation (\n" +
+                        "  n_nationkey INT(11) NOT NULL,\n" +
+                        "  n_name      VARCHAR(25) NOT NULL,\n" +
+                        "  n_regionkey INT(11) NOT NULL,\n" +
+                        "  n_comment   VARCHAR(152) NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`N_NATIONKEY`)\n" +
+                        "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " 'replication_num' = '1',\n" +
+                        " 'enable_persistent_index' = 'true', \n" +
+                        " 'persistent_index_type' = 'cloud_native', \n" +
+                        " 'unique_constraints' = 'n_nationkey',\n" +
+                        " 'foreign_key_constraints' = '(n_regionkey) references region(r_regionkey)'\n" +
+                        ");"));
+        LakeTable region = getLakeTable("lake_test", "region");
+        LakeTable nation = getLakeTable("lake_test", "nation");
+        Map<String, String> regionProps = region.getProperties();
+        Assert.assertTrue(regionProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+        Map<String, String> nationProps = nation.getProperties();
+        Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
+        Assert.assertTrue(nationProps.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT));
     }
 }
