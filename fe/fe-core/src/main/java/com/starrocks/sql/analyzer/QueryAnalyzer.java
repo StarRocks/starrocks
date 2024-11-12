@@ -1313,12 +1313,12 @@ public class QueryAnalyzer {
                 }
             }
 
-            boolean rewrite_unnest_bitmap_to_array = false;
+            boolean rewriteUnnestBitmapToArray = false;
             if (FunctionSet.UNNEST.equals(fn.functionName()) && args.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr unnestArg0 = (FunctionCallExpr) args.get(0);
                 // convert unnest(bitmap_to_array(v1)) to unnest(bitmap)
                 if (FunctionSet.BITMAP_TO_ARRAY.equals(unnestArg0.getFnName().getFunction())) {
-                    rewrite_unnest_bitmap_to_array = true;
+                    rewriteUnnestBitmapToArray = true;
                     Expr bitmapToArrayArg0 = unnestArg0.getChild(0);
                     Type bitmapToArrayArg0Type = bitmapToArrayArg0.getType();
 
@@ -1348,7 +1348,7 @@ public class QueryAnalyzer {
             node.setChildExpressions(node.getFunctionParams().exprs());
 
             if (node.getColumnOutputNames() == null) {
-                if (tableFunction.getFunctionName().getFunction().equals("unnest") || rewrite_unnest_bitmap_to_array) {
+                if (tableFunction.getFunctionName().getFunction().equals("unnest") || rewriteUnnestBitmapToArray) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
                     List<String> columnNames = new ArrayList<>();
