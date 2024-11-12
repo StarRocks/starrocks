@@ -39,6 +39,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -1312,6 +1313,22 @@ public class QueryAnalyzer {
                 }
             }
 
+            boolean rewrite_unnest_bitmap_to_array = false;
+            if (FunctionSet.UNNEST.equals(fn.functionName()) && args.get(0) instanceof FunctionCallExpr) {
+                FunctionCallExpr unnestArg0 = (FunctionCallExpr) args.get(0);
+                // convert unnest(bitmap_to_array(v1)) to unnest(bitmap)
+                if (FunctionSet.BITMAP_TO_ARRAY.equals(unnestArg0.getFnName().getFunction())) {
+                    rewrite_unnest_bitmap_to_array = true;
+                    Expr bitmapToArrayArg0 = unnestArg0.getChild(0);
+                    Type bitmapToArrayArg0Type = bitmapToArrayArg0.getType();
+
+                    node.setChildExpressions(Lists.newArrayList(bitmapToArrayArg0));
+                    node.getFunctionParams().setExprs(Lists.newArrayList(bitmapToArrayArg0));
+                    fn = Expr.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {bitmapToArrayArg0Type},
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                }
+            }
+
             if (namesArray != null) {
                 Preconditions.checkState(fn.hasNamedArg());
                 node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
@@ -1331,7 +1348,7 @@ public class QueryAnalyzer {
             node.setChildExpressions(node.getFunctionParams().exprs());
 
             if (node.getColumnOutputNames() == null) {
-                if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
+                if (tableFunction.getFunctionName().getFunction().equals("unnest") || rewrite_unnest_bitmap_to_array) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
                     List<String> columnNames = new ArrayList<>();

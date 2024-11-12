@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.Vector;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.UNNEST_BITMAP;
+
 /**
  * Internal representation of a table value function.
  */
@@ -111,8 +113,8 @@ public class TableFunction extends Function {
             functionSet.addBuiltin(func);
         }
 
-        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName("unnest_bitmap"),
-                Lists.newArrayList("unnest_bitmap"), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName(UNNEST_BITMAP),
+                Lists.newArrayList(UNNEST_BITMAP), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
         functionSet.addBuiltin(funcUnnestBitmap);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
