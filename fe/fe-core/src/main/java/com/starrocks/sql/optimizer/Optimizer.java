@@ -823,7 +823,7 @@ public class Optimizer {
         }
 
         PushDownSubfieldRule pushDownRule = new PushDownSubfieldRule();
-        tree = pushDownRule.rewrite(tree, rootTaskContext);
+        ruleRewriteDownTop(tree, rootTaskContext, pushDownRule);
 
         if (pushDownRule.hasRewrite()) {
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
