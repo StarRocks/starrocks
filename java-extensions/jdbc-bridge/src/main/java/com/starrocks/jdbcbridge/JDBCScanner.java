@@ -17,7 +17,6 @@ package com.starrocks.jdbcbridge;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import java.io.File;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -61,7 +60,7 @@ public class JDBCScanner {
 
     public void open() throws Exception {
         String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
-        URL driverURL = new File(driverLocation).toURI().toURL();
+        URL driverURL = new URL(driverLocation);
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
             Thread.currentThread().setContextClassLoader(classLoader);
