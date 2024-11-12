@@ -751,7 +751,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -809,7 +809,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
             // delete
             ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
         }
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -873,7 +873,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
         if (i == 5) {
             ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         }
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         config::write_buffer_size = old_size;
         delta_writer->close();
         // Publish version
