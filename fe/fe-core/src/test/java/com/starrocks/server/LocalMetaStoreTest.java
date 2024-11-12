@@ -183,7 +183,7 @@ public class LocalMetaStoreTest {
                     index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
-                    db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), 0, index));
+                    db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), index));
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
