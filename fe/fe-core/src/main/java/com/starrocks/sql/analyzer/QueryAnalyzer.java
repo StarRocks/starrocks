@@ -1314,7 +1314,8 @@ public class QueryAnalyzer {
             }
 
             boolean rewriteUnnestBitmapToArray = false;
-            if (FunctionSet.UNNEST.equals(fn.functionName()) && args.get(0) instanceof FunctionCallExpr) {
+            if (ConnectContext.get().getSessionVariable().isEnableRewriteUnnestBitmapToArray() &&
+                    FunctionSet.UNNEST.equals(fn.functionName()) && args.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr unnestArg0 = (FunctionCallExpr) args.get(0);
                 // convert unnest(bitmap_to_array(v1)) to unnest(bitmap)
                 if (FunctionSet.BITMAP_TO_ARRAY.equals(unnestArg0.getFnName().getFunction())) {
@@ -1323,7 +1324,6 @@ public class QueryAnalyzer {
                     Type bitmapToArrayArg0Type = bitmapToArrayArg0.getType();
 
                     node.setChildExpressions(Lists.newArrayList(bitmapToArrayArg0));
-                    node.getFunctionParams().setExprs(Lists.newArrayList(bitmapToArrayArg0));
                     fn = Expr.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {bitmapToArrayArg0Type},
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 }
