@@ -69,9 +69,7 @@ public:
 
         PoolBase* getPool() const { return &_data->data.pool; }
 
-        void set_not_in_good_condition() {
-            _data->data.in_good_condition = false;
-        }
+        void set_not_in_good_condition() { _data->data.in_good_condition = false; }
 
     private:
         std::shared_ptr<PoolEntryHelper> _data;
