@@ -3912,6 +3912,27 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     if (stat != nullptr) {
         stat->flush_or_wal_cost += watch.elapsed_time();
     }
+
+    {
+        if (config::create_sorted_index) {
+            faststring fixed_buf;
+            put_fixed32_le(&fixed_buf, kKeySizeMagicNum);
+            put_fixed32_le(&fixed_buf, n);
+            for (size_t idx = 0; idx < n; idx++) {
+                const auto& key = keys[idx];
+                const auto value = (values != nullptr) ? values[idx] : IndexValue(NullIndexValue);
+                WALKVSizeType kv_size = key.size + kIndexValueSize;
+                put_fixed32_le(&fixed_buf, kv_size);
+                fixed_buf.append(key.data, key.size);
+                put_fixed64_le(&fixed_buf, value.get_value());
+                if (idx > 0  && idx % 4096 == 0) {
+                    RETURN_IF_ERROR(_sort_index_file->append(fixed_buf));
+                    fixed_buf.clear();
+                }
+            }
+            RETURN_IF_ERROR(_sort_index_file->append(fixed_buf));
+        }
+    }
     return st;
 }
 
@@ -5285,6 +5306,9 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
               << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    
+    std::string sort_index_file = strings::Substitute("$0/sort_index", _path;
+    ASSIGN_OR_RETURN(_sort_index_file, _fs->new_random_access_file(sort_index_file));
     return Status::OK();
 }
 
