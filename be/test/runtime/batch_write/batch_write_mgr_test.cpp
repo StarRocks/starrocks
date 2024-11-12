@@ -128,7 +128,8 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
 }
 
 TEST_F(BatchWriteMgrTest, append_data) {
-    BatchWriteId batch_write_id = {"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
+    BatchWriteId batch_write_id = {
+            "db1", "table1", {{HTTP_ENABLE_BATCH_WRITE, "true"}, {HTTP_BATCH_WRITE_ASYNC, "true"}}};
     auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
                                                                  batch_write_id.table, batch_write_id.load_params,
                                                                  "label1", 1, generate_uuid(), 1000);

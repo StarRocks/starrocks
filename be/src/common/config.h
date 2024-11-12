@@ -1496,6 +1496,6 @@ CONF_mInt32(batch_write_default_timeout_ms, "600000");
 CONF_mInt32(batch_write_rpc_request_retry_num, "10");
 CONF_mInt32(batch_write_rpc_request_retry_interval_ms, "500");
 CONF_mInt32(batch_write_rpc_reqeust_timeout_ms, "10000");
-CONF_mInt32(batch_write_poll_load_status_interval_ms, "100");
+CONF_mInt32(batch_write_poll_load_status_interval_ms, "200");
 CONF_mBool(batch_write_trace_log_enable, "false");
 } // namespace starrocks::config

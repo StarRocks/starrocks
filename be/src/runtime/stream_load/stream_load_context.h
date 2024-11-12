@@ -292,7 +292,7 @@ public:
     // and put label in this `batch_write_label`
     std::string batch_write_label;
     // A hint for the left time of this batch to finish
-    int64_t batch_left_time_nanos = 0;
+    int64_t batch_left_time_nanos = -1;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }
