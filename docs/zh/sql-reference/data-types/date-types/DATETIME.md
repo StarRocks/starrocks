@@ -8,15 +8,9 @@ import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'
 
 日期时间类型，取值范围是 ['0000-01-01 00:00:00', '9999-12-31 23:59:59']。
 
-<<<<<<< HEAD
-打印的形式是 `YYYY-MM-DD HH: MM: SS`。
-=======
 <DateTip />
 
 打印的形式是 `YYYY-MM-DD HH:MM:SS`。
-
-从 v3.3.5 起，DATETIME 支持毫秒和微秒精度。打印形式为 `YYYY-MM-DD HH:MM:SS.fffffff`
->>>>>>> c6ebfcff5b ([Doc] add tip for data fxns (#52810))
 
 ## 示例
 
