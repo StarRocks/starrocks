@@ -470,8 +470,13 @@ public class MvPartitionCompensator {
         if (partitionTableAndColumns == null) {
             return null;
         }
+        Optional<Expr> mvPartitionOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionOpt.isEmpty()) {
+            return null;
+        }
+        Expr mvPartitionExpr = mvPartitionOpt.get();
         Column partitionColumn = partitionTableAndColumns.second;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getRangePartitionExpr(), partitionColumn);
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mvPartitionExpr, partitionColumn);
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
                 LiteralExpr literalExpr = selectedPartitionKey.getKeys().get(0);
@@ -684,7 +689,11 @@ public class MvPartitionCompensator {
         }
 
         Column partitionColumn = partitionTableAndColumns.second;
-        Expr partitionExpr = mv.getRangePartitionExpr();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = mvPartitionExprOpt.get();
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(mvPlan);
         for (LogicalScanOperator scanOperator : scanOperators) {
             // Since mv's plan disabled partition prune, no need to compensate partition predicate for non ref base tables.
@@ -749,11 +758,16 @@ public class MvPartitionCompensator {
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         // materialized view latest partition ranges except to-refresh partitions
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
-
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
         List<Range<PartitionKey>> refBaseTableRanges;
         try {
-            refBaseTableRanges = Lists.newArrayList(PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn,
-                    mv.getRangePartitionExpr()).values());
+            Map<String, Range<PartitionKey>> refBaseTableRangeMap =
+                    PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn, mvPartitionExpr);
+            refBaseTableRanges = refBaseTableRangeMap.values().stream().collect(Collectors.toList());
         } catch (UserException e) {
             LOG.warn("Materialized view Optimizer compute partition range failed.", e);
             return Lists.newArrayList();
@@ -761,7 +775,7 @@ public class MvPartitionCompensator {
 
         // date to varchar range
         Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getRangePartitionExpr(), partitionColumn);
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mvPartitionExpr, partitionColumn);
         if (isConvertToDate) {
             baseRangeMapping = Maps.newHashMap();
             // convert varchar range to date range

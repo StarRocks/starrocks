@@ -134,7 +134,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isRangePartition()) {
             return false;
         }
-        Expr mvPartitionExpr = mv.getRangePartitionExpr();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return false;
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
         if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
             return false;
         }
@@ -523,7 +527,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isExprRangePartitioned()) {
             return null;
         }
-        Expr partitionExpr = mv.getRangePartitionExpr();
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (partitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = partitionExprOpt.get();
         if (partitionExpr == null || !(partitionExpr instanceof FunctionCallExpr)) {
             return null;
         }

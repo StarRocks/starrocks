@@ -39,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -60,7 +61,6 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Preconditions.checkState(partitionInfo.isExprRangePartitioned());
         // If non-partition-by table has changed, should refresh all mv partitions
-        Expr partitionExpr = mv.getRangePartitionExpr();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         if (refBaseTablePartitionColumns.isEmpty()) {
             mv.setInactiveAndReason("partition configuration changed");
@@ -82,8 +82,12 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 mvTimelinessInfo);
 
         // collect all ref base table's partition range map
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        Preconditions.checkArgument(partitionExprOpt.isPresent(),
+                "Materialized view %s has no partition expr.", mv.getName());
+        Expr partitionExpr = partitionExprOpt.get();
         Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
-                RangePartitionDiffer.syncBaseTablePartitionInfos(mv, partitionExpr);
+                RangePartitionDiffer.syncBaseTablePartitionInfos(mv);
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.

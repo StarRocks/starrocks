@@ -1106,7 +1106,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     Preconditions.checkArgument(partitionColumns.size() == 1,
                             "Only support one partition column in range partition");
                     Column partitionColumn = partitionColumns.get(0);
-                    Expr rangePartitionExpr = materializedView.getRangePartitionExpr();
+                    Optional<Expr> rangePartitionExprOpt = materializedView.getRangePartitionFirstExpr();
+                    if (rangePartitionExprOpt.isEmpty()) {
+                        return false;
+                    }
+                    Expr rangePartitionExpr = rangePartitionExprOpt.get();
                     Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
                             snapshotTable, partitionColumn, rangePartitionExpr);
                     Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(

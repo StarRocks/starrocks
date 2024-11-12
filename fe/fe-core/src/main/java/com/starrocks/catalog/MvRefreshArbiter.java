@@ -203,12 +203,14 @@ public class MvRefreshArbiter {
                     baseTableUpdateInfo.addListPartitionKeys(partitionNameWithRange);
                     baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
                 } else if (mvPartitionInfo.isRangePartition()) {
-                    Expr partitionExpr = mv.getRangePartitionExpr();
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,
                             "Range partition column size must be 1");
                     Column partitionColumn = refPartitionColumns.get(0);
+                    Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+                    Preconditions.checkArgument(partitionExprOpt.isPresent(),
+                            "Range partition expr must be present");
                     Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
-                            partitionColumn, updatedPartitionNamesList, partitionExpr);
+                            partitionColumn, updatedPartitionNamesList, partitionExprOpt.get());
                     for (Map.Entry<String, Range<PartitionKey>> e : partitionNameWithRange.entrySet()) {
                         baseTableUpdateInfo.addRangePartitionKeys(e.getKey(), e.getValue());
                     }

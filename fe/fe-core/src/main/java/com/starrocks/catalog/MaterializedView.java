@@ -714,10 +714,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Return the partition column of the materialized view.
-     * NOTE: Only one column is supported for now, support more columns in the future.
-     * @return the partition column of the materialized view
+     * NOTE: Only supports range partition mv for now, because range partition mv only supports one partition column.
      */
-    public Optional<Column> getRangePartitionColumn() {
+    public Optional<Column> getRangePartitionFirstColumn() {
         List<Column> partitionCols = partitionInfo.getPartitionColumns(this.idToColumn);
         if (CollectionUtils.isEmpty(partitionCols)) {
             return Optional.empty();
@@ -728,27 +727,26 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Return the partition expr of the range partitioned materialized view.
-     * NOTE: only one partition expr is supported for now.
-     * @return the partition expr of the range partitioned materialized view
+     * NOTE: Only supports range partition mv for now, because range partition mv only supports one partition column.
      */
-    public Expr getRangePartitionExpr() {
+    public Optional<Expr> getRangePartitionFirstExpr() {
         if (partitionRefTableExprs == null) {
-            return null;
+            return Optional.empty();
         }
         Preconditions.checkState(partitionInfo.isRangePartition(), "Only range partition is supported now");
         Expr partitionExpr = partitionRefTableExprs.get(0);
         if (partitionExpr == null) {
-            return null;
+            return Optional.empty();
         }
         if (partitionExpr.getType() == Type.INVALID) {
-            Optional<Column> partitionColOpt = getRangePartitionColumn();
+            Optional<Column> partitionColOpt = getRangePartitionFirstColumn();
             if (partitionColOpt.isEmpty()) {
-                return null;
+                return Optional.empty();
             }
             Type partitionColType = partitionColOpt.get().getType();
             partitionExpr.setType(partitionColType);
         }
-        return partitionExpr;
+        return Optional.of(partitionExpr);
     }
 
     /**
@@ -1748,6 +1746,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+    /**
+     * Analyze partition exprs in mv's structures.
+     * NOTE: This method should be only called once in FE restart phase.
+     */
     private void analyzePartitionExprs() {
         try {
             // analyze partition exprs for ref base tables

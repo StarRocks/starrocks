@@ -90,7 +90,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public boolean syncAddOrDropPartitions() throws AnalysisException {
         String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
         String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
-        Optional<Column> partitionColumnOpt = mv.getRangePartitionColumn();
+        Optional<Column> partitionColumnOpt = mv.getRangePartitionFirstColumn();
         Preconditions.checkState(partitionColumnOpt.isPresent());
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
@@ -143,7 +143,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
         // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
         // here we should convert date into '%Y%m%d' format
-        Expr partitionExpr = mv.getRangePartitionExpr();
         Map<Table, List<Column>> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
         if (!partitionTableAndColumn.containsKey(table)) {
             LOG.warn("Cannot generate mv refresh partition predicate because cannot decide the partition column of table {}," +
@@ -152,6 +151,11 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
         List<Column> refPartitionColumns = partitionTableAndColumn.get(table);
         Preconditions.checkState(refPartitionColumns.size() == 1);
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (partitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = partitionExprOpt.get();
         boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, refPartitionColumns.get(0));
         if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                 && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
@@ -287,7 +291,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             String start = mvRefreshParams.getRangeStart();
             String end = mvRefreshParams.getRangeEnd();
             Set<String> result = Sets.newHashSet();
-            Column partitionColumn = materializedView.getRangePartitionColumn().get();
+            Column partitionColumn = materializedView.getRangePartitionFirstColumn().get();
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
             Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidRangePartitionMap(partitionTTLNumber);
             for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
