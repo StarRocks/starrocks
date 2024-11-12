@@ -179,6 +179,8 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     ASSERT_TRUE(eof);
 
     t1.join();
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
@@ -211,6 +213,8 @@ PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     ASSERT_TRUE(st.status().is_end_of_file());
 
     t1.join();
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {

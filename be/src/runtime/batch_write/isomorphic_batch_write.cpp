@@ -70,11 +70,6 @@ public:
         _latch.count_down();
     }
 
-    bool async_finished() const {
-        std::lock_guard l(_result_lock);
-        return _async_finished;
-    }
-
     Status get_status() {
         std::lock_guard l(_result_lock);
         return _status;
@@ -230,8 +225,7 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         AsyncAppendDataContext::release(async_ctx);
-        LOG(ERROR) << "Fail to add task to execution queue, " << _batch_write_id << ", user label: " << data_ctx->label
-                   << ", result: " << r;
+        LOG(ERROR) << "Fail to add task, " << _batch_write_id << ", user label: " << data_ctx->label << ", ret: " << r;
         return Status::InternalError(fmt::format("Failed to add task to execution queue, result: {}", r));
     }
     async_ctx->latch().wait();
@@ -246,7 +240,6 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                       << "us, wait_pipe_cost: " << (async_ctx->wait_pipe_cost_ns / 1000)
                       << "us, num retries: " << async_ctx->num_retries
                       << ", pipe_left_active: " << (async_ctx->pipe_left_active_ns / 1000)
-                      << "us, async_finished: " << async_ctx->async_finished()
                       << ", async_status: " << async_ctx->get_status() << ", txn_id: " << async_ctx->txn_id()
                       << ", label: " << async_ctx->label();
     RETURN_IF_ERROR(async_ctx->get_status());
