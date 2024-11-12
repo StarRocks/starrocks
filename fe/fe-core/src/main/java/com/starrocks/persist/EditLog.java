@@ -1107,12 +1107,6 @@ public class EditLog {
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }
-
-                case OperationType.OP_SET_PHYSICAL_PARTITION_ID: {
-                    SetPhysicalPartitionIdLog log = (SetPhysicalPartitionIdLog) journal.getData();
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().replaySetPhysicalPartitionId(log);
-                    break;
-                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1954,9 +1948,5 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
-    }
-
-    public void logSetPhysicalPartitionId(SetPhysicalPartitionIdLog setPhysicalPartitionIdLog) {
-        logEdit(OperationType.OP_SET_PHYSICAL_PARTITION_ID, setPhysicalPartitionIdLog);
     }
 }

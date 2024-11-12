@@ -121,7 +121,6 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
-import com.starrocks.persist.SetPhysicalPartitionIdLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
@@ -774,11 +773,6 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_DROP_WAREHOUSE: {
                 data = DropWarehouseLog.read(in);
-                break;
-            }
-
-            case OperationType.OP_SET_PHYSICAL_PARTITION_ID: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), SetPhysicalPartitionIdLog.class);
                 break;
             }
             default: {

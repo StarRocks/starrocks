@@ -1274,8 +1274,6 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
-            localMetastore.setPhysicalPartitionId();
-
             MetricRepo.init();
 
             isReady.set(true);

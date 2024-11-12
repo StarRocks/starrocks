@@ -116,7 +116,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
@@ -126,7 +125,6 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
-import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
@@ -164,7 +162,6 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
-import com.starrocks.persist.SetPhysicalPartitionIdLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
@@ -362,47 +359,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 } // end for partitions
             } // end for tables
         } // end for dbs
-    }
-
-    public void setPhysicalPartitionId() {
-        SetPhysicalPartitionIdLog setPhysicalPartitionIdLog = new SetPhysicalPartitionIdLog();
-        for (Database db : this.fullNameToDb.values()) {
-            for (Table table : db.getTables()) {
-                if (!table.isNativeTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                for (Partition partition : olapTable.getAllPartitions()) {
-                    PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-                    if (physicalPartition.getId() == partition.getId()) {
-                        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
-                        setPhysicalPartitionIdLog.addPhysicalPartitionId(db.getId(), olapTable.getId(), partition.getId(),
-                                physicalPartitionId);
-                    }
-                }
-            } // end for tables
-        } // end for dbs
-
-        replaySetPhysicalPartitionId(setPhysicalPartitionIdLog);
-        GlobalStateMgr.getCurrentState().getEditLog().logSetPhysicalPartitionId(setPhysicalPartitionIdLog);
-    }
-
-    public void replaySetPhysicalPartitionId(SetPhysicalPartitionIdLog setPhysicalPartitionIdLog) {
-        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        for (Map.Entry<PartitionIdentifier, Long> phIdEntry : setPhysicalPartitionIdLog.getPhId().entrySet()) {
-            PartitionIdentifier partitionIdentifier = phIdEntry.getKey();
-            OlapTable table = (OlapTable) localMetastore.getTable(partitionIdentifier.getDbId(),
-                    partitionIdentifier.getTableId());
-
-            try (AutoCloseableLock ignore =
-                        new AutoCloseableLock(new Locker(), partitionIdentifier.getDbId(),
-                            Lists.newArrayList(partitionIdentifier.getTableId()), LockType.WRITE)) {
-                Partition partition = table.getPartition(partitionIdentifier.getPartitionId());
-                partition.setDefaultPhysicalPartitionId(phIdEntry.getValue());
-                table.addPhysicalPartition(partition.getDefaultPhysicalPartition());
-            }
-        }
     }
 
     @Override
