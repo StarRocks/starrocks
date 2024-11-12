@@ -402,6 +402,13 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             segment_id_to_rowset[mutable_rowset->id() + j] = mutable_rowset;
         }
     }
+    // For test purpose, we can set recover flag to test recover mode.
+    Status test_status = Status::OK();
+    TEST_SYNC_POINT_CALLBACK("update_num_del_stat", &test_status);
+    if (!test_status.ok()) {
+        set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
+        return test_status;
+    }
     for (const auto& each : segment_id_to_add_dels) {
         if (segment_id_to_rowset.count(each.first) == 0) {
             // Maybe happen when primary index is in error state.
