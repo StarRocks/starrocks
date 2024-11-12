@@ -18,15 +18,8 @@
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
 #include <exec/pipeline/query_context.h>
-#include <netinet/in.h>
-#include <openssl/aes.h>
-#include <runtime/exec_env.h>
-#include <util/aes_util.h>
 #include <util/arrow/utils.h>
-#include <util/defer_op.h>
-#include <util/slice.h>
 
-#include "common/config.h"
 #include "common/status.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
