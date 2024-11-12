@@ -35,7 +35,7 @@
 #pragma once
 
 #include <butil/iobuf.h>
-#include <column/chunk.h>
+
 #include <condition_variable>
 #include <deque>
 #include <list>
