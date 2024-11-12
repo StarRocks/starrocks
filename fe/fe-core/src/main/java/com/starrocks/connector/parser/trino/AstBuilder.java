@@ -998,14 +998,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
-        String fieldString = node.getField().toString();
-        if (fieldString.equalsIgnoreCase("dow")) {
-            fieldString = "dayofweek_iso";
-        } else if (fieldString.equalsIgnoreCase("week")) {
-            fieldString = "week_iso";
-        }
-        return new FunctionCallExpr(fieldString,
-                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context))));
+        String fieldString = node.getField().toString().toLowerCase();
+        return  Trino2SRFunctionCallTransformer.convert(fieldString,
+                Lists.newArrayList((Expr) visit(node.getExpression(), context)));
     }
 
     @Override
