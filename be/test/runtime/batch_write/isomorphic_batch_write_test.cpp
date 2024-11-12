@@ -158,7 +158,7 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
-        TBatchWriteResult* result = (TBatchWriteResult*)arg;
+        TMergeCommitResult* result = (TMergeCommitResult*)arg;
         TStatus status;
         status.__set_status_code(TStatusCode::OK);
         result->__set_status(status);
@@ -188,7 +188,7 @@ TEST_F(IsomorphicBatchWriteTest, append_data_async) {
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
-        TBatchWriteResult* result = (TBatchWriteResult*)arg;
+        TMergeCommitResult* result = (TMergeCommitResult*)arg;
         TStatus status;
         status.__set_status_code(TStatusCode::OK);
         result->__set_status(status);
@@ -250,7 +250,7 @@ void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_stat
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::status",
                                           [&](void* arg) { *((Status*)arg) = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("IsomorphicBatchWrite::send_rpc_request::response", [&](void* arg) {
-        TBatchWriteResult* result = (TBatchWriteResult*)arg;
+        TMergeCommitResult* result = (TMergeCommitResult*)arg;
         TStatus status;
         status.__set_status_code(TStatusCode::OK);
         result->__set_status(status);

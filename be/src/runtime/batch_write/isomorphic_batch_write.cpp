@@ -359,7 +359,7 @@ Status IsomorphicBatchWrite::_wait_for_stream_load_pipe() {
 
 Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
     TNetworkAddress master_addr = get_master_address();
-    TBatchWriteRequest request;
+    TMergeCommitRequest request;
     request.__set_db(_batch_write_id.db);
     request.__set_tbl(_batch_write_id.table);
     request.__set_user(data_ctx->auth.user);
@@ -372,14 +372,14 @@ Status IsomorphicBatchWrite::_send_rpc_request(StreamLoadContext* data_ctx) {
     request.__set_backend_host(BackendOptions::get_localhost());
     request.__set_params(_batch_write_id.load_params);
 
-    TBatchWriteResult response;
+    TMergeCommitResult response;
     Status st;
 
 #ifndef BE_TEST
     int64_t start_ts = MonotonicNanos();
     st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, &response](FrontendServiceConnection& client) { client->requestBatchWrite(response, request); },
+            [&request, &response](FrontendServiceConnection& client) { client->requestMergeCommit(response, request); },
             config::batch_write_rpc_reqeust_timeout_ms);
     TRACE_BATCH_WRITE << "receive requestBatchWrite response, " << _batch_write_id
                       << ", user label: " << data_ctx->label << ", master: " << master_addr

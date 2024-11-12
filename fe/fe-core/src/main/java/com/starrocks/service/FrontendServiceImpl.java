@@ -172,8 +172,6 @@ import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
-import com.starrocks.thrift.TBatchWriteRequest;
-import com.starrocks.thrift.TBatchWriteResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -270,6 +268,8 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TObjectDependencyReq;
@@ -1706,8 +1706,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TBatchWriteResult requestBatchWrite(TBatchWriteRequest request) throws TException {
-        TBatchWriteResult result = new TBatchWriteResult();
+    public TMergeCommitResult requestMergeCommit(TMergeCommitRequest request) throws TException {
+        TMergeCommitResult result = new TMergeCommitResult();
         try {
             checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
