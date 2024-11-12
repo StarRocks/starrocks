@@ -51,9 +51,10 @@ public:
             // the prior (x - 1) batch has used (x - 1) * bit_width bytes, and the last batch use
             // (bit_width + 7) / 8 * 8 bytes, so there should be
             // (x - 1) * bit_width + (bit_width + 7) / 8 <= in_bytes
-            const int64_t batches_to_read = std::max(
-                    (int64_t)0,
-                    std::min((in_bytes - (bit_width + 7) / 8 * 8) / bit_width + 1, values_to_read / BATCH_SIZE));
+            const int64_t batches_to_read = (in_bytes > (bit_width + 7) / 8 * 8)
+                                                    ? std::min((in_bytes - (bit_width + 7) / 8 * 8) / bit_width + 1,
+                                                               values_to_read / BATCH_SIZE)
+                                                    : 0;
 
             if (batches_to_read > 0) {
                 starrocks::util::unpack(bit_width, in, in_bytes, batches_to_read * BATCH_SIZE, out);
