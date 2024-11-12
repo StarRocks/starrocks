@@ -2362,7 +2362,8 @@ public class StmtExecutor {
                                         "or set parallel_fragment_exec_instance_num to a lower value in session variable");
                     } else {
                         ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, getExecType(), timeout,
-                                String.format("please increase the '%s' session variable", SessionVariable.INSERT_TIMEOUT));
+                                String.format("please increase the '%s' session variable and retry",
+                                        SessionVariable.INSERT_TIMEOUT));
                     }
                 }
             }
