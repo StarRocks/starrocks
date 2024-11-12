@@ -1585,10 +1585,13 @@ public class GlobalStateMgr {
 
         imageLoader.checkCheckSum();
 
-        try {
-            postLoadImage();
-        } catch (Exception t) {
-            LOG.warn("there is an exception during processing after load image. exception:", t);
+        // Only trigger to do post actions after loading image when FE restarts.
+        if (!isCheckpointThread()) {
+            try {
+                postLoadImage();
+            } catch (Exception t) {
+                LOG.warn("there is an exception during processing after load image. exception:", t);
+            }
         }
 
         long loadImageEndTime = System.currentTimeMillis();
