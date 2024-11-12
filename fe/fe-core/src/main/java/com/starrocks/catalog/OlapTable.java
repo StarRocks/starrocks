@@ -3267,8 +3267,21 @@ public class OlapTable extends Table {
         // common properties for olap table, cloud native table
         // use TreeMap to ensure the order of keys, such as for show create table.
         Map<String, String> properties = Maps.newTreeMap();
-        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
+        // common properties
+        properties.putAll(getCommonProperties());
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    /**
+     * Get common properties for olap table, cloud native table.
+     */
+    public Map<String, String> getCommonProperties() {
+        Map<String, String> properties = Maps.newTreeMap();
         // replication num
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
 
@@ -3332,6 +3345,7 @@ public class OlapTable extends Table {
             }
         }
 
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
@@ -3356,9 +3370,19 @@ public class OlapTable extends Table {
         }
         properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionTypeName);
 
-        // unique properties
-        properties.putAll(getUniqueProperties());
+        // unique constraint
+        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
+        }
 
+        // foreign key constraint
+        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
+        }
         return properties;
     }
 
@@ -3404,20 +3428,6 @@ public class OlapTable extends Table {
         // fast schema evolution
         boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
         properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, String.valueOf(useFastSchemaEvolution));
-
-        // unique constraint
-        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
-                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
-        }
-
-        // foreign key constraint
-        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
-                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
-        }
 
         // storage type
         if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {
