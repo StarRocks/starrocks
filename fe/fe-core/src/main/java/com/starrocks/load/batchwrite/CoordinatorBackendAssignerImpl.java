@@ -171,7 +171,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 loadId, warehouseId, tableId, expectParallel);
 
         // Submit a task to assign nodes to the load, and try to wait for the task to finish
-        boolean sucess = false;
+        boolean success = false;
         try {
             Task task = new Task(
                     taskIdAllocator.incrementAndGet(),
@@ -188,11 +188,11 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 throw new RejectedExecutionException(
                         String.format("Failed to wait for assigning coordinator backends, load id: %s", loadId), e);
             }
-            sucess = true;
+            success = true;
             LOG.info("Finish to wait for assigning coordinator backends, load id: {}, cost: {} ms",
                     loadId, (System.currentTimeMillis() - startTime));
         } finally {
-            if (!sucess) {
+            if (!success) {
                 registeredLoadMetas.remove(loadId);
             }
         }

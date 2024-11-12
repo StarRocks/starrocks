@@ -104,7 +104,6 @@ public class LoadExecutor implements Runnable {
 
     @Override
     public void run() {
-        timeTrace.startRunTsMs.set(System.currentTimeMillis());
         try {
             beginTxn();
             executeLoad();
@@ -116,7 +115,9 @@ public class LoadExecutor implements Runnable {
                     label, DebugUtil.printId(loadId), txnId, e);
         } finally {
             loadExecuteCallback.finishLoad(label);
-            timeTrace.finishTimeMs.set(System.currentTimeMillis());
+            timeTrace.finishTimeMs = System.currentTimeMillis();
+            LOG.debug("Finish load, label: {}, load id: {}, txn_id: {}, {}",
+                    label, DebugUtil.printId(loadId), txnId, timeTrace.summary());
         }
     }
 
@@ -147,7 +148,7 @@ public class LoadExecutor implements Runnable {
     }
 
     private void beginTxn() throws Exception {
-        timeTrace.beginTxnTsMs.set(System.currentTimeMillis());
+        timeTrace.beginTxnTimeMs = System.currentTimeMillis();
         Pair<Database, OlapTable> pair = getDbAndTable();
         txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 pair.first.getId(), Lists.newArrayList(pair.second.getId()), label,
@@ -157,16 +158,15 @@ public class LoadExecutor implements Runnable {
     }
 
     private void commitAndPublishTxn() throws Exception {
-        timeTrace.commitTxnTimeMs.set(System.currentTimeMillis());
+        timeTrace.commitTxnTimeMs = System.currentTimeMillis();
         Pair<Database, OlapTable> pair = getDbAndTable();
         long publishTimeoutMs =
-                streamLoadInfo.getTimeout() * 1000L - (timeTrace.commitTxnTimeMs.get() - timeTrace.createTimeMs.get());
+                streamLoadInfo.getTimeout() * 1000L - (timeTrace.commitTxnTimeMs - timeTrace.beginTxnTimeMs);
         boolean publishSuccess = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(
                 pair.first, txnId, tabletCommitInfo, tabletFailInfo, publishTimeoutMs, null);
         if (!publishSuccess) {
-            throw new LoadException(String.format(
-                    "Publish timeout, total timeout time: %s ms, publish timeout time: %s ms",
-                        streamLoadInfo.getTimeout() * 1000, publishTimeoutMs));
+            LOG.warn("Publish timeout, txn_id: {}, label: {}, total timeout: {} ms, publish timeout: {} ms",
+                        txnId, label, streamLoadInfo.getTimeout() * 1000, publishTimeoutMs);
         }
     }
 
@@ -184,8 +184,8 @@ public class LoadExecutor implements Runnable {
     }
 
     private void executeLoad() throws Exception {
-        timeTrace.executePlanTimeMs.set(System.currentTimeMillis());
         try {
+            timeTrace.executeLoadTimeMs = System.currentTimeMillis();
             ConnectContext context = new ConnectContext();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -194,7 +194,7 @@ public class LoadExecutor implements Runnable {
             context.setThreadLocalInfo();
 
             Pair<Database, OlapTable> pair = getDbAndTable();
-            timeTrace.buildPlanTimeMs.set(System.currentTimeMillis());
+            timeTrace.buildPlanTimeMs = System.currentTimeMillis();
             LoadPlanner loadPlanner = new LoadPlanner(-1, loadId, txnId, pair.first.getId(),
                     tableId.getDbName(), pair.second, streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(),
                     streamLoadInfo.isPartialUpdate(), context, null,
@@ -206,15 +206,13 @@ public class LoadExecutor implements Runnable {
                     ImmutableMap.<String, String>builder()
                             .putAll(loadParameters.toMap()).build(), coordinatorBackendIds);
             loadPlanner.plan();
-
+            timeTrace.deployPlanTimeMs = System.currentTimeMillis();
             coordinator = coordinatorFactory.createStreamLoadScheduler(loadPlanner);
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coordinator);
-            timeTrace.executePlanTimeMs.set(System.currentTimeMillis());
             coordinator.exec();
-
-            timeTrace.joinPlanTimeMs.set(System.currentTimeMillis());
             int waitSecond = streamLoadInfo.getTimeout() -
-                    (int) (System.currentTimeMillis() - timeTrace.createTimeMs.get()) / 1000;
+                    (int) (System.currentTimeMillis() - timeTrace.createTimeMs) / 1000;
+            timeTrace.joinPlanTimeMs.set(System.currentTimeMillis());
             if (coordinator.join(waitSecond)) {
                 Status status = coordinator.getExecStatus();
                 if (!status.ok()) {
@@ -242,9 +240,9 @@ public class LoadExecutor implements Runnable {
                         etlStatus.getCounters().getOrDefault(LoadEtlTask.DPP_ABNORMAL_ALL, "0"));
                 double maxFilterRatio = loadParameters.getMaxFilterRatio().orElse(0.0);
                 if (filteredRows > (filteredRows + loadedRows) * maxFilterRatio) {
-                    throw new LoadException(
-                            "There is data quality issue, please check the tracking url for details." +
-                                    " The tracking url: " + coordinator.getTrackingUrl());
+                    throw new LoadException(String.format("There is data quality issue, please check the " +
+                                    "tracking url for details. Max filter ratio: %s. The tracking url: %s",
+                                    maxFilterRatio, coordinator.getTrackingUrl()));
                 }
             } else {
                 throw new LoadException(
@@ -287,17 +285,39 @@ public class LoadExecutor implements Runnable {
 
     // Trace the timing of various stages of the load operation.
     static class TimeTrace {
-        AtomicLong createTimeMs;
-        AtomicLong startRunTsMs = new AtomicLong(-1);
-        AtomicLong beginTxnTsMs = new AtomicLong(-1);
-        AtomicLong buildPlanTimeMs = new AtomicLong(-1);
-        AtomicLong executePlanTimeMs = new AtomicLong(-1);
+        long createTimeMs;
+        long beginTxnTimeMs = -1;
+        long executeLoadTimeMs = -1;
+        long buildPlanTimeMs = -1;
+        long deployPlanTimeMs = -1;
         AtomicLong joinPlanTimeMs = new AtomicLong(-1);
-        AtomicLong commitTxnTimeMs = new AtomicLong(-1);
-        AtomicLong finishTimeMs = new AtomicLong(-1);
+        long commitTxnTimeMs = -1;
+        long finishTimeMs = -1;
 
         public TimeTrace() {
-            this.createTimeMs = new AtomicLong(System.currentTimeMillis());
+            this.createTimeMs = System.currentTimeMillis();
+        }
+
+        String summary() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("total cost: ").append(finishTimeMs - createTimeMs).append(" ms");
+            sb.append(", pending cost: ").append(beginTxnTimeMs - createTimeMs).append(" ms");
+            if (executeLoadTimeMs > 0) {
+                sb.append(", begin txn cost: ").append(executeLoadTimeMs - beginTxnTimeMs).append(" ms");
+            }
+            if (deployPlanTimeMs > 0) {
+                sb.append(", build plan cost: ").append(deployPlanTimeMs - buildPlanTimeMs).append(" ms");
+            }
+            if (joinPlanTimeMs.get() > 0) {
+                sb.append(", deploy plan cost: ").append(joinPlanTimeMs.get() - deployPlanTimeMs).append(" ms");
+            }
+            if (commitTxnTimeMs > 0) {
+                sb.append(", join plan cost: ").append(commitTxnTimeMs - joinPlanTimeMs.get()).append(" ms");
+            }
+            if (commitTxnTimeMs > 0) {
+                sb.append(", commit/publish txn cost: ").append(finishTimeMs - commitTxnTimeMs).append(" ms");
+            }
+            return sb.toString();
         }
     }
 }
