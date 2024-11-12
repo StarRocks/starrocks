@@ -31,6 +31,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.CloseSessionRequest;
+import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
@@ -333,6 +335,15 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     @Override
+    public void closeSession(CloseSessionRequest request, CallContext context,
+                             StreamListener<CloseSessionResult> listener) {
+        ArrowFlightSqlConnectContext ctx = arrowFlightSqlSessionManager.getConnectContext(context.peerIdentity());
+        if (ctx != null) {
+            ctx.kill(true, "arrow flight sql close session");
+        }
+    }
+
+    @Override
     public void listFlights(CallContext callContext, Criteria criteria, StreamListener<FlightInfo> streamListener) {
         throw CallStatus.UNIMPLEMENTED.withDescription("listFlights unimplemented").toRuntimeException();
     }
@@ -417,6 +428,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Ticket ticket = new Ticket(Any.pack(ticketStatementQuery).toByteArray());
             List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, grpcLocation));
 
+            Thread.sleep(100000);
             Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
             return new FlightInfo(schema, flightDescriptor, endpoints, -1, -1);
         } catch (Exception e) {

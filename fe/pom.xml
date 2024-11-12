@@ -61,8 +61,8 @@ under the License.
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
-        <arrow.version>16.0.0</arrow.version>
-        <protobuf.version>3.24.3</protobuf.version>
+        <arrow.version>17.0.0</arrow.version>
+        <protobuf.version>3.25.1</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
     </properties>
 
