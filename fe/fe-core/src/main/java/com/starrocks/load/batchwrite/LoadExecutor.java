@@ -24,7 +24,10 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.EtlStatus;
+import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
@@ -32,6 +35,8 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -57,7 +62,7 @@ public class LoadExecutor implements Runnable {
     private final String label;
     private final TUniqueId loadId;
     private final StreamLoadInfo streamLoadInfo;
-    private final ImmutableMap<String, String> loadParameters;
+    private final StreamLoadKvParams loadParameters;
     private final Set<Long> coordinatorBackendIds;
     private final int batchWriteIntervalMs;
     private final Coordinator.Factory coordinatorFactory;
@@ -72,6 +77,7 @@ public class LoadExecutor implements Runnable {
     private Coordinator coordinator;
     private List<TabletCommitInfo> tabletCommitInfo;
     private List<TabletFailInfo> tabletFailInfo;
+    private LoadJobFinalOperation loadJobFinalOperation;
 
     public LoadExecutor(
             TableId tableId,
@@ -79,7 +85,7 @@ public class LoadExecutor implements Runnable {
             TUniqueId loadId,
             StreamLoadInfo streamLoadInfo,
             int batchWriteIntervalMs,
-            ImmutableMap<String, String> loadParameters,
+            StreamLoadKvParams loadParameters,
             Set<Long> coordinatorBackendIds,
             Coordinator.Factory coordinatorFactory,
             LoadExecuteCallback loadExecuteCallback) {
@@ -196,7 +202,9 @@ public class LoadExecutor implements Runnable {
                     streamLoadInfo.getNegative(), coordinatorBackendIds.size(), streamLoadInfo.getColumnExprDescs(),
                     streamLoadInfo, label, streamLoadInfo.getTimeout());
             loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
-            loadPlanner.setBatchWrite(batchWriteIntervalMs, loadParameters, coordinatorBackendIds);
+            loadPlanner.setBatchWrite(batchWriteIntervalMs,
+                    ImmutableMap.<String, String>builder()
+                            .putAll(loadParameters.toMap()).build(), coordinatorBackendIds);
             loadPlanner.plan();
 
             coordinator = coordinatorFactory.createStreamLoadScheduler(loadPlanner);
@@ -216,6 +224,28 @@ public class LoadExecutor implements Runnable {
                 }
                 tabletCommitInfo = TabletCommitInfo.fromThrift(coordinator.getCommitInfos());
                 tabletFailInfo = TabletFailInfo.fromThrift(coordinator.getFailInfos());
+
+                // TODO add more information such as progress, unfinished backends
+                loadJobFinalOperation = new LoadJobFinalOperation();
+                EtlStatus etlStatus = loadJobFinalOperation.getLoadingStatus();
+                etlStatus.setState(TEtlState.FINISHED);
+                etlStatus.setCounters(coordinator.getLoadCounters());
+                if (coordinator.getTrackingUrl() != null) {
+                    etlStatus.setTrackingUrl(coordinator.getTrackingUrl());
+                }
+                if (!coordinator.getRejectedRecordPaths().isEmpty()) {
+                    etlStatus.setRejectedRecordPaths(coordinator.getRejectedRecordPaths());
+                }
+                long loadedRows = Long.parseLong(
+                        etlStatus.getCounters().getOrDefault(LoadEtlTask.DPP_NORMAL_ALL, "0"));
+                long filteredRows = Long.parseLong(
+                        etlStatus.getCounters().getOrDefault(LoadEtlTask.DPP_ABNORMAL_ALL, "0"));
+                double maxFilterRatio = loadParameters.getMaxFilterRatio().orElse(0.0);
+                if (filteredRows > (filteredRows + loadedRows) * maxFilterRatio) {
+                    throw new LoadException(
+                            "There is data quality issue, please check the tracking url for details." +
+                                    " The tracking url: " + coordinator.getTrackingUrl());
+                }
             } else {
                 throw new LoadException(
                         String.format("Timeout to execute load after waiting for %s seconds", waitSecond));

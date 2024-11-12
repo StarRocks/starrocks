@@ -83,7 +83,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 parallel,
-                params.toMap(),
+                params,
                 assigner,
                 executor);
     }
