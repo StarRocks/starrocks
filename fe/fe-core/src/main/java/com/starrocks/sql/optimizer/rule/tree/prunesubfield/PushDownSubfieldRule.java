@@ -41,8 +41,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
 import java.util.List;
 import java.util.Map;
@@ -51,7 +51,7 @@ import java.util.Optional;
 /*
  * Push down subfield expression to scan node
  */
-public class PushDownSubfieldRule extends Rule {
+public class PushDownSubfieldRule extends TransformationRule {
     private static final ColumnRefSet EMPTY_COLUMN_SET = new ColumnRefSet();
 
     private ColumnRefFactory factory = null;

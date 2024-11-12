@@ -1002,7 +1002,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void test() throws Exception {
+    public void testPushdownSubfield() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(getDumpInfoFromFile("query_dump" +
                 "/pushdown_subfield"), connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  10:Project\n" +
