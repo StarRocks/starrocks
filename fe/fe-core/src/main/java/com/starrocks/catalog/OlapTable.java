@@ -48,6 +48,7 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -906,7 +907,7 @@ public class OlapTable extends Table {
                     idx.clearTabletsForRestore();
                     Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                             partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
-                            schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), db);
+                            schemaHash, physicalPartition.getId(), db);
                     if (!status.ok()) {
                         return status;
                     }
@@ -919,7 +920,7 @@ public class OlapTable extends Table {
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId, Database db) {
+                                          long partitionId, Database db) {
         Preconditions.checkArgument(replicationNum > 0);
         boolean isColocate = (this.colocateGroup != null && !this.colocateGroup.isEmpty() && db != null);
 
@@ -2048,6 +2049,13 @@ public class OlapTable extends Table {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
                 physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
+
+                // Every partition has a ShardGroup previously,
+                // and now every Materialized index has a shardGroup.
+                // So the original partition's shardGroup is moved to the base materialized index for compatibility
+                if (physicalPartition.getShardGroupId() != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                    physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+                }
             }
         }
 
@@ -3251,6 +3259,10 @@ public class OlapTable extends Table {
         return new OlapTableAlterJobV2Builder(this);
     }
 
+    public AlterJobV2Builder rollUp() {
+        return new OlapTableRollupJobBuilder(this);
+    }
+
     public OptimizeJobV2Builder optimizeTable() {
         return new OptimizeJobV2Builder(this);
     }
@@ -3260,8 +3272,21 @@ public class OlapTable extends Table {
         // common properties for olap table, cloud native table
         // use TreeMap to ensure the order of keys, such as for show create table.
         Map<String, String> properties = Maps.newTreeMap();
-        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
+        // common properties
+        properties.putAll(getCommonProperties());
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    /**
+     * Get common properties for olap table, cloud native table.
+     */
+    public Map<String, String> getCommonProperties() {
+        Map<String, String> properties = Maps.newTreeMap();
         // replication num
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
 
@@ -3325,6 +3350,7 @@ public class OlapTable extends Table {
             }
         }
 
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
@@ -3349,9 +3375,19 @@ public class OlapTable extends Table {
         }
         properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionTypeName);
 
-        // unique properties
-        properties.putAll(getUniqueProperties());
+        // unique constraint
+        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
+        }
 
+        // foreign key constraint
+        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
+        }
         return properties;
     }
 
@@ -3397,20 +3433,6 @@ public class OlapTable extends Table {
         // fast schema evolution
         boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
         properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, String.valueOf(useFastSchemaEvolution));
-
-        // unique constraint
-        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
-                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
-        }
-
-        // foreign key constraint
-        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
-                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
-        }
 
         // storage type
         if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {

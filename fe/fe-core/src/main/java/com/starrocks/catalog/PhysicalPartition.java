@@ -29,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -42,6 +43,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public static final long PARTITION_INIT_VERSION = 1L;
 
+    public static final long INVALID_SHARD_GROUP_ID = -1L;
+
     @SerializedName(value = "id")
     private long id;
 
@@ -54,7 +57,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     private long parentId;
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = INVALID_SHARD_GROUP_ID;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -113,7 +116,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     }
 
-    public PhysicalPartition(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
+    public PhysicalPartition(long id, String name, long parentId, MaterializedIndex baseIndex) {
         this.id = id;
         this.name = name;
         this.parentId = parentId;
@@ -125,7 +128,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.nextDataVersion = this.nextVersion;
         this.versionEpoch = this.nextVersionEpoch();
         this.versionTxnType = TransactionType.TXN_NORMAL;
-        this.shardGroupId = sharedGroupId;
     }
 
     public long getId() {
@@ -159,6 +161,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public List<Long> getShardGroupIds() {
+        List<Long> result = new ArrayList<>();
+        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        result.add(baseIndex.getShardGroupId());
+        return result;
+    }
+
+    public void setShardGroupId(Long shardGroupId) {
+        this.shardGroupId = shardGroupId;
     }
 
     public void setImmutable(boolean isImmutable) {

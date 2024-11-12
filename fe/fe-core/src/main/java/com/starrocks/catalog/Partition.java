@@ -94,15 +94,11 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private Partition() {
     }
 
-    public Partition(long id, long physicalPartitionId, String name,
+    public Partition(long id,
+                     long physicalPartitionId,
+                     String name,
                      MaterializedIndex baseIndex,
                      DistributionInfo distributionInfo) {
-        this(id, physicalPartitionId, name, baseIndex, distributionInfo, 0);
-    }
-
-    public Partition(long id, long physicalPartitionId, String name,
-                     MaterializedIndex baseIndex,
-                     DistributionInfo distributionInfo, long shardGroupId) {
         this.id = id;
         this.name = name;
         this.state = PartitionState.NORMAL;
@@ -118,13 +114,12 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.versionEpoch = this.nextVersionEpoch();
         this.versionTxnType = TransactionType.TXN_NORMAL;
         this.distributionInfo = distributionInfo;
-        this.shardGroupId = shardGroupId;
 
         this.defaultPhysicalPartitionId = physicalPartitionId;
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
-                generatePhysicalPartitionName(physicalPartitionId), id, shardGroupId, baseIndex);
+                generatePhysicalPartitionName(physicalPartitionId), id, baseIndex);
         this.idToSubPartition.put(physicalPartitionId, physicalPartition);
-        this.nameToSubPartition.put(name, physicalPartition);
+        this.nameToSubPartition.put(physicalPartition.getName(), physicalPartition);
     }
 
     public Partition shallowCopy() {
@@ -299,13 +294,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             versionTxnType = TransactionType.TXN_NORMAL;
         }
 
-        for (PhysicalPartition subPartition : idToSubPartition.values()) {
-            if (subPartition.getName() == null) {
-                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
-            }
-            nameToSubPartition.put(subPartition.getName(), subPartition);
-        }
-
         if (defaultPhysicalPartitionId == 0) {
             String partitionJson = GsonUtils.GSON.toJson(this);
             PhysicalPartition physicalPartition = GsonUtils.GSON.fromJson(partitionJson, PhysicalPartition.class);
@@ -316,24 +304,23 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             idToSubPartition.put(physicalPartitionId, physicalPartition);
             nameToSubPartition.put(generatePhysicalPartitionName(physicalPartitionId), physicalPartition);
         }
-    }
 
-    public void setDefaultPhysicalPartitionId(long defaultPhysicalPartitionId) {
-        PhysicalPartition physicalPartition = getDefaultPhysicalPartition();
-        physicalPartition.setIdForRestore(defaultPhysicalPartitionId);
+        for (PhysicalPartition subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                subPartition.getBaseIndex().setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
+            }
 
-        idToSubPartition.remove(this.defaultPhysicalPartitionId);
-        nameToSubPartition.remove(generatePhysicalPartitionName(defaultPhysicalPartitionId));
-
-        this.defaultPhysicalPartitionId = defaultPhysicalPartitionId;
-        idToSubPartition.put(defaultPhysicalPartitionId, physicalPartition);
-        nameToSubPartition.put(generatePhysicalPartitionName(defaultPhysicalPartitionId), physicalPartition);
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
     }
 
     /**************************************PhysicalPartition **********************************************/
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")

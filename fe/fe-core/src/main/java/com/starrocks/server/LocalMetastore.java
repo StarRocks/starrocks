@@ -1521,19 +1521,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         olapTable.inferDistribution(distributionInfo);
         // create sub partition
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
+        // physical partitions in the same logical partition use the same shard_group_id,
+        // so that the shards of this logical partition are more evenly distributed.
+        long shardGroupId = partition.getDefaultPhysicalPartition().getBaseIndex().getShardGroupId();
         for (long indexId : olapTable.getIndexIdToMeta().keySet()) {
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
             indexMap.put(indexId, rollup);
         }
 
         long id = GlobalStateMgr.getCurrentState().getNextId();
-        // physical partitions in the same logical partition use the same shard_group_id,
-        // so that the shards of this logical partition are more evenly distributed.
-        long shardGroupId = partition.getDefaultPhysicalPartition().getShardGroupId();
-
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 id, partition.generatePhysicalPartitionName(id),
-                partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+                partition.getId(), indexMap.get(olapTable.getBaseIndexId()));
+        // set ShardGroupId to partition for rollback to old version
+        physicalPartition.setShardGroupId(shardGroupId);
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -1550,7 +1551,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo,
+                createLakeTablets(olapTable, id, index.getShardGroupId(), index, distributionInfo,
                         tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
@@ -1637,6 +1638,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Partition partition = olapTable.getPartition(info.getPartitionId());
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
+            // the shardGrouId may invalid when upgrade from old version
+            if (olapTable.isCloudNativeTable() &&
+                    physicalPartition.getBaseIndex().getShardGroupId() ==
+                            PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+            }
             olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
@@ -1679,7 +1686,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
-            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                // create shard group
+                shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
+                        createShardGroup(db.getId(), table.getId(), partitionId, indexId);
+            }
+            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
             indexMap.put(indexId, rollup);
         }
 
@@ -1688,19 +1701,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 partitionName,
                 distributionInfo);
 
-        // create shard group
-        long shardGroupId = 0;
-        if (table.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                    createShardGroup(db.getId(), table.getId(), partitionId);
-        }
-
         long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 physicalPartitionId,
                 logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
                 partitionId,
-                shardGroupId,
                 indexMap.get(table.getBaseIndexId()));
 
         logicalPartition.addSubPartition(physicalPartition);
@@ -1723,7 +1728,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMedium, table.isCloudNativeTableOrMaterializedView());
 
             if (table.isCloudNativeTableOrMaterializedView()) {
-                createLakeTablets(table, physicalPartitionId, shardGroupId, index, distributionInfo,
+                createLakeTablets(table, physicalPartitionId, index.getShardGroupId(), index, distributionInfo,
                         tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(table, index, Replica.ReplicaState.NORMAL, distributionInfo,
@@ -1732,8 +1737,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
                 physicalPartition.createRollupIndex(index);
+            } else {
+                // base index set ShardGroupId for rollback to old version
+                physicalPartition.setShardGroupId(index.getShardGroupId());
             }
         }
+
         return logicalPartition;
     }
 
@@ -2730,16 +2739,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (table == null) {
                 throw new DdlException("create materialized failed. table:" + tableName + " not exist");
             }
-            if (table.isCloudNativeTable()) {
-                throw new DdlException("Creating synchronous materialized view(rollup) is not supported in " +
-                        "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
-                        "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
-                        "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details.");
-            }
-            if (!table.isOlapTable()) {
+
+            if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
                         table.getType().name() + " table[" + tableName + "]");
             }
+
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                 throw new DdlException(

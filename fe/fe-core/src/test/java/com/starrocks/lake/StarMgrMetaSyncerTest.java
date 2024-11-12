@@ -201,9 +201,10 @@ public class StarMgrMetaSyncerTest {
             @Mock
             public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable tbl) {
                 MaterializedIndex baseIndex = new MaterializedIndex();
+                baseIndex.setShardGroupId(shardGroupId);
                 DistributionInfo distributionInfo = new HashDistributionInfo();
                 return Lists.newArrayList(new Partition(partitionId, physicalPartitionId,
-                        "p1", baseIndex, distributionInfo, shardGroupId));
+                        "p1", baseIndex, distributionInfo));
             }
         };
 

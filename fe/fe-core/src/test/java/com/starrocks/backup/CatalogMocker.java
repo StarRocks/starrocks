@@ -489,7 +489,7 @@ public class CatalogMocker {
                             TEST_PARTITION1_NAME, baseIndexP1, distributionInfo4);
 
             PhysicalPartition physicalPartition2 = new PhysicalPartition(
-                        TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, 0, baseIndexP2);
+                        TEST_PARTITION2_ID, "", TEST_PARTITION1_ID, baseIndexP2);
             partition1.addSubPartition(physicalPartition2);
 
             rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));

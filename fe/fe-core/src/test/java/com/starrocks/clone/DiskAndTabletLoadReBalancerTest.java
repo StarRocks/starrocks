@@ -131,7 +131,7 @@ public class DiskAndTabletLoadReBalancerTest {
         database.registerTableUnlocked(table);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                0, materializedIndex);
+                materializedIndex);
 
         new Expectations() {
             {
@@ -299,7 +299,7 @@ public class DiskAndTabletLoadReBalancerTest {
         database.registerTableUnlocked(table);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                0, materializedIndex);
+                materializedIndex);
 
         new Expectations() {
             {
@@ -490,9 +490,9 @@ public class DiskAndTabletLoadReBalancerTest {
         database.registerTableUnlocked(table);
 
         PhysicalPartition physicalPartition1 = new PhysicalPartition(physicalPartitionId1, "partition1", partitionId1,
-                0, materializedIndex);
+                materializedIndex);
         PhysicalPartition physicalPartition2 = new PhysicalPartition(physicalPartitionId2, "partition2", partitionId2,
-                0, materializedIndex);
+                materializedIndex);
 
         new Expectations() {
             {
@@ -690,7 +690,7 @@ public class DiskAndTabletLoadReBalancerTest {
         database.registerTableUnlocked(table);
 
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                0, materializedIndex);
+                materializedIndex);
 
         new Expectations() {
             {

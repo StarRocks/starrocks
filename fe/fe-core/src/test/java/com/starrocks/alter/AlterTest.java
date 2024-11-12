@@ -1264,7 +1264,7 @@ public class AlterTest {
             Assert.assertEquals(physicalPartition.getParentId(), partition.get().getId());
             Assert.assertNotNull(physicalPartition.getBaseIndex());
             Assert.assertFalse(physicalPartition.isImmutable());
-            Assert.assertEquals(physicalPartition.getShardGroupId(), 0);
+            Assert.assertEquals(physicalPartition.getShardGroupId(), PhysicalPartition.INVALID_SHARD_GROUP_ID);
             Assert.assertTrue(physicalPartition.hasStorageData());
             Assert.assertFalse(physicalPartition.isFirstLoad());
         }
