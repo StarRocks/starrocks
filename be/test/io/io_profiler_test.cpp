@@ -45,7 +45,8 @@ namespace starrocks {
     ASSERT_EQ(expect.sync_time_ns, actual.sync_time_ns)
 
 TEST(IOProfilerTest, test_tls_io) {
-    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 1);
+    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 6);
     // the init io stat may be not 0, because other test cases maybe have updated the stat
     auto expect = scope.current_scoped_tls_io();
 
@@ -73,54 +74,68 @@ TEST(IOProfilerTest, test_tls_io) {
     ADD_SYNC_IO_STAT(expect, 9883);
     auto actual5 = scope.current_scoped_tls_io();
     ASSERT_IO_STAT_EQ(expect, actual5);
+    IOProfiler::stop();
 }
 
 TEST(IOProfilerTest, test_context_io) {
-    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 2);
-    auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+    {
+        auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+        // io mode is IOMODE_NONE
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 1);
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+        IOProfiler::add_read(1, 1000);
+        IOProfiler::add_write(1, 1000);
+        ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
+    }
+    {
+        auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+        // io mode is IOMODE_READ
+        ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_READ));
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 2);
 
-    // io mode is IOMODE_NONE
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
-    IOProfiler::add_read(1, 1000);
-    IOProfiler::add_write(1, 1000);
-    ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_READ, IOProfiler::get_context_io_mode());
+        IOProfiler::add_read(2, 2000);
+        ADD_READ_IO_STAT(expect, 2, 0);
+        IOProfiler::add_write(2, 2000);
+        ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
+        IOProfiler::stop();
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+    }
+    {
+        auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+        // io mode is IOMODE_WRITE
+        ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_WRITE));
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 3);
 
-    // io mode is IOMODE_READ
-    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_READ));
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_READ, IOProfiler::get_context_io_mode());
-    IOProfiler::add_read(2, 2000);
-    ADD_READ_IO_STAT(expect, 2, 0);
-    IOProfiler::add_write(2, 2000);
-    ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
-    IOProfiler::stop();
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_WRITE, IOProfiler::get_context_io_mode());
+        IOProfiler::add_read(3, 3000);
+        IOProfiler::add_write(3, 3000);
+        ADD_WRITE_IO_STAT(expect, 3, 0);
+        ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
+        IOProfiler::stop();
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+    }
+    {
+        auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+        // io mode is IOMODE_ALL
+        ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 4);
 
-    // io mode is IOMODE_WRITE
-    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_WRITE));
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_WRITE, IOProfiler::get_context_io_mode());
-    IOProfiler::add_read(3, 3000);
-    IOProfiler::add_write(3, 3000);
-    ADD_WRITE_IO_STAT(expect, 3, 0);
-    ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
-    IOProfiler::stop();
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
-
-    // io mode is IOMODE_ALL
-    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_ALL, IOProfiler::get_context_io_mode());
-    IOProfiler::add_read(4, 4000);
-    ADD_READ_IO_STAT(expect, 4, 0);
-    IOProfiler::add_write(4, 4000);
-    ADD_WRITE_IO_STAT(expect, 4, 0);
-    ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
-    IOProfiler::stop();
-    ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_ALL, IOProfiler::get_context_io_mode());
+        IOProfiler::add_read(4, 4000);
+        ADD_READ_IO_STAT(expect, 4, 0);
+        IOProfiler::add_write(4, 4000);
+        ADD_WRITE_IO_STAT(expect, 4, 0);
+        ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
+        IOProfiler::stop();
+        ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+    }
 }
 
 TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
-    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 2);
-    auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
     ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 5);
+    auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
     IOProfiler::add_read(4, 4000);
     ADD_READ_IO_STAT(expect, 4, 0);
     IOProfiler::add_write(4, 4000);
