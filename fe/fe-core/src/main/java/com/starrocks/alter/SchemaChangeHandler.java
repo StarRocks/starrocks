@@ -74,6 +74,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -1526,13 +1527,17 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 2. check compatible
+            Map<String, Column> originSchemaMap = buildSchemaMapFromList(originSchema, true,
+                    CaseSensibility.COLUMN.getCaseSensibility());
+
             for (Column alterColumn : alterSchema) {
                 if (modifyFieldColumns.contains(alterColumn.getName())) {
                     continue;
                 }
-                Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
-                if (col.isPresent() && !alterColumn.equals(col.get())) {
-                    col.get().checkSchemaChangeAllowed(alterColumn);
+                Column col = getColumnFromSchemaMap(originSchemaMap, alterColumn.getName(), true,
+                        CaseSensibility.COLUMN.getCaseSensibility());
+                if (col != null && !alterColumn.equals(col)) {
+                    col.checkSchemaChangeAllowed(alterColumn);
                 }
             }
 
@@ -1601,6 +1606,42 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for indices
 
         return dataBuilder.build();
+    }
+
+    protected static Map<String, Column> buildSchemaMapFromList(List<Column> schema, boolean ignorePrefix,
+                                                                boolean caseSensibility) {
+        Map<String, Column> schemaMap = Maps.newHashMap();
+        if (ignorePrefix) {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()).toLowerCase(), col));
+            }
+        } else {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(col.getName(), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(col.getName().toLowerCase(), col));
+            }
+        }
+        return schemaMap;
+    }
+
+    protected static Column getColumnFromSchemaMap(Map<String, Column> originSchemaMap, String col,
+                                                   boolean ignorePrefix, boolean caseSensibility) {
+        if (caseSensibility) {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col));
+            } else {
+                return originSchemaMap.get(col);
+            }
+        } else {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col).toLowerCase());
+            } else {
+                return originSchemaMap.get(col.toLowerCase());
+            }
+        }
     }
 
     private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexId)
