@@ -75,6 +75,33 @@ bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
 }
 
+#define set_api_kind(starlet_opt, opts)                                               \
+    switch (opts.op_type) {                                                           \
+    case OperationKind::LOAD:                                                         \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::LOAD;            \
+        break;                                                                        \
+    case OperationKind::QUERY:                                                        \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::QUERY;           \
+        break;                                                                        \
+    case OperationKind::COMPACTION:                                                   \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::COMPACTION;      \
+        break;                                                                        \
+    case OperationKind::TABLET_METADATA:                                              \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::TABLET_METADATA; \
+        break;                                                                        \
+    case OperationKind::TXN_LOG:                                                      \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::TXN_LOG;         \
+        break;                                                                        \
+    case OperationKind::DEL_VECTOR:                                                   \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::DEL_VECTOR;      \
+        break;                                                                        \
+    case OperationKind::SCHEMA:                                                       \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::SCHEMA;          \
+        break;                                                                        \
+    case OperationKind::UNDEFINED:                                                    \
+        starlet_opt.op_type = staros::starlet::fslib::OperationType::UNDEFINED;       \
+    } // namespace starrocks
+
 std::string build_starlet_uri(int64_t shard_id, std::string_view path) {
     while (!path.empty() && path.front() == '/') {
         path.remove_prefix(1);
@@ -335,6 +362,7 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
+        set_api_kind(opt, opts);
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
         opt.skip_read_local_cache = opts.skip_disk_cache;
@@ -403,6 +431,7 @@ public:
             }
         }
         fslib_opts.enable_data_cache = enable_datacache;
+        set_api_kind(fslib_opts, opts);
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());

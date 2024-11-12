@@ -17,11 +17,12 @@
 #include <string>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "gutil/macros.h"
 
 namespace google::protobuf {
 class Message;
-}
+} // namespace google::protobuf
 
 namespace starrocks {
 
@@ -31,6 +32,7 @@ class Slice;
 class ProtobufFile {
 public:
     explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
+    explicit ProtobufFile(std::string path, OperationKind op_type) : _path(std::move(path)), _op_type(op_type) {}
 
     explicit ProtobufFile(std::string path, std::shared_ptr<FileSystem> fs) : _path(std::move(path)), _fs(fs) {}
 
@@ -43,6 +45,7 @@ public:
 private:
     std::string _path;
     std::shared_ptr<FileSystem> _fs;
+    OperationKind _op_type = OperationKind::UNDEFINED;
 };
 
 class ProtobufFileWithHeader {

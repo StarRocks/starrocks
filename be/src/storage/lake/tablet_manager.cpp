@@ -245,7 +245,7 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 
-    ProtobufFile file(metadata_location);
+    ProtobufFile file(metadata_location, OperationKind::TABLET_METADATA);
     RETURN_IF_ERROR(file.save(*metadata));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
@@ -340,7 +340,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
-    ProtobufFile file(metadata_location, fs);
+    ProtobufFile file(metadata_location, fs, OperationKind::TABLET_METADATA);
     auto s = file.load(metadata.get(), fill_cache);
     if (!s.ok()) {
         if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
@@ -585,7 +585,7 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
-    ProtobufFile file(txn_log_path);
+    ProtobufFile file(txn_log_path, OperationKind::TXN_LOG);
     RETURN_IF_ERROR(file.load(meta.get(), fill_cache));
     auto t1 = butil::gettimeofday_us();
     g_get_txn_log_latency << (t1 - t0);
@@ -656,7 +656,7 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
     }
     auto t0 = butil::gettimeofday_us();
 
-    ProtobufFile file(path);
+    ProtobufFile file(path, OperationKind::TXN_LOG);
     RETURN_IF_ERROR(file.save(*log));
 
     _metacache->cache_txn_log(path, log);
@@ -947,7 +947,7 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
     auto schema_file_path = _location_provider->schema_file_location(tablet_id, schema_pb.id());
     VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-    ProtobufFile file(schema_file_path);
+    ProtobufFile file(schema_file_path, OperationKind::SCHEMA);
     RETURN_IF_ERROR(file.save(schema_pb));
 
     // Save the schema into the in-memory cache
@@ -963,7 +963,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
 
 StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::string& path) {
     TabletSchemaPB schema_pb;
-    ProtobufFile file(path);
+    ProtobufFile file(path, OperationKind::SCHEMA);
     RETURN_IF_ERROR(file.load(&schema_pb));
     auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
     if (UNLIKELY(schema == nullptr)) {

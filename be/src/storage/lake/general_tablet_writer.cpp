@@ -57,7 +57,8 @@ HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tabl
                                                              bool is_compaction, ThreadPool* flush_pool,
                                                              GlobalDictByNameMaps* global_dicts)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
-          _global_dicts(global_dicts) {}
+          _global_dicts(global_dicts),
+          _is_compaction(is_compaction) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -119,6 +120,9 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
         wopts.encryption_info = pair.info;
         opts.encryption_meta = std::move(pair.encryption_meta);
     }
+    if (_is_compaction) {
+        wopts.op_type = OperationKind::COMPACTION;
+    }
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
@@ -171,7 +175,8 @@ VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_m
                                                          uint32_t max_rows_per_segment, bool is_compaction,
                                                          ThreadPool* flush_pool)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
-          _max_rows_per_segment(max_rows_per_segment) {}
+          _max_rows_per_segment(max_rows_per_segment),
+          _is_compaction(is_compaction) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {
     auto st = wait_futures_finish();
@@ -329,6 +334,9 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
         wopts.encryption_info = pair.info;
         opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    if (_is_compaction) {
+        wopts.op_type = OperationKind::COMPACTION;
     }
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
