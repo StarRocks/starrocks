@@ -201,7 +201,7 @@ std::string StreamLoadContext::to_json() const {
         writer.Key("RequestId");
         writer.String(label.c_str());
         writer.Key("LeftTimeMs");
-        writer.Int64(batch_left_time_nanos / 10000000);
+        writer.Int64(batch_left_time_nanos / 1000000);
     }
 
     writer.EndObject();

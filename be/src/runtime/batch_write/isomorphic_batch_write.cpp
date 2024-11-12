@@ -245,7 +245,7 @@ Status IsomorphicBatchWrite::append_data(StreamLoadContext* data_ctx) {
                       << "us, rpc_cost: " << (async_ctx->rpc_cost_ns / 1000)
                       << "us, wait_pipe_cost: " << (async_ctx->wait_pipe_cost_ns / 1000)
                       << "us, num retries: " << async_ctx->num_retries
-                      << ", pipe_left_active_us: " << (async_ctx->pipe_left_active_ns / 1000)
+                      << ", pipe_left_active: " << (async_ctx->pipe_left_active_ns / 1000)
                       << "us, async_finished: " << async_ctx->async_finished()
                       << ", async_status: " << async_ctx->get_status() << ", txn_id: " << async_ctx->txn_id()
                       << ", label: " << async_ctx->label();
@@ -284,7 +284,7 @@ int IsomorphicBatchWrite::_execute_tasks(void* meta, bthread::TaskIterator<Task>
                           << "us, rpc_cost: " << (ctx->rpc_cost_ns / 1000)
                           << "us, wait_pipe_cost: " << (ctx->wait_pipe_cost_ns / 1000)
                           << "us, num retries: " << ctx->num_retries
-                          << ", pipe_left_active_us: " << (ctx->pipe_left_active_ns / 1000) << "us, status: " << st
+                          << ", pipe_left_active: " << (ctx->pipe_left_active_ns / 1000) << "us, status: " << st
                           << ", txn_id: " << ctx->txn_id() << ", label: " << ctx->label();
         ;
         AsyncAppendDataContext::release(ctx);
@@ -408,9 +408,8 @@ bool is_final_load_status(const TTransactionStatus::type& status) {
 // TODO just poll the load status periodically. improve it later, such as cache the label, and FE notify the BE
 Status IsomorphicBatchWrite::_wait_for_load_status(StreamLoadContext* data_ctx, int64_t timeout_ns) {
     int64_t start_ts = MonotonicNanos();
-    if (data_ctx->batch_left_time_nanos > 0) {
-        bthread_usleep(std::min(data_ctx->batch_left_time_nanos, timeout_ns) / 1000);
-    }
+    int64_t wait_load_finish_ns = std::max((int64_t)0, data_ctx->batch_left_time_nanos) + 1000000;
+    bthread_usleep(std::min(wait_load_finish_ns, timeout_ns) / 1000);
     TGetLoadTxnStatusRequest request;
     request.__set_db(_batch_write_id.db);
     request.__set_tbl(_batch_write_id.table);
