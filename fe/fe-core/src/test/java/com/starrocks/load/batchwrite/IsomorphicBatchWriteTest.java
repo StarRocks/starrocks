@@ -84,7 +84,6 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
                 1000,
                 parallel,
                 params.toMap(),
-                connectContext,
                 assigner,
                 executor);
     }

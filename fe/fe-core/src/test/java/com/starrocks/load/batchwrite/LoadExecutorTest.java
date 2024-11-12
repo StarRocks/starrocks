@@ -112,7 +112,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -147,7 +146,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -178,7 +176,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -205,7 +202,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -240,7 +236,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -269,7 +264,6 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback

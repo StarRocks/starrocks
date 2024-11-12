@@ -502,7 +502,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
             newNodeIds.forEach(id -> newNodes.add(currentAvailableNodes.get(id)));
             List<ComputeNode> oldNodes = loadMeta.nodes;
             loadMeta.nodes = newNodes;
-            LOG.info("Reassign nodes, load id: {}, warehouse: {}, {}, num old nodes: {}, num new nodes: {}, " +
+            LOG.info("Reassign nodes, load id: {}, warehouse: {}, {}, old parallel: {}, new parallel: {}, " +
                     "old nodes: {}, new nodes: {}", loadMeta.loadId, loadMeta.warehouseId, loadMeta.tableId,
                     oldNodes.size(), newNodes.size(), oldNodes, newNodes);
         }

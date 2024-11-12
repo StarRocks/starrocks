@@ -178,7 +178,16 @@ public class LoadAction extends RestBaseAction {
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
         RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
                 .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+
+        // the user-provided label is just used as the trace id
+        String userLabel = request.getRequest().headers().get(LABEL_KEY);
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
+            warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        }
         if (!result.isOk()) {
+            LOG.error("Failed to redirect batch write, db: {}, tbl: {}, user label: {}, warehouse: {}, error: {}",
+                    dbName, tableName, userLabel, warehouseName,  result.getStatus().error_msgs.get(0));
             BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
                     result.getStatus().status_code.name(), ActionStatus.FAILED,
                     result.getStatus().error_msgs.get(0));
@@ -190,7 +199,8 @@ public class LoadAction extends RestBaseAction {
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
-        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
+        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}, user label: {}, warehouse: {}",
+                redirectAddr, dbName, tableName, userLabel, warehouseName);
         redirectTo(request, response, redirectAddr);
     }
 

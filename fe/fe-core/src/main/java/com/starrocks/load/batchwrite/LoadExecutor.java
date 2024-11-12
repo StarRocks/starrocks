@@ -16,6 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -24,11 +25,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -55,7 +58,6 @@ public class LoadExecutor implements Runnable {
     private final TUniqueId loadId;
     private final StreamLoadInfo streamLoadInfo;
     private final ImmutableMap<String, String> loadParameters;
-    private final ConnectContext connectContext;
     private final Set<Long> coordinatorBackendIds;
     private final int batchWriteIntervalMs;
     private final Coordinator.Factory coordinatorFactory;
@@ -78,7 +80,6 @@ public class LoadExecutor implements Runnable {
             StreamLoadInfo streamLoadInfo,
             int batchWriteIntervalMs,
             ImmutableMap<String, String> loadParameters,
-            ConnectContext connectContext,
             Set<Long> coordinatorBackendIds,
             Coordinator.Factory coordinatorFactory,
             LoadExecuteCallback loadExecuteCallback) {
@@ -88,7 +89,6 @@ public class LoadExecutor implements Runnable {
         this.streamLoadInfo = streamLoadInfo;
         this.batchWriteIntervalMs = batchWriteIntervalMs;
         this.loadParameters = loadParameters;
-        this.connectContext = connectContext;
         this.coordinatorBackendIds = coordinatorBackendIds;
         this.coordinatorFactory = coordinatorFactory;
         this.loadExecuteCallback = loadExecuteCallback;
@@ -180,11 +180,18 @@ public class LoadExecutor implements Runnable {
     private void executeLoad() throws Exception {
         timeTrace.executePlanTimeMs.set(System.currentTimeMillis());
         try {
+            ConnectContext context = new ConnectContext();
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            context.setQualifiedUser(UserIdentity.ROOT.getUser());
+            context.setThreadLocalInfo();
+
             Pair<Database, OlapTable> pair = getDbAndTable();
             timeTrace.buildPlanTimeMs.set(System.currentTimeMillis());
             LoadPlanner loadPlanner = new LoadPlanner(-1, loadId, txnId, pair.first.getId(),
                     tableId.getDbName(), pair.second, streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(),
-                    streamLoadInfo.isPartialUpdate(), connectContext, null,
+                    streamLoadInfo.isPartialUpdate(), context, null,
                     streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                     streamLoadInfo.getNegative(), coordinatorBackendIds.size(), streamLoadInfo.getColumnExprDescs(),
                     streamLoadInfo, label, streamLoadInfo.getTimeout());

@@ -19,7 +19,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,7 +59,6 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     private final int batchWriteIntervalMs;
     private final int batchWriteParallel;
     private final ImmutableMap<String, String> loadParameters;
-    private final ConnectContext connectContext;
 
     /**
      * The assigner for coordinator backends.
@@ -97,7 +95,6 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
             int batchWriteIntervalMs,
             int batchWriteParallel,
             Map<String, String> loadParameters,
-            ConnectContext connectContext,
             CoordinatorBackendAssigner coordinatorBackendAssigner,
             Executor executor) {
         this.id = id;
@@ -107,7 +104,6 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         this.batchWriteIntervalMs = batchWriteIntervalMs;
         this.batchWriteParallel = batchWriteParallel;
         this.loadParameters = ImmutableMap.<String, String>builder().putAll(loadParameters).build();
-        this.connectContext = connectContext;
         this.coordinatorBackendAssigner = coordinatorBackendAssigner;
         this.executor = executor;
         this.queryCoordinatorFactory = new DefaultCoordinator.Factory();
@@ -223,7 +219,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
             TUniqueId loadId = UUIDUtil.toTUniqueId(UUID.randomUUID());
             LoadExecutor loadExecutor = new LoadExecutor(
                     tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
-                    connectContext, backendIds, queryCoordinatorFactory, this);
+                    backendIds, queryCoordinatorFactory, this);
             loadExecutorMap.put(label, loadExecutor);
             try {
                 executor.execute(loadExecutor);
