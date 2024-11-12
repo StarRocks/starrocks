@@ -679,9 +679,7 @@ jstat -gcutil pid 1000 1000
 3. 启动该 FE 节点。
 
    ```Bash
-   # 将 <fe_ip> 替换为新 FE 节点的 IP 地址（priority_networks），
-   # 并将 <fe_edit_log_port>（默认：9010）替换为新 FE 节点的 edit_log_port。
-   ./fe/bin/start_fe.sh --helper <fe_ip>:<fe_edit_log_port> --daemon
+   ./fe/bin/start_fe.sh
    ```
 
 4. 查看当前节点是否为 Leader 节点。
