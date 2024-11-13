@@ -61,7 +61,7 @@ under the License.
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
-        <arrow.version>17.0.0</arrow.version>
+        <arrow.version>18.0.0</arrow.version>
         <protobuf.version>3.25.1</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
     </properties>
@@ -434,7 +434,7 @@ under the License.
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
                 <!--same with hadoop 3.4.0-->
-                <version>4.1.100.Final</version>
+                <version>4.1.115.Final</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-mapreduce/1.8.7 -->
