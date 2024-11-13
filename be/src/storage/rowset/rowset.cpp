@@ -81,6 +81,9 @@ Rowset::~Rowset() {
     if (_keys_type != PRIMARY_KEYS) {
         // ONLY support non-pk table now.
         // evict rowset before destroy, in case this rowset no close yet.
+        // Print point address of this rowset to help debug, as 0x13fa000 format
+        LOG(INFO) << "Rowset destroy " << rowset_id().to_string() << " " << std::hex << std::showbase
+                  << reinterpret_cast<uintptr_t>(this);
         MetadataCache::instance()->evict_rowset(this);
     }
 #endif
@@ -192,6 +195,8 @@ Status Rowset::do_load() {
     if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
         // Add rowset to lru metadata cache for memory control.
         // ONLY support non-pk table now.
+        LOG(INFO) << "Rowset cache " << rowset_id().to_string() << " " << std::hex << std::showbase
+                  << reinterpret_cast<uintptr_t>(this);
         MetadataCache::instance()->cache_rowset(this);
     }
 #endif
@@ -635,6 +640,8 @@ Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::strin
 }
 
 void Rowset::do_close() {
+    LOG(INFO) << "Rowset do_close " << rowset_id().to_string() << " " << std::hex << std::showbase
+              << reinterpret_cast<uintptr_t>(this);
     _segments.clear();
 }
 

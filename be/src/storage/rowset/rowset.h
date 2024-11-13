@@ -277,7 +277,9 @@ public:
             st = _rowset_state_machine.on_close(current_refs);
         }
         if (!st.ok()) {
-            LOG(WARNING) << "state transition failed from:" << st.to_string();
+            LOG(WARNING) << "state transition failed from:" << st.to_string()
+                         << " rowsetid: " << rowset_id().to_string() << " " << std::hex << std::showbase
+                         << reinterpret_cast<uintptr_t>(this);
             return;
         }
         VLOG(3) << "rowset is close. rowset state from:" << old_state << " to " << _rowset_state_machine.rowset_state()
