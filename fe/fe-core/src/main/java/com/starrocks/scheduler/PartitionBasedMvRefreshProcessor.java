@@ -370,7 +370,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                 IMaterializedViewMetricsEntity mvEntity) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
-        log.info("Start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
+        log.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -859,6 +859,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public void prepare(TaskRunContext context) {
         Map<String, String> properties = context.getProperties();
+        log.info("prepare refresh mv, properties:{}", properties);
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
         if (db == null) {
@@ -904,7 +905,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // prepare mv refresh partitioner
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, context);
 
-        log.info("finish prepare refresh of mv:{}, mv name:{}, jobId: {}", mvId, mv.getName(), jobId);
+        log.info("finish prepare refresh mv:{}, jobId: {}", mvId, jobId);
     }
 
     /**
