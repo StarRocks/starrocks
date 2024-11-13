@@ -32,13 +32,13 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.iceberg.Snapshot;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
@@ -114,17 +114,17 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
 
         // NOTE: This is necessary because iceberg's physical plan will not use selectedPartitionIds to
         // prune partitions.
-        final Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        if (partitionTableAndColumns == null || !partitionTableAndColumns.containsKey(refBaseTable)) {
+        final Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns == null || !refBaseTablePartitionColumns.containsKey(refBaseTable)) {
             return scanOperator;
         }
-        Column refBaseTablePartitionCol = partitionTableAndColumns.get(refBaseTable);
-        Preconditions.checkState(refBaseTablePartitionCol != null);
-        ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(refBaseTablePartitionCol);
-        Preconditions.checkState(partitionColumnRef != null);
-
-        ScalarOperator externalExtraPredicate = convertPartitionKeysToListPredicate(partitionColumnRef,
-                partitionKeys);
+        List<Column> refBaseTablePartitionCols = refBaseTablePartitionColumns.get(refBaseTable);
+        Preconditions.checkState(refBaseTablePartitionCols != null);
+        List<ScalarOperator> partitionColumnRefs = refBaseTablePartitionCols
+                .stream()
+                .map(col -> scanOperator.getColumnReference(col))
+                .collect(Collectors.toList());
+        ScalarOperator externalExtraPredicate = convertPartitionKeysToListPredicate(partitionColumnRefs, partitionKeys);
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
 
