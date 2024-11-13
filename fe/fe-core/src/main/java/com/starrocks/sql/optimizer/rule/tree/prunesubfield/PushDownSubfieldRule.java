@@ -18,12 +18,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -33,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -41,8 +38,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
 import java.util.Map;
@@ -51,25 +48,21 @@ import java.util.Optional;
 /*
  * Push down subfield expression to scan node
  */
-public class PushDownSubfieldRule extends TransformationRule {
+public class PushDownSubfieldRule implements TreeRewriteRule {
     private static final ColumnRefSet EMPTY_COLUMN_SET = new ColumnRefSet();
 
     private ColumnRefFactory factory = null;
 
     private boolean hasRewrite = false;
 
-    public PushDownSubfieldRule() {
-        super(RuleType.TF_PUSH_DOWN_SUBFIELD, Pattern.create(OperatorType.PATTERN_LEAF));
+    @Override
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        factory = taskContext.getOptimizerContext().getColumnRefFactory();
+        return root.getOp().accept(new PushDowner(), root, new Context());
     }
 
     public boolean hasRewrite() {
         return hasRewrite;
-    }
-
-    @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        factory = context.getColumnRefFactory();
-        return List.of(input.getOp().accept(new PushDowner(), input, new Context()));
     }
 
     private static class Context {
@@ -332,12 +325,9 @@ public class PushDownSubfieldRule extends TransformationRule {
                 }
             }
 
-            if (!leftContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 0, leftContext);
-            }
-            if (!rightContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 1, rightContext);
-            }
+            // recursively visit children no matter this node can push down something
+            visitChild(optExpression, 0, leftContext);
+            visitChild(optExpression, 1, rightContext);
 
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             if (predicate.isPresent() || onPredicate.isPresent()) {
