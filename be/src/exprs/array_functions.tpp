@@ -391,7 +391,7 @@ private:
 
     static ColumnPtr _array_overlap(const Columns& columns) {
         const size_t num_rows = columns[0]->size();
-        auto [is_all_const, num_packed_rows] = ColumnHelper::num_packed_rows(columns);
+        const auto [is_all_const, num_packed_rows] = ColumnHelper::num_packed_rows(columns);
 
         auto result_data_column = BooleanColumn::create(num_packed_rows, 0);
         auto& result_data = result_data_column->get_data();
