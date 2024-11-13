@@ -14,9 +14,7 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.parser.SqlParser;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -26,20 +24,46 @@ public class TrinoInsertTest extends TrinoTestBase {
         TrinoTestBase.beforeClass();
     }
 
+    @Before
+    public void setUp() {
+        connectContext.getSessionVariable().setSqlDialect("trino");
+    }
+
     @Test
     public void testInsertTrinoDialect() throws Exception {
         String insertSql = "insert into t3 select doy(date '2022-03-06')";
-        try {
-            connectContext.getSessionVariable().setSqlDialect("trino");
-            InsertStmt ctasStmt =
-                    (InsertStmt) SqlParser.parse(insertSql, connectContext.getSessionVariable()).get(0);
-            QueryStatement queryStmt = ctasStmt.getQueryStatement();
-            assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
+        assertPlanContains(insertSql, "dayofyear('2022-03-06 00:00:00')");
 
-            connectContext.getSessionVariable().setSqlDialect("starrocks");
-            analyzeFail(insertSql, "No matching function with signature: doy(date)");
-        } finally {
-            connectContext.getSessionVariable().setSqlDialect("trino");
-        }
+        connectContext.getSessionVariable().setSqlDialect("starrocks");
+        analyzeFail(insertSql, "No matching function with signature: doy(date)");
+    }
+
+    @Test
+    public void testInsertValues() throws Exception {
+        String sql = "insert into t0(v1) values (1)";
+        assertPlanContains(sql, "Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : NULL");
+
+        sql = "insert into t0(v1, v2) values (1, 2)";
+        assertPlanContains(sql, "Project\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                "  |  <slot 2> : 2: column_1\n" +
+                "  |  <slot 3> : NULL");
+
+        sql = "insert into t0 values (1, 2, 3)";
+        assertPlanContains(sql, "constant exprs: \n" +
+                "         1 | 2 | 3");
+
+        sql = "insert into t3(day) values (20220306)";
+        assertPlanContains(sql, "0:UNION\n" +
+                "     constant exprs: \n" +
+                "         20220306");
+
+        sql = "insert into t3 values (20220306)";
+        assertPlanContains(sql, "0:UNION\n" +
+                "     constant exprs: \n" +
+                "         20220306");
     }
 }
