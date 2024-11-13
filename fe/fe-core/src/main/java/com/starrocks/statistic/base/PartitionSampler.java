@@ -98,7 +98,7 @@ public class PartitionSampler {
                     new TabletSampler(mediumLowRatio, MEDIUM_LOW_WEIGHT_READ_RATIO, maxSize, sampleRowsLimit);
             TabletSampler low = new TabletSampler(lowRatio, LOW_WEIGHT_READ_RATIO, maxSize, sampleRowsLimit);
 
-            for (Tablet tablet : p.getBaseIndex().getTablets()) {
+            for (Tablet tablet : p.getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
                 long rowCount = tablet.getFuzzyRowCount();
                 if (rowCount <= 0) {
                     continue;
