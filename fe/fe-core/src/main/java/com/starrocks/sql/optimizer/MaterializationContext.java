@@ -46,6 +46,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -373,7 +374,11 @@ public class MaterializationContext {
                 if (!partitionInfo.isRangePartition()) {
                     return LOWEST_ORDERING;
                 }
-                Expr mvPartitionExpr = mv.getPartitionExpr();
+                Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+                if (mvPartitionExprOpt.isEmpty()) {
+                    return LOWEST_ORDERING;
+                }
+                Expr mvPartitionExpr = mvPartitionExprOpt.get();
                 if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
                     return LOWEST_ORDERING;
                 }

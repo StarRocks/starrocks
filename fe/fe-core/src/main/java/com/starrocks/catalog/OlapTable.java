@@ -1216,14 +1216,37 @@ public class OlapTable extends Table {
     }
 
     /**
-     * @return : table's partition name to list partition names.
+     * NOTE: Only list partitioned olap table can call this method.
+     * @return : table's partition name to all list partition cells.
      * eg:
      *  partition columns   : (a, b, c)
      *  values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
-        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
+        return getListPartitionItems(Optional.empty());
+    }
+
+    /**
+     * Return the partition items of the selected partition columns if selectedPartitionCols is not null, otherwise return
+     * all partition items.
+     */
+    public Map<String, PListCell> getListPartitionItems(Optional<List<Column>> selectedPartitionCols) {
+        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo, "partition info is not list partition");
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        List<Column> partitionCols = listPartitionInfo.getPartitionColumns(this.idToColumn);
+        List<Integer> colIdxes = Lists.newArrayList();
+        if (selectedPartitionCols.isPresent()) {
+            Preconditions.checkState(!selectedPartitionCols.isEmpty(), "selected partition columns is empty");
+            Preconditions.checkState(partitionCols.size() >= selectedPartitionCols.get().size(),
+                    "selected partition columns size is larger than partition columns size");
+            for (Column select : selectedPartitionCols.get()) {
+                int idx = partitionCols.indexOf(select);
+                if (idx == -1) {
+                    throw new SemanticException("column " + select.getName() + " is not partition column");
+                }
+                colIdxes.add(idx);
+            }
+        }
         Map<String, PListCell> partitionItems = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
@@ -1234,7 +1257,7 @@ public class OlapTable extends Table {
             }
             // one item
             List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (singleValues != null) {
+            if (CollectionUtils.isNotEmpty(singleValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
                 for (String val : singleValues) {
@@ -1245,8 +1268,20 @@ public class OlapTable extends Table {
 
             // multi items
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (multiValues != null) {
-                partitionItems.put(partitionName, new PListCell(multiValues));
+            if (CollectionUtils.isNotEmpty(multiValues)) {
+                if (CollectionUtils.isEmpty(colIdxes)) {
+                    partitionItems.put(partitionName, new PListCell(multiValues));
+                } else {
+                    List<List<String>> cellValue = Lists.newArrayList();
+                    for (List<String> multiValue : multiValues) {
+                        List<String> selectedValues = Lists.newArrayList();
+                        for (int idx : colIdxes) {
+                            selectedValues.add(multiValue.get(idx));
+                        }
+                        cellValue.add(selectedValues);
+                    }
+                    partitionItems.put(partitionName, new PListCell(cellValue));
+                }
             }
         }
         return partitionItems;

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -203,7 +204,7 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
-    public void testCreateIcebergTable() throws Exception {
+    public void testCreateIcebergTable1() throws Exception {
         {
             String mvName = "iceberg_parttbl_mv1";
             starRocksAssert.useDatabase("test")
@@ -239,6 +240,41 @@ public class MaterializedViewAnalyzerTest {
             Assert.assertTrue(e.getMessage().
                     contains("Do not support create materialized view when base iceberg table partition transform " +
                             "has bucket or truncate."));
+        }
+    }
+
+    @Test
+    public void testCreateIcebergTable2() throws Exception {
+        String mvName = "iceberg_parttbl_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "PARTITION BY date \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+        Table mv = starRocksAssert.getTable("test", mvName);
+        Assert.assertTrue(mv != null);
+        Assert.assertTrue(mv instanceof MaterializedView);
+        PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+        Assert.assertTrue(partitionInfo.isListPartition());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateIcebergTable3() {
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "PARTITION BY (id, data, ts)\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_year` as a;");
+            Table mv = starRocksAssert.getTable("test", "iceberg_bucket_mv1");
+            Assert.assertTrue(mv != null);
+            Assert.assertTrue(mv instanceof MaterializedView);
+            PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+            Assert.assertTrue(partitionInfo.isListPartition());
+        } catch (Exception e) {
+            Assert.fail();
         }
     }
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -147,14 +146,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return result;
     }
 
-    public static Map<String, Set<String>> generateBaseRefMap(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
-                                                              List<Integer> refIdxes,
-                                                              Map<String, PListCell> baseTablePartitionMap) {
+    public static Map<String, Set<String>> generateBaseRefMapImpl(Map<PListAtom, Set<PListCellPlus>> mvPartitionMap,
+                                                                  Map<String, PListCell> baseTablePartitionMap) {
         if (mvPartitionMap.isEmpty()) {
             return Maps.newHashMap();
         }
         // for each partition of base, find the corresponding partition of mv
-        Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(baseTablePartitionMap, refIdxes);
+        Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(baseTablePartitionMap);
         Map<String, Set<String>> result = Maps.newHashMap();
         for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
             // once base table's singleton is found in mv, add the partition name of mv into result
@@ -177,90 +175,29 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     }
 
     /**
-     * MV's partition column may not be the same as the base table's partition column, so we need to convert the base
-     * which contains multiple columns to the MV's partition cell which only contains one column.
-     * @param table ref base table
-     * @param inputs ref base table's partition cells
-     * @param refIdxes mv's ref indexes to the base table's partition columns
-     * @return converted base table partition cells which aligned with mv's partition column
-     */
-    private static Map<String, PListCell> alignBasePartitionCells(Table table,
-                                                                  Map<String, PListCell> inputs,
-                                                                  List<Integer> refIdxes) {
-        if (table.getPartitionColumnNames().size() == 1) {
-            return inputs;
-        }
-        // sort by partition name to ensure the result is stable
-        Map<String, PListCell> sorted = ImmutableSortedMap.copyOf(inputs);
-        Set<PListCell> cells = Sets.newHashSet();
-        Map<String, PListCell> result = Maps.newTreeMap();
-        for (Map.Entry<String, PListCell> e : sorted.entrySet()) {
-            String partName = e.getKey();
-            PListCell cell = e.getValue();
-            PListCell newCell = cell.toPListCell(refIdxes);
-            if (cells.contains(newCell)) {
-                continue;
-            }
-            cells.add(newCell);
-            result.put(partName, newCell);
-        }
-        return result;
-    }
-
-    /**
-     * Get the index of the partition column in the base table.
-     * @param refBaseTable base table
-     * @param refPartitionColumn base table's column which is referenced by the mv
-     * @return the index of the partition column in the base table, throw DmlException if not found
-     */
-    public static int getRefBaseTableIdx(Table refBaseTable,
-                                         Column refPartitionColumn) {
-        List<Column> partitionColumns = PartitionUtil.getPartitionColumns(refBaseTable);
-        int refIndex = partitionColumns.indexOf(refPartitionColumn);
-        if (refIndex == -1) {
-            throw new DmlException("Partition column not found in base table: %s", refPartitionColumn.getName());
-        }
-        return refIndex;
-    }
-
-    /**
      * Collect base table's partition infos.
      * @param basePartitionMaps result to collect base table's partition cells for each table
      * @param allBasePartitionItems result to collect all base table's partition cells(merged)
-     * @param tableRefIdxes result to collect mv's ref indexes to the base table's partition columns
      * @return true if success, otherwise false
      */
     public static boolean syncBaseTablePartitionInfos(MaterializedView mv,
                                                       Map<Table, Map<String, PListCell>> basePartitionMaps,
-                                                      Map<String, PListCell> allBasePartitionItems,
-                                                      Map<Table, List<Integer>> tableRefIdxes) {
-        Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
+                                                      Map<String, PListCell> allBasePartitionItems) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         try {
-            for (Map.Entry<Table, Column> e1 : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = e1.getKey();
-                Column refPartitionColumn = e1.getValue();
-
-                // support one column partition only, we can support multi columns later.
-                int refIndex = getRefBaseTableIdx(refBaseTable, refPartitionColumn);
-                List<Integer> refIdxes = Lists.newArrayList(refIndex);
-                tableRefIdxes.put(refBaseTable, refIdxes);
-
-                // collect base table's partition cells
+            for (Map.Entry<Table, List<Column>> e : refBaseTablePartitionColumns.entrySet()) {
+                Table refBaseTable = e.getKey();
+                List<Column> refPartitionColumns = e.getValue();
+                // collect base table's partition cells by aligning with mv's partition column order
                 Map<String, PListCell> basePartitionCells = PartitionUtil.getPartitionList(refBaseTable,
-                        refPartitionColumn);
+                        refPartitionColumns);
                 basePartitionMaps.put(refBaseTable, basePartitionCells);
 
-                // convert to base partition cell to mv partition cell(only one column)
-                // eg: base table partition column: (dt, region), mv partition column: dt
-                Map<String, PListCell> newBasePartitionCells = alignBasePartitionCells(refBaseTable,
-                        basePartitionCells, refIdxes);
-                // merge into total map to compute the difference
-                for (Map.Entry<String, PListCell> e2 : newBasePartitionCells.entrySet()) {
-                    String partitionName = e2.getKey();
-                    PListCell partitionCell = e2.getValue();
-                    allBasePartitionItems.computeIfAbsent(partitionName, k -> new PListCell(Lists.newArrayList()))
-                            .addItems(partitionCell.getPartitionItems());
-                }
+                // merge into a total map to compute the difference
+                basePartitionCells.entrySet()
+                        .stream()
+                        .forEach(x -> allBasePartitionItems.computeIfAbsent(x.getKey(), k -> new PListCell(Lists.newArrayList()))
+                                .addItems(x.getValue().getPartitionItems()));
             }
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.",
@@ -276,19 +213,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         // merge all base table partition cells
         Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
-        Map<Table, List<Integer>> tableRefIdxes = Maps.newHashMap();
-        if (!syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes)) {
+        if (!syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems)) {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
             return null;
         }
-        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, tableRefIdxes, isQueryRewrite);
+        return computeListPartitionDiff(mv, refBaseTablePartitionMap, allBasePartitionItems, isQueryRewrite);
     }
 
     public static ListPartitionDiffResult computeListPartitionDiff(
             MaterializedView mv,
             Map<Table, Map<String, PListCell>> refBaseTablePartitionMap,
             Map<String, PListCell> allBasePartitionItems,
-            Map<Table, List<Integer>> tableRefIdxes,
             boolean isQueryRewrite) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
@@ -306,8 +241,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 return null;
             }
         }
-        return new ListPartitionDiffResult(mvPartitionNameToListMap, refBaseTablePartitionMap, diff, tableRefIdxes,
-                externalPartitionMaps);
+        return new ListPartitionDiffResult(mvPartitionNameToListMap, refBaseTablePartitionMap, diff, externalPartitionMaps);
     }
 
     /**
@@ -317,16 +251,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return base table -> <partition name, mv partition names> mapping
      */
     public static Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PListCell>> basePartitionMaps,
-                                                                          Map<Table, List<Integer>> tableRefIdxes,
                                                                           Map<String, PListCell> mvPartitionMap) {
         Map<PListAtom, Set<PListCellPlus>> mvAtoms = toAtoms(mvPartitionMap);
         Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
         for (Map.Entry<Table, Map<String, PListCell>> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
             Map<String, PListCell> baseTablePartitionMap = entry.getValue();
-            List<Integer> baseTablePartitionIdxes = tableRefIdxes.get(baseTable);
-            Map<String, Set<String>> baseTableRefMap = generateBaseRefMap(mvAtoms,
-                    baseTablePartitionIdxes, baseTablePartitionMap);
+            Map<String, Set<String>> baseTableRefMap = generateBaseRefMapImpl(mvAtoms, baseTablePartitionMap);
             result.put(baseTable, baseTableRefMap);
         }
         return result;
@@ -339,7 +270,6 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return mv partition name -> <base table, base partition names> mapping
      */
     public static  Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PListCell> mvPartitionMap,
-                                                                         Map<Table, List<Integer>> tableRefIdxes,
                                                                          Map<Table, Map<String, PListCell>> basePartitionMaps) {
         Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
         // for each partition of base, find the corresponding partition of mv
@@ -347,8 +277,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         for (Map.Entry<Table, Map<String, PListCell>> entry : basePartitionMaps.entrySet()) {
             Table baseTable = entry.getKey();
             Map<String, PListCell> basePartitionMap = entry.getValue();
-            List<Integer> refIdxes = tableRefIdxes.get(baseTable);
-            Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(basePartitionMap, refIdxes);
+            Map<PListAtom, Set<PListCellPlus>> baseAtoms = toAtoms(basePartitionMap);
             for (Map.Entry<PListAtom, Set<PListCellPlus>> e : baseAtoms.entrySet()) {
                 PListAtom singleton = e.getKey();
                 Set<PListCellPlus> baseCellPluses = e.getValue();

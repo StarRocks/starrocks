@@ -39,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -60,16 +61,15 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Preconditions.checkState(partitionInfo.isExprRangePartitioned());
         // If non-partition-by table has changed, should refresh all mv partitions
-        Expr partitionExpr = mv.getPartitionExpr();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        if (refBaseTableAndColumns.isEmpty()) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns.isEmpty()) {
             mv.setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", mv.getName());
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", mv.getName()));
         }
 
         // if it needs to refresh based on non-ref base tables, return full refresh directly.
-        boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTableAndColumns);
+        boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTablePartitionColumns);
         logMVPrepare(mv, "MV refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
         if (isRefreshBasedOnNonRefTables) {
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -78,12 +78,16 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // record the relation of partitions between materialized view and base partition table
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
         // collect & update mv's to refresh partitions based on base table's partition changes
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
+        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
 
         // collect all ref base table's partition range map
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        Preconditions.checkArgument(partitionExprOpt.isPresent(),
+                "Materialized view %s has no partition expr.", mv.getName());
+        Expr partitionExpr = partitionExprOpt.get();
         Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
-                RangePartitionDiffer.syncBaseTablePartitionInfos(mv, partitionExpr);
+                RangePartitionDiffer.syncBaseTablePartitionInfos(mv);
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
@@ -120,11 +124,11 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 .collect(Collectors.toMap(e -> e.getKey(), e -> new PRangeCell(e.getValue())));
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
 
-        Map<Table, Expr> baseTableToPartitionExprs = mv.getRefBaseTablePartitionExprs();
+        Map<Table, List<Expr>> refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
-                .generateBaseRefMap(basePartitionNameToRangeMap, baseTableToPartitionExprs, mvPartitionNameToRangeMap);
+                .generateBaseRefMap(basePartitionNameToRangeMap, refBaseTablePartitionExprs, mvPartitionNameToRangeMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
-                .generateMvRefMap(mvPartitionNameToRangeMap, baseTableToPartitionExprs, basePartitionNameToRangeMap);
+                .generateMvRefMap(mvPartitionNameToRangeMap, refBaseTablePartitionExprs, basePartitionNameToRangeMap);
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 

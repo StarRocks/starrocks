@@ -737,7 +737,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         // Update scheduler interval.
         setInterval(Config.dynamic_partition_check_interval_seconds * 1000L);
 
-        // Schedule tables with dynamic partition enabled(only works for base table).
+        // Schedule tables with dynamic partition enabled (only works for base table).
         if (Config.dynamic_partition_enable) {
             scheduleDynamicPartition();
         }

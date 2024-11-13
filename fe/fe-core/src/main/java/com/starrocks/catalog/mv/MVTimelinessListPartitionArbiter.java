@@ -50,15 +50,15 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
     public MvUpdateInfo getMVTimelinessUpdateInfoInChecked() throws AnalysisException {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        if (refBaseTableAndColumns.isEmpty()) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns.isEmpty()) {
             mv.setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", mv.getName());
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", mv.getName()));
         }
 
         // if it needs to refresh based on non-ref base tables, return full refresh directly.
-        boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTableAndColumns);
+        boolean isRefreshBasedOnNonRefTables = needsRefreshOnNonRefBaseTables(refBaseTablePartitionColumns);
         logMVPrepare(mv, "MV refresh based on non-ref base table:{}", isRefreshBasedOnNonRefTables);
         if (isRefreshBasedOnNonRefTables) {
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -66,15 +66,13 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
         // update mv's to refresh partitions based on base table's partition changes
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
-        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTableAndColumns,
+        Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
-        Map<Table, List<Integer>> tableRefIdxes = Maps.newHashMap();
 
         // collect base table's partition infos
-        if (!ListPartitionDiffer.syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems,
-                tableRefIdxes)) {
+        if (!ListPartitionDiffer.syncBaseTablePartitionInfos(mv, refBaseTablePartitionMap, allBasePartitionItems)) {
             logMVPrepare(mv, "Sync base table partition infos failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
         }
@@ -91,7 +89,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         });
 
         ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, refBaseTablePartitionMap,
-                allBasePartitionItems, tableRefIdxes, isQueryRewrite);
+                allBasePartitionItems, isQueryRewrite);
         if (result == null) {
             logMVPrepare(mv, "Partitioned mv compute list diff failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
@@ -111,11 +109,10 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
 
-        final Map<Table, List<Integer>> refBaseTableRefIdxMap = result.refBaseTableRefIdxMap;
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = ListPartitionDiffer
-                .generateBaseRefMap(refBaseTablePartitionMap, refBaseTableRefIdxMap, mvPartitionNameToListMap);
+                .generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = ListPartitionDiffer
-                .generateMvRefMap(mvPartitionNameToListMap, refBaseTableRefIdxMap, refBaseTablePartitionMap);
+                .generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
