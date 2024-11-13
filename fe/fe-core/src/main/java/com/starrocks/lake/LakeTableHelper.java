@@ -160,12 +160,13 @@ public class LakeTableHelper {
         return ret;
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(partition, warehouseId).orElse(null);
+    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
+            throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
-        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), physicalPartition.getId());
     }
 
     /**
@@ -177,8 +178,8 @@ public class LakeTableHelper {
      *
      * @return true if the directory is a shared directory, false otherwise
      */
-    public static boolean isSharedDirectory(String path, long partitionId) {
-        return !path.endsWith(String.format("/%d", partitionId));
+    public static boolean isSharedDirectory(String path, long physicalPartitionId) {
+        return !path.endsWith(String.format("/%d", physicalPartitionId));
     }
 
     /**

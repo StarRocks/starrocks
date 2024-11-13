@@ -106,7 +106,7 @@ public class StarMgrMetaSyncerTest {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
-
+        long physicalPartitionId = 4L;
 
 
         new Expectations() {
@@ -203,7 +203,8 @@ public class StarMgrMetaSyncerTest {
                 MaterializedIndex baseIndex = new MaterializedIndex();
                 baseIndex.setShardGroupId(shardGroupId);
                 DistributionInfo distributionInfo = new HashDistributionInfo();
-                return Lists.newArrayList(new Partition(partitionId, "p1", baseIndex, distributionInfo));
+                return Lists.newArrayList(new Partition(partitionId, physicalPartitionId,
+                        "p1", baseIndex, distributionInfo));
             }
         };
 

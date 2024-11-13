@@ -17,7 +17,7 @@ package com.starrocks.alter;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -278,10 +278,10 @@ public class LakeTableAlterMetaJobTest {
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
-            partition.updateVisibleVersion(commitVersion - 1);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
         replayAlterMetaJob.replay(job);
@@ -296,9 +296,9 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
         }
     }
 

@@ -888,7 +888,7 @@ public class PlanFragmentBuilder {
                         if (CollectionUtils.isEmpty(selectTabletIds)) {
                             continue;
                         }
-                        selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+                        selectedNonEmptyPartitionIds.add(partitionId);
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);

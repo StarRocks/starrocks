@@ -58,6 +58,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -188,12 +189,22 @@ public class ShowExecutorTest {
         MaterializedIndex index2 = new MaterializedIndex();
 
         // mock partition
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index1;
+            }
+        };
+
+        // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition();
                 minTimes = 0;
-                result = index1;
+                result = physicalPartition;
             }
         };
 

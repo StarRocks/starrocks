@@ -798,7 +798,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t0, t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
-                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
@@ -968,7 +968,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
-                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
