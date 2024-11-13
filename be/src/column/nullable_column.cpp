@@ -347,7 +347,7 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint32_t new_from = from + 1;
