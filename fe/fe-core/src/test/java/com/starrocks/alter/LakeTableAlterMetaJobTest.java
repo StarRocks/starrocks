@@ -85,11 +85,7 @@ public class LakeTableAlterMetaJobTest {
                         "PROPERTIES('enable_persistent_index'='false')");
         Assert.assertFalse(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
-<<<<<<< HEAD
-                table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
-=======
-                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
->>>>>>> 4b474d78f1 ([Enhancement] support alter persistent index type in shared-data pk table (#52372))
+                table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
     }
 
     @After
@@ -272,13 +268,8 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
-<<<<<<< HEAD
                 job.dbId, job.tableId, job.tableName,
-                job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
-=======
-                    job.dbId, job.tableId, job.tableName,
-                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
->>>>>>> 4b474d78f1 ([Enhancement] support alter persistent index type in shared-data pk table (#52372))
+                job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
         Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
         Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
