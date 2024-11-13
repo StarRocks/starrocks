@@ -193,7 +193,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
                     throw new SemanticException("Modify failed because unknown properties: " + properties +
                             ", please add `session.` prefix if you want add session variables for mv(" +
-                            "eg, \"session.query_timeout\"=\"30000000\").");
+                            "eg, \"session.insert_timeout\"=\"30000000\").");
                 }
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
