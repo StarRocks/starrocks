@@ -695,3 +695,135 @@ select arrays_overlap([4, 3], [1, null]);
 -- result:
 0
 -- !result
+-- name: test_arrays_overlap_constant_columns
+CREATE TABLE `t1` (
+  `k1` int(11) NULL,
+  `a1` array<String> NULL,
+  `a2` array<String> NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values
+    (1, null, ['a', 'c', 'b', null]),
+    (2, null, ['a', 'c', 'b']),
+    (3, null, ['a', 'c']),
+    (4, null, ['a']);
+-- result:
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, []), ['a', 'c', 'b', null]) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	0
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, [])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	0
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, [null]), ['a', 'c', 'b', null]) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	1
+3	None	["a","c"]	1
+4	None	["a"]	1
+-- !result
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, [null])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	1
+3	None	["a","c"]	1
+4	None	["a"]	1
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), ['a', 'c', 'b', null]) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	None
+2	None	["a","c","b"]	None
+3	None	["a","c"]	None
+4	None	["a"]	None
+-- !result
+select k1, a1, a2, arrays_overlap(['a', 'c', 'b', null], ifnull(a1, null)) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	None
+2	None	["a","c","b"]	None
+3	None	["a","c"]	None
+4	None	["a"]	None
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, []), a2) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	0
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, [])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	0
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), a2) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	None
+2	None	["a","c","b"]	None
+3	None	["a","c"]	None
+4	None	["a"]	None
+-- !result
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, null)) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	None
+2	None	["a","c","b"]	None
+3	None	["a","c"]	None
+4	None	["a"]	None
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, [null]), a2) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(a2, ifnull(a1, [null])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	0
+3	None	["a","c"]	0
+4	None	["a"]	0
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a']), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	1
+3	None	["a","c"]	1
+4	None	["a"]	1
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, null), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	None
+2	None	["a","c","b"]	None
+3	None	["a","c"]	None
+4	None	["a"]	None
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a', null]), ifnull(a1, ['a', 'b'])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	1
+3	None	["a","c"]	1
+4	None	["a"]	1
+-- !result
+select k1, a1, a2, arrays_overlap(ifnull(a1, ['a', null]), ifnull(a1, ['a', 'b', null])) from t1 order by k1;
+-- result:
+1	None	["a","c","b",null]	1
+2	None	["a","c","b"]	1
+3	None	["a","c"]	1
+4	None	["a"]	1
+-- !result

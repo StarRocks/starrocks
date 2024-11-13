@@ -374,6 +374,13 @@ std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
     return {all_const, 1};
 }
 
+std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Column* column) {
+    if (column->is_constant()) {
+        return {true, 1};
+    }
+    return {false, column->size()};
+}
+
 using ColumnsConstIterator = Columns::const_iterator;
 bool ColumnHelper::is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end) {
     for (auto it = begin; it < end; ++it) {
