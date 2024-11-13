@@ -345,8 +345,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
-        SampleStatisticsCollectJob sampleStatisticsCollectJob = (SampleStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob sampleStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v2]", sampleStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -1521,8 +1521,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
-            Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
-            SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
 
