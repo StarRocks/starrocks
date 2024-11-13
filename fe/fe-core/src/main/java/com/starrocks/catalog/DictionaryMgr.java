@@ -630,7 +630,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                                                                                               fragments, scanNodes);
 
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
-            int leftTimeSecond = context.getSessionVariable().getQueryTimeoutS();
+            int leftTimeSecond = context.getExecTimeout();
             coord.setTimeoutSecond(leftTimeSecond);
             coord.exec();
 

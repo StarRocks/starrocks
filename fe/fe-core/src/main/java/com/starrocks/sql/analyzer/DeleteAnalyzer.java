@@ -190,6 +190,7 @@ public class DeleteAnalyzer {
         properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                 String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {

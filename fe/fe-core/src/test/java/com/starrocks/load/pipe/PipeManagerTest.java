@@ -813,7 +813,7 @@ public class PipeManagerTest {
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
-        Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
 
         // drop
         sql = "drop pipe p_crud";
@@ -957,18 +957,18 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
-        createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
-        Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+        Assert.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+        Assert.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
     }
 
     @Test

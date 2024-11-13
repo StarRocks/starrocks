@@ -160,6 +160,11 @@ public class SetStmtAnalyzer {
                     1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.INSERT_TIMEOUT,
+                    1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
         if (variable.equalsIgnoreCase(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT, 1L, null);
         }

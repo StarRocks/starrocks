@@ -155,8 +155,7 @@ public class UpdatePlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
                 } catch (UserException e) {
                     throw new SemanticException(e.getMessage());

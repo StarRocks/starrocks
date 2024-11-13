@@ -470,6 +470,26 @@ public class StmtExecutor {
         return parsedStmt;
     }
 
+    public int getExecTimeout() {
+        return parsedStmt.getTimeout();
+    }
+
+    public String getExecType() {
+        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
+            return "Insert";
+        } else if (parsedStmt instanceof UpdateStmt) {
+            return "Update";
+        } else if (parsedStmt instanceof DeleteStmt) {
+            return "Delete";
+        } else {
+            return "Query";
+        }
+    }
+
+    public boolean isExecLoadType() {
+        return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
+    }
+
     // Execute one statement.
     // Exception:
     //  IOException: talk with client failed.
@@ -1371,7 +1391,8 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
-        int timeout = context.getSessionVariable().getQueryTimeoutS();
+        int queryTimeout = context.getSessionVariable().getQueryTimeoutS();
+        int insertTimeout = context.getSessionVariable().getInsertTimeoutS();
         try {
             Future<?> future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
@@ -1381,6 +1402,7 @@ public class StmtExecutor {
                 // will print warning log if timeout, so we update timeout temporarily to avoid
                 // warning log
                 context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+                context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
                 future.get();
             }
         } catch (RejectedExecutionException e) {
@@ -1394,7 +1416,8 @@ public class StmtExecutor {
             LOG.warn("analyze statement failed {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } finally {
-            context.getSessionVariable().setQueryTimeoutS(timeout);
+            context.getSessionVariable().setQueryTimeoutS(queryTimeout);
+            context.getSessionVariable().setInsertTimeoutS(insertTimeout);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -2282,7 +2305,7 @@ public class StmtExecutor {
                         estimateFileNum,
                         estimateScanFileSize,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        getExecTimeout(),
                         coord);
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
@@ -2307,8 +2330,9 @@ public class StmtExecutor {
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlan(execPlan);
 
-            long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
-            coord.join(context.getSessionVariable().getQueryTimeoutS());
+            int timeout = getExecTimeout();
+            long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000;
+            coord.join(timeout);
             if (!coord.isDone()) {
                 /*
                  * In this case, There are two factors that lead query cancelled:
@@ -2329,16 +2353,17 @@ public class StmtExecutor {
                     coord.cancel(ErrorCode.ERR_QUERY_EXCEPTION.formatErrorMsg());
                     ErrorReport.reportNoAliveBackendException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
-                    coord.cancel(ErrorCode.ERR_QUERY_TIMEOUT.formatErrorMsg());
+                    coord.cancel(ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeout, ""));
                     if (coord.isThriftServerHighLoad()) {
-                        ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT,
+                        ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, getExecType(), timeout,
                                 "Please check the thrift-server-pool metrics, " +
                                         "if the pool size reaches thrift_server_max_worker_threads(default is 4096), " +
                                         "you can set the config to a higher value in fe.conf, " +
                                         "or set parallel_fragment_exec_instance_num to a lower value in session variable");
                     } else {
-                        ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT,
-                                "Increase the query_timeout session variable and retry");
+                        ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, getExecType(), timeout,
+                                String.format("please increase the '%s' session variable and retry",
+                                        SessionVariable.INSERT_TIMEOUT));
                     }
                 }
             }
@@ -2811,5 +2836,4 @@ public class StmtExecutor {
 
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
-
 }
