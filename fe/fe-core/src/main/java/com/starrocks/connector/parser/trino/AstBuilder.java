@@ -1252,9 +1252,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
         List<String> parts  = node.getTarget().getParts();
         String tableName = parts.get(parts.size() - 1);
+        List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
+                map(Identifier::getValue).collect(Collectors.toList()) : null;
         return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
-                tableName.concat(UUID.randomUUID().toString()), null,
-        (QueryStatement) visit(node.getQuery(), context), true, new HashMap<>(0), NodePosition.ZERO);
+                tableName.concat(UUID.randomUUID().toString()), columnAliases,
+        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
 
     @Override
