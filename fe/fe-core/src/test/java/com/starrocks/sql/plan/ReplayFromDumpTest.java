@@ -1000,4 +1000,19 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
     }
+
+    @Test
+    public void testPushdownSubfield() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(getDumpInfoFromFile("query_dump" +
+                "/pushdown_subfield"), connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  10:Project\n" +
+                "  |  <slot 103> : 103: id\n" +
+                "  |  <slot 104> : 104: mock_098\n" +
+                "  |  <slot 164> : 164: mock_107\n" +
+                "  |  <slot 512> : get_json_string(107: mock_031, '$.\"email_Domain1__c\"')\n" +
+                "  |  <slot 513> : get_json_string(107: mock_031, '$.\"fY21_Territory_Score__c\"')\n" +
+                "  |  \n" +
+                "  9:OlapScanNode\n" +
+                "     TABLE: tbl_mock_103"));
+    }
 }
