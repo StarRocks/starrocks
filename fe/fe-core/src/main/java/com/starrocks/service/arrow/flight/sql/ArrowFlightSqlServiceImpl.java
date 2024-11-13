@@ -78,7 +78,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         this.location = location;
         sqlInfoBuilder = new SqlInfoBuilder();
         sqlInfoBuilder.withFlightSqlServerName("StarRocks").withFlightSqlServerVersion("1.0")
-                .withFlightSqlServerArrowVersion("16.0.0")
+                .withFlightSqlServerArrowVersion("17.0.0")
                 .withFlightSqlServerReadOnly(false)
                 .withSqlIdentifierQuoteChar("`")
                 .withSqlDdlCatalog(true)
@@ -428,7 +428,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Ticket ticket = new Ticket(Any.pack(ticketStatementQuery).toByteArray());
             List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, grpcLocation));
 
-            Thread.sleep(100000);
             Schema schema = arrowConnectProcessor.fetchArrowSchema(address, pUniqueId, 600);
             return new FlightInfo(schema, flightDescriptor, endpoints, -1, -1);
         } catch (Exception e) {

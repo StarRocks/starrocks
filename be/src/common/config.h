@@ -1405,7 +1405,6 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
-CONF_String(arrow_flight_sql_ase_key, "");
 
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
