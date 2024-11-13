@@ -142,9 +142,8 @@ public class StatisticExecutor {
         List<TStatisticData> columnStats = Lists.newArrayList();
         if (CollectionUtils.isNotEmpty(columnWithFullStats)) {
             List<String> columnNamesForStats = columnWithFullStats.stream().map(ColumnStatsMeta::getColumnName)
-                            .collect(Collectors.toList());
-            List<Type> columnTypesForStats =
-                    columnWithFullStats.stream()
+                    .collect(Collectors.toList());
+            List<Type> columnTypesForStats = columnWithFullStats.stream()
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
@@ -155,10 +154,20 @@ public class StatisticExecutor {
         }
         if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
             List<String> columnNamesForStats = columnWithSampleStats.stream().map(ColumnStatsMeta::getColumnName)
-                            .collect(Collectors.toList());
-            String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
-            List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
-            columnStats.addAll(tStatisticData);
+                    .collect(Collectors.toList());
+            if (Config.statistic_use_meta_statistics) {
+                List<Type> columnTypesForStats = columnWithSampleStats.stream()
+                        .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
+                        .collect(Collectors.toList());
+                String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
+                        dbId, tableId, columnNamesForStats, columnTypesForStats);
+                List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+                columnStats.addAll(tStatisticData);
+            } else {
+                String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
+                List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+                columnStats.addAll(tStatisticData);
+            }
         }
         return columnStats;
     }

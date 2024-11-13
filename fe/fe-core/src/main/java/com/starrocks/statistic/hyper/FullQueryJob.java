@@ -44,13 +44,13 @@ public class FullQueryJob extends HyperQueryJob {
             }
 
             for (ColumnStats columnStat : columnStats) {
-                VelocityContext context = StatisticSQLs.buildBaseContext(db, table, partition, columnStat);
+                VelocityContext context = HyperStatisticSQLs.buildBaseContext(db, table, partition, columnStat);
                 context.put("dataSize", columnStat.getFullDateSize());
                 context.put("countNullFunction", columnStat.getFullNullCount());
                 context.put("hllFunction", columnStat.getNDV());
                 context.put("maxFunction", columnStat.getMax());
                 context.put("minFunction", columnStat.getMin());
-                String sql = StatisticSQLs.build(context, StatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
+                String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.BATCH_FULL_STATISTIC_TEMPLATE);
                 metaSQL.add(sql);
             }
         }

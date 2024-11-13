@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class StatisticSQLs {
+public class HyperStatisticSQLs {
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
     static {
@@ -54,8 +54,8 @@ public class StatisticSQLs {
     //| max            | varchar(1048576) | NO   | false | <null>  |       |
     //| min            | varchar(1048576) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
-    public static final String TABLE_NAME = "column_statistics";
-    public static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    static final String TABLE_NAME = "column_statistics";
+    static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
@@ -66,7 +66,7 @@ public class StatisticSQLs {
             ", $minFunction " + // VARCHAR
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
-    public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(COUNT(*) as BIGINT)" + // BIGINT, row_count
@@ -77,18 +77,7 @@ public class StatisticSQLs {
             ", $minFunction " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
 
-    public static final String BATCH_DATA_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
-            ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
-            ", '$columnNameStr'" + // VARCHAR, column_name
-            ", cast(0 as BIGINT)" + // BIGINT, row_count
-            ", cast($dataSize as BIGINT)" + // BIGINT, data_size
-            ", $hllFunction" + // VARBINARY, ndv
-            ", cast($countNullFunction as BIGINT)" + // BIGINT, null_count
-            ", ''" + // VARCHAR, max
-            ", '' " + // VARCHAR, min
-            " FROM `$dbName`.`$tableName` partitions(`$partitionName`)";
-
-    public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+    static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(0 as BIGINT)" + // BIGINT, row_count
@@ -99,7 +88,7 @@ public class StatisticSQLs {
             ", '' " + // VARCHAR, min
             " FROM base_cte_table ";
 
-    public static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+    static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
             ", cast($rowCount as BIGINT)" + // BIGINT
@@ -110,13 +99,13 @@ public class StatisticSQLs {
             ", $minFunction " + // VARCHAR
             " FROM base_cte_table ";
 
-    public static String build(VelocityContext context, String template) {
+    static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
     }
 
-    public static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
+    static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
         VelocityContext context = new VelocityContext();
         String columnNameStr = stats.getColumnNameStr();
         String quoteColumnName = stats.getQuotedColumnName();
@@ -130,7 +119,7 @@ public class StatisticSQLs {
         return context;
     }
 
-    public static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
+    static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
                                         PartitionSampler sampler, String template) {
         String tableName = "`" + db.getOriginName() + "`.`" + table.getName() + "`";
 
@@ -162,7 +151,7 @@ public class StatisticSQLs {
             context.put("countNullFunction", stat.getSampleNullCount(info));
             context.put("maxFunction", stat.getMax());
             context.put("minFunction", stat.getMin());
-            groupSQLs.add(StatisticSQLs.build(context, template));
+            groupSQLs.add(HyperStatisticSQLs.build(context, template));
         }
         sqlBuilder.append(String.join(" UNION ALL ", groupSQLs));
         return sqlBuilder.toString();

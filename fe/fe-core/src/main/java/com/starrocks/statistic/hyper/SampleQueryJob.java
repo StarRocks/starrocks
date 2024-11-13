@@ -48,8 +48,8 @@ public class SampleQueryJob extends HyperQueryJob {
                 continue;
             }
             for (List<ColumnStats> stats : partColumns) {
-                String sql = StatisticSQLs.buildSampleSQL(db, table, partition, stats, sampler,
-                        StatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
+                String sql = HyperStatisticSQLs.buildSampleSQL(db, table, partition, stats, sampler,
+                        HyperStatisticSQLs.BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE);
                 sampleSQLs.add(sql);
             }
         }

@@ -85,10 +85,10 @@ public class MetaQueryJob extends HyperQueryJob {
             }
 
             for (ColumnStats columnStat : queryColumns) {
-                VelocityContext context = StatisticSQLs.buildBaseContext(db, table, partition, columnStat);
+                VelocityContext context = HyperStatisticSQLs.buildBaseContext(db, table, partition, columnStat);
                 context.put("maxFunction", columnStat.getMax());
                 context.put("minFunction", columnStat.getMin());
-                String sql = StatisticSQLs.build(context, StatisticSQLs.BATCH_META_STATISTIC_TEMPLATE);
+                String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.BATCH_META_STATISTIC_TEMPLATE);
                 metaSQL.add(sql);
             }
         }
@@ -140,8 +140,8 @@ public class MetaQueryJob extends HyperQueryJob {
                 continue;
             }
             for (List<ColumnStats> part : partColumns) {
-                String sql = StatisticSQLs.buildSampleSQL(db, table, partition, part, sampler,
-                        StatisticSQLs.BATCH_DATA_STATISTIC_SELECT_TEMPLATE);
+                String sql = HyperStatisticSQLs.buildSampleSQL(db, table, partition, part, sampler,
+                        HyperStatisticSQLs.BATCH_DATA_STATISTIC_SELECT_TEMPLATE);
                 metaSQL.add(sql);
             }
         }
