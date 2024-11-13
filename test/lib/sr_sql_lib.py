@@ -636,6 +636,9 @@ class StarrocksSQLApiLib(object):
     def close_hive(self):
         self.hive_lib.close()
 
+    def close_starrocks_arrow(self):
+        self.arrow_sql_lib.close()
+
     def create_database(self, database_name, tolerate_exist=False):
         """
         create starrocks database if tolerate exist
