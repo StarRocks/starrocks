@@ -43,7 +43,7 @@ public class SampleQueryJob extends HyperQueryJob {
         List<String> sampleSQLs = Lists.newArrayList();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
-            if (partition == null) {
+            if (partition == null || sampler.getSampleInfo(partitionId) == null || !partition.hasData()) {
                 // statistics job doesn't lock DB, partition may be dropped, skip it
                 continue;
             }

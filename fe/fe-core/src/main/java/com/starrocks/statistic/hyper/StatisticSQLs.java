@@ -132,9 +132,6 @@ public class StatisticSQLs {
 
     public static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
                                         PartitionSampler sampler, String template) {
-        if (p == null || !p.hasData()) {
-            return null;
-        }
         String tableName = "`" + db.getOriginName() + "`.`" + table.getName() + "`";
 
         SampleInfo info = sampler.getSampleInfo(p.getId());
