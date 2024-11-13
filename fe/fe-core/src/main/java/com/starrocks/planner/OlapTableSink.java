@@ -773,13 +773,13 @@ public class OlapTableSink extends DataSink {
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
-        for (TOlapTablePartition partition : partitionParam.getPartitions()) {
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(partition.getId());
+        for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
             // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
-            LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
+            LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);

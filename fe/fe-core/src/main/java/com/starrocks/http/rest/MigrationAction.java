@@ -119,7 +119,7 @@ public class MigrationAction extends RestBaseAction {
 
                 for (Partition partition : olapTable.getPartitions()) {
                     String partitionName = partition.getName();
-                    MaterializedIndex baseIndex = partition.getBaseIndex();
+                    MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
                     for (Tablet tablet : baseIndex.getTablets()) {
                         List<Comparable> row = Lists.newArrayList();
                         row.add(tableName);
@@ -145,7 +145,7 @@ public class MigrationAction extends RestBaseAction {
 
                     for (Partition partition : olapTable.getPartitions()) {
                         String partitionName = partition.getName();
-                        MaterializedIndex baseIndex = partition.getBaseIndex();
+                        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
                         for (Tablet tablet : baseIndex.getTablets()) {
                             List<Comparable> row = Lists.newArrayList();
                             row.add(tableName);

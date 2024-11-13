@@ -46,7 +46,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -87,7 +86,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
     private static final int MAX_JOB_NUM = 100;
     private static final Comparator<MetaObject> COMPARATOR =
-                (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
+            (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
 
     // tabletId -> job
     private final Map<Long, CheckConsistencyJob> jobs;
@@ -134,7 +133,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.info("parsed startDate: {}, endDate: {}", startDate, endDate);
         } catch (ParseException e) {
             LOG.error("failed to parse start/end time: {}, {}", Config.consistency_check_start_time,
-                        Config.consistency_check_end_time, e);
+                    Config.consistency_check_end_time, e);
             return false;
         }
 
@@ -392,7 +391,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
         if (!isTime) {
             LOG.debug("current time is {}:00, waiting to {}:00 to {}:00",
-                        currentTime, startTime, endTime);
+                    currentTime, startTime, endTime);
         }
 
         return isTime;
@@ -507,11 +506,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                                             Partition.PARTITION_INIT_VERSION);
                                 continue;
                             }
-                            if (physicalPartition instanceof Partition) {
-                                partitionQueue.add((Partition) physicalPartition);
-                            } else if (physicalPartition instanceof PhysicalPartitionImpl) {
-                                partitionQueue.add((PhysicalPartitionImpl) physicalPartition);
-                            }
+                            partitionQueue.add(physicalPartition);
                         }
 
                         while ((chosenOne = partitionQueue.poll()) != null) {
@@ -521,7 +516,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                             List<MaterializedIndex> visibleIndexes =
                                         physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
                             Queue<MetaObject> indexQueue =
-                                        new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
+                                    new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);
 
                             while ((chosenOne = indexQueue.poll()) != null) {
@@ -529,7 +524,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                                 // sort tablets
                                 Queue<MetaObject> tabletQueue =
-                                            new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
+                                        new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
                                 tabletQueue.addAll(index.getTablets());
 
                                 while ((chosenOne = tabletQueue.poll()) != null) {
@@ -596,7 +591,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             return;
         }
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), info.getTableId());
+                .getTable(db.getId(), info.getTableId());
         if (table == null) {
             LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
             return;

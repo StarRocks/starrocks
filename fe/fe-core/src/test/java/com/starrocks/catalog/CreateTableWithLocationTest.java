@@ -194,7 +194,7 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
-        List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp();
         Set<Long> backendIdsWithoutLocProp = getBackendIdsWithoutLocProp();
         System.out.println(backendIdsWithLocProp);
@@ -240,7 +240,7 @@ public class CreateTableWithLocationTest {
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc1");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
-        List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack");
         Set<Long> backendIdsWithoutLocProp = getBackendIdsWithoutLocProp();
         // test_table_explicit_loc_backend_with_loc1's replicas should only distribute on backends with rack location
@@ -280,7 +280,7 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
-        tablets = partitions.get(0).getBaseIndex().getTablets();
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
             Set<Long> replicaBackendIds = Sets.newHashSet();
@@ -319,7 +319,7 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertEquals(1, table.getLocation().keySet().size());
         partitions = new ArrayList<>(table.getAllPartitions());
-        tablets = partitions.get(0).getBaseIndex().getTablets();
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack2"));
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack3"));
@@ -354,7 +354,7 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
-        tablets = partitions.get(0).getBaseIndex().getTablets();
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> allReplicasBackendIds = Sets.newHashSet();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
@@ -393,7 +393,7 @@ public class CreateTableWithLocationTest {
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc5");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         partitions = new ArrayList<>(table.getAllPartitions());
-        tablets = partitions.get(0).getBaseIndex().getTablets();
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         allReplicasBackendIds = Sets.newHashSet();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
@@ -464,7 +464,7 @@ public class CreateTableWithLocationTest {
                     .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc_best_effort");
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
-        List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack2"));
         for (Tablet tablet : tablets) {

@@ -53,7 +53,7 @@ public class RecyclePartitionInfoTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "p1", new MaterializedIndex(), null);
+        Partition partition = new Partition(1L, 11L, "p1", new MaterializedIndex(), null);
 
         RecycleRangePartitionInfo info1 = new RecycleRangePartitionInfo(11L, 22L,
                 partition, range, dataProperty, (short) 1, false, null);

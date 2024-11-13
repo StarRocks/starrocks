@@ -100,6 +100,7 @@ public class LocalTabletsProcDirTest {
         long tablet1Id = 5L;
         long tablet2Id = 6L;
         long replicaId = 10L;
+        long physicalPartitionId = 11L;
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
@@ -135,7 +136,7 @@ public class LocalTabletsProcDirTest {
         index.addTablet(tablet2, tabletMeta);
 
         // Partition
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);

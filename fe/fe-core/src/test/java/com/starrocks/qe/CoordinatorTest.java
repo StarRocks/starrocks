@@ -138,7 +138,8 @@ public class CoordinatorTest extends PlanTestBase {
 
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
-                olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
+                                .getTabletIdsInOrder().stream())
                         .collect(Collectors.toList());
         Assert.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);

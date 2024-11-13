@@ -356,13 +356,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
-            for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkNotNull(partition, partitionId);
-                partition.setMinRetainVersion(0);
-                long commitVersion = partition.getNextVersion();
-                commitVersionMap.put(partitionId, commitVersion);
-                LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
+            for (long physicalPartitionId : physicalPartitionIdToRollupIndex.keySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
+                physicalPartition.setMinRetainVersion(0);
+                long commitVersion = physicalPartition.getNextVersion();
+                commitVersionMap.put(physicalPartitionId, commitVersion);
+                LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
             }
             this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
@@ -642,10 +642,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkState(partition != null, partitionId);
-                List<MaterializedIndex> allMaterializedIndex = table.getPartition(partitionId).
-                        getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                Preconditions.checkState(physicalPartition != null, partitionId);
+                List<MaterializedIndex> allMaterializedIndex = physicalPartition
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 for (MaterializedIndex index : allMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
@@ -694,17 +694,16 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
     public void visualiseRollupIndex(OlapTable table) {
         for (Partition partition : table.getPartitions()) {
-            Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
-            long commitVersion = commitVersionMap.get(partition.getId());
-
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                LOG.debug("update partition visible version. partition=" + partition.getId() + " commitVersion=" +
+                Preconditions.checkState(commitVersionMap.containsKey(physicalPartition.getId()));
+                long commitVersion = commitVersionMap.get(physicalPartition.getId());
+                LOG.debug("update partition visible version. partition=" + physicalPartition.getId() + " commitVersion=" +
                         commitVersion);
                 // Update Partition's visible version
-                Preconditions.checkState(commitVersion == partition.getVisibleVersion() + 1,
-                        commitVersion + " vs " + partition.getVisibleVersion());
-                partition.setVisibleVersion(commitVersion, finishedTimeMs);
-                LOG.debug("update visible version of partition {} to {}. jobId={}", partition.getId(),
+                Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                        commitVersion + " vs " + physicalPartition.getVisibleVersion());
+                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+                LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                         commitVersion, jobId);
                 MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexId);

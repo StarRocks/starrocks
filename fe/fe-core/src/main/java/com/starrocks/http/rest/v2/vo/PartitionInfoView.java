@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -140,9 +141,11 @@ public class PartitionInfoView {
                 pvo.setDistributionType(distributionInfo.getTypeStr());
             });
 
-            pvo.setVisibleVersion(partition.getVisibleVersion());
-            pvo.setVisibleVersionTime(partition.getVisibleVersionTime());
-            pvo.setNextVersion(partition.getNextVersion());
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
+            pvo.setVisibleVersion(physicalPartition.getVisibleVersion());
+            pvo.setVisibleVersionTime(physicalPartition.getVisibleVersionTime());
+            pvo.setNextVersion(physicalPartition.getNextVersion());
 
             PartitionType partitionType = partitionInfo.getType();
             switch (partitionType) {
@@ -166,7 +169,7 @@ public class PartitionInfoView {
                     // TODO add more type support in the future
             }
 
-            List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            List<MaterializedIndex> allIndices = physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             if (CollectionUtils.isNotEmpty(allIndices)) {
                 MaterializedIndex materializedIndex = allIndices.get(0);
                 List<Tablet> tablets = materializedIndex.getTablets();

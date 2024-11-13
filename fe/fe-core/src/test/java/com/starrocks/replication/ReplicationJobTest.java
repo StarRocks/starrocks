@@ -98,12 +98,12 @@ public class ReplicationJobTest {
 
     @Before
     public void setUp() throws Exception {
-        partition.updateVersionForRestore(10);
-        srcPartition.updateVersionForRestore(100);
-        partition.setDataVersion(8);
-        partition.setNextDataVersion(9);
-        srcPartition.setDataVersion(98);
-        srcPartition.setNextDataVersion(99);
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -163,8 +163,10 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
-        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
-        Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getDataVersion());
     }
 
     @Test
@@ -321,14 +323,14 @@ public class ReplicationJobTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
-        partitionInfo.src_version = srcPartition.getVisibleVersion();
-        partitionInfo.src_version_epoch = srcPartition.getVersionEpoch();
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
-        MaterializedIndex index = partition.getBaseIndex();
-        MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);

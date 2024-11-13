@@ -131,7 +131,7 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(partitionId, "t0", index, dist);
+        Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {

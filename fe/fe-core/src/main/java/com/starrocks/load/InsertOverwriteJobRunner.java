@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
@@ -269,7 +268,7 @@ public class InsertOverwriteJobRunner {
             return;
         }
 
-        if (insertStmt.isSpecifyPartitionNames())  {
+        if (insertStmt.isSpecifyPartitionNames()) {
             List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             for (String partitionName : partitionNames) {
@@ -438,7 +437,8 @@ public class InsertOverwriteJobRunner {
                 for (String partitionName : tmpPartitionNames) {
                     Partition partition = targetTable.getPartition(partitionName, true);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             sourceTablets.addAll(index.getTablets());
                         }
                         targetTable.dropTempPartition(partitionName, true);

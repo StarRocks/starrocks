@@ -897,8 +897,8 @@ public class DatabaseTransactionMgr {
                 }
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
-                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                    PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
                     // partition maybe dropped between commit and publish version, ignore it
                     if (partition == null) {
                         continue;
@@ -913,8 +913,8 @@ public class DatabaseTransactionMgr {
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
-                    int quorumNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
-                    int replicaNum = partitionInfo.getReplicationNum(partitionId);
+                    int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
+                    int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
@@ -1038,13 +1038,13 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
                     for (PartitionCommitInfo partitionCommitInfo : idToPartitionCommitInfo.values()) {
-                        long partitionId = partitionCommitInfo.getPartitionId();
-                        PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                        long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                         // partition maybe dropped between commit and publish version, ignore this error
-                        if (partition == null) {
-                            droppedPartitionIds.add(partitionId);
+                        if (physicalPartition == null) {
+                            droppedPartitionIds.add(physicalPartitionId);
                             LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    partitionId,
+                                    physicalPartitionId,
                                     transactionState);
                             continue;
                         }
@@ -1052,19 +1052,19 @@ public class DatabaseTransactionMgr {
                         if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !transactionState.isVersionOverwrite() &&
                                 !partitionCommitInfo.isDoubleWrite() &&
-                                partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                                physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
                             if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                                 LOG.debug("transactionId {} partition {} commitInfo version {} is not equal with " +
                                                 "partition visible version {} plus one, need wait",
                                         transactionId,
-                                        partitionId,
+                                        physicalPartitionId,
                                         partitionCommitInfo.getVersion(),
-                                        partition.getVisibleVersion());
+                                        physicalPartition.getVisibleVersion());
                             }
                             String errMsg =
                                     String.format("wait for publishing partition %d version %d. self version: %d. table %d",
-                                            partitionId, partition.getVisibleVersion() + 1,
+                                            physicalPartitionId, physicalPartition.getVisibleVersion() + 1,
                                             partitionCommitInfo.getVersion(), tableId);
                             transactionState.setErrorMsg(errMsg);
                             return;
@@ -1074,10 +1074,10 @@ public class DatabaseTransactionMgr {
                             continue;
                         }
 
-                        int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
+                        int quorumReplicaNum = partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, partition);
+                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1099,7 +1099,7 @@ public class DatabaseTransactionMgr {
                                         }
                                         // this means the replica is a healthy replica,
                                         // it is healthy in the past and does not have error in current load
-                                        if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                        if (replica.checkVersionCatchUp(physicalPartition.getVisibleVersion(), true)) {
                                             // during rollup, the rollup replica's last failed version < 0,
                                             // it may be treated as a normal replica.
 
@@ -1121,7 +1121,7 @@ public class DatabaseTransactionMgr {
                                             // then we will detect this and set C's last failed version to 10 and last success version to 11
                                             // this logic has to be replayed in checkpoint thread
                                             replica.updateVersionInfo(replica.getVersion(),
-                                                    partition.getVisibleVersion(),
+                                                    physicalPartition.getVisibleVersion(),
                                                     partitionCommitInfo.getVersion());
                                             LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                             "in error replica list and its version not equal to partition " +
@@ -1147,8 +1147,8 @@ public class DatabaseTransactionMgr {
                                     String errMsg = String.format(
                                             "publish on tablet %d failed. succeed replica num %d less than quorum %d."
                                                     + " table: %d, partition: %d, publish version: %d",
-                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, partitionId,
-                                            partition.getVisibleVersion() + 1);
+                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, physicalPartitionId,
+                                            physicalPartition.getVisibleVersion() + 1);
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
                                 }
@@ -1247,7 +1247,7 @@ public class DatabaseTransactionMgr {
                     .values().iterator();
             while (partitionCommitInfoIterator.hasNext()) {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
-                long partitionId = partitionCommitInfo.getPartitionId();
+                long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
@@ -1261,13 +1261,13 @@ public class DatabaseTransactionMgr {
                     ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
                     long versionDiff = newVersion - partition.getVisibleVersion();
                     partitionCommitInfo.setVersion(newVersion);
                     partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
-                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPhysicalPartitionId());
                         partitionCommitInfo.setVersionEpoch(newVersionEpoch);
                     }
                 } else if (transactionState.isVersionOverwrite()) {
@@ -1502,7 +1502,7 @@ public class DatabaseTransactionMgr {
                 List<Comparable> tableInfo = new ArrayList<>();
                 tableInfo.add(entry.getKey());
                 tableInfo.add(Joiner.on(", ").join(entry.getValue().getIdToPartitionCommitInfo().values().stream().map(
-                        PartitionCommitInfo::getPartitionId).collect(Collectors.toList())));
+                        PartitionCommitInfo::getPhysicalPartitionId).collect(Collectors.toList())));
                 tableInfos.add(tableInfo);
             }
         } finally {

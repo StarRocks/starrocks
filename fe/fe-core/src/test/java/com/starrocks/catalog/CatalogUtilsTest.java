@@ -39,6 +39,9 @@ public class CatalogUtilsTest {
     @Mock
     private Partition partition;
 
+    @Mock
+    private PhysicalPartition physicalPartition;
+
     @Before
     public void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -61,7 +64,8 @@ public class CatalogUtilsTest {
         partitions.add(partition);
         when(olapTable.getPartitions()).thenReturn(partitions);
         when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
-        when(partition.getVisibleVersion()).thenReturn(2L);
+        when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
+        when(physicalPartition.getVisibleVersion()).thenReturn(2L);
         when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);

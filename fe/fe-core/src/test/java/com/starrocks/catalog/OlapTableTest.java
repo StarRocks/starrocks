@@ -167,7 +167,7 @@ public class OlapTableTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
-        Partition partition = new Partition(1, "p1", null, null);
+        Partition partition = new Partition(1, 11, "p1", null, null);
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
 
         new MockUp<Range<PartitionKey>>() {
@@ -204,7 +204,7 @@ public class OlapTableTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
-        Partition partition = new Partition(1, "p1", null, null);
+        Partition partition = new Partition(1, 11, "p1", null, null);
         Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
@@ -232,7 +232,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -245,7 +245,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -271,7 +271,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -284,7 +284,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28  hour"));
-        Partition partition2 = new Partition(2L, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -309,7 +309,7 @@ public class OlapTableTest {
         listPartitionInfo.setValues(1L, values1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition1));
@@ -321,7 +321,7 @@ public class OlapTableTest {
         List<String> values2 = new ArrayList<>(Arrays.asList(LocalDate.now().toString()));
         listPartitionInfo.setValues(2L, values2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -351,7 +351,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition = new Partition(1L, "p1", null, null);
+        Partition partition = new Partition(1L, 11, "p1", null, null);
 
         // Datacache.partition_duration is not set, cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
@@ -365,7 +365,7 @@ public class OlapTableTest {
         List<List<String>> multiValuesList2 = new ArrayList<>(Arrays.asList(multiValues2));
         listPartitionInfo.setMultiValues(2L, multiValuesList2);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("28 hour"));
-        Partition partition2 = new Partition(2L, "p2", null, null);
+        Partition partition2 = new Partition(2L, 21, "p2", null, null);
 
         // cache is valid
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition2));
@@ -387,7 +387,7 @@ public class OlapTableTest {
         listPartitionInfo.setMultiValues(1L, multiValuesList1);
         OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
-        Partition partition1 = new Partition(1L, "p1", null, null);
+        Partition partition1 = new Partition(1L, 11, "p1", null, null);
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         // cache is valid

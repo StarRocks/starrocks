@@ -244,7 +244,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -349,9 +349,9 @@ public class StatisticsCalculatorTest {
         Partition partition2 = partitions.get(1);
         Partition partition3 = partitions.get(2);
         // mock one empty partition
-        partition1.setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
-        partition2.setVisibleVersion(2, System.currentTimeMillis());
-        partition3.setVisibleVersion(2, System.currentTimeMillis());
+        partition1.getDefaultPhysicalPartition().setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition2.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition3.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
@@ -422,7 +422,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
@@ -519,7 +519,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =

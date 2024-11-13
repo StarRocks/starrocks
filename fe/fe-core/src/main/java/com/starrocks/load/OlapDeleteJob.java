@@ -304,10 +304,10 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
             if (replicaNum == null) {
                 // should not happen
-                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
                             " when commit delete job");
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
@@ -339,8 +339,8 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
-    public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
-        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }

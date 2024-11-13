@@ -148,7 +148,7 @@ public class CheckConsistencyJob {
                     LockType.READ)) {
             OlapTable olapTable = (OlapTable) table;
 
-            PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
                 LOG.debug("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return false;
@@ -273,7 +273,7 @@ public class CheckConsistencyJob {
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
 
-            PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
                 LOG.warn("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return -1;

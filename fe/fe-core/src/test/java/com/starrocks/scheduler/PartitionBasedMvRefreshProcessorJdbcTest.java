@@ -247,8 +247,10 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
 
         // partial range refresh 1
         {
-            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
-                        Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            Map<String, Long> partitionVersionMap = new HashMap<>();
+            for (Partition p : materializedView.getPartitions()) {
+                partitionVersionMap.put(p.getName(), p.getDefaultPhysicalPartition().getVisibleVersion());
+            }
             starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
                         " partition start('2023-08-02') end('2023-09-01')" +
                         "force with sync mode");
@@ -257,13 +259,16 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
-                        materializedView.getPartition("p202308_202309").getVisibleVersion());
+                        materializedView.getPartition("p202308_202309")
+                                .getDefaultPhysicalPartition().getVisibleVersion());
         }
 
         // partial range refresh 2
         {
-            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
-                        Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            Map<String, Long> partitionVersionMap = new HashMap<>();
+            for (Partition p : materializedView.getPartitions()) {
+                partitionVersionMap.put(p.getName(), p.getDefaultPhysicalPartition().getVisibleVersion());
+            }
             starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
                         " partition start('2023-07-01') end('2023-08-01')" +
                         "force with sync mode");
@@ -272,7 +277,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
-                        materializedView.getPartition("p202308_202309").getVisibleVersion());
+                        materializedView.getPartition("p202308_202309").getDefaultPhysicalPartition()
+                                .getVisibleVersion());
         }
 
         starRocksAssert.dropMaterializedView(mvName);

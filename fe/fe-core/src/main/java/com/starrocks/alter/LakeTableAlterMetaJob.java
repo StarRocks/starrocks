@@ -14,7 +14,6 @@
 
 package com.starrocks.alter;
 
-
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;

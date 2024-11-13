@@ -86,7 +86,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(rollupIndexId));
 
-                List<Tablet> originTablets = partition.getIndex(baseIndexId).getTablets();
+                List<Tablet> originTablets = physicalPartition.getIndex(baseIndexId).getTablets();
                 WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
                         ConnectContext.get().getCurrentWarehouseId());
