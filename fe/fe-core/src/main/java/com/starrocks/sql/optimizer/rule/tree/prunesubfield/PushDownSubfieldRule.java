@@ -325,12 +325,9 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 }
             }
 
-            if (!leftContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 0, leftContext);
-            }
-            if (!rightContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 1, rightContext);
-            }
+            // recursively visit children no matter this node can push down something
+            visitChild(optExpression, 0, leftContext);
+            visitChild(optExpression, 1, rightContext);
 
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             if (predicate.isPresent() || onPredicate.isPresent()) {
