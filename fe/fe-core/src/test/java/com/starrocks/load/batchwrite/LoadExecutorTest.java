@@ -247,7 +247,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
 
         Exception expectException = new LoadException(
                 "There is data quality issue, please check the tracking url for details." +
-                        " The tracking url: " + trackingUrl);
+                        " Max filter ratio: 0.0. The tracking url: " + trackingUrl);
         testLoadFailBase(executor, expectException, TransactionStatus.ABORTED);
     }
 
