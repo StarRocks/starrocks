@@ -359,8 +359,10 @@ public:
 
 private:
     static ColumnPtr _array_overlap_const(const ArrayOverlapState<HashSet>& state, const Column& column) {
-        size_t chunk_size = column.size();
-        auto result_data_column = BooleanColumn::create(chunk_size, 0);
+        const size_t num_rows = column.size();
+        const auto [is_const, num_packed_rows] = ColumnHelper::num_packed_rows(&column);
+
+        auto result_data_column = BooleanColumn::create(num_packed_rows, 0);
         auto& result_data = result_data_column->get_data();
         NullColumnPtr result_null_column;
         const ArrayColumn* src_data_column = ColumnHelper::get_data_column_by_type<TYPE_ARRAY>(&column);
@@ -372,20 +374,26 @@ private:
 
         DCHECK(src_data_column->elements_column()->is_nullable());
 
-        for (size_t i = 0; i < chunk_size; i++) {
+        for (size_t i = 0; i < num_packed_rows; i++) {
             result_data[i] = _check_column_overlap_nullable(*state.hash_set, *src_data_column, i, state.has_null);
         }
 
-        if (result_null_column != nullptr) {
-            return NullableColumn::create(result_data_column, result_null_column);
+        if (is_const) {
+            // Const null column is handled by `RETURN_IF_COLUMNS_ONLY_NULL` in `process`.
+            DCHECK(result_null_column == nullptr);
+            return ConstColumn::create(std::move(result_data_column), num_rows);
+        } else if (result_null_column != nullptr) {
+            return NullableColumn::create(std::move(result_data_column), std::move(result_null_column));
         } else {
             return result_data_column;
         }
     }
 
     static ColumnPtr _array_overlap(const Columns& columns) {
-        size_t chunk_size = columns[0]->size();
-        auto result_data_column = BooleanColumn::create(chunk_size, 0);
+        const size_t num_rows = columns[0]->size();
+        const auto [is_all_const, num_packed_rows] = ColumnHelper::num_packed_rows(columns);
+
+        auto result_data_column = BooleanColumn::create(num_packed_rows, 0);
         auto& result_data = result_data_column->get_data();
 
         const auto* src_data_column_0 = ColumnHelper::get_data_column_by_type<TYPE_ARRAY>(columns[0].get());
@@ -395,15 +403,30 @@ private:
 
         DCHECK(src_data_column_0->elements_column()->is_nullable());
 
-        //TODO: use small array to build hash set
-        for (size_t i = 0; i < chunk_size; i++) {
+        if (!is_all_const && (columns[0]->is_constant() || columns[1]->is_constant())) {
+            const auto* const_data_column = columns[0]->is_constant() ? src_data_column_0 : src_data_column_1;
+            const auto* non_const_column = columns[0]->is_constant() ? src_data_column_1 : src_data_column_0;
+
             HashSet hash_set;
-            bool has_null = _put_array_to_hash_set(*src_data_column_1, i, &hash_set);
-            result_data[i] = _check_column_overlap_nullable(hash_set, *src_data_column_0, i, has_null);
+            const bool has_null = _put_array_to_hash_set(*const_data_column, 0, &hash_set);
+            for (size_t i = 0; i < num_packed_rows; i++) {
+                result_data[i] = _check_column_overlap_nullable(hash_set, *non_const_column, i, has_null);
+            }
+        } else {
+            //TODO: use small array to build hash set
+            for (size_t i = 0; i < num_packed_rows; i++) {
+                HashSet hash_set;
+                const bool has_null = _put_array_to_hash_set(*src_data_column_1, i, &hash_set);
+                result_data[i] = _check_column_overlap_nullable(hash_set, *src_data_column_0, i, has_null);
+            }
         }
 
-        if (result_null_column != nullptr) {
-            return NullableColumn::create(result_data_column, result_null_column);
+        if (is_all_const) {
+            // Const null column is handled by `RETURN_IF_COLUMNS_ONLY_NULL` in `process`.
+            DCHECK(result_null_column == nullptr);
+            return ConstColumn::create(std::move(result_data_column), num_rows);
+        } else if (result_null_column != nullptr) {
+            return NullableColumn::create(std::move(result_data_column), std::move(result_null_column));
         } else {
             return result_data_column;
         }
