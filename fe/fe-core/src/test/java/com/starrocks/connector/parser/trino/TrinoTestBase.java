@@ -177,7 +177,7 @@ public class TrinoTestBase {
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | StarRocksPlannerException e) {
+        } catch (ParsingException | StarRocksPlannerException | io.trino.sql.parser.ParsingException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
