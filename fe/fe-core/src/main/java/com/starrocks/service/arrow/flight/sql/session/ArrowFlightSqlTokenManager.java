@@ -21,6 +21,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;
@@ -35,8 +36,8 @@ public class ArrowFlightSqlTokenManager implements AutoCloseable {
     public ArrowFlightSqlTokenManager() {
         this.tokenCache =
                 CacheBuilder.newBuilder()
-                        .maximumSize(1024)
-                        .expireAfterWrite(3600, TimeUnit.MINUTES)
+                        .maximumSize(Config.arrow_token_cache_size)
+                        .expireAfterWrite(Config.arrow_token_cache_expire, TimeUnit.MINUTES)
                         .removalListener((RemovalNotification<String, ArrowFlightSqlTokenInfo> notification) -> {
                             ConnectContext context =
                                     ExecuteEnv.getInstance().getScheduler()

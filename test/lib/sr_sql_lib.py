@@ -169,7 +169,7 @@ class StarrocksSQLApiLib(object):
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
         self.arrow_sql_lib = ArrowSqlLib()
-        self.arrow_port = 0
+        self.arrow_port = ""
 
         # connection pool
         self.connection_pool = None
@@ -574,7 +574,7 @@ class StarrocksSQLApiLib(object):
     def connect_starrocks_arrow(self):
         args_dict = {
             "host": self.mysql_host,
-            "arrow_port": self.arrow_port,
+            "arrow_port": self.arrow_port if self.arrow_port else 9408,
             "user": self.mysql_user,
             "password": self.mysql_password,
         }

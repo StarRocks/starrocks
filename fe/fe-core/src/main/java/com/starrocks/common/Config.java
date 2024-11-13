@@ -3308,6 +3308,10 @@ public class Config extends ConfigBase {
 
     public static int batch_write_executor_threads_num = 4096;
 
-    @ConfField
-    public static String arrow_flight_sql_ase_key = "";
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_size = 1024;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_expire = 3600;
+
 }
