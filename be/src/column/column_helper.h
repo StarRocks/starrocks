@@ -387,6 +387,7 @@ public:
     //     which could reduce unnecessary calculations.
     //     Don't forget to resize the result constant columns if necessary.
     static std::pair<bool, size_t> num_packed_rows(const Columns& columns);
+    static std::pair<bool, size_t> num_packed_rows(const Column* column);
 
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
