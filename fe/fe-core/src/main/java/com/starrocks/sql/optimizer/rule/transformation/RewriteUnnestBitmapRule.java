@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import autovalue.shaded.com.google.common.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -48,8 +48,13 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableRewriteUnnestBitmapToArray()) {
+            return false;
+        }
+
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) input.getOp();
-        if (!tableFunctionOperator.getFn().functionName().equals(FunctionSet.UNNEST)) {
+        if (tableFunctionOperator.getFn() != null &&
+                !tableFunctionOperator.getFn().functionName().equals(FunctionSet.UNNEST)) {
             return false;
         }
 
@@ -90,14 +95,14 @@ public class RewriteUnnestBitmapRule extends TransformationRule {
         columnRefMap.putIfAbsent(bitmapColumn, bitmapColumn);
 
         TableFunction unnestBitmapFn =
-                (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST, new Type[] {Type.BITMAP},
+                (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {Type.BITMAP},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<Pair<ColumnRefOperator, ScalarOperator>> fnParamColumnProject =
                 Lists.newArrayList(Pair.create(bitmapColumn, bitmapColumn));
 
         LogicalTableFunctionOperator newTableFunctionOperator =
-                new LogicalTableFunctionOperator(originalTableFunctionOperator.getOuterColRefs(), unnestBitmapFn,
-                        fnParamColumnProject);
+                new LogicalTableFunctionOperator(originalTableFunctionOperator.getFnResultColRefs(), unnestBitmapFn,
+                        fnParamColumnProject, originalTableFunctionOperator.getOuterColRefs());
 
         return Lists.newArrayList(OptExpression.create(newTableFunctionOperator, input.inputAt(0)));
     }
