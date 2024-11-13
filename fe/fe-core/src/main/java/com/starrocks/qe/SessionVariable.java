@@ -641,6 +641,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_DIALECT = "sql_dialect";
 
+    // Is Trino dialect downgraded to Starrocks
+    public static final String ENABLE_DIALECT_DOWNGRADE = "enable_dialect_downgrade";
+
     public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
@@ -1984,6 +1987,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SQL_DIALECT)
     private String sqlDialect = "StarRocks";
+
+    @VarAttr(name = ENABLE_DIALECT_DOWNGRADE)
+    private boolean enableDialectDowngrade = true;
 
     @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
     private boolean enableOuterJoinReorder = true;
@@ -3911,6 +3917,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlDialect(String dialect) {
         this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableDialectDowngrade() {
+        return enableDialectDowngrade;
+    }
+
+    public void setEnableDialectDowngrade(boolean enableDialectDowngrade) {
+        this.enableDialectDowngrade = enableDialectDowngrade;
     }
 
     public boolean isEnableOuterJoinReorder() {
