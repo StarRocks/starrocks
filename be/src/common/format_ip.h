@@ -48,7 +48,7 @@ inline bool parse_ipv4(const char* pos, int64_t& dst, int64_t first_octet = -1) 
         int64_t value = 0;
         size_t len = 0;
 
-        while (is_numeric_ascii(*pos) && len < 3) {
+        while (is_numeric_ascii(*pos) && len <= 3) {
             value = value * DECIMAL_BASE + (*pos - '0');
             ++len;
             ++pos;
@@ -64,6 +64,8 @@ inline bool parse_ipv4(const char* pos, int64_t& dst, int64_t first_octet = -1) 
             break;
         }
     }
+
+    if (*pos != '\0') return false;
 
     dst = result;
     return true;

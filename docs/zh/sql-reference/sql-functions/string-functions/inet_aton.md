@@ -26,7 +26,7 @@ inet_aton(VARCHAR ipv4)
 ## 示例
 
 ```Plain Text
-mysql> select inet_aton('192.168.0.1'); 
+mysql> select inet_aton('192.168.1.1'); 
 +--------------------------------------+ 
 | inet_aton('192.168.1.1')             | 
 +--------------------------------------+ 

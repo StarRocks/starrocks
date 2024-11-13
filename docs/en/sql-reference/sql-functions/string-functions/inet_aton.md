@@ -17,7 +17,7 @@ BIGINT inet_aton(VARCHAR ipv4)
 ## Examples
 
 ```Plain Text
-mysql> select inet_aton('192.168.0.1'); 
+mysql> select inet_aton('192.168.1.1'); 
 +--------------------------------------+ 
 | inet_aton('192.168.1.1') | 
 +--------------------------------------+ 
