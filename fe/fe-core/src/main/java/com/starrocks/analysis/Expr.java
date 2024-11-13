@@ -1217,6 +1217,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return null;
     }
 
+    public List<SlotRef> collectAllSlotRefs() {
+        List<SlotRef> result = Lists.newArrayList();
+        if (this instanceof SlotRef) {
+            result.add((SlotRef) this);
+        }
+        for (Expr child : children) {
+            result.addAll(child.collectAllSlotRefs());
+        }
+        return result;
+    }
+
     /**
      * Returns the first child if this Expr is a CastExpr. Otherwise, returns 'this'.
      */

@@ -39,7 +39,7 @@ E: (1064, 'Getting analyzing error. Detail message: All generated columns must b
 -- !result
 CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Generated Column can not be KEY.')
+E: (1064, 'Getting analyzing error. Detail message: Generated Column mc can not be KEY.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:

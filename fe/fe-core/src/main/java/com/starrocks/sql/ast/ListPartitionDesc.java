@@ -16,7 +16,9 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -52,16 +54,30 @@ public class ListPartitionDesc extends PartitionDesc {
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
 
+    protected List<Expr> partitionExprs = Lists.newArrayList();
+
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
-        this(partitionColNames, partitionDescs, NodePosition.ZERO);
+        this(partitionColNames, partitionDescs, Lists.newArrayList(), NodePosition.ZERO);
     }
 
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs, NodePosition pos) {
+        this(partitionColNames, partitionDescs, Lists.newArrayList(), pos);
+    }
+
+    public ListPartitionDesc(List<String> partitionColNames,
+                             List<PartitionDesc> partitionDescs,
+                             List<Expr> partitionExprs) {
+        this(partitionColNames, partitionDescs, partitionExprs, NodePosition.ZERO);
+    }
+
+    public ListPartitionDesc(List<String> partitionColNames,
+                             List<PartitionDesc> partitionDescs, List<Expr> partitionExprs, NodePosition pos) {
         super(pos);
         super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
+        this.partitionExprs = partitionExprs;
         this.singleListPartitionDescs = Lists.newArrayList();
         this.multiListPartitionDescs = Lists.newArrayList();
         if (partitionDescs != null) {
@@ -90,6 +106,10 @@ public class ListPartitionDesc extends PartitionDesc {
         return partitionColNames;
     }
 
+    public List<Expr> getPartitionExprs() {
+        return partitionExprs;
+    }
+
     public List<String> findAllPartitionNames() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -101,12 +121,27 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
+        // analyze partition expr
+        this.analyzePartitionExprs(columnDefs);
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
         this.analyzeMultiListPartition(tableProperties, columnDefList);
         // list partition values should not contain NULL partition value if this column is not nullable.
         this.postAnalyzePartitionColumns(columnDefList);
+    }
+
+    public void analyzePartitionExprs(List<ColumnDef> columnDefs) throws AnalysisException {
+        List<String> slotRefs = partitionExprs.stream()
+                .flatMap(e -> e.collectAllSlotRefs().stream())
+                .map(SlotRef::getColumnName)
+                .collect(Collectors.toList());
+        for (ColumnDef columnDef : columnDefs) {
+            if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
+                    && columnDef.getAggregateType() != AggregateType.NONE) {
+                throw new AnalysisException("The partition expr should base on key column");
+            }
+        }
     }
 
     public List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
@@ -127,7 +162,8 @@ public class ListPartitionDesc extends PartitionDesc {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }
-                    if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
+                    if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE
+                            && !columnDef.isGeneratedColumn()) {
                         throw new AnalysisException("The partition column could not be aggregated column"
                                 + " and unique table's partition column must be key column");
                     }
