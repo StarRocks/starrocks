@@ -32,7 +32,7 @@ public class TableFunctionRelation extends Relation {
      * functionName is created by parser
      * and will be converted to tableFunction in Analyzer
      */
-    private final FunctionName functionName;
+    private FunctionName functionName;
     /**
      * functionParams is created by parser
      * and will be converted to childExpressions in Analyzer
@@ -83,6 +83,10 @@ public class TableFunctionRelation extends Relation {
 
     public void setChildExpressions(List<Expr> childExpressions) {
         this.childExpressions = childExpressions;
+    }
+
+    public void setFunctionName(FunctionName functionName) {
+        this.functionName = functionName;
     }
 
     @Override

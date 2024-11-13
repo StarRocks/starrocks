@@ -269,11 +269,13 @@ public class TableFunctionTest extends PlanTestBase {
 
     @Test
     public void testRewrite() throws Exception {
+        //        connectContext.getSessionVariable().setEnableRewriteUnnestBitmapToArray(false);
+        //        connectContext.setThreadLocalInfo();
         String sql = "SELECT k1,  unnest AS c3\n" +
                 "    FROM test_agg,unnest(bitmap_to_array(b1)) ORDER BY k1 ASC, c3 ASC\n" +
                 "LIMIT 5;";
         String plan = getFragmentPlan(sql);
-
         System.out.println(plan);
+        assertContains(plan, "tableFunctionName: unnest_bitmap");
     }
 }

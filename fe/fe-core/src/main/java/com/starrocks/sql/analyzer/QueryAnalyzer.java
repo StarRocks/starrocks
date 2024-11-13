@@ -28,6 +28,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
@@ -1313,6 +1314,7 @@ public class QueryAnalyzer {
                 }
             }
 
+            List<Expr> childExpressions = node.getFunctionParams().exprs();
             boolean rewriteUnnestBitmapToArray = false;
             if (ConnectContext.get().getSessionVariable().isEnableRewriteUnnestBitmapToArray() &&
                     FunctionSet.UNNEST.equals(fn.functionName()) && args.get(0) instanceof FunctionCallExpr) {
@@ -1323,9 +1325,10 @@ public class QueryAnalyzer {
                     Expr bitmapToArrayArg0 = unnestArg0.getChild(0);
                     Type bitmapToArrayArg0Type = bitmapToArrayArg0.getType();
 
-                    node.setChildExpressions(Lists.newArrayList(bitmapToArrayArg0));
+                    childExpressions = Lists.newArrayList(bitmapToArrayArg0);
                     fn = Expr.getBuiltinFunction(FunctionSet.UNNEST_BITMAP, new Type[] {bitmapToArrayArg0Type},
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    node.setFunctionName(new FunctionName(node.getFunctionName().getDb(), FunctionSet.UNNEST_BITMAP));
                 }
             }
 
@@ -1345,7 +1348,7 @@ public class QueryAnalyzer {
             TableFunction tableFunction = (TableFunction) fn;
             tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             node.setTableFunction(tableFunction);
-            node.setChildExpressions(node.getFunctionParams().exprs());
+            node.setChildExpressions(childExpressions);
 
             if (node.getColumnOutputNames() == null) {
                 if (tableFunction.getFunctionName().getFunction().equals("unnest") || rewriteUnnestBitmapToArray) {

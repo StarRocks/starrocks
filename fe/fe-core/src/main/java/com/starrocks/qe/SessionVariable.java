@@ -4386,6 +4386,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableRewriteUnnestBitmapToArray;
     }
 
+    public void setEnableRewriteUnnestBitmapToArray(boolean enableRewriteUnnestBitmapToArray) {
+        this.enableRewriteUnnestBitmapToArray = enableRewriteUnnestBitmapToArray;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
