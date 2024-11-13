@@ -294,6 +294,8 @@ public:
     // A hint for the left time of this batch to finish
     int64_t batch_left_time_nanos = -1;
 
+    uint64_t first_msg_timestamp = 0;
+
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }
     ExecEnv* exec_env() { return _exec_env; }

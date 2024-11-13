@@ -401,6 +401,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 (totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs);
         summary.put("committedTaskNum", committedTaskNum);
         summary.put("abortedTaskNum", abortedTaskNum);
+        summary.putAll(getLatency());
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }

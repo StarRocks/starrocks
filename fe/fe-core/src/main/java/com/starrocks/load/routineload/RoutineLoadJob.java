@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -69,6 +70,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.RoutineLoadLatencyMetricMgr;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -309,6 +311,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     // save the latest 3 error log urls
     private Queue<String> errorLogUrls = EvictingQueue.create(3);
+
+    private long latency = 0;
 
     protected boolean isTypeRead = false;
 
@@ -1122,6 +1126,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             long timeToExecuteMs;
             RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                     (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
+            if (rlTaskTxnCommitAttachment.getFirstMsgTimestamp() > 0) {
+                latency = txnState.getFinishTime() - rlTaskTxnCommitAttachment.getFirstMsgTimestamp();
+            }
             // isProgressKeepUp returns false means there is too much data in kafka/pulsar stream,
             // we set timeToExecuteMs to now, so that data not accumulated in kafka/pulsar
             if (!routineLoadTaskInfo.isProgressKeepUp(rlTaskTxnCommitAttachment.getProgress())) {
@@ -1136,6 +1143,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
+        }
+
+        if (latency != 0 && Config.enable_routine_load_latency_metrics) {
+            LOG.info("routine load {} with txn {} latency: {}ms", id, txnState.getTransactionId(), latency);
+            RoutineLoadLatencyMetricMgr.updateLatency(this, latency);
         }
     }
 
@@ -1509,6 +1521,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                                                TransactionState.TxnStatusChangeReason txnStatusChangeReason);
 
     protected abstract String getStatistic();
+
+    protected Map<String, Object> getLatency() {
+        Map<String, Object> summary = Maps.newHashMap();
+        if (Config.enable_routine_load_latency_metrics) {
+            Snapshot snapshot = RoutineLoadLatencyMetricMgr.getLatency(this);
+            if (snapshot != null) {
+                summary.put("latencyMedianMs", snapshot.getMedian());
+                summary.put("latency95thPercentileMs", snapshot.get95thPercentile());
+                summary.put("latency99thPercentileMs", snapshot.get99thPercentile());
+                summary.put("latencyMaxMs", snapshot.getMax());
+            }
+        }
+        return summary;
+    }
 
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

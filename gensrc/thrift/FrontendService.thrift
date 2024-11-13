@@ -1002,6 +1002,7 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    13: optional i64 firstMsgTimestamp
 }
 
 struct TMiniLoadTxnCommitAttachment {

@@ -3329,6 +3329,12 @@ public class Config extends ConfigBase {
 
     public static int batch_write_executor_threads_num = 4096;
 
+    /**
+     * Whether to collect routine load latency metrics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_latency_metrics = false;
+
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 

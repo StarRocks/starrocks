@@ -482,6 +482,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         if (!ctx->error_url.empty()) {
             rl_attach.__set_errorLogUrl(ctx->error_url);
         }
+        rl_attach.__isset.firstMsgTimestamp = true;
+        rl_attach.__set_firstMsgTimestamp(ctx->first_msg_timestamp);
         return true;
     }
     case TLoadSourceType::PULSAR: {
@@ -496,6 +498,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         if (!ctx->error_url.empty()) {
             rl_attach.__set_errorLogUrl(ctx->error_url);
         }
+        rl_attach.__isset.firstMsgTimestamp = true;
+        rl_attach.__set_firstMsgTimestamp(ctx->first_msg_timestamp);
         return true;
     }
     default:

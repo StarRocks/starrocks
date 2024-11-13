@@ -140,6 +140,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     MonotonicStopWatch watch;
     watch.start();
     bool eos = false;
+    bool is_first_msg = true;
     while (true) {
         if (eos || left_time <= 0 || left_bytes <= 0) {
             LOG(INFO) << "consumer group done: " << _grp_id
@@ -229,6 +230,10 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     auto timestamp = msg->timestamp();
                     if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
                         cmt_offset_timestamp[msg->partition()] = msg->timestamp().timestamp;
+                        if (UNLIKELY(is_first_msg)) {
+                            is_first_msg = false;
+                            ctx->first_msg_timestamp = msg->timestamp().timestamp;
+                        }
                     }
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
@@ -357,6 +362,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     MonotonicStopWatch watch;
     watch.start();
     bool eos = false;
+    bool is_first_msg = true;
     while (true) {
         if (eos || left_time <= 0 || left_bytes <= 0) {
             LOG(INFO) << "consumer group done: " << _grp_id
@@ -415,6 +421,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 left_bytes -= len;
                 ack_offset[partition] = msg_id;
                 VLOG(3) << "consume partition" << partition << " - " << msg_id;
+
+                if (UNLIKELY(is_first_msg)) {
+                    is_first_msg = false;
+                    ctx->first_msg_timestamp = msg->getPublishTimestamp();
+                }
             } else {
                 // failed to append this msg, we must stop
                 LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
