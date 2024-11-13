@@ -2532,6 +2532,11 @@ optimizerTrace
     : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
+partitionExpr
+    : identifier
+    | functionCall
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
@@ -2539,6 +2544,7 @@ partitionDesc
     | PARTITION BY LIST? identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
+    | PARTITION BY partitionExpr (',' partitionExpr)*
     ;
 
 listPartitionDesc

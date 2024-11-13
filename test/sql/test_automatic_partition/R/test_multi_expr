@@ -1,0 +1,244 @@
+-- name: test_multi_func_expr
+create table t(k1 datetime, k2 datetime, v int) partition by date_trunc('day', k1), date_trunc('month', k2);
+-- result:
+-- !result
+insert into t values('2020-01-01','2020-02-02', 1);
+-- result:
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*NORMAL	__generated_partition_column_0, __generated_partition_column_1.*
+-- !result
+select * from t;
+-- result:
+2020-01-01 00:00:00	2020-02-02 00:00:00	1	2020-01-01 00:00:00	2020-02-01 00:00:00
+-- !result
+
+
+
+
+
+
+
+
+
+
+
+
+-- name: test_multi_list_function
+create table t(k1 int, k2 datetime, v int) partition by k1,date_trunc('day', k2);
+-- result:
+-- !result
+insert into t values(1,'2020-01-01',1);
+-- result:
+-- !result
+insert into t values(1,'2020-01-02',1);
+-- result:
+-- !result
+insert into t values(2,'2020-01-01',1);
+-- result:
+-- !result
+insert into t values(3,'2020-01-01',1);
+-- result:
+-- !result
+insert into t values(3,'2020-01-03',1);
+-- result:
+-- !result
+explain select * from t where k1=1;
+-- result:
+[REGEX].*partitions=2/5.*
+-- !result
+explain select * from t where k1=1 and k2='2020-01-02';
+-- result:
+[REGEX].*partitions=1/5.*
+-- !result
+explain select * from t where k1=3 and k2='2020-01-01';
+-- result:
+[REGEX].*partitions=1/5.*
+-- !result
+explain select * from t where k1=2;
+-- result:
+[REGEX].*partitions=1/5.*
+-- !result
+explain select * from t where k2='2020-01-01';
+-- result:
+[REGEX].*partitions=3/5.*
+-- !result
+explain select * from t where k2='2020-01-02';
+-- result:
+[REGEX].*partitions=1/5.*
+-- !result
+explain select * from t where k2='2020-01-03';
+-- result:
+[REGEX].*partitions=1/5.*
+-- !result
+
+
+
+
+-- name: test_mulit_timestamp_function
+create table t(k1 int, k2 bigint, v int) partition by from_unixtime(k2),k1;
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
+-- result:
+-- !result
+select * from t;
+-- result:
+1	1577811661	1	2020-01-01 01:01:01
+2	1577811661	1	2020-01-01 01:01:01
+1	1196389819	1	2007-11-30 10:30:19
+-- !result
+explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+explain select * from t where k2=1196389819;
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+explain select * from t where k1=1;
+-- result:
+[REGEX].*partitions=2/3.*
+-- !result
+create table t1(k1 int, k2 bigint, v int) partition by from_unixtime(k2, "%Y-%m-%d");
+-- result:
+-- !result
+insert into t1 values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t1 values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t1 values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
+-- result:
+-- !result
+explain select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+explain select * from t1 where k2=1196389819;
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+
+
+
+-- name: test_single_column_partition
+create table t(k1 int, k2 bigint, v int) partition by from_unixtime(k2, '%Y-%m-%d');
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
+-- result:
+-- !result
+select * from t;
+-- result:
+1	1577811661	1	2020-01-01
+1	1196389819	1	2007-11-30
+-- !result
+explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+
+
+
+-- name: test_primary_key_table
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d');
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),2);
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
+-- result:
+-- !result
+insert into t values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),2);
+-- result:
+-- !result
+select * from t;
+-- result:
+1	1577811661	1	2020-01-01
+2	1577811661	2	2020-01-01
+1	1196389819	2	2007-11-30
+-- !result
+select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+1	1196389819	2	2007-11-30
+-- !result
+select * from t where k2=1196389819;
+-- result:
+1	1196389819	2	2007-11-30
+-- !result
+explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+explain select * from t where k2=1196389819;
+-- result:
+[REGEX].*partitions=1/2.*
+-- !result
+create table t1(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d'),k1;
+-- result:
+-- !result
+insert into t1 values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t1 values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
+-- result:
+-- !result
+insert into t1 values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),2);
+-- result:
+-- !result
+insert into t1 values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),1);
+-- result:
+-- !result
+insert into t1 values(1,UNIX_TIMESTAMP('2007-11-30 10:30:19'),2);
+-- result:
+-- !result
+select * from t1;
+-- result:
+1	1577811661	1	2020-01-01
+1	1196389819	2	2007-11-30
+2	1577811661	2	2020-01-01
+-- !result
+select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+1	1196389819	2	2007-11-30
+-- !result
+select * from t1 where k2=1196389819;
+-- result:
+1	1196389819	2	2007-11-30
+-- !result
+explain select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+explain select * from t1 where k2=1196389819;
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+-- name: test_create_error
+create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: AGG_KEYS table should specify aggregate type for non-key column[__generated_partition_column_0].')
+-- !result
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The partition expr should base on key column.')
+-- !result

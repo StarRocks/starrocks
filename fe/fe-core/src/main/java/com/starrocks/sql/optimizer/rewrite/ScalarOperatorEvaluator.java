@@ -222,7 +222,7 @@ public enum ScalarOperatorEvaluator {
 
         FunctionInvoker invoker = functions.get(signature);
 
-        return invoker != null && invoker.isMonotonic;
+        return invoker != null && isMonotonicFunc(invoker, call);
     }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
@@ -230,7 +230,9 @@ public enum ScalarOperatorEvaluator {
             return false;
         }
 
-        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())) {
+        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())
+                || (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(invoker.getSignature().getName())
+                && operator.getChildren().size() == 2)) {
             String pattern = operator.getChild(1).toString();
             if (pattern.isEmpty()) {
                 return true;
