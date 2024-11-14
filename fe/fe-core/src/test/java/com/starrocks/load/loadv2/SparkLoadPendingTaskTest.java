@@ -110,7 +110,7 @@ public class SparkLoadPendingTaskTest {
         long partitionId = 2L;
         DistributionInfo distributionInfo = new HashDistributionInfo(2, Lists.newArrayList(columns.get(0)));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
-        Partition partition = new Partition(partitionId, "p1", null, distributionInfo);
+        Partition partition = new Partition(partitionId, 21,  "p1", null, distributionInfo);
         List<Partition> partitions = Lists.newArrayList(partition);
 
         // file group
@@ -258,11 +258,11 @@ public class SparkLoadPendingTaskTest {
         int distributionColumnIndex = 1;
         DistributionInfo distributionInfo =
                 new HashDistributionInfo(3, Lists.newArrayList(columns.get(distributionColumnIndex)));
-        Partition partition1 = new Partition(partition1Id, "p1", null,
+        Partition partition1 = new Partition(partition1Id, 21,  "p1", null,
                 distributionInfo);
-        Partition partition2 = new Partition(partition2Id, "p2", null,
+        Partition partition2 = new Partition(partition2Id, 51,  "p2", null,
                 new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
-        Partition partition3 = new Partition(partition3Id, "tp3", null,
+        Partition partition3 = new Partition(partition3Id, 61,  "tp3", null,
                 distributionInfo);
         int partitionColumnIndex = 0;
         List<Partition> partitions = Lists.newArrayList(partition1, partition2);

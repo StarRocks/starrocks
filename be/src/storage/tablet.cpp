@@ -1127,7 +1127,7 @@ void Tablet::delete_all_files() {
     // Release resources like memory and disk space.
     // we have to call list_versions first, or else error occurs when
     // removing hash_map item and iterating hash_map concurrently.
-    std::shared_lock rdlock(_meta_lock);
+    std::unique_lock wlock(_meta_lock);
     for (const auto& it : _rs_version_map) {
         (void)it.second->remove();
     }
@@ -1830,7 +1830,7 @@ void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs)
     }
 
     if (_updates) {
-        _updates->rewrite_rs_meta();
+        _updates->rewrite_rs_meta(true);
     }
 }
 

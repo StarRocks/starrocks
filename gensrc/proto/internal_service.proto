@@ -648,6 +648,18 @@ message PFetchArrowSchemaResult {
     optional bytes schema = 2;
 };
 
+// Data will be sent as the attachment of the request
+message PStreamLoadRequest {
+    optional string db = 1;
+    optional string table = 2;
+    optional string user = 3;
+    optional string passwd = 4;
+    repeated PStringPair parameters = 5;
+}
+
+message PStreamLoadResponse {
+    optional string json_result = 1;
+}
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -694,4 +706,6 @@ service PInternalService {
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 
     rpc fetch_arrow_schema(PFetchArrowSchemaRequest) returns (PFetchArrowSchemaResult);
+    
+    rpc stream_load(PStreamLoadRequest) returns (PStreamLoadResponse);
 };

@@ -59,6 +59,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
@@ -507,6 +508,17 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
 
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::batch_write_thread_pool_num_min)
+                            .set_max_threads(config::batch_write_thread_pool_num_max)
+                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
+
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
 
@@ -665,6 +677,10 @@ void ExecEnv::stop() {
 
     if (_stream_mgr) {
         _stream_mgr->close();
+    }
+
+    if (_batch_write_mgr) {
+        _batch_write_mgr->stop();
     }
 
     if (_routine_load_task_executor) {

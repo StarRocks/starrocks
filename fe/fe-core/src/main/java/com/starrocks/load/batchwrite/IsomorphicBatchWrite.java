@@ -14,12 +14,11 @@
 
 package com.starrocks.load.batchwrite;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,7 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,8 +57,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
     private final StreamLoadInfo streamLoadInfo;
     private final int batchWriteIntervalMs;
     private final int batchWriteParallel;
-    private final ImmutableMap<String, String> loadParameters;
-    private final ConnectContext connectContext;
+    private final StreamLoadKvParams loadParameters;
 
     /**
      * The assigner for coordinator backends.
@@ -95,8 +93,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
             StreamLoadInfo streamLoadInfo,
             int batchWriteIntervalMs,
             int batchWriteParallel,
-            Map<String, String> loadParameters,
-            ConnectContext connectContext,
+            StreamLoadKvParams loadParameters,
             CoordinatorBackendAssigner coordinatorBackendAssigner,
             Executor executor) {
         this.id = id;
@@ -105,8 +102,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         this.streamLoadInfo = streamLoadInfo;
         this.batchWriteIntervalMs = batchWriteIntervalMs;
         this.batchWriteParallel = batchWriteParallel;
-        this.loadParameters = ImmutableMap.<String, String>builder().putAll(loadParameters).build();
-        this.connectContext = connectContext;
+        this.loadParameters = loadParameters;
         this.coordinatorBackendAssigner = coordinatorBackendAssigner;
         this.executor = executor;
         this.queryCoordinatorFactory = new DefaultCoordinator.Factory();
@@ -145,8 +141,9 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
         TStatus status = new TStatus();
         List<ComputeNode> backends = null;
         try {
-            backends = coordinatorBackendAssigner.getBackends(id);
-            if (!backends.isEmpty()) {
+            Optional<List<ComputeNode>> ret = coordinatorBackendAssigner.getBackends(id);
+            if (ret.isPresent() && !ret.get().isEmpty()) {
+                backends = ret.get();
                 status.setStatus_code(TStatusCode.OK);
             } else {
                 status.setStatus_code(TStatusCode.SERVICE_UNAVAILABLE);
@@ -154,7 +151,6 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
                         "Can't find available backends, db: %s, table: %s, warehouse: %s, load id: %s",
                         tableId.getDbName(), tableId.getTableName(), warehouseName, id);
                 status.setError_msgs(Collections.singletonList(errMsg));
-                backends = null;
                 LOG.error(errMsg);
             }
         } catch (Exception exception) {
@@ -222,7 +218,7 @@ public class IsomorphicBatchWrite implements LoadExecuteCallback {
             TUniqueId loadId = UUIDUtil.toTUniqueId(UUID.randomUUID());
             LoadExecutor loadExecutor = new LoadExecutor(
                     tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
-                    connectContext, backendIds, queryCoordinatorFactory, this);
+                    backendIds, queryCoordinatorFactory, this);
             loadExecutorMap.put(label, loadExecutor);
             try {
                 executor.execute(loadExecutor);

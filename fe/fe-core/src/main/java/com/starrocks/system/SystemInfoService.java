@@ -267,6 +267,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ShowResultSet modifyBackendHost(ModifyBackendClause modifyBackendClause) throws DdlException {
+        if (RunMode.isSharedDataMode()) {
+            throw new DdlException("modify backend host is not supported in shared-data cluster.");
+        }
         String willBeModifiedHost = modifyBackendClause.getSrcHost();
         String fqdn = modifyBackendClause.getDestHost();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);

@@ -45,7 +45,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
@@ -101,7 +101,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         long maxPartitionVersionTime = -1;
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);

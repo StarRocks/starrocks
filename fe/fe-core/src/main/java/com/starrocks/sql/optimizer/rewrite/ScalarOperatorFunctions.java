@@ -42,6 +42,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -51,6 +52,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -175,7 +178,7 @@ public class ScalarOperatorFunctions {
                     : NUMBER_OF_NON_LEAP_YEAR;
         }
 
-        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+        public static Pair<Long, Long> computeYearWeekValue(long year, long month, long day, int weekBehaviour) {
             weekBehaviour = weekBehaviour & 0x7;
             if ((weekBehaviour & 0x1) == 0) {
                 weekBehaviour ^= 0x4;
@@ -192,7 +195,7 @@ public class ScalarOperatorFunctions {
             long yearLocal = year;
             if (month == 1 && day <= (7 - weekDay)) {
                 if (!bWeekYear && ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4))) {
-                    return 0;
+                    return Pair.create(yearLocal, (long) 0);
                 }
                 bWeekYear = true;
                 yearLocal--;
@@ -210,10 +213,20 @@ public class ScalarOperatorFunctions {
                 weekDay = (weekDay + computeDaysInYear(yearLocal)) % 7;
                 if ((!bFirstWeekDay && weekDay < 4) || (bFirstWeekDay && weekDay == 0)) {
                     yearLocal++;
-                    return 1;
+                    return Pair.create(yearLocal, (long) 1);
                 }
             }
-            return days / 7 + 1;
+            return Pair.create(yearLocal, days / 7 + 1);
+        }
+
+        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+            Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour);
+            return value.second;
+        }
+
+        public static long computeYearWeek(long year, long month, long day, int weekBehaviour) {
+            Pair<Long, Long> value = computeYearWeekValue(year, month, day, weekBehaviour | 2);
+            return value.first * 100 + value.second;
         }
     }
 
@@ -403,6 +416,26 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATETIME, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+        String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
+        DateTime jodaDateTime = new DateTime(date.getDatetime()
+                .atZone(ZoneId.systemDefault()) // Associate with the default time zone of the system
+                .toInstant()
+                .toEpochMilli());
+        return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
+    }
+
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
             @ConstantFunction(name = "to_iso8601", argTypes = {DATE}, returnType = VARCHAR, isMonotonic = true)
     })
@@ -517,7 +550,8 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator week(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
-        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        long result =
+                TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
         return ConstantOperator.createInt((int) result);
     }
 
@@ -528,6 +562,27 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
         LocalDateTime dt = arg.getDatetime();
         long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "yearweek", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "yearweek", argTypes = {DATE}, returnType = INT)
+    })
+    public static ConstantOperator yearWeek(ConstantOperator arg) {
+        LocalDateTime dt = arg.getDatetime();
+        long result =
+                TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "yearweek", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "yearweek", argTypes = {DATE, INT}, returnType = INT)
+    })
+    public static ConstantOperator yearWeekWithMode(ConstantOperator arg, ConstantOperator mode) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeYearWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
         return ConstantOperator.createInt((int) result);
     }
 
@@ -577,8 +632,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT, isMonotonic = true),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT, isMonotonic = true)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
@@ -591,8 +646,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = 0;
@@ -611,7 +666,7 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true),
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
@@ -627,8 +682,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
-            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {

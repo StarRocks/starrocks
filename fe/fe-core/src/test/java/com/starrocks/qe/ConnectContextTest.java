@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -41,6 +42,9 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -57,8 +61,6 @@ import java.util.List;
 public class ConnectContextTest {
     @Mocked
     private MysqlChannel channel;
-    @Mocked
-    private StmtExecutor executor;
     @Mocked
     private SocketChannel socketChannel;
     @Mocked
@@ -82,9 +84,6 @@ public class ConnectContextTest {
                 channel.getRemoteIp();
                 minTimes = 0;
                 result = "192.168.1.1";
-
-                executor.cancel("set up");
-                minTimes = 0;
 
                 globalStateMgr.getVariableMgr();
                 minTimes = 0;
@@ -189,7 +188,6 @@ public class ConnectContextTest {
         // Timeout
         ctx.setStartTime();
         now = ctx.getStartTime() + ctx.getSessionVariable().getWaitTimeoutS() * 1000 + 1;
-        ctx.setExecutor(executor);
         ctx.checkTimeout(now);
         Assert.assertTrue(ctx.isKilled());
 
@@ -204,23 +202,56 @@ public class ConnectContextTest {
     }
 
     @Test
-    public void testOtherTimeout() {
+    public void testQueryTimeout() {
         ConnectContext ctx = new ConnectContext(socketChannel);
         ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
 
-        // sleep no time out
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // query no time out
         Assert.assertFalse(ctx.isKilled());
-        long now = ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
         ctx.checkTimeout(now);
         Assert.assertFalse(ctx.isKilled());
 
         // Timeout
-        now = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
         ctx.checkTimeout(now);
         Assert.assertFalse(ctx.isKilled());
 
         // Kill
         ctx.kill(true, "query timeout");
+        Assert.assertTrue(ctx.isKilled());
+
+        // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void testInsertTimeout() {
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        StmtExecutor executor = new StmtExecutor(
+                ctx, new InsertStmt(new TableName("db", "tbl"), new QueryStatement(ValuesRelation.newDualRelation())));
+        ctx.setExecutor(executor);
+
+        // insert no time out
+        Assert.assertFalse(ctx.isKilled());
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 - 1;
+        ctx.checkTimeout(now);
+        Assert.assertFalse(ctx.isKilled());
+
+        // Timeout
+        now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 + 1;
+        ctx.checkTimeout(now);
+        Assert.assertFalse(ctx.isKilled());
+
+        // Kill
+        ctx.kill(true, "insert timeout");
         Assert.assertTrue(ctx.isKilled());
 
         // clean up

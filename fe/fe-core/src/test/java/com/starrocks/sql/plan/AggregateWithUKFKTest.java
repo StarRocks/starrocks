@@ -90,13 +90,11 @@ public class AggregateWithUKFKTest extends PlanTestBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, INT, false]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); " +
-                "args: BOOLEAN,INT,INT; result: TINYINT; args nullable: false; result nullable: true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
+                "  0:OlapScanNode");
 
         sql = "SELECT\n" +
                 "    id,\n" +
@@ -135,13 +133,11 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, INT, false]\n" +
                 "  |  2 <-> [2: big_value, BIGINT, true]\n" +
-                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT;" +
-                " result: TINYINT; args nullable: false; result nullable: true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
-                "     preAggregation: off. Reason: None aggregate function\n");
+                "  0:OlapScanNode");
         sql = "SELECT\n" +
                 "    id,\n" +
                 "    big_value,\n" +
@@ -438,7 +434,7 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  2:Project\n" +
                 "  |  <slot 6> : 6: c16\n" +
                 "  |  <slot 7> : 7: sum\n" +
-                "  |  <slot 8> : if(7: sum IS NULL, 0, 1)\n" +
+                "  |  <slot 8> : if(7: sum IS NULL, CAST(0 AS BIGINT), CAST(1 AS BIGINT))\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: c11)\n" +
@@ -491,9 +487,59 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: c11\n" +
                 "  |  <slot 6> : 6: c16\n" +
-                "  |  <slot 8> : if(CAST(1: c11 AS BIGINT) IS NULL, 0, 1)\n" +
+                "  |  <slot 8> : if(CAST(1: c11 AS BIGINT) IS NULL, CAST(0 AS BIGINT), CAST(1 AS BIGINT))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testEliminateAggForCountReturnType() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select c21, count(c22) from tt2 group by c21";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "if[(2: c22 IS NULL, cast(0 as BIGINT), cast(1 as BIGINT)); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: false; result nullable: true]");
+
+        sql = "select c21, count(1) as cnt from tt2 group by c21 order by cnt";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [7, BIGINT, false] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: c21, INT, true]\n" +
+                "  |  7 <-> 1\n" +
+                "  |  cardinality: 1");
+
+        sql = "select c21, count(*) as cnt from tt2 group by c21 order by cnt";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [7, BIGINT, false] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: c21, INT, true]\n" +
+                "  |  7 <-> 1\n" +
+                "  |  cardinality: 1");
+
+        sql = "select c21, count() as cnt from tt2 group by c21 order by cnt";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [7, BIGINT, false] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: c21, INT, true]\n" +
+                "  |  7 <-> 1\n" +
+                "  |  cardinality: 1");
     }
 
 }

@@ -643,8 +643,13 @@ createMaterializedViewStatement
     AS queryStatement
     ;
 
+mvPartitionExprs:
+    primaryExpression
+    | '(' primaryExpression (',' primaryExpression)* ')'
+    ;
+
 materializedViewDesc
-    : (PARTITION BY primaryExpression)
+    : (PARTITION BY mvPartitionExprs)
     | distributionDesc
     | orderByDesc
     | refreshSchemeDesc
@@ -1726,9 +1731,9 @@ privObjectTypePlural
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP SNAPSHOT qualifiedName
-    TO identifier
-    (ON '(' tableDesc (',' tableDesc) * ')')?
+    : BACKUP (DATABASE dbName=identifier)?
+    SNAPSHOT qualifiedName TO repoName=identifier
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1742,8 +1747,9 @@ showBackupStatement
 
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
+    FROM repoName=identifier
+    (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -2508,11 +2514,19 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+backupRestoreObjectDesc
+    : backupRestoreTableDesc
+    | (ALL (FUNCTION | FUNCTIONS) | (FUNCTION | FUNCTIONS) qualifiedName (AS identifier)?)
+    | (ALL (TABLE | TABLES) | (TABLE | TABLES) backupRestoreTableDesc)
+    | (ALL MATERIALIZED (VIEW | VIEWS) | MATERIALIZED (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    | (ALL (VIEW | VIEWS) | (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    ;
+
 tableDesc
     : qualifiedName partitionNames?
     ;
 
-restoreTableDesc
+backupRestoreTableDesc
     : qualifiedName partitionNames? (AS identifier)?
     ;
 
@@ -2524,6 +2538,11 @@ optimizerTrace
     : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
+partitionExpr
+    : identifier
+    | functionCall
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
@@ -2531,6 +2550,7 @@ partitionDesc
     | PARTITION BY LIST? identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
+    | PARTITION BY partitionExpr (',' partitionExpr)*
     ;
 
 listPartitionDesc

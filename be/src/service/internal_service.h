@@ -183,6 +183,9 @@ public:
     void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
                             PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
 
+    void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
+                     PStreamLoadResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

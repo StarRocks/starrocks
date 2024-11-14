@@ -30,6 +30,7 @@ import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -199,7 +200,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     Optional<ConnectorTableColumnStats> columnStatistic =
                             realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
                     if (columnStatistic.isPresent()) {
-                        columnStatistics.add(columnStatistic.get());
+                        columnStatistics.add(StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
                     } else {
                         columnStatistics.add(ConnectorTableColumnStats.unknown());
                     }

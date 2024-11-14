@@ -687,10 +687,7 @@ Follow these steps if you want to start a new FE node with the metadata backup:
 3. Start the FE node.
 
    ```Bash
-   # Replace <fe_ip> with the IP address (priority_networks) 
-   # of the new FE node, and replace <fe_edit_log_port> (Default: 9010) with 
-   # the new FE node's edit_log_port.
-   ./fe/bin/start_fe.sh --helper <fe_ip>:<fe_edit_log_port> --daemon
+   ./fe/bin/start_fe.sh
    ```
 
 4. Check whether the current FE node is the Leader FE node.

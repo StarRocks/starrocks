@@ -963,7 +963,7 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
-struct TBatchWriteRequest {
+struct TMergeCommitRequest {
     1: optional string db
     2: optional string tbl
     3: optional string user
@@ -974,7 +974,7 @@ struct TBatchWriteRequest {
     8: optional map<string, string> params;
 }
 
-struct TBatchWriteResult {
+struct TMergeCommitResult {
     1: optional Status.TStatus status;
     // only valid for success
     2: optional string label;
@@ -1399,6 +1399,7 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+    5: optional bool is_temp
 }
 
 struct TCreatePartitionResult {
@@ -1921,7 +1922,7 @@ service FrontendService {
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 
-    TBatchWriteResult requestBatchWrite(1: TBatchWriteRequest request)
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
 
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 

@@ -48,7 +48,7 @@ public class PartitionUtilsTest {
         HashDistributionInfo distributionInfo =
                 new HashDistributionInfo(1, Lists.newArrayList(new Column("id", Type.BIGINT)));
 
-        Partition p1 = new Partition(10001L, "p1", materializedIndex, distributionInfo);
+        Partition p1 = new Partition(10001L, 10002L, "p1", materializedIndex, distributionInfo);
         partitions.add(p1);
         PartitionUtils.clearTabletsFromInvertedIndex(partitions);
     }

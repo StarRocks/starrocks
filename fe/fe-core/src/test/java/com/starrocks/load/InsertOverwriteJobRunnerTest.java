@@ -96,13 +96,13 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
         runner.cancel();
         Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
 
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
                 Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
@@ -136,7 +136,7 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
     }
@@ -155,7 +155,7 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
 
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);

@@ -25,7 +25,6 @@ import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
@@ -521,8 +520,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     public DecodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeInfo context) {
         PhysicalOlapScanOperator scan = optExpression.getOp().cast();
         OlapTable table = (OlapTable) scan.getTable();
-        long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
-                .orElse(0L);
+        long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+                .max(Long::compareTo).orElse(0L);
 
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
             return DecodeInfo.EMPTY;

@@ -244,7 +244,7 @@ struct TBrokerScanRangeParams {
     // If multi_row_delimiter is set, row_delimiter will ignore.
     12: optional string multi_row_delimiter;
     // If non_blocking_read is set, stream_load_pipe will not block while performing read io
-    13: optional bool non_blocking_read;
+    13: optional bool non_blocking_read; // deprecated
     // If use_broker is set, we will read hdfs thourgh broker
     // If use_broker is not set, we will read through libhdfs/S3 directly
     14: optional bool use_broker
@@ -886,6 +886,9 @@ struct TSortNode {
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
   31: optional bool analytic_partition_skewed;
+  32: optional list<Exprs.TExpr> pre_agg_exprs;
+  33: optional list<Types.TSlotId> pre_agg_output_slot_id;
+  34: optional bool pre_agg_insert_local_shuffle;
 }
 
 enum TAnalyticWindowType {
