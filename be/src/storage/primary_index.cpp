@@ -1382,7 +1382,9 @@ Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, cons
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         return _insert_into_persistent_index(rssid, rowids, pks);
     } else {
-        return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        auto st = _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1402,6 +1404,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        _calc_memory_usage();
     }
     return st;
 }
@@ -1414,6 +1417,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
         st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        _calc_memory_usage();
     }
     return st;
 }
@@ -1440,7 +1444,9 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
     if (_persistent_index != nullptr) {
         return _replace_persistent_index_by_indexes(rssid, rowid_start, replace_indexes, pks);
     } else {
-        return _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        auto st = _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1452,6 +1458,7 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
         st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
     }
     return st;
 }
@@ -1464,6 +1471,7 @@ Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Col
         st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
     }
     return st;
 }
@@ -1476,6 +1484,7 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
         st = _erase_persistent_index(key_col, deletes);
     } else {
         _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        _calc_memory_usage();
     }
     return st;
 }
