@@ -61,6 +61,7 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/stream_load_http_executor.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -72,7 +73,8 @@ HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
         : _env(env),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
-          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
+          _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)),
+          _stream_load_http_executor(new StreamLoadHttpExecutor()) {}
 
 HttpServiceBE::~HttpServiceBE() {
     _ev_http_server.reset();
@@ -81,6 +83,7 @@ HttpServiceBE::~HttpServiceBE() {
 }
 
 void HttpServiceBE::stop() {
+    _stream_load_http_executor->stop();
     _ev_http_server->stop();
 }
 
@@ -91,8 +94,10 @@ void HttpServiceBE::join() {
 Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
 
+    RETURN_IF_ERROR(_stream_load_http_executor->init());
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
+    auto* stream_load_action =
+            new StreamLoadAction(_env, _http_concurrent_limiter.get(), _stream_load_http_executor.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -106,7 +111,7 @@ Status HttpServiceBE::start() {
     // PrepreTransaction:   POST /api/transaction/prepare
     //
     // ListTransactions:    POST /api/transaction/list
-    auto* transaction_manager_action = new TransactionManagerAction(_env);
+    auto* transaction_manager_action = new TransactionManagerAction(_env, _stream_load_http_executor.get());
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
@@ -242,7 +247,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
-    auto* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction(_env, this);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 

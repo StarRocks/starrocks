@@ -391,6 +391,7 @@ CONF_Int32(be_http_port, "8040");
 CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
+CONF_Bool(be_http_enable_pthread, "true");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
@@ -1333,6 +1334,11 @@ CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
+CONF_mBool(enable_stream_load_async_handle, "true");
+CONF_mInt32(stream_load_async_handle_thread_pool_num_min, "0");
+CONF_mInt32(stream_load_async_handle_thread_pool_num_max, "48");
+CONF_Int32(stream_load_async_handle_thread_pool_queue_size, "102400");
+CONF_Int32(stream_load_async_handle_thread_pool_idle_time_ms, "2000");
 
 CONF_mInt32(get_txn_status_internal_sec, "10");
 
