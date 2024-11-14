@@ -118,7 +118,7 @@ private:
     // map from hash value of fragment instance id/node id pair to stream receivers;
     // Ownership of the stream revcr is shared between this instance and the caller of
     // create_recvr().
-    typedef phmap::flat_hash_map<PlanNodeId, std::shared_ptr<DataStreamRecvr>> RecvrMap;
+    typedef phmap::flat_hash_map<PlanNodeId, std::shared_ptr<DataStreamRecvr>, StdHash<PlanNodeId>> RecvrMap;
     typedef phmap::flat_hash_map<TUniqueId, std::shared_ptr<RecvrMap>> StreamMap;
     StreamMap _receiver_map[BUCKET_NUM];
     std::atomic<uint32_t> _fragment_count{0};
