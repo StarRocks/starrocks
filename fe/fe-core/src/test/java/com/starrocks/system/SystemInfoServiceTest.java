@@ -380,4 +380,19 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(beIP3 == null);
     }
 
+    @Test(expected = DdlException.class)
+    public void testUpdateBackendAddressInSharedDataMode() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
+        // throw not support exception
+        service.modifyBackendHost(clause);
+    }
+
 }
