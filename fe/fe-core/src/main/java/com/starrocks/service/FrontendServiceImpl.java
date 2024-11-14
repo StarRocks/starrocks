@@ -2006,7 +2006,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             updatePartitionIds.add(p.getParentId());
             p.setImmutable(true);
 
-            List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
+            List<PhysicalPartition> mutablePartitions;
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
@@ -2197,6 +2197,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+        String partitionNamePrefix = null;
+        boolean isTemp = false;
+        if (request.isSetIs_temp() && request.isIs_temp()) {
+            isTemp = true;
+            partitionNamePrefix = "txn" + request.getTxn_id();
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -2237,7 +2243,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    request.partition_values);
+                    request.partition_values, isTemp, partitionNamePrefix);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
                 partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
@@ -2346,7 +2352,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
+                return buildCreatePartitionResponse(
+                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
@@ -2357,7 +2364,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
-                                                                       List<String> partitionColNames) {
+                                                                       List<String> partitionColNames,
+                                                                       boolean isTemp) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
@@ -2376,13 +2384,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
-            Partition partition = olapTable.getPartition(partitionName);
+            Partition partition = olapTable.getPartition(partitionName, isTemp);
             tPartition = new TOlapTablePartition();
-            tPartition.setId(partition.getId());
+            tPartition.setId(partition.getDefaultPhysicalPartition().getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
@@ -2495,7 +2504,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
             tPartition.setNum_buckets(index.getTablets().size());

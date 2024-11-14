@@ -1,0 +1,7 @@
+position: 10 # float position is supported
+label: '时间日期函数'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: date-time-functions

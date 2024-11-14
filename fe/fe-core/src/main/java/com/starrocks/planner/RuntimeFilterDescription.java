@@ -197,7 +197,8 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
-        if (isBuildFromColocateGroup && !isBroadcastJoin()) {
+        // colocate runtime filter couldn't apply to other exec groups
+        if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
             int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;

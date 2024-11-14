@@ -56,6 +56,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.connector.iceberg.MIcebergTableMeta.MOCKED_ICEBERG_TABLES;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 public class MockIcebergMetadata implements ConnectorMetadata {
@@ -99,6 +100,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                     MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME, MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME,
                     MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME, MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME,
                     MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
+
 
     private static final List<String> PARTITION_NAMES_0 = Lists.newArrayList("date=2020-01-01",
             "date=2020-01-02",
@@ -187,7 +189,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_TRANSFORMS_DB_NAME);
 
-        for (String tblName : PARTITION_TRANSFORM_TABLE_NAMES) {
+        List<String> allTableNames = Lists.newArrayList(PARTITION_TRANSFORM_TABLE_NAMES);
+        MOCKED_ICEBERG_TABLES.keySet().stream().forEach(allTableNames::add);
+        for (String tblName : allTableNames) {
             List<Column> columns = getPartitionedTransformTableSchema(tblName);
             MockIcebergTable icebergTable = getPartitionTransformIcebergTable(tblName, columns);
             List<String> partitionNames = getTransformTablePartitionNames(tblName);
@@ -352,6 +356,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 table.ops().commit(table.ops().current(), evolutionMetaData);
                 return table;
             }
+            default: {
+                if (MOCKED_ICEBERG_TABLES.containsKey(tblName)) {
+                    MIcebergTable table = MOCKED_ICEBERG_TABLES.get(tblName);
+                    return table.getTestTable(schema);
+                }
+            }
         }
         return null;
     }
@@ -380,6 +390,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             case MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME:
                 return Lists.newArrayList("ts=2024-01-01", "ts_month=2024-01",
                         "ts=2024-02", "ts=2024-03");
+            default: {
+                if (MOCKED_ICEBERG_TABLES.containsKey(tblName)) {
+                    MIcebergTable table = MOCKED_ICEBERG_TABLES.get(tblName);
+                    return table.getTransformTablePartitionNames(tblName);
+                }
+            }
         }
         return null;
     }

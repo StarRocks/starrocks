@@ -519,7 +519,7 @@ public class LeaderImpl {
         }
 
         long tableId = pushTask.getTableId();
-        long partitionId = pushTask.getPartitionId();
+        long physicalPartitionId = pushTask.getPartitionId();
         long pushIndexId = pushTask.getIndexId();
         long pushTabletId = pushTask.getTabletId();
         // push finish type:
@@ -552,9 +552,9 @@ public class LeaderImpl {
                 throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
             }
 
-            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null) {
-                throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
+                throw new MetaNotFoundException("cannot find partition[" + physicalPartitionId + "] when push finished");
             }
 
             MaterializedIndex pushIndex = physicalPartition.getIndex(pushIndexId);
@@ -592,7 +592,7 @@ public class LeaderImpl {
                     Replica replica = findRelatedReplica(olapTable, physicalPartition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
-                        olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
+                        olapDeleteJob.addFinishedReplica(physicalPartitionId, pushTabletId, replica);
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }
@@ -958,13 +958,16 @@ public class LeaderImpl {
             TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
+
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partition.getId());
                 partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
-                partitionMeta.setVisible_version(partition.getVisibleVersion());
-                partitionMeta.setVisible_time(partition.getVisibleVersionTime());
-                partitionMeta.setNext_version(partition.getNextVersion());
+                partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
+                partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());
+                partitionMeta.setNext_version(physicalPartition.getNextVersion());
                 partitionMeta.setIs_temp(olapTable.getPartition(partition.getName(), true) != null);
                 tableMeta.addToPartitions(partitionMeta);
                 short replicaNum = partitionInfo.getReplicationNum(partition.getId());
@@ -1038,7 +1041,8 @@ public class LeaderImpl {
             }
 
             for (Partition partition : olapTable.getAllPartitions()) {
-                List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes =
+                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());

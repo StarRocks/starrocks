@@ -2,11 +2,13 @@
 displayed_sidebar: docs
 ---
 
+import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'
+
 # DATETIME
 
-## 描述
-
 日期时间类型，取值范围是 ['0000-01-01 00:00:00', '9999-12-31 23:59:59']。
+
+<DateTip />
 
 打印的形式是 `YYYY-MM-DD HH:MM:SS`。
 

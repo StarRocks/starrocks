@@ -48,6 +48,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -155,6 +156,9 @@ public class BackupJob extends AbstractJob {
 
     private boolean testPrimaryKey = false;
 
+    @SerializedName(value = "backupFunctions")
+    private List<Function> backupFunctions = Lists.newArrayList();
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -196,6 +200,10 @@ public class BackupJob extends AbstractJob {
 
     public List<TableRef> getTableRef() {
         return tableRefs;
+    }
+
+    public void setBackupFunctions(List<Function> functions) {
+        this.backupFunctions = functions;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -541,6 +549,7 @@ public class BackupJob extends AbstractJob {
                 copiedTables.add(copiedTbl);
             }
             backupMeta = new BackupMeta(copiedTables);
+            backupMeta.setFunctions(backupFunctions);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }

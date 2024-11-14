@@ -97,6 +97,8 @@ public class Config extends ConfigBase {
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     @ConfField
     public static boolean sys_log_enable_compress = false;
+    @ConfField
+    public static String[] sys_log_warn_modules = {};
     /**
      * Log to file by default. set to `true` if you want to log to console
      */
@@ -2092,6 +2094,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
 
+    /**
+     * The partition size of sample collect, default 1k partitions
+     */
+    @ConfField(mutable = true)
+    public static int statistic_sample_collect_partition_size = 1000;
+
     @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
@@ -3314,4 +3322,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_token_cache_expire = 3600;
 
+    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
 }

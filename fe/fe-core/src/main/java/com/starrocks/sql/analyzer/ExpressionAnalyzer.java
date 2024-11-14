@@ -1649,7 +1649,7 @@ public class ExpressionAnalyzer {
             dictQueryExpr.setTbl_name(tableName.getTbl());
 
             Map<Long, Long> partitionVersion = new HashMap<>();
-            dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+            dictTable.getAllPhysicalPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
             dictQueryExpr.setPartition_version(partitionVersion);
 
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());

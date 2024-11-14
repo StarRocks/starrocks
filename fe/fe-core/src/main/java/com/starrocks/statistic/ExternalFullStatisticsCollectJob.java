@@ -71,7 +71,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
 
     private final String catalogName;
-    private final List<String> partitionNames;
+    protected List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 

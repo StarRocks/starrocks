@@ -415,7 +415,7 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
@@ -425,6 +425,7 @@ public class StarOSAgent {
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
+                    .putLabels("indexId", String.valueOf(indexId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
@@ -782,8 +783,8 @@ public class StarOSAgent {
         return shardInfos.get(0);
     }
 
-    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
-        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
-        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
     }
 }

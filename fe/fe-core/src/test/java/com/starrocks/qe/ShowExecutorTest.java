@@ -58,6 +58,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -188,12 +189,22 @@ public class ShowExecutorTest {
         MaterializedIndex index2 = new MaterializedIndex();
 
         // mock partition
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index1;
+            }
+        };
+
+        // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
-                partition.getBaseIndex();
+                partition.getDefaultPhysicalPartition();
                 minTimes = 0;
-                result = index1;
+                result = physicalPartition;
             }
         };
 
@@ -820,7 +831,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("100.000B", resultSet.getString(23));
         Assert.assertEquals("0", resultSet.getString(24));
         Assert.assertEquals("N/A", resultSet.getString(27));
-        Assert.assertEquals("DISCONNECTED", resultSet.getString(29));
+        Assert.assertEquals("CONNECTING", resultSet.getString(29));
         Assert.assertEquals(String.valueOf(workerId), resultSet.getString(31));
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }

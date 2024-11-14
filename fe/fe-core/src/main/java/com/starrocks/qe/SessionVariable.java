@@ -191,6 +191,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
+    public static final String INSERT_TIMEOUT = "insert_timeout";
+    public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
@@ -230,6 +232,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
+    public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -639,6 +642,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_DIALECT = "sql_dialect";
 
+    // Is Trino dialect downgraded to Starrocks
+    public static final String ENABLE_DIALECT_DOWNGRADE = "enable_dialect_downgrade";
+
     public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
 
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
@@ -819,6 +825,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
 
     public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+    
+    public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
+
+    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1156,8 +1166,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+    @VariableMgr.VarAttr(name = DYNAMIC_OVERWRITE)
+    private boolean dynamicOverwrite = false;
+
     @VariableMgr.VarAttr(name = INSERT_MAX_FILTER_RATIO)
     private double insertMaxFilterRatio = 0;
+
+    @VariableMgr.VarAttr(name = INSERT_TIMEOUT)
+    private int insertTimeoutS = 14400;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -1266,6 +1282,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+    @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
+    private boolean enableLambdaPushdown = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -1974,6 +1992,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SQL_DIALECT)
     private String sqlDialect = "StarRocks";
 
+    @VarAttr(name = ENABLE_DIALECT_DOWNGRADE)
+    private boolean enableDialectDowngrade = true;
+
     @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
     private boolean enableOuterJoinReorder = true;
 
@@ -2226,6 +2247,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
+
+    @VarAttr(name = ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK)
+    private boolean enablePushDownPreAggWithRank = true;
+
+    @VarAttr(name = INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG)
+    private boolean insertLocalShuffleForWindowPreAgg = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -2831,12 +2858,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
+    }
+
+    public void setDynamicOverwrite(boolean dynamicOverwrite) {
+        this.dynamicOverwrite = dynamicOverwrite;
+    }
+
     public double getInsertMaxFilterRatio() {
         return insertMaxFilterRatio;
     }
 
     public void setInsertMaxFilterRatio(double insertMaxFilterRatio) {
         this.insertMaxFilterRatio = insertMaxFilterRatio;
+    }
+
+    public int getInsertTimeoutS() {
+        return insertTimeoutS;
+    }
+
+    public void setInsertTimeoutS(int insertTimeoutS) {
+        this.insertTimeoutS = insertTimeoutS;
     }
 
     public boolean isEnableSpill() {
@@ -3481,6 +3524,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownAggregateMode;
     }
 
+    public boolean getEnableLambdaPushDown() {
+        return enableLambdaPushdown;
+    }
+
+    public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
+        this.enableLambdaPushdown = enableLambdaPushdown;
+    }
+
     public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
         this.cboPushDownAggregateMode = cboPushDownAggregateMode;
     }
@@ -3729,7 +3780,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
-    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
+    public void setEnableMaterializedViewTimeSeriesPushDownRewrite(
+            boolean enableMaterializedViewTimeSeriesPushDownRewrite) {
         this.enableMaterializedViewTimeSeriesPushDownRewrite = enableMaterializedViewTimeSeriesPushDownRewrite;
     }
 
@@ -3877,6 +3929,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSqlDialect(String dialect) {
         this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableDialectDowngrade() {
+        return enableDialectDowngrade;
+    }
+
+    public void setEnableDialectDowngrade(boolean enableDialectDowngrade) {
+        this.enableDialectDowngrade = enableDialectDowngrade;
     }
 
     public boolean isEnableOuterJoinReorder() {
@@ -4332,6 +4392,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConnectorIncrementalScanRanges(boolean v) {
         enableConnectorIncrementalScanRanges = v;
+    }
+
+    public boolean getEnablePushDownPreAggWithRank() {
+        return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
     }
 
     // Serialize to thrift object

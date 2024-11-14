@@ -15,15 +15,14 @@
 package com.starrocks.load.batchwrite;
 
 import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.List;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -60,7 +59,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "1");
             }});
-        mockCoordinatorBackendAssignerImpl(1);
         RequestCoordinatorBackendResult result1 =
                 batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
         assertTrue(result1.isOk());
@@ -74,7 +72,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
             }});
         RequestCoordinatorBackendResult result2 =
                 batchWriteMgr.requestCoordinatorBackends(tableId1, params2);
-        mockCoordinatorBackendAssignerImpl(1);
         assertTrue(result2.isOk());
         assertEquals(1, result2.getValue().size());
         assertEquals(2, batchWriteMgr.numBatchWrites());
@@ -83,7 +80,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
             }});
-        mockCoordinatorBackendAssignerImpl(4);
         RequestCoordinatorBackendResult result3 =
                 batchWriteMgr.requestCoordinatorBackends(tableId2, params3);
         assertTrue(result3.isOk());
@@ -94,7 +90,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
             }});
-        mockCoordinatorBackendAssignerImpl(4);
         RequestCoordinatorBackendResult result4 =
                 batchWriteMgr.requestCoordinatorBackends(tableId3, params4);
         assertTrue(result4.isOk());
@@ -104,7 +99,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
 
     @Test
     public void testRequestLoad() {
-        mockCoordinatorBackendAssignerImpl(4);
         StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "100000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
@@ -154,7 +148,6 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
 
     @Test
     public void testCleanupInactiveBatchWrite() {
-        mockCoordinatorBackendAssignerImpl(4);
         StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {{
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
@@ -183,22 +176,21 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         assertEquals(0, batchWriteMgr.numBatchWrites());
     }
 
-    // TODO remove this mock after CoordinatorBackendAssignerImpl is implemented
-    private void mockCoordinatorBackendAssignerImpl(int numBackends) {
-        new MockUp<CoordinatorBackendAssignerImpl>() {
-
-            @Mock
-            public void registerBatchWrite(long id, long warehouseId, TableId tableId, int expectParallel) {
-            }
-
-            @Mock
-            public void unregisterBatchWrite(long id) {
-            }
-
-            @Mock
-            public List<ComputeNode> getBackends(long id) {
-                return allNodes.subList(0, numBackends);
+    @Test
+    public void testAssignerRegisterBatchWriteFail() {
+        StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {{
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "10000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            }});
+        CoordinatorBackendAssigner assigner = batchWriteMgr.getCoordinatorBackendAssigner();
+        new Expectations(assigner) {
+            {
+                assigner.registerBatchWrite(anyLong, anyLong, (TableId) any, anyInt);
+                result = new Exception("registerBatchWrite failed");
             }
         };
+        RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params1);
+        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        assertEquals(0, batchWriteMgr.numBatchWrites());
     }
 }

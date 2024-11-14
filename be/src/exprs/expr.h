@@ -267,6 +267,7 @@ public:
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
+    SlotId max_used_slot_id() const;
 
 protected:
     friend class MathFunctions;

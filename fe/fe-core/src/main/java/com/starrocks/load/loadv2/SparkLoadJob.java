@@ -506,12 +506,13 @@ public class SparkLoadJob extends BulkLoadJob {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
-                        long partitionVersion = partition.getVisibleVersion();
+                        long partitionVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
                             long indexId = index.getId();
                             int schemaHash = indexToSchemaHash.get(indexId);
