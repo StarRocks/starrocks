@@ -375,11 +375,15 @@ set(EXEC_FILES
         ./runtime/mem_pool_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
+        ./runtime/batch_write/batch_write_mgr_test.cpp
+        ./runtime/batch_write/batch_write_util_test.cpp
+        ./runtime/batch_write/isomorphic_batch_write_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
+        ./runtime/time_bounded_stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp

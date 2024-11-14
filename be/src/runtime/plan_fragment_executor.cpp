@@ -511,30 +511,7 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
     if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
-    _channel_stream_load = true;
-    for (; iter != scan_range_map.end(); iter++) {
-        for (const auto& scan_range : iter->second) {
-            const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
-            int channel_id = broker_scan_range.channel_id;
-            const string& label = broker_scan_range.params.label;
-            const string& db_name = broker_scan_range.params.db_name;
-            const string& table_name = broker_scan_range.params.table_name;
-            TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
-            TUniqueId load_id = broker_scan_range.ranges[0].load_id;
-            long txn_id = broker_scan_range.params.txn_id;
-            StreamLoadContext* ctx = nullptr;
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->create_channel_context(
-                    _exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
-            DeferOp op([&] {
-                if (ctx->unref()) {
-                    delete ctx;
-                }
-            });
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
-            _stream_load_contexts.push_back(ctx);
-        }
-    }
-    return Status::OK();
+    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
 }
 
 } // namespace starrocks
