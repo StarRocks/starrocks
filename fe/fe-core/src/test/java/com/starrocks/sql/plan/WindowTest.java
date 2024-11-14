@@ -689,7 +689,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
@@ -708,7 +708,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
@@ -726,7 +726,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
@@ -779,7 +779,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
@@ -798,7 +798,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
@@ -816,7 +816,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 4\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
                     "  |  pre agg functions: [, sum(3: v3), ], [, avg(3: v3), ], [, count(3: v3), ]\n" +
                     "  |  offset: 0");
         }
