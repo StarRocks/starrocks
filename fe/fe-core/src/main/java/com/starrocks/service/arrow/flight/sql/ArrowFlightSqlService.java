@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.arrow.flight.sql.auth.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
@@ -43,7 +44,8 @@ public class ArrowFlightSqlService {
                 new ArrowFlightSqlSessionManager(arrowFlightSqlTokenManager);
 
         ArrowFlightSqlServiceImpl producer =
-                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager, location);
+                new ArrowFlightSqlServiceImpl(arrowFlightSqlSessionManager,
+                        Location.forGrpcInsecure(FrontendOptions.getLocalHostAddress(), port));
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
                 new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
 
