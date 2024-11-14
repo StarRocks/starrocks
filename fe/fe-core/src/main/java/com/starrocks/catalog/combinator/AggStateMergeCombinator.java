@@ -65,7 +65,6 @@ public final class AggStateMergeCombinator extends AggregateFunction {
             aggStateMergeFunc.setAggStateDesc(aggStateDesc);
             // use agg state desc's nullable as `agg_state` function's nullable
             aggStateMergeFunc.setIsNullable(aggStateDesc.getResultNullable());
-            LOG.info("Register agg state function: {}", aggStateMergeFunc.functionName());
             return Optional.of(aggStateMergeFunc);
         } catch (Exception e) {
             LOG.warn("Failed to create AggStateMergeCombinator for function: {}", aggFunc.functionName(), e);

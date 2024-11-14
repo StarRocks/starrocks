@@ -40,6 +40,7 @@
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
 // NOLINTNEXTLINE
+#include "script/script.h"
 #include "service/staros_worker.h"
 
 namespace starrocks {
@@ -87,6 +88,8 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_num_rows(5);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
     EXPECT_OK(_tablet_manager->tablet_metadata_exists(12345, 2));
+    string result;
+    ASSERT_TRUE(execute_script("System.print(StorageEngine.get_lake_tablet_metadata_json(12345,2))", result).ok());
     auto res = _tablet_manager->get_tablet_metadata(12345, 2);
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->id(), 12345);
@@ -814,6 +817,59 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
             ASSERT_TRUE(res.ok());
             ASSERT_EQ(res.value()->id(), tablet_metadata->schema().id());
         }
+    }
+}
+
+TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
+    starrocks::TabletMetadata metadata;
+    auto schema = metadata.mutable_schema();
+    schema->set_id(1);
+    metadata.set_id(12345);
+    metadata.set_version(1);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(2);
+    auto rowset_meta_pb2 = metadata.add_rowsets();
+    rowset_meta_pb2->set_id(2);
+    rowset_meta_pb2->set_overlapped(false);
+    rowset_meta_pb2->set_data_size(1024);
+    rowset_meta_pb2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    metadata.set_version(3);
+    auto rowset_meta_pb3 = metadata.add_rowsets();
+    rowset_meta_pb3->set_id(3);
+    rowset_meta_pb3->set_overlapped(false);
+    rowset_meta_pb3->set_data_size(1024);
+    rowset_meta_pb3->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 0, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 1, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 2, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(2, rowsets.size());
+    }
+
+    {
+        auto res = _tablet_manager->capture_tablet_and_rowsets(12345, 3, 3);
+        EXPECT_TRUE(res.ok());
+        auto& [tablet, rowsets] = res.value();
+        ASSERT_EQ(1, rowsets.size());
     }
 }
 

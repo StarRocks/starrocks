@@ -18,7 +18,6 @@ package com.starrocks.external.starrocks;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.leader.LeaderImpl;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -129,10 +128,7 @@ public class TableMetaSyncerTest {
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
-        // remove the thread local meta context
-        MetaContext.remove();
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
-        Assert.assertNull(MetaContext.get());
         Assert.assertEquals(4, extTable.getPartitions().size());
     }
 }

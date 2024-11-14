@@ -1278,10 +1278,36 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
             MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
             Assert.assertEquals("p1,p2,p3", message.getMvPartitionsToRefreshString());
             Assert.assertEquals("{t1=[p1, p2, p3]}", message.getBasePartitionsToRefreshMapString());
+
+            // update new partitions of base table
+            addListPartition("t1", "p4", "2020-07-02", "shenzhen");
+            addListPartition("t1", "p5", "2020-07-05", "shenzhen");
+            executeInsertSql("INSERT INTO t1 partition(p4) VALUES  (\"2020-07-02\", \"shenzhen\", 3);");
+            executeInsertSql("INSERT INTO t1 partition(p5) VALUES  (\"2020-07-05\", \"shenzhen\", 4);");
+            processor = getProcessor(taskRun);
+            mvTaskRunContext = processor.getMvContext();
+            Assert.assertNull(mvTaskRunContext.getNextPartitionValues());
+            message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
+            Assert.assertEquals("p1,p2,p3,p5", message.getMvPartitionsToRefreshString());
+            Assert.assertEquals("{t1=[p1, p2, p3, p4, p5]}", message.getBasePartitionsToRefreshMapString());
             starRocksAssert.dropTable("t1");
             starRocksAssert.dropMaterializedView("mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testCreateMVWithMultiPartitionColumns() {
+        starRocksAssert.withTable(T3, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                    "partition by (province, dt) \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "properties ('partition_refresh_number' = '-1')" +
+                    "as select dt, province, sum(age) from t3 group by dt, province;");
+            MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+            refreshMV("test", mv);
+            starRocksAssert.dropMaterializedView("mv1");
+        });
     }
 }

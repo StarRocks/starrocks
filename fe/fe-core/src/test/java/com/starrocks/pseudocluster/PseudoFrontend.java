@@ -198,8 +198,6 @@ public class PseudoFrontend {
 
                 GlobalStateMgr.getCurrentState().initialize(args);
                 GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
-                StateChangeExecutor.getInstance().setMetaContext(
-                        GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();

@@ -149,6 +149,8 @@ public:
 
     virtual int get_subfields(std::vector<std::vector<std::string>>* subfields) const;
 
+    virtual void for_each_slot_id(const std::function<void(SlotId)>& cb) const;
+
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.
@@ -265,6 +267,7 @@ public:
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
+    SlotId max_used_slot_id() const;
 
 protected:
     friend class MathFunctions;

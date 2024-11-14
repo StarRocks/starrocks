@@ -36,7 +36,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
@@ -1304,16 +1303,6 @@ public class MvUtils {
     }
 
     /**
-     * Check whether opt expression or its children have applied mv union rewrite.
-     *
-     * @param optExpression: opt expression to check
-     * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
-     */
-    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
-    }
-
-    /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
      *
      * @param connectContext: connect context
@@ -1325,7 +1314,7 @@ public class MvUtils {
                                                  boolean isInlineView) {
         // step1: get from mv plan cache
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContext(mv, connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                .getPlanContext(connectContext.getSessionVariable(), mv);
         if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
             // TODO: distinguish normal mv plan and view rewrite plan
             return mvPlanContexts.get(0);
@@ -1456,8 +1445,7 @@ public class MvUtils {
         partitionProperties.put("storage_medium", materializedView.getStorageMedium());
         String storageCooldownTime =
                 materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+        if (storageCooldownTime != null) {
             // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
             String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
             partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
@@ -1507,21 +1495,18 @@ public class MvUtils {
      * @param table             the base table to find the specific partition expr
      * @return the mv partition expr if found, otherwise empty
      */
-    public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
+    public static List<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
         if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
-            return Optional.empty();
+            return null;
         }
         return partitionExprMaps.entrySet().stream()
                 .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
                 .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
-                .findFirst();
+                .collect(Collectors.toList());
     }
 
     /**
-     * Get the column by slot ref from table's columns
-     *
-     * @param columns base table's columns
-     * @param slotRef the base table's partition slot ref to find
+     * Get the column by slot ref from table's columns.
      * @return the column if found, otherwise empty
      */
     public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
@@ -1542,15 +1527,35 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
+    public static ScalarOperator convertPartitionKeysToListPredicate(List<ScalarOperator> partitionColRefs,
                                                                      Collection<PartitionKey> partitionRanges) {
         List<ScalarOperator> values = Lists.newArrayList();
-        for (PartitionKey partitionKey : partitionRanges) {
-            LiteralExpr literalExpr = partitionKey.getKeys().get(0);
-            ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-            values.add(upperBound);
+        if (partitionColRefs.size() == 1) {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                LiteralExpr literalExpr = literalExprs.get(0);
+                ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                values.add(upperBound);
+            }
+            return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
+        } else {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                // TODO: use row operator instead
+                List<ScalarOperator> predicates = Lists.newArrayList();
+                for (int i = 0; i < literalExprs.size(); i++) {
+                    ScalarOperator partitionColRef = partitionColRefs.get(i);
+                    LiteralExpr literalExpr = literalExprs.get(i);
+                    ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound);
+                    predicates.add(eq);
+                }
+                values.add(Utils.compoundAnd(predicates));
+            }
+            return Utils.compoundOr(values);
         }
-        return MvUtils.convertToInPredicate(partitionColRef, values);
     }
 
     /**

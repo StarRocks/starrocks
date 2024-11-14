@@ -148,7 +148,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
-                    ObjectType.STORAGE_VOLUME);
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
                         provider.getAvailablePrivType(objectType));
@@ -195,9 +196,11 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    List.of(PrivilegeType.NODE),
+                    List.of(PrivilegeType.NODE, PrivilegeType.CREATE_WAREHOUSE),
                     null,
                     false);
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, ObjectType.WAREHOUSE,
+                    provider.getAvailablePrivType(ObjectType.WAREHOUSE));
             rolePrivilegeCollection.disableMutable();
 
             // 4. user_admin
@@ -270,7 +273,8 @@ public class AuthorizationMgr {
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
-                || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);
@@ -753,9 +757,6 @@ public class AuthorizationMgr {
             short pluginVersion) throws PrivilegeException {
         userWriteLock();
         try {
-            if (!user.equals(UserIdentity.ROOT)) {
-                provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
-            }
             userToPrivilegeCollection.put(user, privilegeCollection);
             invalidateUserInCache(user);
             LOG.info("replayed update user {}", user);
@@ -1239,9 +1240,6 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
-                }
 
                 if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                     RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(roleId);
@@ -1306,10 +1304,6 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                // Actually privilege collection is useless here, but we still record it for further usage
-                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
-                }
                 roleIdToPrivilegeCollection.remove(roleId);
                 roleNameToId.remove(privilegeCollection.getName());
                 LOG.info("replayed drop role {}", roleId);

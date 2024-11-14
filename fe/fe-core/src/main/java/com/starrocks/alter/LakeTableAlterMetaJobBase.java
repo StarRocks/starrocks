@@ -279,28 +279,28 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     public void updatePartitionTabletMeta(Database db, LakeTable table, Partition partition) throws DdlException {
-        Collection<PhysicalPartition> subPartitions;
+        Collection<PhysicalPartition> physicalPartitions;
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            subPartitions = partition.getSubPartitions();
+            physicalPartitions = partition.getSubPartitions();
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        for (PhysicalPartition physicalPartition : subPartitions) {
-            updatePhysicalPartitionTabletMeta(db, table, partition, physicalPartition);
+        for (PhysicalPartition physicalPartition : physicalPartitions) {
+            updatePhysicalPartitionTabletMeta(db, table, physicalPartition);
         }
     }
 
-    public void updatePhysicalPartitionTabletMeta(Database db, OlapTable table, Partition partition,
-                                                  PhysicalPartition subPartition) throws DdlException {
+    public void updatePhysicalPartitionTabletMeta(Database db, OlapTable table,
+                                                  PhysicalPartition partition) throws DdlException {
         List<MaterializedIndex> indexList;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            indexList = new ArrayList<>(subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+            indexList = new ArrayList<>(partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -385,13 +385,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     void updateNextVersion(@NotNull LakeTable table) {
         for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            long commitVersion = commitVersionMap.get(partitionId);
-            Preconditions.checkState(partition.getNextVersion() == commitVersion,
-                    "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
-            partition.setNextVersion(commitVersion + 1);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+            long commitVersion = commitVersionMap.get(physicalPartition.getId());
+            Preconditions.checkState(physicalPartition.getNextVersion() == commitVersion,
+                    "partitionNextVersion=" + physicalPartition.getNextVersion() + " commitVersion=" + commitVersion);
+            physicalPartition.setNextVersion(commitVersion + 1);
             LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
-                    jobId, partition.getId(), commitVersion);
+                    jobId, physicalPartition.getId(), commitVersion);
         }
     }
 

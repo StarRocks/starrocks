@@ -27,6 +27,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -40,6 +42,9 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import io.delta.kernel.types.BasePrimitiveType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.paimon.catalog.Catalog;
@@ -253,7 +258,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", MOCK_PAIMON_CATALOG_NAME, "", properties);
         //register paimon catalog
         PaimonMetadata paimonMetadata =
-                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog);
+                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog,
+                        new ConnectorProperties(ConnectorType.PAIMON, properties));
         metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
     }
 
@@ -283,13 +289,18 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
-            super(null, null, null, null);
+            super(null, null, null, null, new ConnectorProperties(ConnectorType.DELTALAKE));
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
                     .add(new Column("col1", Type.INT))
                     .add(new Column("col2", Type.STRING))
                     .build();
+
+            StructType structType = new StructType(List.of(new StructField("col1",
+                            BasePrimitiveType.createPrimitive("integer"), false),
+                    new StructField("col2", BasePrimitiveType.createPrimitive("string"), false)));
+
             List<String> partitionNames = new ArrayList<>();
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,

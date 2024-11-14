@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -136,6 +137,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private Expr defineExpr; // use to define column in materialize view
     @SerializedName(value = "uniqueId")
     private int uniqueId;
+    // physicalName is used to store the physical name of the column in the storage layer.
+    // for example, the physical name of a column in a parquet file.
+    // used in delta lake column mapping name mode
+    @SerializedName(value = "physicalName")
+    private String physicalName;
 
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
@@ -188,6 +194,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+        this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
+                  String physicalName) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -226,13 +238,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.stats = new ColumnStats();
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
+        this.physicalName = physicalName;
     }
 
     public Column(Column column) {
         this.name = column.getName();
         this.columnId = column.getColumnId();
+        this.aggStateDesc = column.aggStateDesc;
         this.type = column.type;
-        this.type.setAggStateDesc(this.aggStateDesc);
+        this.type.setAggStateDesc(column.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
@@ -616,7 +630,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+            sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\" ");
         } else if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
@@ -733,7 +748,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("AUTO_INCREMENT ");
             }
             if (defaultValue != null && !type.isOnlyMetricType()) {
-                sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
+                sb.append("DEFAULT \"").append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\" ");
             }
         } else {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
@@ -888,6 +904,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public int getUniqueId() {
         return this.uniqueId;
+    }
+
+    public String getPhysicalName() {
+        return physicalName;
     }
 
     // return max unique id of all fields

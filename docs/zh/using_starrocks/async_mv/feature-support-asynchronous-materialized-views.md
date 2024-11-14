@@ -46,22 +46,23 @@ sidebar_label: "能力边界"
 
 ## 属性
 
-| 属性                               | 描述                                                     | 支持版本       |
-| :--------------------------------- | :------------------------------------------------------ | :----------- |
+| 属性                                 | 描述                                                                      | 支持版本               |
+|:-----------------------------------|:------------------------------------------------------------------------|:-------------------|
 | `session.<property_name>`          | 用于物化视图构建的会话变量前缀，例如 `session.query_timeout` 和 `session.query_mem_limit`。 | v3.0+              |
-| auto_refresh_partitions_limit      | 每次自动刷新触发时要刷新的物化视图分区的最大数量。           | v2.5+              |
-| excluded_trigger_tables            | 不会触发物化视图自动刷新的基表。                             | v2.5+              |
-| partition_refresh_number           | 执行批量刷新任务时每批次要刷新的分区数量。                   | v2.5+              |
-| partition_ttl_number               | 保留的最近物化视图分区数量。                                 | v2.5+              |
-| partition_ttl                      | 物化视图分区的生存时间 (TTL)。推荐使用此属性而非 `partition_ttl_number`。 | v3.1.4+<br />v3.2+ |
-| force_external_table_query_rewrite | 是否为基于 External Catalog 的物化视图启用查询改写。         | v2.5+              |
-| query_rewrite_consistency          | 基于内表构建的物化视图的查询改写规则。                       | v3.0.5+<br />v3.1+ |
-| resource_group                     | 物化视图刷新任务所属的资源组。                               | v3.1+              |
-| colocate_with                      | 物化视图的 Colocation Group。                                | v3.1+              |
-| foreign_key_constraints            | 创建 View Delta Join 查询改写的异步物化视图时的外键约束。    | v2.5.4+<br />v3.0+ |
-| unique_constraints                 | 创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束。 | v2.5.4+<br />v3.0+ |
-| mv_rewrite_staleness_second        | 查询改写时，物化视图数据的 Stalness 容忍度。                 | v3.1+              |
-| enable_query_rewrite               | 物化视图是否可用于查询改写。                                 | v3.3+              |
+| auto_refresh_partitions_limit      | 每次自动刷新触发时要刷新的物化视图分区的最大数量。                                               | v2.5+              |
+| excluded_trigger_tables            | 不会触发物化视图自动刷新的基表。                                                        | v2.5+              |
+| partition_refresh_number           | 执行批量刷新任务时每批次要刷新的分区数量。                                                   | v2.5+              |
+| partition_ttl_number               | 保留的最近物化视图分区数量。                                                          | v2.5+              |
+| partition_ttl                      | 物化视图分区的生存时间 (TTL)。推荐使用此属性而非 `partition_ttl_number`。                     | v3.1.4+<br />v3.2+ |
+| force_external_table_query_rewrite | 是否为基于 External Catalog 的物化视图启用查询改写。                                     | v2.5+              |
+| query_rewrite_consistency          | 基于内表构建的物化视图的查询改写规则。                                                     | v3.0.5+<br />v3.1+ |
+| resource_group                     | 物化视图刷新任务所属的资源组。                                                         | v3.1+              |
+| colocate_with                      | 物化视图的 Colocation Group。                                                 | v3.1+              |
+| foreign_key_constraints            | 创建 View Delta Join 查询改写的异步物化视图时的外键约束。                                   | v2.5.4+<br />v3.0+ |
+| unique_constraints                 | 创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束。                         | v2.5.4+<br />v3.0+ |
+| mv_rewrite_staleness_second        | 查询改写时，物化视图数据的 Stalness 容忍度。                                             | v3.1+              |
+| enable_query_rewrite               | 物化视图是否可用于查询改写。                                                          | v3.3+              |
+| excluded_refresh_tables            | 物化视图刷新的时候不会触发数据同步的基表。                                                   | v3.3+              |
 
 ## 分区
 

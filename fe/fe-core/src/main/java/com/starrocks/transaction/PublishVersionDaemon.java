@@ -271,6 +271,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
+        List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -280,9 +281,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
+                transactionIds.add(transactionState.getTransactionId());
             }
         }
+        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
             AgentTaskExecutor.submit(batchTask);
         }
@@ -762,7 +764,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
@@ -806,7 +808,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+            // prevent excessive logging
+            if (partitionCommitInfo.getVersionTime() < 0 && 
+                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
+                return false;
+            }
+            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
         }

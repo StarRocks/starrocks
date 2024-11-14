@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergEqualityDeleteScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
@@ -109,6 +110,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKGroupByKeysRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
@@ -161,6 +163,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinPushDownRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateTimeSeriesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
@@ -178,6 +181,7 @@ public class RuleSet {
             new HiveScanImplementationRule(),
             new FileScanImplementationRule(),
             new IcebergScanImplementationRule(),
+            new IcebergEqualityDeleteScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
@@ -253,6 +257,7 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
+                MergeLimitDirectRule.CTE_CONSUMER,
                 MergeLimitDirectRule.TABLE_FUNCTION,
                 MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
@@ -295,6 +300,7 @@ public class RuleSet {
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
+                new PruneUKFKGroupByKeysRule(), // Put this before PruneAggregateColumnsRule
                 new PruneAggregateColumnsRule(),
                 new PruneGroupByKeysRule(),
                 new PruneTopNColumnsRule(),
@@ -321,6 +327,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
                 PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
+                PushDownPredicateScanRule.ICEBERG_EQUALITY_DELETE_SCAN,
                 PushDownPredicateScanRule.KUDU_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
@@ -412,6 +419,7 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 AggregateScanRule.getInstance(),
+                AggregateTimeSeriesRule.getInstance(),
                 OnlyScanRule.getInstance()
         ));
 

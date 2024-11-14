@@ -304,19 +304,25 @@ public class BackupJobInfo implements Writable {
 
         // tbls
         for (Table tbl : tbls) {
-            OlapTable olapTbl = (OlapTable) tbl;
             BackupTableInfo tableInfo = new BackupTableInfo();
             tableInfo.id = tbl.getId();
             tableInfo.name = tbl.getName();
             jobInfo.tables.put(tableInfo.name, tableInfo);
+
+            if (tbl.isOlapView()) {
+                continue;
+            }
+
+            OlapTable olapTbl = (OlapTable) tbl;
             // partitions
             for (Partition partition : olapTbl.getPartitions()) {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
-                partitionInfo.version = partition.getVisibleVersion();
+                partitionInfo.version = partition.getDefaultPhysicalPartition().getVisibleVersion();
                 if (partition.getSubPartitions().size() == 1) {
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
                         BackupIndexInfo idxInfo = new BackupIndexInfo();
                         idxInfo.id = index.getId();
                         idxInfo.name = olapTbl.getIndexNameById(index.getId());
@@ -439,6 +445,16 @@ public class BackupJobInfo implements Writable {
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
         String[] tblNames = JSONObject.getNames(backupObjs);
+        if (tblNames == null) {
+            // means that pure snapshot for functions
+            String result = root.getString("backup_result");
+            if (result.equals("succeed")) {
+                jobInfo.success = true;
+            } else {
+                jobInfo.success = false;
+            }
+            return;
+        }
         for (String tblName : tblNames) {
             BackupTableInfo tblInfo = new BackupTableInfo();
             tblInfo.name = tblName;
@@ -451,6 +467,11 @@ public class BackupJobInfo implements Writable {
             }
             JSONObject parts = tbl.getJSONObject("partitions");
             String[] partsNames = JSONObject.getNames(parts);
+            if (partsNames == null) {
+                // skip logical view
+                jobInfo.tables.put(tblName, tblInfo);
+                continue;
+            }
             for (String partName : partsNames) {
                 BackupPartitionInfo partInfo = new BackupPartitionInfo();
                 partInfo.name = partName;

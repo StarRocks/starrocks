@@ -818,6 +818,7 @@ struct TMasterOpRequest {
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
     35: optional string session_id
+    36: optional i32 connectionId
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -960,6 +961,23 @@ struct TStreamLoadPutResult {
     1: required Status.TStatus status
     // valid when status is OK
     2: optional InternalService.TExecPlanFragmentParams params
+}
+
+struct TBatchWriteRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TBatchWriteResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
 }
 
 struct TKafkaRLTaskProgress {
@@ -1381,6 +1399,7 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+    5: optional bool is_temp
 }
 
 struct TCreatePartitionResult {
@@ -1902,6 +1921,8 @@ service FrontendService {
     TLoadTxnCommitResult loadTxnPrepare(1: TLoadTxnCommitRequest request)
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
+
+    TBatchWriteResult requestBatchWrite(1: TBatchWriteRequest request)
 
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 

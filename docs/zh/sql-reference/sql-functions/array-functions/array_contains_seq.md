@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 描述
 
-检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中。如果是，返回 1。
+检查数组 `array2` 的所有元素是否以完全相同的顺序出现在数组 `array1` 中。当且仅当 `array1 = prefix + array2 + suffix` 时，函数返回 `1`。
 
 举例：
 

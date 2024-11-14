@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
@@ -27,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -259,13 +259,16 @@ public class InsertOverwriteJobRunner {
         if (insertStmt.getTargetPartitionNames() == null) {
             return;
         }
+        if (insertStmt.isDynamicOverwrite()) {
+            return;
+        }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         List<List<String>> partitionValues = Lists.newArrayList();
         if (!olapTable.getPartitionInfo().isAutomaticPartition()) {
             return;
         }
 
-        if (insertStmt.isSpecifyPartitionNames())  {
+        if (insertStmt.isSpecifyPartitionNames()) {
             List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             for (String partitionName : partitionNames) {
@@ -304,7 +307,7 @@ public class InsertOverwriteJobRunner {
         }
 
         try {
-            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues, false, null);
         } catch (AnalysisException ex) {
             LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
@@ -362,6 +365,9 @@ public class InsertOverwriteJobRunner {
     }
 
     private void createTempPartitions() throws DdlException {
+        if (job.isDynamicOverwrite()) {
+            return;
+        }
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -408,13 +414,34 @@ public class InsertOverwriteJobRunner {
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
-                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            // hash set is able to deduplicate the elements
-                            sourceTablets.addAll(index.getTablets());
+                        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex index : subPartition.getMaterializedIndices(
+                                    MaterializedIndex.IndexExtState.ALL)) {
+                                sourceTablets.addAll(index.getTablets());
+                            }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
                         LOG.warn("partition {} is null", pid);
+                    }
+                }
+            }
+            // if dynamic overwrite, drop all runtime created partitions
+            if (job.isDynamicOverwrite()) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, insertStmt.getTxnId());
+                if (txnState == null) {
+                    throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                }
+                List<String> tmpPartitionNames = txnState.getCreatedPartitionNames();
+                for (String partitionName : tmpPartitionNames) {
+                    Partition partition = targetTable.getPartition(partitionName, true);
+                    if (partition != null) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
+                        targetTable.dropTempPartition(partitionName, true);
                     }
                 }
             }
@@ -470,8 +497,10 @@ public class InsertOverwriteJobRunner {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    sourceTablets.addAll(index.getTablets());
+                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        sourceTablets.addAll(index.getTablets());
+                    }
                 }
             });
             long sumSourceRows = job.getSourcePartitionIds().stream()
@@ -481,7 +510,17 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                if (job.isDynamicOverwrite()) {
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .getTransactionState(dbId, insertStmt.getTxnId());
+                    if (txnState == null) {
+                        throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                    }
+                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    targetTable.replaceMatchPartitions(tmpPartitionNames);
+                } else {
+                    targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                }
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
@@ -554,8 +593,10 @@ public class InsertOverwriteJobRunner {
             if (insertStmt.getTargetPartitionNames() == null) {
                 insertStmt.setPartitionNotSpecifiedInOverwrite(true);
             }
-            insertStmt.setTargetPartitionNames(partitionNames);
-            insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
+            if (!job.isDynamicOverwrite()) {
+                insertStmt.setTargetPartitionNames(partitionNames);
+                insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
+            }
             insertStmt.setOverwrite(false);
             insertStmt.setSystem(true);
 

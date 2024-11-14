@@ -280,6 +280,10 @@ struct TBrokerScanRange {
     3: required list<Types.TNetworkAddress> broker_addresses
     // used for channel stream load only
     4: optional i32 channel_id
+    // available when this is a stream load in batch write mode
+    5: optional bool enable_batch_write
+    6: optional i32 batch_write_interval_ms
+    7: optional map<string, string> batch_write_parameters;
 }
 
 // Es scan range
@@ -390,6 +394,13 @@ struct THdfsScanRange {
     // Paimon Deletion Vector File
     27: optional TPaimonDeletionFile paimon_deletion_file
 
+    // for extended column like iceberg data_seq_num or spec_id
+    28: optional map<Types.TSlotId, Exprs.TExpr> extended_columns;
+    
+    // attached partition value.
+    29: optional Descriptors.THdfsPartition partition_value;
+
+    30: optional Types.TTableId table_id;
 }
 
 struct TBinlogScanRange {
@@ -724,6 +735,7 @@ struct TNestLoopJoinNode {
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
+    5: optional bool interpolate_passthrough = false
 }
 
 enum TAggregationOp {
@@ -874,6 +886,9 @@ struct TSortNode {
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
   31: optional bool analytic_partition_skewed;
+  32: optional list<Exprs.TExpr> pre_agg_exprs;
+  33: optional list<Types.TSlotId> pre_agg_output_slot_id;
+  34: optional bool pre_agg_insert_local_shuffle;
 }
 
 enum TAnalyticWindowType {
@@ -1127,6 +1142,9 @@ struct THdfsScanNode {
     21: optional string metadata_table_type
 
     22: optional DataCache.TDataCacheOptions datacache_options;
+
+    // for extended column like iceberg data_seq_num or spec_id
+    23: optional list<Types.TSlotId> extended_slot_ids;
 }
 
 struct TProjectNode {

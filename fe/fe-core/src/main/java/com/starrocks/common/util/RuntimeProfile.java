@@ -144,8 +144,8 @@ public class RuntimeProfile {
         if (pair != null) {
             return pair.first;
         } else {
-            Preconditions.checkState(parentName.equals(ROOT_COUNTER)
-                    || this.counterMap.containsKey(parentName));
+            Preconditions.checkState(parentName.equals(ROOT_COUNTER) || this.counterMap.containsKey(parentName),
+                    String.format("dangling counter %s->%s", parentName, name));
             Counter newCounter = new Counter(type, strategy, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
@@ -817,7 +817,7 @@ public class RuntimeProfile {
                     RuntimeProfile child = profile.getChild(childName);
                     if (child == null) {
                         identical = false;
-                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                        LOG.debug("find non-isomorphic children, profileName={}, requiredChildName={}",
                                 profile.name, childName);
                         continue;
                     }
@@ -954,8 +954,9 @@ public class RuntimeProfile {
             reorderedChildNames.addAll(minMaxChildNames);
             reorderedChildNames.addAll(otherChildNames);
 
+            Map<String, Counter> counterMap1 = profile.getCounterMap();
             for (String childName : reorderedChildNames) {
-                Counter childCounter = profile.getCounterMap().get(childName);
+                Counter childCounter = counterMap1.get(childName);
                 Preconditions.checkState(childCounter != null);
                 builder.append(prefix).append("   - ").append(childName).append(": ")
                         .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");

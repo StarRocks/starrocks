@@ -44,6 +44,8 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Status;
@@ -111,6 +113,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -906,6 +909,9 @@ public class DefaultCoordinator extends Coordinator {
                 if (copyStatus.isCancelled() &&
                         copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                } else if (copyStatus.isTimeout()) {
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout, errMsg);
                 }
                 throw new UserException(ec, errMsg);
             }
@@ -1024,57 +1030,81 @@ public class DefaultCoordinator extends Coordinator {
             return;
         }
 
-        queryProfile.updateProfile(execState, params);
-
+        // NOTE:
+        // The exec status would affect query schedule, so it must be updated no matter what exceptions happen.
+        // Otherwise, the query might hang until timeout
         if (!execState.updateExecStatus(params)) {
             return;
         }
 
-        lock();
+        String instanceId = DebugUtil.printId(params.getFragment_instance_id());
+        // Create a CompletableFuture chain for handling updates
+        CompletableFuture<Void> future = CompletableFuture.completedFuture(null)
+                .thenRun(() -> {
+                    try {
+                        queryProfile.updateProfile(execState, params);
+                        execState.updateRunningProfile(params);
+                    } catch (Throwable e) {
+                        LOG.warn("update profile failed {}", instanceId, e);
+                    }
+                })
+                .thenRun(() -> {
+                    try {
+                        lock();
+                        queryProfile.updateLoadChannelProfile(params);
+                    } catch (Throwable e) {
+                        LOG.warn("update load channel profile failed {}", instanceId, e);
+                    } finally {
+                        unlock();
+                    }
+                })
+                .thenRun(() -> {
+                    Status status = new Status(params.status);
+                    if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+                        ConnectContext ctx = connectContext;
+                        if (ctx != null) {
+                            ctx.setErrorCodeOnce(status.getErrorCodeString());
+                        }
+                        LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
+                                status, DebugUtil.printId(jobSpec.getQueryId()),
+                                DebugUtil.printId(params.getFragment_instance_id()),
+                                params.getBackend_id());
+                        updateStatus(status, params.getFragment_instance_id());
+                    }
+                })
+                .thenRun(() -> {
+                    if (execState.isFinished()) {
+                        try {
+                            lock();
+                            queryProfile.updateLoadInformation(execState, params);
+                        } catch (Throwable e) {
+                            LOG.warn("update load information failed {}", instanceId, e);
+                        } finally {
+                            unlock();
+                        }
+                    }
+                })
+                .thenRun(() -> {
+                    // NOTE: it's critical for query execution, and must be put after the profile update
+                    if (execState.isFinished()) {
+                        queryProfile.finishInstance(params.getFragment_instance_id());
+                    }
+                })
+                .thenRun(() -> updateJobProgress(params))
+                .handle((result, ex) -> {
+                    // all block are independent, continue the execution no matter what exception happen
+                    if (ex != null) {
+                        LOG.warn("Error occurred during fragment exec status update {}: {}", instanceId,
+                                ex.getMessage());
+                    }
+                    return null; // Return null to continue the chain
+                });
+
         try {
-            queryProfile.updateLoadChannelProfile(params);
-        } finally {
-            unlock();
+            future.get();
+        } catch (Exception e) {
+            LOG.warn("Error occurred during updateFragmentExecStatus {}", instanceId, e);
         }
-
-        // print fragment instance profile
-        if (LOG.isDebugEnabled()) {
-            StringBuilder builder = new StringBuilder();
-            execState.printProfile(builder);
-            LOG.debug("profile for query_id={} instance_id={}\n{}",
-                    DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    builder);
-        }
-
-        Status status = new Status(params.status);
-        // for now, abort the query if we see any error except if the error is cancelled
-        // and returned_all_results_ is true.
-        // (UpdateStatus() initiates cancellation, if it hasn't already been initiated)
-        if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
-            ConnectContext ctx = connectContext;
-            if (ctx != null) {
-                ctx.setErrorCodeOnce(status.getErrorCodeString());
-            }
-            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                    status, DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    params.getBackend_id());
-            updateStatus(status, params.getFragment_instance_id());
-        }
-
-        if (execState.isFinished()) {
-            lock();
-            try {
-                queryProfile.updateLoadInformation(execState, params);
-            } finally {
-                unlock();
-            }
-
-            queryProfile.finishInstance(params.getFragment_instance_id());
-        }
-
-        updateJobProgress(params);
     }
 
     @Override

@@ -64,7 +64,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -142,6 +141,7 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
@@ -157,7 +157,6 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -274,7 +273,6 @@ public class GlobalStateMgr {
      * Meta and Image context
      */
     private String imageDir;
-    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -302,6 +300,7 @@ public class GlobalStateMgr {
     private final LoadMgr loadMgr;
     private final RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
+    private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
 
@@ -634,6 +633,7 @@ public class GlobalStateMgr {
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
+        this.batchWriteMgr = new BatchWriteMgr();
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
 
@@ -675,9 +675,6 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
-
-        this.metaContext = new MetaContext();
-        this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
 
@@ -895,10 +892,6 @@ public class GlobalStateMgr {
 
     public AuditEventProcessor getAuditEventProcessor() {
         return auditEventProcessor;
-    }
-
-    public static int getCurrentStateStarRocksMetaVersion() {
-        return MetaContext.get().getStarRocksMetaVersion();
     }
 
     public static boolean isCheckpointThread() {
@@ -1254,13 +1247,6 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
-            // Log meta_version
-            int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-            if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
-                editLog.logMetaVersion(new MetaVersion(FeConstants.STARROCKS_META_VERSION));
-                MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
-            }
-
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
                 // if isFirstTimeStartUp is true, frontends must contain this Node.
@@ -1339,7 +1325,6 @@ public class GlobalStateMgr {
 
         // start checkpoint thread
         checkpointer = new Checkpoint(journal);
-        checkpointer.setMetaContext(metaContext);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
         checkpointThreadId = checkpointer.getId();
@@ -1387,6 +1372,7 @@ public class GlobalStateMgr {
         // start routine load scheduler
         routineLoadScheduler.start();
         routineLoadTaskScheduler.start();
+        batchWriteMgr.start();
         // start dynamic partition task
         dynamicPartitionScheduler.start();
         // start daemon thread to update db used data quota for db txn manager periodically
@@ -1537,6 +1523,7 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                     .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                     .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                    .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                     .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1648,7 +1635,6 @@ public class GlobalStateMgr {
             System.exit(-1);
         }
 
-        MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         LOG.info("finished to replay header from image");
@@ -1736,6 +1722,7 @@ public class GlobalStateMgr {
                 replicationMgr.save(imageWriter);
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
+                warehouseMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -1888,8 +1875,6 @@ public class GlobalStateMgr {
                 }
             }
         };
-
-        replayer.setMetaContext(metaContext);
     }
 
     /**
@@ -2005,7 +1990,7 @@ public class GlobalStateMgr {
 
         }
         if (replayedJournalId.get() - startReplayId > 0) {
-            LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
+            LOG.debug("replayed journal from {} - {}", startReplayId, replayedJournalId);
             return true;
         }
         return false;
@@ -2144,6 +2129,10 @@ public class GlobalStateMgr {
 
     public StreamLoadMgr getStreamLoadMgr() {
         return streamLoadMgr;
+    }
+
+    public BatchWriteMgr getBatchWriteMgr() {
+        return batchWriteMgr;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
@@ -2392,7 +2381,7 @@ public class GlobalStateMgr {
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
         } else {
-            timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+            timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         }
 
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
@@ -2577,10 +2566,6 @@ public class GlobalStateMgr {
 
     public StateChangeExecution getStateChangeExecution() {
         return execution;
-    }
-
-    public MetaContext getMetaContext() {
-        return metaContext;
     }
 
     public void createBuiltinStorageVolume() {

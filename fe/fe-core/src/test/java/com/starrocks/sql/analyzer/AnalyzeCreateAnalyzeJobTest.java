@@ -33,7 +33,6 @@ import org.junit.Test;
 
 import java.util.List;
 
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -104,7 +103,13 @@ public class AnalyzeCreateAnalyzeJobTest {
         Assert.assertEquals(1,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
         sql = "create analyze sample table hive0.tpch.customer(C_NAME, C_PHONE)";
-        analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
+        analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+        Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
+        Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, analyzeStmt.getAnalyzeType());
+
+        DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
+        Assert.assertEquals(2,
+                starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
     }
 
     @Test

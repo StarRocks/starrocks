@@ -67,11 +67,13 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
+class BaseRowset;
 struct CompactionCandidate;
 struct CompactionContext;
 struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class ChunkIterator;
 
@@ -164,7 +166,7 @@ public:
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
-    [[nodiscard]] bool has_delete_predicates(const Version& version);
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -426,8 +428,8 @@ private:
 
     // Keep the rowsets committed but not publish which rowset meta without schema
     phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
-                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5,
-                                  phmap::NullMutex, true>
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
             _committed_rs_map;
 
     // gtid -> version

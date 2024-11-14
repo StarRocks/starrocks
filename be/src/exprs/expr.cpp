@@ -666,6 +666,12 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     return n;
 }
 
+void Expr::for_each_slot_id(const std::function<void(SlotId)>& cb) const {
+    for (auto child : _children) {
+        child->for_each_slot_id(cb);
+    }
+}
+
 int Expr::get_subfields(std::vector<std::vector<std::string>>* subfields) const {
     int n = 0;
 
@@ -883,6 +889,12 @@ bool Expr::is_index_only_filter() const {
         }
     }
     return is_index_only_filter;
+}
+
+SlotId Expr::max_used_slot_id() const {
+    SlotId max_slot_id = 0;
+    for_each_slot_id([&max_slot_id](SlotId slot_id) { max_slot_id = std::max(max_slot_id, slot_id); });
+    return max_slot_id;
 }
 
 } // namespace starrocks

@@ -40,12 +40,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -74,6 +76,7 @@ import com.starrocks.sql.ast.BackupStmt.BackupType;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.task.DirMoveTask;
@@ -98,6 +101,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
@@ -261,11 +265,43 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Repository " + repoName + " does not exist");
         }
 
+        BackupJobInfo jobInfo = null;
+        if (stmt instanceof RestoreStmt) {
+            // Check if snapshot exist in repository, if existed, get jobInfo for restore process
+            List<BackupJobInfo> infos = Lists.newArrayList();
+            Status status = repository.getSnapshotInfoFile(stmt.getLabel(), ((RestoreStmt) stmt).getBackupTimestamp(), infos);
+            if (!status.ok()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Failed to get info of snapshot '" + stmt.getLabel() + "' because: "
+                                + status.getErrMsg() + ". Maybe specified wrong backup timestamp");
+            }
+            Preconditions.checkState(infos.size() == 1);
+            jobInfo = infos.get(0);
+        }
+
         // check if db exist
         String dbName = stmt.getDbName();
+        if (dbName == null) {
+            // if target dbName if null, use dbName in snapshot
+            dbName = jobInfo.dbName;
+        }
+
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            if (stmt instanceof RestoreStmt) {
+                try {
+                    globalStateMgr.getLocalMetastore().createDb(dbName, null);
+                    db = globalStateMgr.getLocalMetastore().getDb(dbName);
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                    }
+                } catch (Exception e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                "Can not create database: " + dbName + " in restore process");
+                }
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Try to get sequence lock.
@@ -284,7 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             if (stmt instanceof BackupStmt) {
                 backup(repository, db, (BackupStmt) stmt);
             } else if (stmt instanceof RestoreStmt) {
-                restore(repository, db, (RestoreStmt) stmt);
+                restore(repository, db, (RestoreStmt) stmt, jobInfo);
             }
         } finally {
             seqlock.unlock();
@@ -325,8 +361,15 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapTableOrMaterializedView()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
+                if (!tbl.isSupportBackupRestore()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                                   "Table: " + tblName + " can not support backup restore, type: " +
+                                                   tbl.getType());
+                }
+
+                if (tbl.isOlapView()) {
+                    backupTbls.add(tbl);
+                    continue;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -407,6 +450,11 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // Create a backup job
         BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
+        List<Function> allFunctions = Lists.newArrayList();
+        for (FunctionRef fnRef : stmt.getFnRefs()) {
+            allFunctions.addAll(fnRef.getFunctions());
+        }
+        backupJob.setBackupFunctions(allFunctions);
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
@@ -416,35 +464,36 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         LOG.info("finished to submit backup job: {}", backupJob);
     }
 
-    private void restore(Repository repository, Database db, RestoreStmt stmt) throws DdlException {
-        // Check if snapshot exist in repository
-        List<BackupJobInfo> infos = Lists.newArrayList();
-        Status status = repository.getSnapshotInfoFile(stmt.getLabel(), stmt.getBackupTimestamp(), infos);
-        if (!status.ok()) {
+    private void restore(Repository repository, Database db, RestoreStmt stmt, BackupJobInfo jobInfo) throws DdlException {
+        // check the original dbName existed in snapshot or not
+        if (!stmt.getOriginDbName().isEmpty() && !stmt.getOriginDbName().equals(jobInfo.dbName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                    "Failed to get info of snapshot '" + stmt.getLabel() + "' because: "
-                            + status.getErrMsg() + ". Maybe specified wrong backup timestamp");
-        }
-
-        // Check if all restore objects are exist in this snapshot.
-        // Also remove all unrelated objs
-        Preconditions.checkState(infos.size() == 1);
-        BackupJobInfo jobInfo = infos.get(0);
-        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
-        // So, we should restore all table in current database.
-        if (stmt.getTableRefs().size() != 0) {
-            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+                        "target database: " + stmt.getOriginDbName() + " is not existed in snapshot");
         }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
+
+        // If restore statement contains `ON` clause, filter the specified backup objects which are needed through infomation
+        // provide in stmt and BackupMeta.
+        if (stmt.withOnClause()) {
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs(), stmt, backupMeta);
+        }
+
+        // For UDFs restore, restore all functions in BackupMeta if statement does not contains `ON` clause or contains `ON`
+        // and `ALL` clause for functions. Otherwise, restore the functions specified after `ON` clause in restore statement.
+        if (stmt.withOnClause() && backupMeta != null) {
+            checkAndFilterRestoreFunctionsInBackupMeta(stmt, backupMeta);
+        }
 
         // Create a restore job
         RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isCloudNativeTable()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
+                if (!remoteTbl.isSupportBackupRestore()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                                   "Table: " + remoteTbl.getName() +
+                                                   " can not support backup restore, type: " + remoteTbl.getType());
                 }
                 mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(db.getOriginName(), remoteTbl, jobInfo, tblInfo);
             }
@@ -460,7 +509,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         LOG.info("finished to submit restore job: {}", restoreJob);
     }
 
-    private BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+    protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
         // the meta version is used when reading backup meta from file.
         // we do not persist this field, because this is just a temporary solution.
         // the true meta version should be getting from backup job info, which is saved when doing backup job.
@@ -479,11 +528,44 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return backupMetas.get(0);
     }
 
-    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)
-            throws DdlException {
+    protected void checkAndFilterRestoreFunctionsInBackupMeta(RestoreStmt stmt, BackupMeta backupMeta) throws DdlException {
+        List<Function> functionsInBackupMeta = backupMeta.getFunctions();
+        List<Function> restoredFunctions = Lists.newArrayList();
+        Set<String> hitFnNames = Sets.newHashSet();
+        for (FunctionRef fnRef : stmt.getFnRefs()) {
+            List<Function> hitFunc = functionsInBackupMeta.stream().filter(x -> fnRef.checkSameFunctionNameForRestore(x))
+                                     .collect(Collectors.toList());
+            if (hitFunc.isEmpty()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                               "Can not find restore function: " + fnRef.getFnName().toString());
+            }
+
+            if (fnRef.getAlias() != null && !fnRef.getAlias().isEmpty()) {
+                hitFunc.stream().forEach(fn -> fn.setFunctionName(
+                                         new FunctionName(fn.getFunctionName().getDb(), fnRef.getAlias())));
+            }
+            hitFnNames.add(hitFunc.get(0).getFunctionName().getFunction());
+            restoredFunctions.addAll(hitFunc);
+        }
+
+        if (stmt.allFunction()) {
+            for (Function fn : functionsInBackupMeta) {
+                if (hitFnNames.contains(fn.getFunctionName().getFunction())) {
+                    continue;
+                }
+                restoredFunctions.add(fn);
+            }
+        }
+        backupMeta.setFunctions(restoredFunctions);
+    }
+
+    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs, RestoreStmt stmt,
+            BackupMeta backupMeta) throws DdlException {
         Set<String> allTbls = Sets.newHashSet();
+        Set<String> originTblName = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {
             String tblName = tblRef.getName().getTbl();
+            originTblName.add(tblName);
             if (!jobInfo.containsTbl(tblName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Table " + tblName + " does not exist in snapshot " + jobInfo.name);
@@ -513,6 +595,26 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             // only retain restore partitions
             tblInfo.retainPartitions(partitionNames == null ? null : partitionNames.getPartitionNames());
             allTbls.add(tblName);
+        }
+
+        if (backupMeta != null) {
+            if (stmt.allTable()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapTable() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
+
+            if (stmt.allMV()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapMaterializedView() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
+
+            if (stmt.allView()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapView() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
         }
 
         // only retain restore tables

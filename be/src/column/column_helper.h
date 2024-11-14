@@ -266,6 +266,11 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
 
+    template <LogicalType Type>
+    static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+        return down_cast<const RunTimeColumnType<Type>*>(value);
+    }
+
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
@@ -382,6 +387,7 @@ public:
     //     which could reduce unnecessary calculations.
     //     Don't forget to resize the result constant columns if necessary.
     static std::pair<bool, size_t> num_packed_rows(const Columns& columns);
+    static std::pair<bool, size_t> num_packed_rows(const Column* column);
 
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
@@ -530,18 +536,22 @@ public:
     static ColumnPtr create_const_null_column(size_t chunk_size);
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
+
+    // unpack array column, return offsets_column, elements_column, elements_null_column
+    static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
 
 // Hold a slice of chunk
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+    size_t segment_id = 0;
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
-    Ptr cutoff(size_t required_rows);
+    ChunkUniquePtr cutoff(size_t required_rows);
     void reset(Ptr input);
 };
 
@@ -571,5 +581,6 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

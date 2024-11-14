@@ -398,4 +398,16 @@ public class NativeAccessController implements AccessController {
             throw new AccessDeniedException();
         }
     }
+
+    @Override
+    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.WAREHOUSE,
+                Collections.singletonList(name));
+    }
+
+    @Override
+    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        checkAnyActionOnObject(currentUser, roleIds, ObjectType.WAREHOUSE, Collections.singletonList(name));
+    }
 }

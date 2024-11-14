@@ -19,8 +19,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.ColumnStatsMeta;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.ImmutableTriple;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class StatisticsUtils {
     public static Table getTableByUUID(String tableUUID) {
@@ -56,5 +66,45 @@ public class StatisticsUtils {
         }
 
         return ImmutableTriple.of(splits[0], db, table);
+    }
+
+    public static Statistics buildDefaultStatistics(Set<ColumnRefOperator> columns) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(1);
+        statisticsBuilder.addColumnStatistics(
+                columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
+        return statisticsBuilder.build();
+    }
+
+    public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
+                                                                     ConnectorTableColumnStats connectorTableColumnStats) {
+        Triple<String, Database, Table> tableIdentifier = getTableTripleByUUID(table.getUUID());
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
+                        tableIdentifier.getRight().getName());
+
+        if (externalBasicStatsMeta == null) {
+            return connectorTableColumnStats;
+        }
+
+        Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
+        if (!columnStatsMetaMap.containsKey(columnName)) {
+            return connectorTableColumnStats;
+        }
+
+        ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
+        if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            return connectorTableColumnStats;
+        }
+
+        // the column statistics analyze type is sample , we need to estimate the table level column statistics
+        int sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
+        int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
+
+        double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
+        long totalRowCount = (long) avgPartitionRowCount * totalPartitionSize;
+
+        return new ConnectorTableColumnStats(connectorTableColumnStats.getColumnStatistic(),
+                totalRowCount, connectorTableColumnStats.getUpdateTime());
     }
 }

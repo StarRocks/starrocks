@@ -43,7 +43,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -75,6 +77,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
@@ -112,6 +115,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
@@ -487,22 +491,49 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
+    @Override
+    public Void visitLogicalIcebergEqualityDeleteScan(LogicalIcebergEqualityDeleteScanOperator node, ExpressionContext context) {
+        return computeIcebergEqualityDeleteScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalIcebergEqualityDeleteScan(PhysicalIcebergEqualityDeleteScanOperator node,
+                                                       ExpressionContext context) {
+        return computeIcebergEqualityDeleteScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeIcebergEqualityDeleteScanNode(Operator node, ExpressionContext context, Table table,
+                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        context.setStatistics(StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet()));
+        return visitOperator(node, context);
+    }
+
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             TableVersionRange version;
+            IcebergMORParams icebergMORParams;
             if (node.isLogical()) {
                 version = ((LogicalIcebergScanOperator) node).getTableVersionRange();
+                icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
             } else {
                 version = ((PhysicalIcebergScanOperator) node).getTableVersionRange();
+                icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
             }
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
-                    node.getPredicate(), node.getLimit(), version);
-            context.setStatistics(stats);
+
+            Statistics statistics;
+            if (icebergMORParams == IcebergMORParams.EMPTY || icebergMORParams == IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE) {
+                statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                        optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
+                        node.getPredicate(), node.getLimit(), version);
+            } else {
+                statistics = StatisticsUtils.buildDefaultStatistics(colRefToColumnMetaMap.keySet());
+            }
+
+            context.setStatistics(statistics);
             if (node.isLogical()) {
-                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                boolean hasUnknownColumns = statistics.getColumnStatistics().values().stream()
                         .anyMatch(ColumnStatistic::isUnknown);
                 ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
             }
@@ -1244,14 +1275,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<ColumnStatistic> estimateColumnStatistics = childOutputColumns.get(0).stream().map(columnRefOperator ->
                 context.getChildStatistics(0).getColumnStatistic(columnRefOperator)).collect(Collectors.toList());
 
+
+        boolean isFromIcebergEqualityDeleteRewrite;
+        if (node.isLogical()) {
+            isFromIcebergEqualityDeleteRewrite = ((LogicalUnionOperator) node).isFromIcebergEqualityDeleteRewrite();
+        } else {
+            isFromIcebergEqualityDeleteRewrite = ((PhysicalUnionOperator) node).isFromIcebergEqualityDeleteRewrite();
+        }
+
         for (int outputIdx = 0; outputIdx < outputColumnRef.size(); ++outputIdx) {
             double estimateRowCount = context.getChildrenStatistics().get(0).getOutputRowCount();
             for (int childIdx = 1; childIdx < context.arity(); ++childIdx) {
                 ColumnRefOperator childOutputColumn = childOutputColumns.get(childIdx).get(outputIdx);
                 Statistics childStatistics = context.getChildStatistics(childIdx);
-                ColumnStatistic estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
-                        estimateColumnStatistics.get(outputIdx), estimateRowCount,
-                        childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                ColumnStatistic estimateColumnStatistic;
+                if (!isFromIcebergEqualityDeleteRewrite) {
+                    estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
+                            estimateColumnStatistics.get(outputIdx), estimateRowCount,
+                            childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                } else {
+                    estimateColumnStatistic = estimateColumnStatistics.get(outputIdx);
+                }
+
                 // set new estimate column statistic
                 estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
                 estimateRowCount += childStatistics.getOutputRowCount();
@@ -1568,6 +1613,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+
+        Map<ColumnRefOperator, CallOperator> preAggFnCall = null;
+        if (node instanceof PhysicalTopNOperator) {
+            PhysicalTopNOperator physicalTopNOperator = (PhysicalTopNOperator) node;
+            preAggFnCall = physicalTopNOperator.getPreAggCall();
+        } else {
+            LogicalTopNOperator logicalTopNOperator = (LogicalTopNOperator) node;
+            preAggFnCall = logicalTopNOperator.getPartitionPreAggCall();
+        }
+        if (preAggFnCall != null) {
+            preAggFnCall.forEach((key, value) -> builder
+                    .addColumnStatistic(key,
+                            ExpressionStatisticCalculator.calculate(value, inputStatistics,
+                                    inputStatistics.getOutputRowCount())));
+        }
 
         if (partitionLimit > 0 && !partitions.isEmpty()
                 && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {

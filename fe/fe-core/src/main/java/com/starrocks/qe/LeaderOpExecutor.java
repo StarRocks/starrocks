@@ -97,15 +97,15 @@ public class LeaderOpExecutor {
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
-            this.waitTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
+            this.waitTimeoutMs = ctx.getExecTimeout() * 1000;
         } else {
             this.waitTimeoutMs = 0;
         }
-        // set thriftTimeoutMs to query_timeout + thrift_rpc_timeout_ms
+        // set thriftTimeoutMs to exec timeout + thrift_rpc_timeout_ms
         // so that we can return an execution timeout instead of a network timeout
-        this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+        this.thriftTimeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         if (this.thriftTimeoutMs < 0) {
-            this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
+            this.thriftTimeoutMs = ctx.getExecTimeout() * 1000;
         }
         this.parsedStmt = parsedStmt;
     }
@@ -243,6 +243,7 @@ public class LeaderOpExecutor {
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
+        params.setConnectionId(ctx.getConnectionId());
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);

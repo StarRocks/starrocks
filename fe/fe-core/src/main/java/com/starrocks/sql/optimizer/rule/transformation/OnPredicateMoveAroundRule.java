@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -114,6 +115,18 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                 result = OptExpression.create(joinOperator,
                         Lists.newArrayList(OptExpression.create(toLeftFilter, input.inputAt(0)),
                                 OptExpression.create(toRightFilter, input.inputAt(1)))
+                );
+            }
+        } else if (joinOperator.getJoinType() == JoinOperator.LEFT_ANTI_JOIN) {
+            List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, leftDomainProperty, rightDomainProperty, false))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            ScalarOperator toRightPredicate = Utils.compoundAnd(distinctPredicates(toRightPredicates));
+            if (toRightPredicate != null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
                 );
             }
         } else if (joinOperator.getJoinType().isLeftOuterJoin()) {

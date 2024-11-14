@@ -77,6 +77,14 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 ```
 
+### 禁用列过滤
+
+在 SCAN 阶段过滤未使用列的优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在数据迁移前禁用此优化：
+
+```SQL
+SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
+```
+
 ### 配置数据迁移（可选）
 
 您可以通过以下 FE 和 BE 参数配置数据迁移操作。通常情况下，默认配置即可满足需求。如果您想保留默认配置，可以选择跳过该步骤。
@@ -96,11 +104,11 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 | replication_max_parallel_table_count  | 100        | -        | 允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。 |
 | replication_max_parallel_replica_count| 10240      | -        | 允许并发同步的 tablet 副本数。                               |
 | replication_max_parallel_data_size_mb | 1048576    | MB       | 允许并发同步的数据量。                                       |
-| replication_transaction_timeout_sec   | 3600       | 秒       | 同步任务的超时时间。                                         |
+| replication_transaction_timeout_sec   | 86400      | 秒       | 同步任务的超时时间。                                         |
 
 #### BE 参数
 
-以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md#配置-be-动态参数)。
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md)。
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -372,7 +380,7 @@ ORDER BY TABLE_NAME;
 
 ## Q&A
 
-### Q1：为什么只能同步表结构？
+### Q1：集群间需要开通哪些端口？
 
 如果您开启了防火墙，则需要开通以下端口：
 

@@ -518,10 +518,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 44> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
     }
 
     @Test
@@ -529,10 +529,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
                 "  |  <slot 39> : 39: year\n" +
                 "  |  <slot 42> : 42: case\n" +
-                "  |  <slot 44> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)"));
     }
 
     @Test
@@ -999,5 +999,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_init_error"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("HASH JOIN"));
+    }
+
+    @Test
+    public void testPushdownSubfield() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  10:Project\n" +
+                "  |  <slot 103> : 103: id\n" +
+                "  |  <slot 104> : 104: mock_098\n" +
+                "  |  <slot 164> : 164: mock_107\n" +
+                "  |  <slot 512> : get_json_string(107: mock_031, '$.\"email_Domain1__c\"')\n" +
+                "  |  <slot 513> : get_json_string(107: mock_031, '$.\"fY21_Territory_Score__c\"')\n" +
+                "  |  \n" +
+                "  9:OlapScanNode\n" +
+                "     TABLE: tbl_mock_103"));
     }
 }

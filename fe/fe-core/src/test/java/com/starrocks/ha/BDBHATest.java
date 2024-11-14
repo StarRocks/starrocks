@@ -34,7 +34,6 @@ public class BDBHATest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
-        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @Test

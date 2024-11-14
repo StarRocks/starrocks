@@ -55,7 +55,7 @@ Status FlatJsonColumnCompactor::_compact_columns(std::vector<ColumnPtr>& json_da
     _has_remain = deriver.has_remain_json();
     _remain_filter = deriver.remain_fitler();
 
-    VLOG(1) << "FlatJsonColumnCompactor compact_columns, json_datas size: " << json_datas.size()
+    VLOG(2) << "FlatJsonColumnCompactor compact_columns, json_datas size: " << json_datas.size()
             << ", flat json: " << JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain);
 
     if (_flat_paths.empty()) {
@@ -78,7 +78,7 @@ bool check_is_same_schema(JsonColumn* one, JsonColumn* two) {
 }
 
 Status FlatJsonColumnCompactor::_merge_columns(std::vector<ColumnPtr>& json_datas) {
-    VLOG(1) << "FlatJsonColumnCompactor merge_columns, json_datas: " << json_datas.size();
+    VLOG(2) << "FlatJsonColumnCompactor merge_columns, json_datas: " << json_datas.size();
     _is_flat = false;
     _json_meta->mutable_json_meta()->set_has_remain(false);
     _json_meta->mutable_json_meta()->set_is_flat(false);
@@ -97,10 +97,10 @@ Status FlatJsonColumnCompactor::_merge_columns(std::vector<ColumnPtr>& json_data
         }
 
         if (!json_col->is_flat_json()) {
-            VLOG(1) << "FlatJsonColumnCompactor merge_columns direct write";
+            VLOG(2) << "FlatJsonColumnCompactor merge_columns direct write";
             RETURN_IF_ERROR(_json_writer->append(*col));
         } else {
-            VLOG(1) << "FlatJsonColumnCompactor merge_columns merge: " << json_col->debug_flat_paths();
+            VLOG(2) << "FlatJsonColumnCompactor merge_columns merge: " << json_col->debug_flat_paths();
             if (!check_is_same_schema(pre_col, json_col)) {
                 merger = std::make_unique<JsonMerger>(json_col->flat_column_paths(), json_col->flat_column_types(),
                                                       json_col->has_remain());
@@ -122,7 +122,7 @@ Status FlatJsonColumnCompactor::_merge_columns(std::vector<ColumnPtr>& json_data
 }
 
 Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_datas) {
-    VLOG(1) << "FlatJsonColumnCompactor flatten_columns, json_datas: " << json_datas.size();
+    VLOG(2) << "FlatJsonColumnCompactor flatten_columns, json_datas: " << json_datas.size();
     _is_flat = true;
 
     // init flattener first, the flat_paths/types will change in _init_flat_writers
@@ -141,7 +141,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_da
         }
 
         if (!json_col->is_flat_json()) {
-            VLOG(1) << "FlatJsonColumnCompactor flatten_columns flat json.";
+            VLOG(2) << "FlatJsonColumnCompactor flatten_columns flat json.";
             flattener.flatten(json_col);
             _flat_columns = flattener.mutable_result();
         } else {
@@ -150,7 +150,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_da
                                                  json_col->has_remain());
                 pre_col = json_col;
             }
-            VLOG(1) << "FlatJsonColumnCompactor flatten_columns hyper-transformer: " << json_col->debug_flat_paths();
+            VLOG(2) << "FlatJsonColumnCompactor flatten_columns hyper-transformer: " << json_col->debug_flat_paths();
             RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields()));
             _flat_columns = transformer.mutable_result();
         }
@@ -182,9 +182,6 @@ Status FlatJsonColumnCompactor::_flatten_columns(std::vector<ColumnPtr>& json_da
 }
 
 Status FlatJsonColumnCompactor::finish() {
-    for (const auto& js : _json_datas) {
-        DCHECK_GT(js->size(), 0);
-    }
     RETURN_IF_ERROR(_compact_columns(_json_datas));
     _json_datas.clear(); // release after write
     for (auto& iter : _flat_writers) {

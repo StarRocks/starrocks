@@ -103,6 +103,8 @@ struct ResultFileOptions {
 };
 
 // write result to file
+// used in no-pipeline or file_sink_operator
+// won't used in result_sink_operator
 class FileResultWriter final : public ResultWriter {
 public:
     FileResultWriter(const ResultFileOptions* file_option, const std::vector<ExprContext*>& output_expr_ctxs,

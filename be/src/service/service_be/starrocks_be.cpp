@@ -24,6 +24,7 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/strings/join.h"
@@ -37,6 +38,7 @@
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
 #include "service/staros_worker.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
@@ -300,7 +302,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " started successfully";
 
-    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+    while (!process_exit_in_progress()) {
         sleep(1);
     }
 
@@ -329,6 +331,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif

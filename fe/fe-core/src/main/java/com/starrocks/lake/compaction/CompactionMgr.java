@@ -124,16 +124,19 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
+    List<PartitionStatisticsSnapshot> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
             @NotNull Set<Long> excludeTables) {
-        return choosePartitionsToCompact(excludeTables).stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
+        return choosePartitionsToCompact(excludeTables)
+                .stream()
+                .filter(p -> !excludes.contains(p.getPartition()))
+                .collect(Collectors.toList());
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact(Set<Long> excludeTables) {
+    List<PartitionStatisticsSnapshot> choosePartitionsToCompact(Set<Long> excludeTables) {
         List<PartitionStatisticsSnapshot> selection = sorter.sort(
                 selector.select(partitionStatisticsHashMap.values(), excludeTables));
-        return selection.stream().map(PartitionStatisticsSnapshot::getPartition).collect(Collectors.toList());
+        return selection;
     }
 
     @NotNull

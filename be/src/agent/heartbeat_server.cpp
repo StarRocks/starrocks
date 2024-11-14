@@ -40,8 +40,10 @@
 #include <atomic>
 #include <ctime>
 #include <fstream>
+#include <sstream>
 
 #include "agent/master_info.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
@@ -58,8 +60,6 @@ using std::vector;
 using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 static int64_t reboot_time = 0;
 
@@ -85,7 +85,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     StatusOr<CmpResult> res;
     // reject master's heartbeat when exit
-    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
+    if (process_exit_in_progress()) {
         res = Status::Shutdown("BE is shutting down");
     } else {
         res = compare_master_info(master_info);
@@ -94,18 +94,19 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     if (!res.ok()) {
         MasterInfoPtr ptr;
         if (get_master_info(&ptr)) {
-            LOG(WARNING) << "Fail to handle heartbeat: " << res.status() << " cached master info: " << *ptr
-                         << " received master info: " << master_info;
+            LOG(WARNING) << "Fail to handle heartbeat: " << res.status()
+                         << " cached master info: " << print_master_info(*ptr)
+                         << " received master info: " << print_master_info(master_info);
         } else {
             LOG(WARNING) << "Fail to handle heartbeat: " << res.status();
         }
     } else if (*res == kNeedUpdate) {
-        LOG(INFO) << "Updating master info: " << master_info;
+        LOG(INFO) << "Updating master info: " << print_master_info(master_info);
         bool r = update_master_info(master_info);
         LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
                                "with a larger epoch";
     } else if (*res == kNeedUpdateAndReport) {
-        LOG(INFO) << "Updating master info: " << master_info;
+        LOG(INFO) << "Updating master info: " << print_master_info(master_info);
         bool r = update_master_info(master_info);
         LOG_IF(WARNING, !r) << "Fail to update master info, maybe the master info has been updated by another thread "
                                "with a larger epoch";
@@ -149,6 +150,18 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
     }
+}
+
+std::string HeartbeatServer::print_master_info(const TMasterInfo& master_info) const {
+    std::ostringstream out;
+    if (!master_info.__isset.token) {
+        master_info.printTo(out);
+    } else {
+        TMasterInfo master_info_copy(master_info);
+        master_info_copy.__set_token("<hidden>");
+        master_info_copy.printTo(out);
+    }
+    return out.str();
 }
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {

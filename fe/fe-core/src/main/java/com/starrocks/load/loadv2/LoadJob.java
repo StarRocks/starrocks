@@ -89,6 +89,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -103,7 +104,7 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable {
+public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable, LoadJobWithWarehouse {
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
@@ -242,8 +243,23 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         lock.writeLock().unlock();
     }
 
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isCompleted();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return getFinishTimestamp();
     }
 
     public long getId() {

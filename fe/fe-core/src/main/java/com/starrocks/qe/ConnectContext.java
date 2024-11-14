@@ -94,9 +94,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -236,9 +238,16 @@ public class ConnectContext {
 
     private UUID sessionId;
 
+    private String proxyHostName;
+    private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
+
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
+    // `insert into table select external table`. Currently, this feature only supports hive table.
+    private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -339,6 +348,14 @@ public class ConnectContext {
 
     public void setThreadLocalInfo() {
         threadLocalInfo.set(this);
+    }
+
+    public Optional<Boolean> getUseConnectorMetadataCache() {
+        return useConnectorMetadataCache;
+    }
+
+    public void setUseConnectorMetadataCache(Optional<Boolean> useConnectorMetadataCache) {
+        this.useConnectorMetadataCache = useConnectorMetadataCache;
     }
 
     /**
@@ -573,6 +590,24 @@ public class ConnectContext {
 
     public void setConnectionId(int connectionId) {
         this.connectionId = connectionId;
+    }
+
+    public String getProxyHostName() {
+        return proxyHostName;
+    }
+
+    public void setProxyHostName(String address) {
+        this.proxyHostName = address;
+    }
+
+    public boolean hasPendingForwardRequest() {
+        return pendingForwardRequests.intValue() > 0;
+    }
+    public void incPendingForwardRequest() {
+        pendingForwardRequests.incrementAndGet();
+    }
+    public void decPendingForwardRequest() {
+        pendingForwardRequests.decrementAndGet();
     }
 
     public void resetConnectionStartTime() {
@@ -912,6 +947,18 @@ public class ConnectContext {
         }
     }
 
+    public int getExecTimeout() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
+    }
+
     public void checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
@@ -925,27 +972,36 @@ public class ConnectContext {
         if (executor != null) {
             sql = executor.getOriginStmtInString();
         }
+        String errMsg = "";
         if (command == MysqlCommand.COM_SLEEP) {
-            if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, sql);
 
                 killFlag = true;
                 killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
             }
         } else {
-            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, sql);
 
                 // Only kill
                 killFlag = true;
+
+                String suggestedMsg = String.format("please increase the '%s' session variable",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
             }
         }
         if (killFlag) {
-            kill(killConnection, "query timeout");
+            kill(killConnection, errMsg);
         }
     }
 

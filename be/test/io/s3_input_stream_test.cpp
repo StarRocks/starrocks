@@ -138,6 +138,15 @@ TEST_F(S3InputStreamTest, test_read) {
     ASSERT_EQ(10, *f->position());
 }
 
+TEST_F(S3InputStreamTest, test_not_found) {
+    auto f = std::make_unique<S3InputStream>(g_s3client, s_bucket_name, "key_not_found");
+    char buf[6];
+    auto r = f->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
+}
+
 TEST_F(S3InputStreamTest, test_skip) {
     auto f = new_random_access_file();
     char buf[6];

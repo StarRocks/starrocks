@@ -20,6 +20,7 @@
 #include <sstream>
 
 #include "column/array_column.h"
+#include "column/array_view_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -46,12 +47,11 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
 
     auto lambda_expr = down_cast<LambdaFunction*>(_children[0]);
-
     LambdaFunction::ExtractContext extract_ctx;
     // assign slot ids to outer common exprs starting with max_used_slot_id + 1
-    extract_ctx.next_slot_id = lambda_expr->max_used_slot_id() + 1;
+    extract_ctx.next_slot_id = context->root()->max_used_slot_id() + 1;
 
-    RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, &extract_ctx));
+    RETURN_IF_ERROR(lambda_expr->extract_outer_common_exprs(state, context, &extract_ctx));
     _outer_common_exprs.swap(extract_ctx.outer_common_exprs);
     for (auto [_, expr] : _outer_common_exprs) {
         RETURN_IF_ERROR(expr->prepare(state, context));
@@ -67,10 +67,18 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                                                        const NullColumnPtr& result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
+    auto tmp_chunk = std::make_shared<Chunk>();
+    {
+        // see more details: https://github.com/StarRocks/starrocks/pull/52692
+        for (const auto& [slot_id, _] : chunk->get_slot_id_to_index_map()) {
+            tmp_chunk->append_column(chunk->get_column_by_slot_id(slot_id), slot_id);
+        }
+    }
+
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        ASSIGN_OR_RETURN(auto col, context->evaluate(expr, chunk));
-        chunk->append_column(col, slot_id);
+        ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
+        tmp_chunk->append_column(col, slot_id);
     }
 
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
@@ -80,7 +88,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
         DCHECK(slot_id > 0);
-        auto captured_column = chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
+                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
         if (UNLIKELY(captured_column->size() < input_elements[0]->size())) {
             return Status::InternalError(fmt::format("The size of the captured column {} is less than array's size.",
                                                      captured_column->get_name()));
@@ -99,8 +108,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         auto array_column = down_cast<const ArrayColumn*>(data_column.get());
         auto elements_column = array_column->elements_column();
         UInt32Column::Ptr offsets_column = array_column->offsets_column();
-        if constexpr (!all_const_input) {
-            if (input_elements[i]->is_constant()) {
+
+        if (input_elements[i]->is_constant()) {
+            if (!all_const_input || !capture_slot_ids.empty()) {
+                // if not all input columns are constant,
+                // or all input columns are constant but lambda expr depends on other capture columns(e.g. array_map(x->x+k,[1,2,3])),
+                // we should unpack the const column before evaluation
                 size_t elements_num = array_column->get_element_size(0);
                 elements_column = elements_column->clone();
                 offsets_column = UInt32Column::create();
@@ -114,13 +127,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                     offset += elements_num;
                     offsets_column->append(offset);
                 }
-            } else {
-                if (result_null_column != nullptr) {
-                    data_column->empty_null_in_complex_column(result_null_column->get_data(),
-                                                              array_column->offsets().get_data());
-                }
-                elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
             }
+        } else {
+            if (result_null_column != nullptr) {
+                data_column->empty_null_in_complex_column(result_null_column->get_data(),
+                                                          array_column->offsets().get_data());
+            }
+            elements_column = down_cast<const ArrayColumn*>(data_column.get())->elements_column();
         }
 
         if (aligned_offsets == nullptr) {
@@ -134,32 +147,23 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
     DCHECK(aligned_offsets != nullptr);
 
-    // 4. prepare outer common exprs
-    for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        auto column = chunk->get_column_by_slot_id(slot_id);
-        column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-        if constexpr (independent_lambda_expr) {
-            // if lambda expr doesn't rely on arguments, we don't need to align offset
-            cur_chunk->append_column(column, slot_id);
-        } else {
-            cur_chunk->append_column(column->replicate(aligned_offsets->get_data()), slot_id);
-        }
-    }
-
-    // 5. prepare capture columns
+    // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
-        if (cur_chunk->is_slot_exist(slot_id)) {
-            continue;
-        }
-        auto captured_column = chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
+                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
-            cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+            if (captured_column->is_array()) {
+                auto view_column = ArrayViewColumn::from_array_column(captured_column);
+                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+            } else {
+                cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+            }
         }
     }
 
-    // 6. evaluate lambda expr
+    // 5. evaluate lambda expr
     ColumnPtr column = nullptr;
     if constexpr (independent_lambda_expr) {
         // if lambda expr doesn't rely on arguments, we evaluate it first, and then align offsets
@@ -173,8 +177,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         column = tmp_col->replicate(aligned_offsets->get_data());
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
     } else {
-        // if all input arguments are const,
-        if constexpr (all_const_input) {
+        // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
+        // we can evaluate it based on const column
+        if (all_const_input && capture_slot_ids.empty()) {
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
@@ -186,6 +191,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 tmp_chunk->check_or_die();
+                for (auto& column : tmp_chunk->columns()) {
+                    // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
+                    // in the future, this copy can be removed when we solve this problem.
+                    if (column->is_array_view()) {
+                        column = ArrayViewColumn::to_array_column(column);
+                    }
+                }
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
@@ -200,8 +212,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     DCHECK(column != nullptr);
     column = ColumnHelper::cast_to_nullable_column(column);
 
-    if constexpr (all_const_input) {
-        // if all input arguments are const, we can return a const column
+    if (all_const_input && capture_slot_ids.empty()) {
+        // if all input arguments are const and lambdaexpr doesn't depend on other capture columns,
+        // we can return a const column
         auto data_column = FunctionHelper::get_data_column_of_const(column);
 
         aligned_offsets = UInt32Column::create();

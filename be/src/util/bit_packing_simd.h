@@ -262,8 +262,39 @@ static inline void unpack17to21(const uint8_t* __restrict__ in, uint32_t* __rest
     }
 }
 
-// Unpack num_values number of uint32_t values with bit_width in [22, 31] range.
-static inline void unpack22to31(const uint8_t* __restrict__ in, uint32_t* __restrict__ out, int64_t num_values,
+// Unpack num_values number of uint32_t values with bit_width in [22, 24] range.
+static inline void unpack22to24(const uint8_t* __restrict__ in, uint32_t* __restrict__ out, int64_t num_values,
+                                int bit_width) {
+    uint64_t pdepMask = kPdepMask32[bit_width];
+
+    uint8_t rightShift1 = bit_width * 2;
+    uint8_t leftShift1 = 64 - rightShift1;
+    uint8_t rightShift2 = bit_width * 4 - 64;
+    uint8_t leftShift2 = 2 * 64 - bit_width * 4;
+    uint8_t rightShift3 = bit_width * 6 - 2 * 64;
+
+    auto writeEndOffset = out + num_values;
+
+    // Process bit_width bytes (8 values) a time.
+    while (out + 8 <= writeEndOffset) {
+        uint64_t value_0 = *(reinterpret_cast<const uint64_t*>(in));
+        uint64_t value_1 = *(reinterpret_cast<const uint64_t*>(in + 8));
+        uint64_t value_2 = *(reinterpret_cast<const uint64_t*>(in + 16));
+
+        *reinterpret_cast<uint64_t*>(out) = _pdep_u64(value_0, pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 1) =
+                _pdep_u64((value_1 << leftShift1) | (value_0 >> rightShift1), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 2) =
+                _pdep_u64((value_2 << leftShift2) | (value_1 >> rightShift2), pdepMask);
+        *(reinterpret_cast<uint64_t*>(out) + 3) = _pdep_u64((value_2 >> rightShift3), pdepMask);
+
+        in += bit_width;
+        out += 8;
+    }
+}
+
+// Unpack num_values number of uint32_t values with bit_width in [25, 31] range.
+static inline void unpack25to31(const uint8_t* __restrict__ in, uint32_t* __restrict__ out, int64_t num_values,
                                 int bit_width) {
     uint64_t pdepMask = kPdepMask32[bit_width];
 
@@ -376,7 +407,7 @@ inline void unpack<uint16_t>(int bit_width, const uint8_t* __restrict__ in, int6
 
 #else
 
-    unpackNaive<uint16_t>(bit_width, in, in_bytes, out, num_values);
+    unpackNaive<uint16_t>(bit_width, in, in_bytes, num_values, out);
 
 #endif
 }
@@ -425,6 +456,8 @@ inline void unpack<uint32_t>(int bit_width, const uint8_t* __restrict__ in, int6
     case 22:
     case 23:
     case 24:
+        unpack22to24(in, out, num_values, bit_width);
+        break;
     case 25:
     case 26:
     case 27:
@@ -432,7 +465,7 @@ inline void unpack<uint32_t>(int bit_width, const uint8_t* __restrict__ in, int6
     case 29:
     case 30:
     case 31:
-        unpack22to31(in, out, num_values, bit_width);
+        unpack25to31(in, out, num_values, bit_width);
         break;
     case 32:
         unpack32(in, out, num_values);

@@ -1846,6 +1846,21 @@ class StarrocksSQLApiLib(object):
                     return False
             return True
 
+        def is_all_finished3():
+            show_sql = f"""select STATE from information_schema.task_runs a 
+                join information_schema.materialized_views b 
+                on a.task_name=b.task_name 
+                where b.table_name='{mv_name}' 
+                    and a.`database`='{current_db}'"""
+            print(show_sql)
+            res = self.execute_sql(show_sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "show mv state error")
+            success_cnt = get_success_count(res["result"])
+            if success_cnt >= check_count:
+                return True
+            return False
+
         # information_schema.task_runs result
         def get_success_count(results):
             cnt = 0
@@ -1866,21 +1881,9 @@ class StarrocksSQLApiLib(object):
                 time.sleep(1)
                 count += 1
         else:
-            show_sql = f"""select STATE from information_schema.task_runs a 
-                join information_schema.materialized_views b 
-                on a.task_name=b.task_name 
-                where b.table_name='{mv_name}' 
-                    and a.`database`='{current_db}'"""
             while count < max_loop_count:
-                print(show_sql)
-                res = self.execute_sql(show_sql, True)
-                if not res["status"]:
-                    tools.assert_true(False, "show mv state error")
-
-                success_cnt = get_success_count(res["result"])
-                if success_cnt >= check_count:
-                    is_all_ok = True
-                    # sleep to avoid FE's async action.
+                is_all_ok = is_all_finished1() and is_all_finished3()
+                if is_all_ok:
                     time.sleep(1)
                     break
                 time.sleep(1)
@@ -1972,6 +1975,33 @@ class StarrocksSQLApiLib(object):
             if plan.find(expect) > 0:
                 return True
         return False
+    
+    def print_hit_materialized_views(self, query) -> str:
+        """
+        print all mv_names hit in query
+        """
+        time.sleep(1)
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return ""
+        plan = res["result"]
+        if not plan:
+            return ""
+        mv_name = None
+        ans = []
+        for line in plan:
+            if len(line) != 1:
+                continue
+            content = line[0]
+            if content.find("MaterializedView: true") > 0:
+                if mv_name:
+                    ans.append(mv_name)
+                mv_name = None
+            if content.find("TABLE:") > 0:
+                mv_name = content.split("TABLE:")[1].strip()
+        return ",".join(ans)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2537,6 +2567,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             else:
                 break
 
+    def assert_is_identical_explain_plan(self, query1, query2):
+        """
+        assert whether two plans from query1 and query2 are identical
+        """
+        sql1 = "explain %s" % query1
+        sql2 = "explain %s" % query2
+        res1 = self.execute_sql(sql1, True)
+        res2 = self.execute_sql(sql2, True)
+        tools.assert_true(res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"]))
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
@@ -2578,6 +2618,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         for expect in expects:
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan:\n %s" % (expect, plan_string))
+
+    def assert_show_stats_meta_contains(self, predicate, *expects):
+        """
+        assert show stats meta with predicate contains expect string
+        """
+        sql = "show stats meta %s" % predicate
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            meta_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in show stats meta:\n %s" % (expect, meta_string))
 
     def assert_trace_values_contains(self, query, *expects):
         """

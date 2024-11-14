@@ -737,18 +737,18 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
-            Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
-                    "Partition " + partition.getName() + " in table " + table.getName()
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
+            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
                             + " publish version not finished");
-            Preconditions.checkState(partition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + partition.getVisibleVersion()
+            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
+                    "Target visible version: " + physicalPartition.getVisibleVersion()
                             + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (partition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
                 continue;
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
+            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
                     srcSystemInfoService);
             partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }

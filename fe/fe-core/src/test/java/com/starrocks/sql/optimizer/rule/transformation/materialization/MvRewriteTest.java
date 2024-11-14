@@ -285,8 +285,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testJoinMvRewrite() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+    public void testJoinMvRewrite1() throws Exception {
         createAndRefreshMv("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -340,7 +339,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan6, "join_mv_1");
 
         dropMv("test", "join_mv_1");
+    }
 
+    @Test
+    public void testJoinMvRewrite2() throws Exception {
         createAndRefreshMv("create materialized view join_mv_2" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -377,7 +379,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan10, "join_mv_2");
 
         dropMv("test", "join_mv_2");
+    }
 
+    @Test
+    public void testJoinMvRewrite3() throws Exception {
         createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -440,7 +445,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // query delta depends on join reorder
         String query16 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
                 " join emps on (emps.deptno = depts.deptno)";
-        String plan16 = getFragmentPlan(query16);
+        String plan16 = getFragmentPlan(query16, "MV");
         PlanTestBase.assertContains(plan16, "join_mv_3");
         OptExpression optExpression16 = getOptimizedPlan(query16, connectContext);
         List<PhysicalScanOperator> scanOperators16 = getScanOperators(optExpression16, "join_mv_3");
@@ -460,7 +465,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan17, "join_mv_3");
 
         dropMv("test", "join_mv_3");
+    }
 
+    @Test
+    public void testJoinMvRewrite4() throws Exception {
         createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -475,7 +483,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan18 = getFragmentPlan(query18);
         PlanTestBase.assertContains(plan18, "join_mv_4");
         dropMv("test", "join_mv_4");
+    }
 
+    @Test
+    public void testJoinMvRewrite5() throws Exception {
         createAndRefreshMv("create materialized view join_mv_5" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -495,7 +506,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_5");
         dropMv("test", "join_mv_6");
+    }
 
+    @Test
+    public void testJoinMvRewrite6() throws Exception {
         createAndRefreshMv("create materialized view join_mv_7" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -506,7 +520,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan20 = getFragmentPlan(query20);
         PlanTestBase.assertContains(plan20, "join_mv_7");
         dropMv("test", "join_mv_7");
+    }
 
+    @Test
+    public void testJoinMvRewrite7() throws Exception {
         // multi relations test
         createAndRefreshMv("create materialized view join_mv_8" +
                 " distributed by hash(empid)" +
@@ -517,7 +534,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan21 = getFragmentPlan(query21);
         PlanTestBase.assertContains(plan21, "join_mv_8");
         dropMv("test", "join_mv_8");
+    }
 
+    @Test
+    public void testJoinMvRewrite8() throws Exception {
         createAndRefreshMv("create materialized view join_mv_9" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -1747,6 +1767,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
     }
 
+    private List<MvPlanContext> getPlanContext(MaterializedView mv, boolean useCache) {
+        boolean prev = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache);
+        List<MvPlanContext> result = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                connectContext.getSessionVariable(), mv);
+        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(prev);
+        return result;
+    }
+
     @Test
     public void testPlanCache() throws Exception {
         {
@@ -1759,15 +1788,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "agg_join_mv_1");
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            List<MvPlanContext> planContexts = getPlanContext(mv, false);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            planContexts = getPlanContext(mv, true);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            planContexts = getPlanContext(mv, false);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             starRocksAssert.dropMaterializedView("agg_join_mv_1");
@@ -1781,7 +1810,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "mv_with_window");
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assert.assertNotNull(planContexts);
             Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
@@ -1801,7 +1830,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 starRocksAssert.withMaterializedView(mvSql);
 
                 MaterializedView mv = getMv("test", mvName);
-                List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                List<MvPlanContext> planContexts = getPlanContext(mv, true);
                 Assert.assertNotNull(planContexts);
                 Assert.assertNotNull(planContexts.size() == 1);
             }
@@ -1829,10 +1858,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 }
             };
             // build cache
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assert.assertEquals(Lists.newArrayList(), planContexts);
             // hit cache
-            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            planContexts = getPlanContext(mv, true);
             Assert.assertEquals(Lists.newArrayList(), planContexts);
         }
     }
@@ -2079,7 +2108,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             MaterializedView mv = starRocksAssert.getMv("test", name);
 
             int mockRows = i + 1;
-            mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+            mv.getPartitions().forEach(p -> p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(mockRows));
         }
 
         for (int i = 0; i < dimensions.size(); i++) {
@@ -2295,5 +2324,53 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv_order_by_v1");
             starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
+    }
+
+    @Test
+    public void testRefreshMVWithListPartition1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        try {
+            starRocksAssert.withMaterializedView("create materialized view mv1 partition by dt " +
+                    "refresh manual as select dt,id from s1;\n");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view is partitioned by string type column dt but ref base " +
+                    "table s1 is range partitioned"));
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
+    }
+
+    @Test
+    public void testRefreshMVWithListPartition2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s1 (\n" +
+                "   dt varchar(30),\n" +
+                "   id int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(str2date(dt, \"%Y-%m-%d\"))(\n" +
+                "   START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ");");
+        executeInsertSql(connectContext, "insert into s1 values(\"2021-01-01\",1),(\"2021-01-02\",2)," +
+                "(\"2021-01-03\",3), (\"2021-01-04\",4),(\"2021-01-05\",5),\n" +
+                "(\"2021-01-06\",6),(\"2021-01-07\",7),(\"2021-01-08\",8),(\"2021-01-09\",9),(\"2021-01-09\",10);");
+        starRocksAssert.withMaterializedView("create materialized view mv1 " +
+                "PARTITION BY str2date(dt, \"%Y-%m-%d\")\n" +
+                "refresh manual as select dt,id from s1;\n");
+        refreshMaterializedView("test", "mv1");
+        MaterializedView mv = getMv("test", "mv1");
+        Assert.assertTrue(mv.getPartitionInfo().isRangePartition());
+        String plan = getFragmentPlan("select * from s1");
+        PlanTestBase.assertContains(plan, "mv1");
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("s1");
     }
 }

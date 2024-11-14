@@ -22,7 +22,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
@@ -57,8 +56,10 @@ import org.jetbrains.annotations.NotNull;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StatisticExecutor {
@@ -268,7 +269,7 @@ public class StatisticExecutor {
         }
 
         OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
+        long version = olapTable.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                 .max(Long::compareTo).orElse(0L);
         String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -425,9 +426,37 @@ public class StatisticExecutor {
                         refreshAsync);
             } else {
                 // for external table
-                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
-                        db.getFullName(), table.getName(), statsJob.getColumnNames(), statsJob.getType(),
-                        analyzeStatus.getStartTime(), statsJob.getProperties());
+                ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
+                        statsJob.getCatalogName(), db.getFullName(), table.getName());
+                if (externalBasicStatsMeta == null) {
+                    externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
+                            table.getName(), Lists.newArrayList(statsJob.getColumnNames()), statsJob.getType(),
+                            analyzeStatus.getEndTime(), statsJob.getProperties());
+                } else {
+                    externalBasicStatsMeta = externalBasicStatsMeta.clone();
+                    externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
+                    externalBasicStatsMeta.setProperties(statsJob.getProperties());
+                    externalBasicStatsMeta.setAnalyzeType(statsJob.getType());
+                }
+
+                Set<Long> sampledPartitions = new HashSet<>();
+                int allPartitionSize = -1;
+                if (statsJob.getType() == StatsConstants.AnalyzeType.SAMPLE) {
+                    ExternalSampleStatisticsCollectJob sampleStatsJob = (ExternalSampleStatisticsCollectJob) statsJob;
+                    sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
+                    allPartitionSize = sampleStatsJob.getAllPartitionSize();
+                }
+                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
+                    // merge sampled partitions
+                    if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
+                        sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
+                                getSampledPartitionsHashValue());
+                    }
+                    ColumnStatsMeta meta =
+                            new ColumnStatsMeta(column, statsJob.getType(), analyzeStatus.getEndTime(),
+                                    sampledPartitions, allPartitionSize);
+                    externalBasicStatsMeta.addColumnStatsMeta(meta);
+                }
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                         .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),

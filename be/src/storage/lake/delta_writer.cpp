@@ -115,6 +115,8 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
+    Status manual_flush();
+
     Status flush();
 
     Status flush_async();
@@ -211,7 +213,7 @@ Status DeltaWriterImpl::check_immutable() {
         if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
         }
-        VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
+        VLOG(2) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
                 << ", immutable_tablet_size=" << _immutable_tablet_size
                 << ", data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
@@ -276,7 +278,7 @@ inline Status DeltaWriterImpl::flush_async() {
                 if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
                     _is_immutable.store(true, std::memory_order_relaxed);
                 }
-                VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
+                VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
                         << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
                         << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
@@ -305,6 +307,11 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
     } else {
         return res.status();
     }
+}
+
+inline Status DeltaWriterImpl::manual_flush() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    return flush_async();
 }
 
 inline Status DeltaWriterImpl::flush() {
@@ -697,6 +704,11 @@ int64_t DeltaWriter::txn_id() const {
 
 MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
+}
+
+Status DeltaWriter::manual_flush() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::manual_flush() in a bthread";
+    return _impl->manual_flush();
 }
 
 Status DeltaWriter::flush() {

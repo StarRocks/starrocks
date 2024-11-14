@@ -34,12 +34,13 @@
 
 package com.starrocks.backup;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
@@ -64,6 +65,8 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     private Map<String, Table> tblNameMap = Maps.newHashMap();
     // tbl id -> tbl
     private Map<Long, Table> tblIdMap = Maps.newHashMap();
+    @SerializedName(value = "functions")
+    private List<Function> functions = Lists.newArrayList();
 
     private BackupMeta() {
 
@@ -88,16 +91,19 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         return tblIdMap.get(tblId);
     }
 
+    public void setFunctions(List<Function> functions) {
+        this.functions = functions;
+    }
+
+    public List<Function> getFunctions() {
+        return functions;
+    }
+
     public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
         File file = new File(filePath);
-        MetaContext metaContext = new MetaContext();
-        metaContext.setStarRocksMetaVersion(starrocksMetaVersion);
-        metaContext.setThreadLocalInfo();
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
             BackupMeta backupMeta = BackupMeta.read(dis);
             return backupMeta;
-        } finally {
-            MetaContext.remove();
         }
     }
 

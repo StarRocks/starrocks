@@ -143,6 +143,7 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+    private boolean enableDynamicOverwrite = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -229,6 +230,10 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+    public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
+        this.enableDynamicOverwrite = enableDynamicOverwrite;
+    }
+
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -238,6 +243,10 @@ public class OlapTableSink extends DataSink {
     }
 
     public List<Long> getOpenPartitions() {
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            return new ArrayList<>(Collections.singletonList(
+                    dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
+        }
         if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
@@ -266,6 +275,9 @@ public class OlapTableSink extends DataSink {
         if (optionalPartition.isPresent()) {
             long partitionId = optionalPartition.get().getId();
             numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+        }
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            tSink.setDynamic_overwrite(true);
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
@@ -296,7 +308,7 @@ public class OlapTableSink extends DataSink {
                 tSink2.unsetPartition();
                 tSink2.unsetLocation();
                 TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                        enableAutomaticPartition, automaticBucketSize, doubleWritePartitionIds);
+                        false, automaticBucketSize, doubleWritePartitionIds);
                 tSink2.setPartition(partitionParam2);
                 tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, warehouseId));
                 tSink2.setIgnore_out_of_partition(true);
@@ -761,13 +773,13 @@ public class OlapTableSink extends DataSink {
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
-        for (TOlapTablePartition partition : partitionParam.getPartitions()) {
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(partition.getId());
+        for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
             // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
-            LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
+            LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);

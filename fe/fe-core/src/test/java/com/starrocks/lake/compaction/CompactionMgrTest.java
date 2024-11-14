@@ -16,7 +16,6 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -34,7 +33,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -62,23 +60,19 @@ public class CompactionMgrTest {
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
-        List<PartitionIdentifier> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
-        Assert.assertSame(partition1, compactionList.get(0));
-
-        Assert.assertEquals(compactionList, compactionManager.choosePartitionsToCompact(excludeTables));
+        Assert.assertSame(partition1, compactionList.get(0).getPartition());
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)));
 
         compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(2, compactionList.size());
-        Assert.assertTrue(compactionList.contains(partition1));
-        Assert.assertTrue(compactionList.contains(partition2));
 
         compactionList = compactionManager.choosePartitionsToCompact(Collections.singleton(partition1), excludeTables);
         Assert.assertEquals(1, compactionList.size());
-        Assert.assertSame(partition2, compactionList.get(0));
+        Assert.assertSame(partition2, compactionList.get(0).getPartition());
 
         compactionManager.enableCompactionAfter(partition1, 5000);
         compactionManager.enableCompactionAfter(partition2, 5000);
@@ -90,7 +84,7 @@ public class CompactionMgrTest {
         compactionManager.removePartition(partition1);
         compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
-        Assert.assertSame(partition2, compactionList.get(0));
+        Assert.assertSame(partition2, compactionList.get(0).getPartition());
     }
 
     @Test
@@ -121,13 +115,17 @@ public class CompactionMgrTest {
     public void testTriggerManualCompaction() {
         CompactionMgr compactionManager = new CompactionMgr();
         PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(1d)));
 
         PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
         Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
 
-        Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
-        Assert.assertEquals(1, allStatistics.size());
-        Assert.assertTrue(allStatistics.contains(statistics));
+        Set<Long> excludeTables = new HashSet<>();
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
+        Assert.assertEquals(1, compactionList.size());
+        Assert.assertSame(partition, compactionList.get(0).getPartition());
+        Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, compactionList.get(0).getPriority());
     }
 
     @Test
@@ -145,7 +143,7 @@ public class CompactionMgrTest {
                 PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
                 Database db = new Database();
                 Table table = new LakeTable();
-                PhysicalPartition partition = new Partition(123, "aaa", null, null);
+                PhysicalPartition partition = new PhysicalPartition(123, "aaa", 123,  null);
                 CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
                 r.put(partitionIdentifier, job);
                 return r;
@@ -186,7 +184,6 @@ public class CompactionMgrTest {
             }
         };
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         compactionMgr.save(image.getImageWriter());
         CompactionMgr compactionMgr2 = new CompactionMgr();

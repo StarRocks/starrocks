@@ -191,6 +191,13 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapAggDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return new MapType(types[0], types[1]);
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
@@ -215,6 +222,7 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getAggStateName(FunctionSet.ARRAY_AGG), new ArrayAggStateDeduce())
             .put(FunctionSet.getAggStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateMergeName(FunctionSet.ARRAY_AGG), new ArrayAggMergeDeduce())
+            .put(FunctionSet.MAP_AGG, new MapAggDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -235,6 +243,22 @@ public class PolymorphicFunctionAnalyzer {
         }
         if (fn instanceof AggregateFunction) {
             return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
+        }
+        return null;
+    }
+
+    private static Function resolvePolymorphicArrayFunction(Function fn, Type[] inputArgTypes) {
+        // for some special array function, they have ANY_ARRAY/ANY_ELEMENT in arguments, should align type
+        String fnName = fn.getFunctionName().getFunction();
+        if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName))  {
+            Type elementType = ((ArrayType) inputArgTypes[0]).getItemType();
+            Type commonType = TypeManager.getCommonSuperType(elementType, inputArgTypes[1]);
+            if (commonType == null) {
+                return null;
+            }
+            return newScalarFunction((ScalarFunction) fn,
+                    Arrays.asList(new ArrayType(commonType), commonType), fn.getReturnType());
         }
         return null;
     }
@@ -298,6 +322,11 @@ public class PolymorphicFunctionAnalyzer {
         }
         // deduce by special function
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
+        if (resolvedFunction != null) {
+            return resolvedFunction;
+        }
+
+        resolvedFunction = resolvePolymorphicArrayFunction(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;
         }

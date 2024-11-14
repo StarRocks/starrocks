@@ -157,8 +157,14 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
 }
 
 CompactionScheduler::~CompactionScheduler() {
-    _stopped.store(true, std::memory_order_relaxed);
-    _threads->shutdown();
+    stop();
+}
+
+void CompactionScheduler::stop() {
+    bool expected = false;
+    if (_stopped.compare_exchange_strong(expected, true)) {
+        _threads->shutdown();
+    }
 }
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
@@ -179,7 +185,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               is_checker, cb);
+                                                               request->force_base_compaction(), is_checker, cb);
         {
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());

@@ -35,7 +35,9 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#ifdef WITH_TENANN
 #include <tenann/index/index_cache.h>
+#endif
 
 #include <cstdio>
 #include <memory>
@@ -344,6 +346,7 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
+    SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)

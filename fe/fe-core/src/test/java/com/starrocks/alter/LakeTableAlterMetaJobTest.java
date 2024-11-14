@@ -17,8 +17,10 @@ package com.starrocks.alter;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -33,6 +35,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
@@ -82,7 +85,7 @@ public class LakeTableAlterMetaJobTest {
                                 "PROPERTIES('enable_persistent_index'='false')");
         Assert.assertFalse(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
-                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
+                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
     }
 
     @After
@@ -114,6 +117,63 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         Assert.assertTrue(table.enablePersistentIndex());
+    }
+
+    @Test
+    public void testSetEnablePersistentWithoutType() throws Exception {
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        job.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
+        job.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        job.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assert.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assert.assertTrue(table.getPersistentIndexType() == (Config.enable_cloud_native_persistent_index_by_default
+                ? TPersistentIndexType.CLOUD_NATIVE : TPersistentIndexType.LOCAL));
+    }
+
+    @Test
+    public void testSetEnablePersistentWithLocalindex() throws Exception {
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), table.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "LOCAL");
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        job2.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assert.assertTrue(table.enablePersistentIndex());
+        // check persistent index type been set
+        Assert.assertTrue(table.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+    }
+
+    @Test
+    public void testSetDisblePersistentIndex() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table2.getId(), table2.getName(), 60 * 1000,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "LOCAL");
+        Assert.assertTrue(table2.enablePersistentIndex());
+        Assert.assertTrue(table2.getPersistentIndexType() == TPersistentIndexType.LOCAL);
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, job2.getJobState());
+        job2.runPendingJob();
+        Assert.assertEquals(AlterJobV2.JobState.RUNNING, job2.getJobState());
+        Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
+        job2.runRunningJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
+        job2.runFinishedRewritingJob();
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
+        Assert.assertFalse(table2.enablePersistentIndex());
+
+        db.dropTable(table2.getName());
     }
 
     @Test
@@ -210,7 +270,7 @@ public class LakeTableAlterMetaJobTest {
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
                     job.dbId, job.tableId, job.tableName,
-                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true);
+                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
         Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
         Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
@@ -218,10 +278,10 @@ public class LakeTableAlterMetaJobTest {
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
-            partition.updateVisibleVersion(commitVersion - 1);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
         replayAlterMetaJob.replay(job);
@@ -236,9 +296,9 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
-            Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
         }
     }
 
@@ -266,5 +326,49 @@ public class LakeTableAlterMetaJobTest {
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
                     () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+    }
+
+    @Test
+    public void testModifyPropertyWithIndex() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
+        Assert.assertNotNull(job);
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexType() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // should throw exception
+        ExceptionChecker.expectThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+
+        // success
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);
+        Assert.assertNotNull(job2);
+    }
+
+    @Test
+    public void testModifyPropertyWithIndexTypeFailure() throws Exception {
+        LakeTable table2 = createTable(connectContext,
+                    "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        properties.put("persistent_index_type", "CLOUD_NATIVE");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // should throw exception
+        ExceptionChecker.expectThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
+
     }
 }

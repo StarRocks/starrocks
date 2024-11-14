@@ -126,7 +126,9 @@ public class DecimalV3FunctionAnalyzer {
             return Arrays.stream(argTypes).map(t -> commonType).toArray(Type[]::new);
         }
 
-        if (FunctionSet.ARRAYS_OVERLAP.equalsIgnoreCase(fnName)) {
+        if (FunctionSet.ARRAYS_OVERLAP.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_CONTAINS_ALL.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_CONTAINS_SEQ.equalsIgnoreCase(fnName)) {
             Preconditions.checkState(argTypes.length == 2);
             Type[] childTypes = Arrays.stream(argTypes).map(a -> {
                 if (a.isArrayType()) {
@@ -318,6 +320,13 @@ public class DecimalV3FunctionAnalyzer {
         if (FunctionSet.DECIMAL_ROUND_FUNCTIONS.contains(fnName)) {
             return true;
         }
+
+        if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) ||
+                FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            return argumentTypes[0].isArrayType() &&
+                    (((ArrayType) argumentTypes[0]).getItemType().isDecimalV3() || argumentTypes[1].isDecimalV3());
+        }
+
 
         if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
             return true;
@@ -551,7 +560,9 @@ public class DecimalV3FunctionAnalyzer {
                 newFn.setRetType(new ArrayType(triple.returnType));
                 return newFn;
             }
-            case FunctionSet.ARRAYS_OVERLAP: {
+            case FunctionSet.ARRAYS_OVERLAP:
+            case FunctionSet.ARRAY_CONTAINS_ALL:
+            case FunctionSet.ARRAY_CONTAINS_SEQ: {
                 newFn.setArgsType(argumentTypes);
                 return newFn;
             }

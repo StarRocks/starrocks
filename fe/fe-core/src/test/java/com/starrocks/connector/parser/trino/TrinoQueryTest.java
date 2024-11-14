@@ -1228,4 +1228,25 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
     }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
+    }
 }

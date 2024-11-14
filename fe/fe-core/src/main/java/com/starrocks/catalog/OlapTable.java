@@ -48,6 +48,7 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+import com.starrocks.alter.OlapTableRollupJobBuilder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -196,7 +197,8 @@ public class OlapTable extends Table {
          * The query plan which is generate during this state is invalid because the meta
          * during the creation of the logical plan and the physical plan might be inconsistent.
         */
-        UPDATING_META
+        UPDATING_META,
+        OPTIMIZE
     }
 
     @SerializedName(value = "state")
@@ -680,10 +682,11 @@ public class OlapTable extends Table {
 
     public boolean hasMaterializedView() {
         Optional<Partition> partition = idToPartition.values().stream().findFirst();
-        if (!partition.isPresent()) {
+        if (partition.isEmpty()) {
             return false;
         } else {
-            return partition.get().hasMaterializedView();
+            PhysicalPartition physicalPartition = partition.get().getDefaultPhysicalPartition();
+            return physicalPartition.hasMaterializedView();
         }
     }
 
@@ -820,84 +823,56 @@ public class OlapTable extends Table {
         setId(globalStateMgr.getNextId());
 
         // reset all 'indexIdToXXX' map
+        Map<Long, MaterializedIndexMeta> origIndexIdToMeta = Maps.newHashMap(indexIdToMeta);
+        indexIdToMeta.clear();
         for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
             long newIdxId = globalStateMgr.getNextId();
             if (entry.getValue().equals(name)) {
                 // base index
                 baseIndexId = newIdxId;
             }
-            indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
-            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
-            indexIdToMeta.get(newIdxId).setSchemaId(newIdxId);
+            MaterializedIndexMeta indexMeta = origIndexIdToMeta.get(entry.getKey());
+            indexMeta.setIndexIdForRestore(newIdxId);
+            indexMeta.setSchemaId(newIdxId);
+            indexIdToMeta.put(newIdxId, indexMeta);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
-        // generate a partition name to id map
-        Map<String, Long> origPartNameToId = Maps.newHashMap();
-        for (Partition partition : idToPartition.values()) {
-            origPartNameToId.put(partition.getName(), partition.getId());
-            LOG.info("partition id {} sub partition {}", partition.getId(), partition.getSubPartitions());
+        // generate a partition old id to new id map
+        Map<Long, Long> partitionOldIdToNewId = Maps.newHashMap();
+        for (Long id : idToPartition.keySet()) {
+            partitionOldIdToNewId.put(id, globalStateMgr.getNextId());
+            // reset replication number for partition info
+            partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
         }
 
-        // reset partition info and idToPartition map
-        if (partitionInfo.isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                long newPartId = globalStateMgr.getNextId();
-                rangePartitionInfo.idToDataProperty.put(newPartId,
-                        rangePartitionInfo.idToDataProperty.remove(entry.getValue()));
-                rangePartitionInfo.idToReplicationNum.remove(entry.getValue());
-                rangePartitionInfo.idToReplicationNum.put(newPartId,
-                        (short) restoreReplicationNum);
-                rangePartitionInfo.getIdToRange(false).put(newPartId,
-                        rangePartitionInfo.getIdToRange(false).remove(entry.getValue()));
+        // reset partition info
+        partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
 
-                rangePartitionInfo.idToInMemory
-                        .put(newPartId, rangePartitionInfo.idToInMemory.remove(entry.getValue()));
-                idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
-                    physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
-                    physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
-                });
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                partition.getSubPartitions().forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
-                });
-            }
-        } else {
-            // Single partitioned
-            long newPartId = globalStateMgr.getNextId();
-            for (Map.Entry<String, Long> entry : origPartNameToId.entrySet()) {
-                partitionInfo.idToDataProperty.put(newPartId, partitionInfo.idToDataProperty.remove(entry.getValue()));
-                partitionInfo.idToReplicationNum.remove(entry.getValue());
-                partitionInfo.idToReplicationNum.put(newPartId, (short) restoreReplicationNum);
-                partitionInfo.idToInMemory.put(newPartId, partitionInfo.idToInMemory.remove(entry.getValue()));
-                idToPartition.get(entry.getValue()).getSubPartitions().forEach(physicalPartition -> {
-                    physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
-                    physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
-                });
-                idToPartition.put(newPartId, idToPartition.remove(entry.getValue()));
-                Partition partition = idToPartition.get(newPartId);
-                partition.setIdForRestore(newPartId);
-                partition.getSubPartitions().forEach(physicalPartition -> {
-                    if (physicalPartition.getId() != newPartId) {
-                        partition.removeSubPartition(physicalPartition.getId());
-                        physicalPartition.setIdForRestore(globalStateMgr.getNextId());
-                        physicalPartition.setParentId(newPartId);
-                        partition.addSubPartition(physicalPartition);
-                    }
-                    physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartId);
-                    physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartId);
-                });
-            }
+        // reset partitions
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        idToPartition.clear();
+        physicalPartitionIdToPartitionId.clear();
+        physicalPartitionNameToPartitionId.clear();
+        for (Partition partition : partitions) {
+            long newPartitionId = partitionOldIdToNewId.get(partition.getId());
+            partition.setIdForRestore(newPartitionId);
+            idToPartition.put(newPartitionId, partition);
+            List<PhysicalPartition> origPhysicalPartitions = Lists.newArrayList(partition.getSubPartitions());
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                if (physicalPartition.getId() != newPartitionId) {
+                    partition.removeSubPartition(physicalPartition.getId());
+                }
+            });
+            origPhysicalPartitions.forEach(physicalPartition -> {
+                if (physicalPartition.getId() != newPartitionId) {
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
+                    physicalPartition.setParentId(newPartitionId);
+                    partition.addSubPartition(physicalPartition);
+                }
+                physicalPartitionIdToPartitionId.put(physicalPartition.getId(), newPartitionId);
+                physicalPartitionNameToPartitionId.put(physicalPartition.getName(), newPartitionId);
+            });
         }
 
         // reset replication number for olaptable
@@ -907,16 +882,23 @@ public class OlapTable extends Table {
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             Partition partition = entry.getValue();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                Map<Long, MaterializedIndex> origIdToIndex = Maps.newHashMapWithExpectedSize(origIdxIdToName.size());
                 for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
-                    System.out.println("entry2.getValue():" + entry2.getValue()
-                            + " baseIndex: " + physicalPartition.getBaseIndex());
                     MaterializedIndex idx = physicalPartition.getIndex(entry2.getKey());
+                    origIdToIndex.put(entry2.getKey(), idx);
+                    long newIdxId = indexNameToId.get(entry2.getValue());
+                    if (newIdxId != baseIndexId) {
+                        // not base table, delete old index
+                        physicalPartition.deleteRollupIndex(entry2.getKey());
+                    }
+                }
+                for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {
+                    MaterializedIndex idx = origIdToIndex.get(entry2.getKey());
                     long newIdxId = indexNameToId.get(entry2.getValue());
                     int schemaHash = indexIdToMeta.get(newIdxId).getSchemaHash();
                     idx.setIdForRestore(newIdxId);
                     if (newIdxId != baseIndexId) {
                         // not base table, reset
-                        physicalPartition.deleteRollupIndex(entry2.getKey());
                         physicalPartition.createRollupIndex(idx);
                     }
 
@@ -925,7 +907,7 @@ public class OlapTable extends Table {
                     idx.clearTabletsForRestore();
                     Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                             partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
-                            schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), db);
+                            schemaHash, physicalPartition.getId(), db);
                     if (!status.ok()) {
                         return status;
                     }
@@ -938,7 +920,7 @@ public class OlapTable extends Table {
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
-                                          long partitionId, long shardGroupId, Database db) {
+                                          long partitionId, Database db) {
         Preconditions.checkArgument(replicationNum > 0);
         boolean isColocate = (this.colocateGroup != null && !this.colocateGroup.isEmpty() && db != null);
 
@@ -1235,14 +1217,37 @@ public class OlapTable extends Table {
     }
 
     /**
-     * @return : table's partition name to list partition names.
+     * NOTE: Only list partitioned olap table can call this method.
+     * @return : table's partition name to all list partition cells.
      * eg:
      *  partition columns   : (a, b, c)
      *  values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
-        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
+        return getListPartitionItems(Optional.empty());
+    }
+
+    /**
+     * Return the partition items of the selected partition columns if selectedPartitionCols is not null, otherwise return
+     * all partition items.
+     */
+    public Map<String, PListCell> getListPartitionItems(Optional<List<Column>> selectedPartitionCols) {
+        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo, "partition info is not list partition");
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        List<Column> partitionCols = listPartitionInfo.getPartitionColumns(this.idToColumn);
+        List<Integer> colIdxes = Lists.newArrayList();
+        if (selectedPartitionCols.isPresent()) {
+            Preconditions.checkState(!selectedPartitionCols.isEmpty(), "selected partition columns is empty");
+            Preconditions.checkState(partitionCols.size() >= selectedPartitionCols.get().size(),
+                    "selected partition columns size is larger than partition columns size");
+            for (Column select : selectedPartitionCols.get()) {
+                int idx = partitionCols.indexOf(select);
+                if (idx == -1) {
+                    throw new SemanticException("column " + select.getName() + " is not partition column");
+                }
+                colIdxes.add(idx);
+            }
+        }
         Map<String, PListCell> partitionItems = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
@@ -1253,7 +1258,7 @@ public class OlapTable extends Table {
             }
             // one item
             List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
-            if (singleValues != null) {
+            if (CollectionUtils.isNotEmpty(singleValues)) {
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
                 for (String val : singleValues) {
@@ -1264,8 +1269,20 @@ public class OlapTable extends Table {
 
             // multi items
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
-            if (multiValues != null) {
-                partitionItems.put(partitionName, new PListCell(multiValues));
+            if (CollectionUtils.isNotEmpty(multiValues)) {
+                if (CollectionUtils.isEmpty(colIdxes)) {
+                    partitionItems.put(partitionName, new PListCell(multiValues));
+                } else {
+                    List<List<String>> cellValue = Lists.newArrayList();
+                    for (List<String> multiValue : multiValues) {
+                        List<String> selectedValues = Lists.newArrayList();
+                        for (int idx : colIdxes) {
+                            selectedValues.add(multiValue.get(idx));
+                        }
+                        cellValue.add(selectedValues);
+                    }
+                    partitionItems.put(partitionName, new PListCell(cellValue));
+                }
             }
         }
         return partitionItems;
@@ -1376,6 +1393,7 @@ public class OlapTable extends Table {
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
         physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
+        physicalPartitionNameToPartitionId.put(physicalPartition.getName(), physicalPartition.getParentId());
     }
 
     // This is a private method.
@@ -1638,7 +1656,8 @@ public class OlapTable extends Table {
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
-                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+                return (int) (h2.getDefaultPhysicalPartition().getVisibleVersion()
+                        - h1.getDefaultPhysicalPartition().getVisibleVersion());
             }
         });
         return partitions.subList(0, recentPartitionNum);
@@ -1850,7 +1869,9 @@ public class OlapTable extends Table {
     public long getRowCount() {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
-            rowCount += entry.getValue().getBaseIndex().getRowCount();
+            for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
+                rowCount += partition.getBaseIndex().getRowCount();
+            }
         }
         return rowCount;
     }
@@ -2063,6 +2084,13 @@ public class OlapTable extends Table {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
                 physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
+
+                // Every partition has a ShardGroup previously,
+                // and now every Materialized index has a shardGroup.
+                // So the original partition's shardGroup is moved to the base materialized index for compatibility
+                if (physicalPartition.getShardGroupId() != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                    physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+                }
             }
         }
 
@@ -2267,8 +2295,10 @@ public class OlapTable extends Table {
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
             Partition partition = optionalPartition.get();
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
-            MaterializedIndex baseIdx = partition.getBaseIndex();
+            MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
@@ -2739,6 +2769,33 @@ public class OlapTable extends Table {
         }
     }
 
+    public void replaceMatchPartitions(List<String> tempPartitionNames) {
+        for (String partitionName : tempPartitionNames) {
+            Partition partition = tempPartitions.getPartition(partitionName);
+            if (partition != null) {
+                String oldPartitionName = partitionName.substring(
+                        partitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1);
+                Partition oldPartition = nameToPartition.get(oldPartitionName);
+                if (oldPartition != null) {
+                    // drop old partition
+                    dropPartition(-1, oldPartitionName, true);
+                }
+                // add new partition
+                addPartition(partition);
+                // drop temp partition
+                tempPartitions.dropPartition(partitionName, false);
+                // move the range from idToTempRange to idToRange
+                partitionInfo.moveRangeFromTempToFormal(partition.getId());
+                // rename partition
+                renamePartition(partitionName, oldPartitionName);
+            }
+        }
+
+        for (Column column : getColumns()) {
+            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+        }
+    }
+
     /*
      * replace partitions in 'partitionNames' with partitions in
      * 'tempPartitionNames'.
@@ -2938,7 +2995,7 @@ public class OlapTable extends Table {
         Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion()));
+                    String.valueOf(partition.getDefaultPhysicalPartition().getVisibleVersion()));
         }
         return result;
     }
@@ -3184,9 +3241,11 @@ public class OlapTable extends Table {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : index.getTablets()) {
-                    invertedIndex.deleteTablet(tablet.getId());
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }
@@ -3235,6 +3294,10 @@ public class OlapTable extends Table {
         return new OlapTableAlterJobV2Builder(this);
     }
 
+    public AlterJobV2Builder rollUp() {
+        return new OlapTableRollupJobBuilder(this);
+    }
+
     public OptimizeJobV2Builder optimizeTable() {
         return new OptimizeJobV2Builder(this);
     }
@@ -3244,8 +3307,21 @@ public class OlapTable extends Table {
         // common properties for olap table, cloud native table
         // use TreeMap to ensure the order of keys, such as for show create table.
         Map<String, String> properties = Maps.newTreeMap();
-        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
+        // common properties
+        properties.putAll(getCommonProperties());
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    /**
+     * Get common properties for olap table, cloud native table.
+     */
+    public Map<String, String> getCommonProperties() {
+        Map<String, String> properties = Maps.newTreeMap();
         // replication num
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
 
@@ -3309,6 +3385,7 @@ public class OlapTable extends Table {
             }
         }
 
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
@@ -3333,9 +3410,19 @@ public class OlapTable extends Table {
         }
         properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionTypeName);
 
-        // unique properties
-        properties.putAll(getUniqueProperties());
+        // unique constraint
+        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
+        }
 
+        // foreign key constraint
+        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
+        }
         return properties;
     }
 
@@ -3382,20 +3469,6 @@ public class OlapTable extends Table {
         boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
         properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, String.valueOf(useFastSchemaEvolution));
 
-        // unique constraint
-        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
-                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints(), this));
-        }
-
-        // foreign key constraint
-        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
-        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
-                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(this, getForeignKeyConstraints()));
-        }
-
         // storage type
         if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
@@ -3426,10 +3499,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
         }
         return null;
     }

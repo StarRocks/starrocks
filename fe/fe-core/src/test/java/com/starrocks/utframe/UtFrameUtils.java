@@ -66,11 +66,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -81,7 +81,6 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
@@ -124,6 +123,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1039,7 +1041,6 @@ public class UtFrameUtils {
 
     public static void setUpForPersistTest() {
         PseudoJournalReplayer.setUp();
-        PseudoImage.setUpImageVersion();
     }
 
     public static void tearDownForPersisTest() {
@@ -1050,20 +1051,11 @@ public class UtFrameUtils {
      * pseudo image is used to test if image is wrote correctly.
      */
     public static class PseudoImage {
-        private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
         private ImageWriter imageWriter;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        public static void setUpImageVersion() {
-            MetaContext metaContext = new MetaContext();
-            metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
-            metaContext.setThreadLocalInfo();
-            isSetup.set(true);
-        }
-
         public PseudoImage() throws IOException {
-            assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
             imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
             imageWriter.setOutputStream(buffer);
@@ -1227,8 +1219,8 @@ public class UtFrameUtils {
     }
 
     public static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
+        partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1236,6 +1228,18 @@ public class UtFrameUtils {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    public static void mockLogicalScanIsEmptyOutputRows(boolean expect) {
+        new MockUp<LogicalOlapScanOperator>() {
+            /**
+             * {@link LogicalOlapScanOperator#isEmptyOutputRows()}
+             */
+            @Mock
+            public boolean isEmptyOutputRows() {
+                return expect;
+            }
+        };
     }
 
     public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
@@ -1351,7 +1355,7 @@ public class UtFrameUtils {
                     if (tbl != null) {
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
                         }
                     }
                 } else if (stmt instanceof DeleteStmt) {
@@ -1406,5 +1410,36 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+    }
+
+    /***
+     * Get the OptExpression of the query which is only optimized by rbo only.
+     */
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        QueryStatement statement = null;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+        } catch (Exception e) {
+            Assert.fail("Parse query failed:" + DebugUtil.getStackTrace(e));
+        }
+        LogicalPlan logicalPlan = UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        OptExpression optExpression = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory,
+                logicalPlan, optimizerConfig);
+        return optExpression;
+    }
+
+
+    /**
+     * Get the scan operators of the query which is only optimized by rbo only.
+     */
+    public static List<LogicalScanOperator> getQueryScanOperators(ConnectContext connectContext,
+                                                                  String query) {
+        OptExpression optExpression = getQueryOptExpression(connectContext, query);
+        Assert.assertNotNull(optExpression);
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
+        return scanOperators;
     }
 }

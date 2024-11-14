@@ -410,6 +410,22 @@ public class BrokerLoadJobTest {
         brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+
+        // test that timeout happens in loadin task before the job timeout
+        BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
+        new Expectations() {
+            {
+                brokerLoadJob5.isTimeout();
+                result = false;
+            }
+        };
+        brokerLoadJob5.retryTime = 1;
+        brokerLoadJob5.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = LoadErrorUtils.BACKEND_BRPC_TIMEOUT.keywords;
+        brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
     }
 
     @Test
@@ -446,6 +462,37 @@ public class BrokerLoadJobTest {
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
+    public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws UserException {
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
+                times = 1;
+                result = new UserException("Artificial exception");
+            }
+        };
+
+        try {
+            BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
+            failMsg = new FailMsg(FailMsg.CancelType.UNKNOWN, "[E1008]Reached timeout=7200000ms @127.0.0.1:8060");
+            brokerLoadJob1.onTaskFailed(taskId, failMsg);
+        } catch (Exception e) {
+            Assert.fail("should not throw exception");
+        }
     }
 
     @Test

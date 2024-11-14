@@ -129,13 +129,17 @@ CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
-CONF_Int32(upload_worker_count, "1");
+CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
-CONF_Int32(download_worker_count, "1");
+CONF_mInt32(download_worker_count, "0");
+// The buffer size to upload.
+CONF_mInt32(upload_buffer_size, "4194304");
+// The buffer size to download.
+CONF_mInt32(download_buffer_size, "4194304");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
-CONF_Int32(release_snapshot_worker_count, "5");
+CONF_mInt32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
 CONF_mInt32(report_task_interval_seconds, "10");
 // The interval time(seconds) for agent report disk state to FE.
@@ -1482,5 +1486,7 @@ CONF_mBool(skip_schema_in_rowset_meta, "true");
 CONF_mBool(enable_bit_unpack_simd, "true");
 
 CONF_mInt32(max_committed_without_schema_rowset, "1000");
+
+CONF_mInt32(apply_version_slow_log_sec, "30");
 
 } // namespace starrocks::config

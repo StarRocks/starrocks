@@ -262,7 +262,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     {
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
-                        String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
+                        String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
                         Assert.assertTrue(queryCacheStats != null);
                         Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
                         Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
@@ -273,8 +273,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
-                    while (p2.getVisibleVersion() != 3) {
-                        System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
+                    while (p2.getDefaultPhysicalPartition().getVisibleVersion() != 3) {
+                        System.out.println("waiting for partition p2 to be visible:" +
+                                p2.getDefaultPhysicalPartition().getVisibleVersion());
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
@@ -288,7 +289,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         processor = refreshMV("test", mv);
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
-                        String key = String.format("cache_getUpdatedPartitionNames_%s", table.getId());
+                        String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
                         Assert.assertTrue(queryCacheStats != null);
                         Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
                         Assert.assertTrue(queryCacheStats.getCounter().get(key) >= 1);

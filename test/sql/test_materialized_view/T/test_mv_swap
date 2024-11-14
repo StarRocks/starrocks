@@ -1,4 +1,6 @@
--- name: test_mv_swap
+-- name: test_mv_swap @sequential
+
+admin set frontend config('enable_mv_automatic_active_check'='false');
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -74,3 +76,5 @@ ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 
 [UC]drop database db_${uuid0} force;
+
+admin set frontend config('enable_mv_automatic_active_check'='true');

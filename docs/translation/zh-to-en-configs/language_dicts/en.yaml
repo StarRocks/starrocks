@@ -1,0 +1,137 @@
+数据导入: Data loading
+数据导出: Data unloading
+导入: load
+内表: native table
+存算分离表: Cloud-native table
+外部表: External Table
+文件外部表: File External Table
+Hive 外表: Hive external table
+数据库模式层次结构: hierarchy of data objects
+存储分层: storage layering
+存算分离: separation of storage and compute
+存算分离模式: shared-data mode
+存算一体模式: shared-nothing mode
+存算分离集群: shared-data cluster
+存算一体集群: shared-nothing cluster
+0数据迁移: zero-migration
+原生向量化引擎: native vectorized engine
+联邦查询: federated query
+列式存储: columnar storage
+行存储: row storage
+智能物化视图: intelligent materialized view
+基表: base table
+物化视图: materialized view
+同步物化视图: synchronous materialized view
+异步物化视图: asynchronous materialized view
+流批一体: unified batch and streaming
+高可用: high availability
+高可扩展性: high scalability
+数据摄取: data ingestion
+大宽表: denormalized table/flat table
+预聚合: pre-aggregation
+聚合查询: aggregate query
+星形模型: star schema
+雪花模型: snowflake schema
+点查询: point query
+表模型: table type
+明细表: Duplicate Key table
+聚合表: Aggregate table
+主键表: Primary Key table
+更新表: Unique Key table
+数据清洗: data cleaning
+全局字典: global dictionary
+全局低基数字典优化: global dictionary for low-cardinality optimization
+低基数: low cardinality
+仓储物流: warehousing logistics
+查询性能: query performance
+数据采集: data acquisition
+多表关联查询: multi-table join query
+CBO优化器: cost-based optimizer
+存算分离: separation of storage and compute
+成本估算: cost estimation
+二叉树: binary tree
+数据分析: data analytics
+数据湖分析: data lake analytics
+明细数据: detailed data
+去重: distinct count
+精准去重: exact distinct count
+近似去重: approximate distinct count
+表结构: table schema
+排序键: sort key
+分桶键: bucketing key
+分区列: partitioning column
+分区键: partition key
+随机分桶: random bucketing
+分区方式: partitioning method
+自动分区: automatic partitioning
+动态分区: dynamic partitioning
+表达式分区: expresion partitioning
+LIST 分区: list partitioning
+副本: replica
+用户画像: user profiling
+用户留存: user retention
+精准营销: precision marketing
+群体分析: group analysis
+延迟物化: late materialization
+数据局部性: data locality
+前缀索引: prefix index
+后置列: suffix column
+前置列: prefix column
+分级存储: tiered storage
+倒排索引: inverted indexing
+近似算法: approximation algorithm
+嵌套查询: nested query
+内存泄漏: memory leak
+内存膨胀: memory bloat
+二次分区: secondary partitioning
+分区裁剪: pruning
+分区文件: partition file
+抽象语法树: abstract syntax tree
+常量折叠: constant folding
+常量传播: constant propagation
+悲观加锁: pessimistic locking
+乐观加锁: optimistic locking
+滚动升级: rolling update
+分层搜索: stratified search
+统一搜索: unified search
+给表添加数据: populate a table
+工作目录: working directory
+计算节点: compute node
+计算引擎: compute engine
+等深直方图: equi-height histogram
+等宽直方图: equi-width histogram
+分页查询: paginated query
+相关列: correlated columns
+字面量: literal
+生成列: generated column
+自增列: auto increment
+云原生: cloud-native
+持久化索引: persistent index
+工具函数: utility function
+聚合函数: aggregate function
+中间结果落盘: spill to disk
+查询改写: query rewrite
+数据均衡: data re-distribution
+本地磁盘: local disk
+自动降冷: automatic cooldown
+存储介质: storage medium
+垃圾回收: garbage collection
+会话变量: session variable
+全局变量: global variable
+大查询: big query
+分类器: classifier
+存储卷: storage volume
+远端存储: remote storage
+基数保持 JOIN: cardinality-preserving join
+并行度: parallelism
+部分列更新: partial update
+条件更新: conditional update
+高阶函数: higher-order function
+异步刷新: async refresh
+查询加速: query acceleration
+Segment 文件: segment file
+行列混存: Hybrid row-column storage
+List 分区: List Partitioning
+Range 分区: Range Partitioning
+Bitmap 索引: Bitmap index
+Bloom filter 索引: Bloom filter index

@@ -39,6 +39,8 @@ import com.starrocks.sql.common.DmlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -77,21 +79,18 @@ public abstract class MVPCTRefreshPartitioner {
      * Generate partition predicate for mv refresh according ref base table changed partitions.
      * @param refBaseTable: ref base table to check.
      * @param refBaseTablePartitionNames: ref base table partition names to check.
-     * @param mvPartitionSlotRef: mv partition slot ref to generate partition predicate.
+     * @param mvPartitionSlotRefs: mv partition slot ref to generate partition predicate.
      * @return: Return partition predicate for mv refresh.
      * @throws AnalysisException
      */
     public abstract Expr generatePartitionPredicate(Table refBaseTable,
                                                     Set<String> refBaseTablePartitionNames,
-                                                    Expr mvPartitionSlotRef) throws AnalysisException;
+                                                    List<Expr> mvPartitionSlotRefs) throws AnalysisException;
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions.
      * @param mvPartitionInfo: mv partition info to check.
      * @param snapshotBaseTables: snapshot base tables to check.
-     * @param start: start partition name to check.
-     * @param end: end partition name to check.
-     * @param force: force to refresh or not.
      * @param mvPotentialPartitionNames: mv potential partition names to check.
      * @return: Return mv partitions to refresh based on the ref base table partitions.
      * @throws AnalysisException
@@ -105,8 +104,6 @@ public abstract class MVPCTRefreshPartitioner {
     /**
      * Get mv partition names with TTL based on the ref base table partitions.
      * @param materializedView: materialized view to check.
-     * @param start: start partition name to refresh.
-     * @param end: end partition name to refresh.
      * @param partitionTTLNumber: mv partition TTL number.
      * @param isAutoRefresh: is auto refresh or not.
      * @return: mv to refresh partition names with TTL based on the ref base table partitions.
@@ -122,7 +119,7 @@ public abstract class MVPCTRefreshPartitioner {
      *
      * @param mvPartitionsToRefresh     : mv partitions to refresh.
      * @param mvPotentialPartitionNames : mv potential partition names to check.
-     * @param tentative see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor#checkMvToRefreshedPartitions}
+     * @param tentative see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor}
      */
     public abstract void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                         Set<String> mvPotentialPartitionNames,
@@ -169,10 +166,8 @@ public abstract class MVPCTRefreshPartitioner {
      */
     protected Set<String> getMvPartitionNamesToRefresh(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
-        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
-            Table baseTable = e.getKey();
-            
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        for (Table baseTable : refBaseTablePartitionColumns.keySet()) {
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
                 LOG.info("The ref base table {} is not supported partition refresh, refresh all " +
@@ -214,7 +209,7 @@ public abstract class MVPCTRefreshPartitioner {
      * - its non-ref base table except un-supported base table has updated.
      */
     protected boolean needsRefreshBasedOnNonRefTables(Map<Long, TableSnapshotInfo> snapshotBaseTables) {
-        Map<Table, Column> tableColumnMap = mv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> tableColumnMap = mv.getRefBaseTablePartitionColumns();
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             if (!isPartitionRefreshSupported(snapshotTable)) {
@@ -279,5 +274,31 @@ public abstract class MVPCTRefreshPartitioner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
         }
+    }
+
+    /**
+     * @param mvPartitionNames : the need to refresh materialized view partition names
+     * @return : the corresponding ref base table partition names to the materialized view partition names
+     */
+    protected Map<Table, Set<String>> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
+        Map<Table, Set<String>> result = new HashMap<>();
+        Map<String, Map<Table, Set<String>>> mvRefBaseTablePartitionMaps =
+                mvContext.getMvRefBaseTableIntersectedPartitions();
+        for (String mvPartitionName : mvPartitionNames) {
+            if (mvRefBaseTablePartitionMaps == null || !mvRefBaseTablePartitionMaps.containsKey(mvPartitionName)) {
+                LOG.warn("Cannot find need refreshed mv table partition from synced partition info: {}",
+                        mvPartitionName);
+                continue;
+            }
+            Map<Table, Set<String>> mvRefBaseTablePartitionMap = mvRefBaseTablePartitionMaps.get(mvPartitionName);
+            for (Map.Entry<Table, Set<String>> entry : mvRefBaseTablePartitionMap.entrySet()) {
+                Table baseTable = entry.getKey();
+                Set<String> baseTablePartitions = entry.getValue();
+                // If the result already contains the base table name, add all new partitions to the existing set
+                // If the result doesn't contain the base table name, put the new set into the map
+                result.computeIfAbsent(baseTable, k -> Sets.newHashSet()).addAll(baseTablePartitions);
+            }
+        }
+        return result;
     }
 }

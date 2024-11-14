@@ -242,6 +242,7 @@ Status GlobalEnv::_init_mem_tracker() {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
+    _passthrough_mem_tracker = regist_tracker(MemTracker::PASSTHROUGH, -1, "passthrough");
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
@@ -445,6 +446,27 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing);
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
+
+    StarRocksMetrics::instance()->metrics()->register_hook("pipe_execution_hook", [this] {
+        int64_t driver_schedule_count = 0;
+        int64_t driver_execution_ns = 0;
+        int64_t driver_queue_len = 0;
+        int64_t driver_poller_block_queue_len = 0;
+        int64_t scan_executor_queuing = 0;
+        _workgroup_manager->for_each_executors([&](const workgroup::PipelineExecutorSet& executors) {
+            const auto metrics = executors.driver_executor()->metrics();
+            driver_schedule_count += metrics.schedule_count;
+            driver_execution_ns += metrics.driver_execution_ns;
+            driver_queue_len += metrics.driver_queue_len;
+            driver_poller_block_queue_len += metrics.driver_poller_block_queue_len;
+            scan_executor_queuing += executors.scan_executor()->num_tasks();
+        });
+        StarRocksMetrics::instance()->pipe_driver_schedule_count.set_value(driver_schedule_count);
+        StarRocksMetrics::instance()->pipe_driver_execution_time.set_value(driver_execution_ns);
+        StarRocksMetrics::instance()->pipe_driver_queue_len.set_value(driver_queue_len);
+        StarRocksMetrics::instance()->pipe_poller_block_queue_len.set_value(driver_poller_block_queue_len);
+        StarRocksMetrics::instance()->pipe_scan_executor_queuing.set_value(scan_executor_queuing);
+    });
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
@@ -714,20 +736,26 @@ void ExecEnv::destroy() {
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
-    size_t max_loop_cnt_cfg = config::loop_count_wait_fragments_finish;
-    if (max_loop_cnt_cfg == 0) {
+    size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
+    if (max_loop_secs == 0) {
         return;
     }
 
-    size_t running_fragments = _fragment_mgr->running_fragment_count();
-    size_t loop_cnt = 0;
+    size_t running_fragments = _get_running_fragments_count();
+    size_t loop_secs = 0;
 
-    while (running_fragments && loop_cnt < max_loop_cnt_cfg) {
-        DLOG(INFO) << running_fragments << " fragment(s) are still running...";
-        sleep(10);
-        running_fragments = _fragment_mgr->running_fragment_count();
-        loop_cnt++;
+    while (running_fragments > 0 && loop_secs < max_loop_secs) {
+        LOG(INFO) << running_fragments << " fragment(s) are still running...";
+        sleep(1);
+        running_fragments = _get_running_fragments_count();
+        loop_secs++;
     }
+}
+
+size_t ExecEnv::_get_running_fragments_count() const {
+    // fragment is registered in _fragment_mgr in non-pipeline env
+    // while _query_context_mgr is used in pipeline engine.
+    return _fragment_mgr->running_fragment_count() + _query_context_mgr->size();
 }
 
 void ExecEnv::wait_for_finish() {

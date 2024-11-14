@@ -31,6 +31,7 @@
 namespace starrocks::lake {
 
 namespace {
+
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
@@ -42,6 +43,21 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
             // because the primary index is available in cache
             // But it will be remove from index cache after apply is finished
+            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+        }
+        // Check if the alter_meta has a persistent index type change
+        if (alter_meta.has_persistent_index_type()) {
+            // Get the previous and new persistent index types
+            PersistentIndexTypePB prev_type = metadata->persistent_index_type();
+            PersistentIndexTypePB new_type = alter_meta.persistent_index_type();
+            // Apply the changes to the persistent index type
+            metadata->set_persistent_index_type(new_type);
+            LOG(INFO) << fmt::format("alter persistent index type from {} to {} for tablet id: {}",
+                                     PersistentIndexTypePB_Name(prev_type), PersistentIndexTypePB_Name(new_type),
+                                     metadata->id());
+            // Get the update manager
+            auto update_mgr = tablet_mgr->update_mgr();
+            // Try to remove the index from the index cache
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
         // update tablet meta
@@ -234,6 +250,10 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+            // Apply the compaction operation to the cloud native pk index.
+            // This ensures that the pk index is updated with the compaction changes.
+            _builder.remove_compacted_sst(op_compaction);
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,

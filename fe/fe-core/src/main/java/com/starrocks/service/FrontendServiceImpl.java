@@ -99,11 +99,14 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -116,6 +119,7 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
@@ -131,6 +135,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
@@ -167,6 +172,8 @@ import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
+import com.starrocks.thrift.TBatchWriteRequest;
+import com.starrocks.thrift.TBatchWriteResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -312,6 +319,7 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
+import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -319,6 +327,7 @@ import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -351,10 +360,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    private final ProxyContextManager proxyContextManager;
     public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
+        proxyContextManager = ProxyContextManager.getInstance();
         this.exeEnv = exeEnv;
     }
 
@@ -536,7 +547,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
                                 Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                            .getTable(db.getFullName(), tableName.getTbl());
+                                        .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
@@ -1120,10 +1131,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.info("receive forwarded stmt {} from FE: {}",
                 params.getStmt_id(), clientAddr != null ? clientAddr.getHostname() : "unknown");
         ConnectContext context = new ConnectContext(null);
-        ConnectProcessor processor = new ConnectProcessor(context);
-        TMasterOpResult result = processor.proxyExecute(params);
-        ConnectContext.remove();
-        return result;
+        String hostname = "";
+        if (clientAddr != null) {
+            hostname = clientAddr.getHostname();
+        }
+        context.setProxyHostName(hostname);
+        boolean addToProxyManager = params.isSetConnectionId();
+        final int connectionId = params.getConnectionId();
+
+        try (var guard = proxyContextManager.guard(hostname, connectionId, context, addToProxyManager)) {
+            ConnectProcessor processor = new ConnectProcessor(context);
+            return processor.proxyExecute(params);
+        } catch (Exception e) {
+            LOG.warn("unreachable path:", e);
+            final TMasterOpResult result = new TMasterOpResult();
+            result.setErrorMsg(e.getMessage());
+            return result;
+        }
     }
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
@@ -1257,7 +1281,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnCommit(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn commit request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn commit request: {}", request);
 
@@ -1390,7 +1414,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("get txn status request: {}", request);
 
@@ -1427,7 +1451,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnCommitResult loadTxnPrepare(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+        LOG.debug("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
         LOG.debug("txn prepare request: {}", request);
 
@@ -1485,7 +1509,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
+        LOG.debug("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), request.getReason(), clientAddr);
         LOG.debug("txn rollback request: {}", request);
 
@@ -1575,7 +1599,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
+        LOG.debug("receive stream load put request. db:{}, tbl: {}, txn_id: {}, load id: {}, backend: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
                 clientAddr);
         LOG.debug("stream load put request: {}", request);
@@ -1682,6 +1706,34 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TBatchWriteResult requestBatchWrite(TBatchWriteRequest request) throws TException {
+        TBatchWriteResult result = new TBatchWriteResult();
+        try {
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
+            TableId tableId = new TableId(request.getDb(), request.getTbl());
+            StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
+            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState()
+                    .getBatchWriteMgr().requestLoad(tableId, params, request.getBackend_id(), request.getBackend_host());
+            result.setStatus(loadResult.getStatus());
+            if (loadResult.isOk()) {
+                result.setLabel(loadResult.getValue());
+            }
+        } catch (AuthenticationException authenticationException) {
+            TStatus status = new TStatus();
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs(authenticationException.getMessage());
+            result.setStatus(status);
+        } catch (Exception exception) {
+            TStatus status = new TStatus();
+            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs(exception.getMessage());
+            result.setStatus(status);
+        }
+        return result;
+    }
+
+    @Override
     public TStatus snapshotLoaderReport(TSnapshotLoaderReportRequest request) throws TException {
         if (GlobalStateMgr.getCurrentState().getBackupHandler().report(request.getTask_type(), request.getJob_id(),
                 request.getTask_id(), request.getFinished_num(), request.getTotal_num())) {
@@ -1712,7 +1764,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
-    private TNetworkAddress getClientAddr() {
+    public TNetworkAddress getClientAddr() {
         ThriftServerContext connectionContext = ThriftServerEventProcessor.getConnectionContext();
         // For NonBlockingServer, we can not get client ip.
         if (connectionContext != null) {
@@ -1873,7 +1925,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TImmutablePartitionResult updateImmutablePartition(TImmutablePartitionRequest request) throws TException {
-        LOG.info("Receive update immutable partition: {}", request);
+        LOG.debug("Receive update immutable partition: {}", request);
 
         TImmutablePartitionResult result;
         try {
@@ -1954,7 +2006,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             updatePartitionIds.add(p.getParentId());
             p.setImmutable(true);
 
-            List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
+            List<PhysicalPartition> mutablePartitions;
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
@@ -2145,6 +2197,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+        String partitionNamePrefix = null;
+        boolean isTemp = false;
+        if (request.isSetIs_temp() && request.isIs_temp()) {
+            isTemp = true;
+            partitionNamePrefix = "txn" + request.getTxn_id();
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -2185,7 +2243,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    request.partition_values);
+                    request.partition_values, isTemp, partitionNamePrefix);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
                 partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
@@ -2217,7 +2275,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
-                            "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
+                                    "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
                             olapTable.getName(), Config.max_partitions_in_one_batch)));
             result.setStatus(errorStatus);
             return result;
@@ -2294,7 +2352,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
+                return buildCreatePartitionResponse(
+                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
@@ -2305,7 +2364,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
-                                                                       List<String> partitionColNames) {
+                                                                       List<String> partitionColNames,
+                                                                       boolean isTemp) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
@@ -2324,13 +2384,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
-            Partition partition = olapTable.getPartition(partitionName);
+            Partition partition = olapTable.getPartition(partitionName, isTemp);
             tPartition = new TOlapTablePartition();
-            tPartition.setId(partition.getId());
+            tPartition.setId(partition.getDefaultPhysicalPartition().getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
@@ -2443,7 +2504,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
             tPartition.setNum_buckets(index.getTablets().size());
@@ -2480,15 +2542,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
-    /**
-     * Returns the empty warehouse info.
-     * Maintaining this method is just to avoid problems at grayscale upgrading.
-     */
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
+        Map<Long, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
+        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
+                .map(WarehouseInfo::toThrift)
+                .collect(Collectors.toList());
+
         TGetWarehousesResponse res = new TGetWarehousesResponse();
         res.setStatus(new TStatus(OK));
-        res.setWarehouse_infos(Collections.emptyList());
+        res.setWarehouse_infos(warehouseInfos);
 
         return res;
     }

@@ -1297,6 +1297,25 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
+    // Publish EMPTY_TXN_LOG
+    {
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(-1);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+    ASSERT_EQ(2, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {

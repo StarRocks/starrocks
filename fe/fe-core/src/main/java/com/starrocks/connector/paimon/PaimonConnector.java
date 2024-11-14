@@ -18,6 +18,8 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
@@ -42,17 +44,19 @@ import static org.apache.paimon.options.CatalogOptions.URI;
 import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
 public class PaimonConnector implements Connector {
-    private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
-    private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
+    public static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
+    public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
     private final String catalogName;
     private final Options paimonOptions;
+    private final ConnectorProperties connectorProperties;
 
     public PaimonConnector(ConnectorContext context) {
         Map<String, String> properties = context.getProperties();
+        this.connectorProperties = new ConnectorProperties(ConnectorType.PAIMON, properties);
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
@@ -83,7 +87,9 @@ public class PaimonConnector implements Connector {
                 && !catalogType.equalsIgnoreCase("dlf")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
-        paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        if (!Strings.isNullOrEmpty(warehousePath)) {
+            paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        }
         initFsOption(cloudConfiguration);
         String keyPrefix = "paimon.option.";
         Set<String> optionKeys = properties.keySet().stream().filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
@@ -139,6 +145,6 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog());
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties);
     }
 }
