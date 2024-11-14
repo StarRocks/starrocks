@@ -631,7 +631,10 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     public String generatePhysicalPartitionName(long physicalPartitionId) {
         return this.name + '_' + physicalPartitionId;
     }
-        
+
+    @SerializedName(value = "dpid")
+    private long defaultPhysicalPartitionId = 0;
+
     @Override
     public void gsonPostProcess() throws IOException {
         if (dataVersion == 0) {
@@ -652,6 +655,38 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
                 subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
             }
             nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
+
+        if (defaultPhysicalPartitionId != 0) {
+            PhysicalPartitionImpl physicalPartition = idToSubPartition.get(defaultPhysicalPartitionId);
+
+            idToSubPartition.remove(defaultPhysicalPartitionId);
+            nameToSubPartition.remove(physicalPartition.getName());
+
+            this.shardGroupId = physicalPartition.getShardGroupId();
+            this.isImmutable.set(physicalPartition.isImmutable());
+            this.baseIndex = physicalPartition.getBaseIndex();
+
+            for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                if (materializedIndex.getId() == baseIndex.getId()) {
+                    continue;
+                }
+                this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
+            }
+
+            for (MaterializedIndex materializedIndex : physicalPartition.getMaterializedIndices(IndexExtState.SHADOW)) {
+                this.idToShadowIndex.put(materializedIndex.getId(), materializedIndex);
+            }
+
+            this.visibleVersion = physicalPartition.getVisibleVersion();
+            this.visibleVersionTime =  physicalPartition.getVisibleVersionTime();
+            this.nextVersion = physicalPartition.getNextVersion();
+            this.dataVersion = physicalPartition.getDataVersion();
+            this.nextDataVersion = physicalPartition.getNextDataVersion();
+            this.versionEpoch = physicalPartition.getVersionEpoch();
+            this.versionTxnType = physicalPartition.getVersionTxnType();
+
+            this.defaultPhysicalPartitionId = 0;
         }
     }
 }
