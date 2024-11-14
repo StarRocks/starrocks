@@ -211,11 +211,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
-        return normal.getPrunedPartitions(table, predicate, limit, version);
-    }
-
-    @Override
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
         return normal.getDeleteFiles(table, snapshotId, predicate, content);
     }

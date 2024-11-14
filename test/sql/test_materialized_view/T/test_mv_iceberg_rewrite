@@ -36,8 +36,9 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 REFRESH MATERIALIZED VIEW test_mv1 PARTITION START ("2023-12-01") END ("2023-12-03") WITH SYNC MODE;
 function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-01' GROUP BY dt", "test_mv1")
 function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt", "test_mv1")
+set enable_materialized_view_transparent_union_rewrite=false;
 function: check_no_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
-
+set enable_materialized_view_transparent_union_rewrite=true;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt>='2023-12-03' GROUP BY dt order by dt;
