@@ -154,24 +154,24 @@ void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller*
     ctx->db = request->db();
     ctx->table = request->table();
     std::map<std::string, std::string> parameters;
-    for (const PKeyValue& kv : request->parameters()) {
-        parameters.emplace(kv.key(), kv.value());
+    for (const PStringPair& pair : request->parameters()) {
+        parameters.emplace(pair.key(), pair.val());
     }
 
     {
-        auto value = GET_PARAMETER_OR_EMPTY(parameters, HTTP_ENABLE_BATCH_WRITE);
+        auto value = GET_PARAMETER_OR_EMPTY(parameters, HTTP_ENABLE_MERGE_COMMIT);
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         ctx->enable_batch_write = StringParser::string_to_bool(value.c_str(), value.length(), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             ASSIGN_AND_RETURN(ctx->status, Status::InvalidArgument(fmt::format(
-                                                   "Invalid parameter {}. The value must be be bool type, but is {}",
-                                                   HTTP_ENABLE_BATCH_WRITE, value)));
+                                                   "Invalid parameter {}. The value must be bool type, but is {}",
+                                                   HTTP_ENABLE_MERGE_COMMIT, value)));
         }
         if (!ctx->enable_batch_write) {
             ASSIGN_AND_RETURN(ctx->status,
                               Status::InvalidArgument(fmt::format(
                                       "RPC interface only support batch write currently. Must set {} to true",
-                                      HTTP_ENABLE_BATCH_WRITE, value)));
+                                      HTTP_ENABLE_MERGE_COMMIT, value)));
         }
     }
     ctx->label = GET_PARAMETER_OR_EMPTY(parameters, HTTP_LABEL_KEY);

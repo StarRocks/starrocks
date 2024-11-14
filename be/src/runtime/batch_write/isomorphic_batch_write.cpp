@@ -124,7 +124,7 @@ IsomorphicBatchWrite::IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads
 
 Status IsomorphicBatchWrite::init() {
     TEST_ERROR_POINT("IsomorphicBatchWrite::init::error");
-    auto it = _batch_write_id.load_params.find(HTTP_BATCH_WRITE_ASYNC);
+    auto it = _batch_write_id.load_params.find(HTTP_MERGE_COMMIT_ASYNC);
     if (it != _batch_write_id.load_params.end()) {
         _batch_write_async = it->second == "true";
     }

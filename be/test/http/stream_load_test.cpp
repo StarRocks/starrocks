@@ -399,9 +399,9 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
     request._params.emplace(HTTP_DB_KEY, "db");
     request._params.emplace(HTTP_TABLE_KEY, "tbl");
     request._headers.emplace(HTTP_LABEL_KEY, "batch_write_csv");
-    request._headers.emplace(HTTP_ENABLE_BATCH_WRITE, "true");
-    request._headers.emplace(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-    request._headers.emplace(HTTP_BATCH_WRITE_ASYNC, "true");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+    request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+    request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
 
     std::string content = "a|b|c|d";
     struct evhttp_request ev_req;
@@ -435,9 +435,9 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
     action.handle(&request);
     ASSERT_TRUE(ctx->status.ok());
-    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_BATCH_WRITE, "true"},
-                                                      {HTTP_BATCH_WRITE_INTERVAL_MS, "1000"},
-                                                      {HTTP_BATCH_WRITE_ASYNC, "true"},
+    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_MERGE_COMMIT, "true"},
+                                                      {HTTP_MERGE_COMMIT_INTERVAL_MS, "1000"},
+                                                      {HTTP_MERGE_COMMIT_ASYNC, "true"},
                                                       {HTTP_FORMAT_KEY, "csv"},
                                                       {HTTP_COLUMN_SEPARATOR, "|"}};
     ASSERT_EQ(load_params, ctx->load_parameters);
@@ -463,9 +463,9 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     request._params.emplace(HTTP_DB_KEY, "db");
     request._params.emplace(HTTP_TABLE_KEY, "tbl");
     request._headers.emplace(HTTP_LABEL_KEY, "batch_write_csv");
-    request._headers.emplace(HTTP_ENABLE_BATCH_WRITE, "true");
-    request._headers.emplace(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-    request._headers.emplace(HTTP_BATCH_WRITE_ASYNC, "true");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+    request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+    request._headers.emplace(HTTP_MERGE_COMMIT_ASYNC, "true");
 
     std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
     struct evhttp_request ev_req;
@@ -498,9 +498,9 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
     action.handle(&request);
     ASSERT_TRUE(ctx->status.ok());
-    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_BATCH_WRITE, "true"},
-                                                      {HTTP_BATCH_WRITE_INTERVAL_MS, "1000"},
-                                                      {HTTP_BATCH_WRITE_ASYNC, "true"},
+    std::map<std::string, std::string> load_params = {{HTTP_ENABLE_MERGE_COMMIT, "true"},
+                                                      {HTTP_MERGE_COMMIT_INTERVAL_MS, "1000"},
+                                                      {HTTP_MERGE_COMMIT_ASYNC, "true"},
                                                       {HTTP_FORMAT_KEY, "json"}};
     ASSERT_EQ(load_params, ctx->load_parameters);
     ASSERT_EQ(content, std::string(ctx->buffer->ptr, ctx->buffer->limit));
@@ -522,7 +522,7 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
     request._params.emplace(HTTP_DB_KEY, "db");
     request._params.emplace(HTTP_TABLE_KEY, "tbl");
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-    request._headers.emplace(HTTP_ENABLE_BATCH_WRITE, "abc");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "abc");
     request.set_handler(&action);
     action.on_header(&request);
     action.handle(&request);

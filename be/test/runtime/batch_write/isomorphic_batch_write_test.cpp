@@ -133,7 +133,7 @@ TEST_F(IsomorphicBatchWriteTest, register_and_unregister_pipe) {
 }
 
 TEST_F(IsomorphicBatchWriteTest, append_data_async) {
-    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_BATCH_WRITE_ASYNC, "true"}}};
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "true"}}};
     IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });
@@ -223,7 +223,7 @@ TEST_F(IsomorphicBatchWriteTest, append_data_sync) {
 void IsomorphicBatchWriteTest::test_append_data_sync_base(const Status& rpc_status, TTransactionStatus::type txn_status,
                                                           const Status& expect_st) {
     BatchWriteId batch_write_id{
-            .db = "db", .table = "table", .load_params = {{HTTP_BATCH_WRITE_ASYNC, "false"}, {HTTP_TIMEOUT, "1"}}};
+            .db = "db", .table = "table", .load_params = {{HTTP_MERGE_COMMIT_ASYNC, "false"}, {HTTP_TIMEOUT, "1"}}};
     IsomorphicBatchWriteSharedPtr batch_write = std::make_shared<IsomorphicBatchWrite>(batch_write_id, _executor.get());
     ASSERT_OK(batch_write->init());
     DeferOp defer_writer([&] { batch_write->stop(); });

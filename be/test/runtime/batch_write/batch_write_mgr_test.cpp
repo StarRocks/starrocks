@@ -129,7 +129,7 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
 
 TEST_F(BatchWriteMgrTest, append_data) {
     BatchWriteId batch_write_id = {
-            "db1", "table1", {{HTTP_ENABLE_BATCH_WRITE, "true"}, {HTTP_BATCH_WRITE_ASYNC, "true"}}};
+            "db1", "table1", {{HTTP_ENABLE_MERGE_COMMIT, "true"}, {HTTP_MERGE_COMMIT_ASYNC, "true"}}};
     auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
                                                                  batch_write_id.table, batch_write_id.load_params,
                                                                  "label1", 1, generate_uuid(), 1000);
@@ -202,11 +202,11 @@ TEST_F(BatchWriteMgrTest, stop) {
     ASSERT_TRUE(_batch_write_mgr->append_data(data_ctx).is_service_unavailable());
 }
 
-#define ADD_KEY_VALUE(request, key, value)        \
-    {                                             \
-        PKeyValue* kv = request.add_parameters(); \
-        kv->set_key(key);                         \
-        kv->set_value(value);                     \
+#define ADD_KEY_VALUE(request, key, value)            \
+    {                                                 \
+        PStringPair* pair = request.add_parameters(); \
+        pair->set_key(key);                           \
+        pair->set_val(value);                         \
     }
 
 TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
@@ -225,9 +225,9 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
     request.set_user("root");
     request.set_passwd("123456");
     ADD_KEY_VALUE(request, "label", "test1");
-    ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
-    ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-    ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+    ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
+    ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+    ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_ASYNC, "true");
     ADD_KEY_VALUE(request, HTTP_TIMEOUT, "60");
     ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
     std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
@@ -242,9 +242,9 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
         EXPECT_EQ("123456", ctx->auth.passwd);
         EXPECT_TRUE(ctx->enable_batch_write);
         EXPECT_EQ(60, ctx->timeout_second);
-        std::map<std::string, std::string> load_params = {{HTTP_ENABLE_BATCH_WRITE, "true"},
-                                                          {HTTP_BATCH_WRITE_INTERVAL_MS, "1000"},
-                                                          {HTTP_BATCH_WRITE_ASYNC, "true"},
+        std::map<std::string, std::string> load_params = {{HTTP_ENABLE_MERGE_COMMIT, "true"},
+                                                          {HTTP_MERGE_COMMIT_INTERVAL_MS, "1000"},
+                                                          {HTTP_MERGE_COMMIT_ASYNC, "true"},
                                                           {HTTP_TIMEOUT, "60"},
                                                           {HTTP_FORMAT_KEY, "json"}};
         EXPECT_EQ(load_params, ctx->load_parameters);
@@ -262,7 +262,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
 
 TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
     std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
-    // HTTP_ENABLE_BATCH_WRITE is invalid
+    // HTTP_ENABLE_MERGE_COMMIT is invalid
     {
         brpc::Controller cntl;
         cntl.request_attachment().append(data);
@@ -272,7 +272,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         request.set_user("root");
         request.set_passwd("123456");
         ADD_KEY_VALUE(request, "label", "test1");
-        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "abc");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "abc");
         PStreamLoadResponse response;
         _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
         rapidjson::Document doc;
@@ -281,7 +281,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
     }
 
-    // HTTP_ENABLE_BATCH_WRITE is false
+    // HTTP_ENABLE_MERGE_COMMIT is false
     {
         brpc::Controller cntl;
         cntl.request_attachment().append(data);
@@ -291,7 +291,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         request.set_user("root");
         request.set_passwd("123456");
         ADD_KEY_VALUE(request, "label", "test1");
-        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "false");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "false");
         PStreamLoadResponse response;
         _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
         rapidjson::Document doc;
@@ -310,7 +310,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         request.set_user("root");
         request.set_passwd("123456");
         ADD_KEY_VALUE(request, "label", "test1");
-        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
         ADD_KEY_VALUE(request, HTTP_TIMEOUT, "abc");
         PStreamLoadResponse response;
         _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
@@ -330,9 +330,9 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         request.set_user("root");
         request.set_passwd("123456");
         ADD_KEY_VALUE(request, "label", "test1");
-        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
-        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_ASYNC, "true");
         ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
         PStreamLoadResponse response;
         _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
@@ -357,9 +357,9 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         request.set_user("root");
         request.set_passwd("123456");
         ADD_KEY_VALUE(request, "label", "test1");
-        ADD_KEY_VALUE(request, HTTP_ENABLE_BATCH_WRITE, "true");
-        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
-        ADD_KEY_VALUE(request, HTTP_BATCH_WRITE_ASYNC, "true");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_ASYNC, "true");
         ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
         PStreamLoadResponse response;
         SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::fail", [](void* arg) {

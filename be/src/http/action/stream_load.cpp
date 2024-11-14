@@ -282,13 +282,13 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         return Status::InternalError("no valid Basic authorization");
     }
 
-    if (!http_req->header(HTTP_ENABLE_BATCH_WRITE).empty()) {
-        auto value = http_req->header(HTTP_ENABLE_BATCH_WRITE);
+    if (!http_req->header(HTTP_ENABLE_MERGE_COMMIT).empty()) {
+        auto value = http_req->header(HTTP_ENABLE_MERGE_COMMIT);
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         ctx->enable_batch_write = StringParser::string_to_bool(value.c_str(), value.length(), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-            return Status::InvalidArgument(fmt::format(
-                    "Invalid parameter {}. The value must be be bool type, but is {}", HTTP_ENABLE_BATCH_WRITE, value));
+            return Status::InvalidArgument(fmt::format("Invalid parameter {}. The value must be bool type, but is {}",
+                                                       HTTP_ENABLE_MERGE_COMMIT, value));
         }
     }
 
