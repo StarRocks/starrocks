@@ -430,7 +430,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         materializedView.getName(), DebugUtil.getRootStackTrace(e));
                 // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
                 // the base-table not exists before refreshExternalTable, so we just need to swallow this exception
-                if (e.getMessage() == null || !e.getMessage().contains("not exist")) {
+                if (e.getMessage() == null || !e.getMessage().contains("not exist") || e instanceof LockTimeoutException) {
                     throw e;
                 }
             }
