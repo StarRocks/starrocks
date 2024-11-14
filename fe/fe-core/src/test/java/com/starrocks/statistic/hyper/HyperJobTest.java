@@ -178,7 +178,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
                 pair.second, List.of(pid), 1);
 
-        Assert.assertEquals(2, jobs.size());
+        Assert.assertEquals(1, jobs.size());
 
         List<String> sql = jobs.get(0).buildQuerySQL();
         Assert.assertEquals(3, sql.size());
