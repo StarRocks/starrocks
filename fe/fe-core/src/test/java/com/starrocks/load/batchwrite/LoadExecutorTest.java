@@ -14,7 +14,6 @@
 
 package com.starrocks.load.batchwrite;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
@@ -32,6 +31,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
@@ -111,8 +111,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -146,8 +145,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -177,8 +175,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -204,8 +201,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -216,6 +212,44 @@ public class LoadExecutorTest extends BatchWriteTestBase {
         testLoadFailBase(executor, expectException, TransactionStatus.UNKNOWN);
     }
 
+    @Test
+    public void testMaxFilterRatio() {
+        LoadExecutor executor = new LoadExecutor(
+                new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                label,
+                loadId,
+                streamLoadInfo,
+                1000,
+                kvParams,
+                new HashSet<>(Arrays.asList(10002L, 10003L)),
+                coordinatorFactory,
+                loadExecuteCallback
+        );
+
+        Map<String, String> counters = new HashMap<>();
+        counters.put(LoadEtlTask.DPP_NORMAL_ALL, "100");
+        counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "100");
+        String trackingUrl = "test_tracking_url";
+        new Expectations() {
+            {
+                coordinator.join((anyInt));
+                result = true;
+                coordinator.getExecStatus();
+                result = new Status();
+                coordinator.getCommitInfos();
+                result = buildCommitInfos();
+                coordinator.getLoadCounters();
+                result = counters;
+                coordinator.getTrackingUrl();
+                result = trackingUrl;
+            }
+        };
+
+        Exception expectException = new LoadException(
+                "There is data quality issue, please check the tracking url for details." +
+                        " Max filter ratio: 0.0. The tracking url: " + trackingUrl);
+        testLoadFailBase(executor, expectException, TransactionStatus.ABORTED);
+    }
 
     private void testLoadFailBase(
             LoadExecutor executor, Exception expectedException, TransactionStatus expectedTxnStatus) {
@@ -239,8 +273,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
@@ -268,8 +301,7 @@ public class LoadExecutorTest extends BatchWriteTestBase {
                 loadId,
                 streamLoadInfo,
                 1000,
-                ImmutableMap.<String, String>builder().putAll(kvParams.toMap()).build(),
-                connectContext,
+                kvParams,
                 new HashSet<>(Arrays.asList(10002L, 10003L)),
                 coordinatorFactory,
                 loadExecuteCallback
