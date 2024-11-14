@@ -29,6 +29,9 @@
    <a href="https://twitter.com/StarRocksLabs">
     <img src="https://img.shields.io/twitter/follow/StarRocksLabs?style=social" alt="Twitter">
   </a>
+  <a href="https://gurubase.io/g/starrocks">
+    <img src="https://img.shields.io/badge/Gurubase-Ask%20StarRocks%20Guru-006BFF" alt="Gurubase">
+  </a>
  </p>
 
 <div align="center"> 
