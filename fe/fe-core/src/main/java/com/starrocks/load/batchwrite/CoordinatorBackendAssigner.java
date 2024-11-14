@@ -17,6 +17,7 @@ package com.starrocks.load.batchwrite;
 import com.starrocks.system.ComputeNode;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Interface for assigning coordinator backends to loads.
@@ -51,5 +52,5 @@ public interface CoordinatorBackendAssigner {
      * @param id The ID of the batch write.
      * @return A list of compute nodes assigned to the batch write.
      */
-    List<ComputeNode> getBackends(long id);
+    Optional<List<ComputeNode>> getBackends(long id);
 }

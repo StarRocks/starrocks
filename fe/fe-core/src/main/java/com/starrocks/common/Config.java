@@ -3309,4 +3309,11 @@ public class Config extends ConfigBase {
     public static int batch_write_idle_ms = 3600000;
 
     public static int batch_write_executor_threads_num = 4096;
+
+    @ConfField(mutable = true)
+    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
 }

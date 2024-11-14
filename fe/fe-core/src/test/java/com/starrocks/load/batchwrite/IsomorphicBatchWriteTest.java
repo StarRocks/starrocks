@@ -83,8 +83,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
                 streamLoadInfo,
                 1000,
                 parallel,
-                params.toMap(),
-                connectContext,
+                params,
                 assigner,
                 executor);
     }
@@ -95,7 +94,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = nodes;
+                result = Optional.of(nodes);
             }
         };
         RequestCoordinatorBackendResult requestResult = load.requestCoordinatorBackends();
@@ -108,7 +107,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = Collections.emptyList();
+                result = Optional.of(Collections.emptyList());
             }
         };
         RequestCoordinatorBackendResult requestResult = load.requestCoordinatorBackends();
@@ -135,7 +134,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = nodes;
+                result = Optional.of(nodes);
             }
         };
         RequestLoadResult result1 = load.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
@@ -165,7 +164,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = nodes;
+                result = Optional.of(nodes);
             }
         };
 
@@ -207,7 +206,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = nodes;
+                result = Optional.of(nodes);
             }
         };
 
@@ -222,7 +221,7 @@ public class IsomorphicBatchWriteTest extends BatchWriteTestBase {
         new Expectations() {
             {
                 assigner.getBackends(1);
-                result = nodes;
+                result = Optional.of(nodes);
             }
         };
 
