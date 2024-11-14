@@ -920,7 +920,7 @@ protected:
 
     bool _cancel_major_compaction = false;
 
-    std::unique_ptr<RandomAccessFile> _sort_index_file;
+    std::unique_ptr<WritableFile> _sort_index_file{nullptr};
 
 private:
     bool _need_bloom_filter = false;

@@ -617,7 +617,11 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     ASSIGN_OR_RETURN(_bf_wb, _fs->new_writable_file(wblock_opts, _bf_file_path));
     // The minimum unit of compression is shard now, and read on a page-by-page basis is disable after compression.
     if (config::enable_pindex_compression) {
-        _meta.set_compression_type(CompressionTypePB::LZ4_FRAME);
+        if (config::enable_zstd) {
+            _meta.set_compression_type(CompressionTypePB::ZSTD);
+        } else {
+            _meta.set_compression_type(CompressionTypePB::LZ4_FRAME);
+        }
     } else {
         _meta.set_compression_type(CompressionTypePB::NO_COMPRESSION);
     }
@@ -765,7 +769,7 @@ Status ImmutableIndexWriter::finish() {
     if (write_pindex_bf) {
         RETURN_IF_ERROR(write_bf());
     }
-    VLOG(2) << strings::Substitute(
+    LOG(INFO) << strings::Substitute(
             "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 bf_bytes:$7 "
             "compression_type:$8",
             _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
@@ -1077,6 +1081,7 @@ std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const
 
     size_t avg_kv_len = total_kv_pairs_usage / total_kv_num;
     size_t page_size = std::min(kMaxPerPageSize, pad(avg_kv_len * kRecordPerBucket, kPageSize));
+    page_size = std::min(kMaxPerPageSize, std::max((size_t)(config::pindex_page_size), page_size));
 
     size_t npage = npad(cap / nshard, page_size);
     return {nshard, npage, page_size};
@@ -3915,13 +3920,19 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
 
     {
         if (config::create_sorted_index) {
+            if (_sort_index_file == nullptr) {
+                std::string sort_index_file = strings::Substitute("$0/sort_index", _path);
+                WritableFileOptions wblock_opts;
+                wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+                ASSIGN_OR_RETURN(_sort_index_file, _fs->new_writable_file(sort_index_file));
+            }
             faststring fixed_buf;
-            put_fixed32_le(&fixed_buf, kKeySizeMagicNum);
+            put_fixed32_le(&fixed_buf, 0);
             put_fixed32_le(&fixed_buf, n);
             for (size_t idx = 0; idx < n; idx++) {
                 const auto& key = keys[idx];
                 const auto value = (values != nullptr) ? values[idx] : IndexValue(NullIndexValue);
-                WALKVSizeType kv_size = key.size + kIndexValueSize;
+                uint32_t kv_size = key.size + kIndexValueSize;
                 put_fixed32_le(&fixed_buf, kv_size);
                 fixed_buf.append(key.data, key.size);
                 put_fixed64_le(&fixed_buf, value.get_value());
@@ -5307,8 +5318,10 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     
-    std::string sort_index_file = strings::Substitute("$0/sort_index", _path;
-    ASSIGN_OR_RETURN(_sort_index_file, _fs->new_random_access_file(sort_index_file));
+    std::string sort_index_file = strings::Substitute("$0/sort_index", _path);
+    WritableFileOptions wblock_opts;
+    wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_RETURN(_sort_index_file, _fs->new_writable_file(sort_index_file));
     return Status::OK();
 }
 
