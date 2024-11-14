@@ -22,6 +22,7 @@ select count(array_map(x->array_length(array_concat(arr_str,[])), arr_largeint))
 
 set @arr=array_repeat("12345",1000000);
 select array_length(array_map((x,y)->x > y, @arr,@arr)) from table(generate_series(1,10,1));
+select count(*) from array_map_test where array_map((a1) -> concat(split(id, 'd'), split(id, 'd')), arr_str) is not null;
 
 -- name: test_array_map_3
 CREATE TABLE `t` (
