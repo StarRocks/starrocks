@@ -46,6 +46,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -105,6 +106,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1317,6 +1319,21 @@ public class MvUtils {
     public static boolean isStr2Date(Expr expr) {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+
+    public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
+        Map<String, String> partitionProperties = new HashMap<>(4);
+        partitionProperties.put("replication_num",
+                String.valueOf(materializedView.getDefaultReplicationNum()));
+        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
+        String storageCooldownTime =
+                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
+        if (storageCooldownTime != null) {
+            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
+        }
+        return partitionProperties;
     }
 
     /**
