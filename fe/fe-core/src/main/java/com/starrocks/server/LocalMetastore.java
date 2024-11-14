@@ -1627,11 +1627,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-<<<<<<< HEAD
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
-=======
                     MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
->>>>>>> addcaa4edd ([BugFix] Fix drop partition in different db could not refresh MV (#52618))
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         Database mvDb = getDb(mvId.getDbId());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
@@ -2776,6 +2772,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return null;
         }
         return database.getTable(tblName);
+    }
+
+    public Table getTable(Long dbId, Long tableId) {
+        Database database = getDb(dbId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
     }
 
     public Optional<Table> mayGetTable(String dbName, String tblName) {
