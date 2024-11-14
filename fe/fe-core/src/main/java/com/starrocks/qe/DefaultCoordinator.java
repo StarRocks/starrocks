@@ -910,7 +910,8 @@ public class DefaultCoordinator extends Coordinator {
                         copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
                 } else if (copyStatus.isTimeout()) {
-                    ErrorReport.reportTimeoutException(ErrorCode.ERR_QUERY_TIMEOUT, errMsg);
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout, errMsg);
                 }
                 throw new UserException(ec, errMsg);
             }

@@ -1655,7 +1655,7 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Analyze materialized properties failed " +
                     "because unknown properties: " + properties +
                     ", please add `session.` prefix if you want add session variables for mv(" +
-                    "eg, \"session.query_timeout\"=\"30000000\").");
+                    "eg, \"session.insert_timeout\"=\"30000000\").");
         }
         String varKey = entry.getKey().substring(
                 PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
