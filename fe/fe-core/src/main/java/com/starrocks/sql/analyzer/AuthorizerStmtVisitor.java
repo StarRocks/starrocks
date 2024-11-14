@@ -2139,7 +2139,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 for (Function fn : fns) {
                     try {
                         Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                db, fn, PrivilegeType.EXPORT);
+                                db, fn, PrivilegeType.USAGE);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -2153,7 +2153,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             externalCatalogs.forEach(externalCatalog -> {
                 try {
                     Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                externalCatalog.getCatalogName(), PrivilegeType.EXPORT);
+                                externalCatalog.getCatalogName(), PrivilegeType.USAGE);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             externalCatalog.getCatalogName(),
