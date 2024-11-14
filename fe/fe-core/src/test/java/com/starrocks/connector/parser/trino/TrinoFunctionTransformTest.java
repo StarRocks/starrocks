@@ -180,13 +180,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
 
         sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 00:00:00");
 
         sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
