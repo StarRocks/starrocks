@@ -299,4 +299,70 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     return builder.build(false);
 }
 
+StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Columns& columns) {
+    static std::u8string kBar = u8"\u2593";
+    RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));
+    RETURN_IF(!columns[1]->is_constant(), Status::InvalidArgument("argument[min] must be constant"));
+    RETURN_IF(!columns[2]->is_constant(), Status::InvalidArgument("argument[max] must be constant"));
+    RETURN_IF(!columns[3]->is_constant(), Status::InvalidArgument("argument[width] must be constant"));
+
+    ColumnViewer<TYPE_BIGINT> viewer_size(columns[0]);
+    ColumnViewer<TYPE_BIGINT> viewer_min(columns[1]);
+    ColumnViewer<TYPE_BIGINT> viewer_max(columns[2]);
+    ColumnViewer<TYPE_BIGINT> viewer_width(columns[3]);
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> builder(rows);
+
+    size_t min = viewer_min.value(0);
+    size_t max = viewer_max.value(0);
+    size_t width = viewer_width.value(0);
+    RETURN_IF(min >= max, Status::InvalidArgument("requirement: min < max"));
+    RETURN_IF(width <= 0, Status::InvalidArgument("requirement: width > 0"));
+
+    for (size_t i = 0; i < rows; i++) {
+        size_t size = viewer_size.value(i);
+        RETURN_IF(size < min, Status::InvalidArgument("requirement: size >= min"));
+        RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
+
+        double ratio = std::min<double>(1.0, 1.0 * (size - min) / (max - min));
+        size_t result_width = ratio * width;
+        std::string bar;
+        for (size_t j = 0; j < result_width; j++) {
+            bar.append(reinterpret_cast<const char*>(kBar.c_str()));
+        }
+        builder.append(bar);
+    }
+    return builder.build(false);
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context, const Columns& columns) {
+    RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));
+    RETURN_IF(!columns[1]->is_constant(), Status::InvalidArgument("argument[min] must be constant"));
+    RETURN_IF(!columns[2]->is_constant(), Status::InvalidArgument("argument[max] must be constant"));
+    RETURN_IF(!columns[3]->is_constant(), Status::InvalidArgument("argument[bucket] must be constant"));
+
+    ColumnViewer<TYPE_BIGINT> viewer_size(columns[0]);
+    ColumnViewer<TYPE_BIGINT> viewer_min(columns[1]);
+    ColumnViewer<TYPE_BIGINT> viewer_max(columns[2]);
+    ColumnViewer<TYPE_BIGINT> viewer_buckets(columns[3]);
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> builder(rows);
+
+    size_t min = viewer_min.value(0);
+    size_t max = viewer_max.value(0);
+    size_t buckets = viewer_buckets.value(0);
+    RETURN_IF(min >= max, Status::InvalidArgument("requirement: min < max"));
+    RETURN_IF(buckets <= 0, Status::InvalidArgument("requirement: buckets > 0"));
+
+    for (size_t i = 0; i < rows; i++) {
+        size_t size = viewer_size.value(i);
+        RETURN_IF(size < min, Status::InvalidArgument("requirement: size >= min"));
+        RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
+
+        size_t bucket = (size - min) / std::max<size_t>(1, ((max - min) / buckets));
+        builder.append(bucket);
+    }
+    return builder.build(false);
+}
+
 } // namespace starrocks
