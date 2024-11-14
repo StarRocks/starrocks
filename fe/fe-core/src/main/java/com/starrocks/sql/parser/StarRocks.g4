@@ -2044,9 +2044,9 @@ unsetPasswordPolicy
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP SNAPSHOT qualifiedName
-    TO identifier
-    (ON '(' backupObjectDesc (',' backupObjectDesc) * ')')?
+    : BACKUP (DATABASE dbName=identifier)?
+    SNAPSHOT qualifiedName TO repoName=identifier
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -2060,8 +2060,9 @@ showBackupStatement
 
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    (ON '(' restoreObjectDesc (',' restoreObjectDesc) * ')')?
+    FROM repoName=identifier
+    (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -2853,19 +2854,19 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
-backupObjectDesc
-    : tableDesc | FUNCTION qualifiedName
+backupRestoreObjectDesc
+    : backupRestoreTableDesc
+    | (ALL (FUNCTION | FUNCTIONS) | (FUNCTION | FUNCTIONS) qualifiedName (AS identifier)?)
+    | (ALL (TABLE | TABLES) | (TABLE | TABLES) backupRestoreTableDesc)
+    | (ALL MATERIALIZED (VIEW | VIEWS) | MATERIALIZED (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    | (ALL (VIEW | VIEWS) | (VIEW | VIEWS) qualifiedName (AS identifier)?)
     ;
 
 tableDesc
     : qualifiedName partitionNames?
     ;
 
-restoreObjectDesc
-    : restoreTableDesc | FUNCTION qualifiedName (AS identifier)?
-    ;
-
-restoreTableDesc
+backupRestoreTableDesc
     : qualifiedName partitionNames? (AS identifier)?
     ;
 

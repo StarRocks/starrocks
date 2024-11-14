@@ -742,6 +742,10 @@ public class Database extends MetaObject implements Writable {
         return functions;
     }
 
+    public synchronized Map<String, List<Function>> getNameToFunction() {
+        return Maps.newHashMap(name2Function);
+    }
+
     public synchronized List<Function> getFunctionsByName(String functionName) {
         return name2Function.getOrDefault(functionName, ImmutableList.of());
     }
