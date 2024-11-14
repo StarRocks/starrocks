@@ -211,6 +211,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     writer->close();
 
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    // update memory usage, should large than zero
+    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(_tablet_metadata->id(), txn_id));
 
     // read at version 2
@@ -255,6 +257,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
+    // update memory usage, should large than zero
+    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     _tablet_mgr->prune_metacache();
     // fill delvec cache again
@@ -394,6 +398,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
+    // update memory usage, should large than zero
+    EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
