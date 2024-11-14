@@ -222,4 +222,13 @@ public interface ParserErrorMsg {
     String nullIdentifierCancelBackupRestore();
     @BaseMessage("Value count in PIVOT {0} must match number of FOR columns {1}")
     String pivotValueArityMismatch(int a0, int a1);
+
+    @BaseMessage("Specifying dbName before snapshot name is forbidden if the DbName is specified explicitly in BACKUP/RESTORE")
+    String unsupportedSepcifyDbNameAfterSnapshotName();
+
+    @BaseMessage("Specifying alias for backup object is forbidden in BACKUP stmt")
+    String unsupportedSepcifyAliasInBackupStmt();
+
+    @BaseMessage("`ON` clause is forbidden if no Database explicitly specified in Restore stmt")
+    String unsupportedOnClauseWithoutAnyDbNameInRestoreStmt();
 }

@@ -265,11 +265,43 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Repository " + repoName + " does not exist");
         }
 
+        BackupJobInfo jobInfo = null;
+        if (stmt instanceof RestoreStmt) {
+            // Check if snapshot exist in repository, if existed, get jobInfo for restore process
+            List<BackupJobInfo> infos = Lists.newArrayList();
+            Status status = repository.getSnapshotInfoFile(stmt.getLabel(), ((RestoreStmt) stmt).getBackupTimestamp(), infos);
+            if (!status.ok()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Failed to get info of snapshot '" + stmt.getLabel() + "' because: "
+                                + status.getErrMsg() + ". Maybe specified wrong backup timestamp");
+            }
+            Preconditions.checkState(infos.size() == 1);
+            jobInfo = infos.get(0);
+        }
+
         // check if db exist
         String dbName = stmt.getDbName();
+        if (dbName == null) {
+            // if target dbName if null, use dbName in snapshot
+            dbName = jobInfo.dbName;
+        }
+
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            if (stmt instanceof RestoreStmt) {
+                try {
+                    globalStateMgr.getLocalMetastore().createDb(dbName, null);
+                    db = globalStateMgr.getLocalMetastore().getDb(dbName);
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                    }
+                } catch (Exception e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                "Can not create database: " + dbName + " in restore process");
+                }
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Try to get sequence lock.
@@ -288,7 +320,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             if (stmt instanceof BackupStmt) {
                 backup(repository, db, (BackupStmt) stmt);
             } else if (stmt instanceof RestoreStmt) {
-                restore(repository, db, (RestoreStmt) stmt);
+                restore(repository, db, (RestoreStmt) stmt, jobInfo);
             }
         } finally {
             seqlock.unlock();
@@ -432,30 +464,23 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         LOG.info("finished to submit backup job: {}", backupJob);
     }
 
-    private void restore(Repository repository, Database db, RestoreStmt stmt) throws DdlException {
-        // Check if snapshot exist in repository
-        List<BackupJobInfo> infos = Lists.newArrayList();
-        Status status = repository.getSnapshotInfoFile(stmt.getLabel(), stmt.getBackupTimestamp(), infos);
-        if (!status.ok()) {
+    private void restore(Repository repository, Database db, RestoreStmt stmt, BackupJobInfo jobInfo) throws DdlException {
+        // check the original dbName existed in snapshot or not
+        if (!stmt.getOriginDbName().isEmpty() && !stmt.getOriginDbName().equals(jobInfo.dbName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                    "Failed to get info of snapshot '" + stmt.getLabel() + "' because: "
-                            + status.getErrMsg() + ". Maybe specified wrong backup timestamp");
-        }
-
-        // Check if all restore objects are exist in this snapshot.
-        // Also remove all unrelated objs
-        Preconditions.checkState(infos.size() == 1);
-        BackupJobInfo jobInfo = infos.get(0);
-        // If restore statement contains `ON` clause, check and filter the specified backup
-        // object is needed. 
-        if (stmt.withOnClause()) {
-            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+                        "target database: " + stmt.getOriginDbName() + " is not existed in snapshot");
         }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
 
-        // For UDFs restore, restore all functions in BackupMeta if statement does not contains `ON` clause.
-        // Otherwise, restore the functions specified after `ON` clause in restore statement.
+        // If restore statement contains `ON` clause, filter the specified backup objects which are needed through infomation
+        // provide in stmt and BackupMeta.
+        if (stmt.withOnClause()) {
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs(), stmt, backupMeta);
+        }
+
+        // For UDFs restore, restore all functions in BackupMeta if statement does not contains `ON` clause or contains `ON`
+        // and `ALL` clause for functions. Otherwise, restore the functions specified after `ON` clause in restore statement.
         if (stmt.withOnClause() && backupMeta != null) {
             checkAndFilterRestoreFunctionsInBackupMeta(stmt, backupMeta);
         }
@@ -484,7 +509,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         LOG.info("finished to submit restore job: {}", restoreJob);
     }
 
-    private BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+    protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
         // the meta version is used when reading backup meta from file.
         // we do not persist this field, because this is just a temporary solution.
         // the true meta version should be getting from backup job info, which is saved when doing backup job.
@@ -506,6 +531,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     protected void checkAndFilterRestoreFunctionsInBackupMeta(RestoreStmt stmt, BackupMeta backupMeta) throws DdlException {
         List<Function> functionsInBackupMeta = backupMeta.getFunctions();
         List<Function> restoredFunctions = Lists.newArrayList();
+        Set<String> hitFnNames = Sets.newHashSet();
         for (FunctionRef fnRef : stmt.getFnRefs()) {
             List<Function> hitFunc = functionsInBackupMeta.stream().filter(x -> fnRef.checkSameFunctionNameForRestore(x))
                                      .collect(Collectors.toList());
@@ -518,16 +544,28 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 hitFunc.stream().forEach(fn -> fn.setFunctionName(
                                          new FunctionName(fn.getFunctionName().getDb(), fnRef.getAlias())));
             }
+            hitFnNames.add(hitFunc.get(0).getFunctionName().getFunction());
             restoredFunctions.addAll(hitFunc);
+        }
+
+        if (stmt.allFunction()) {
+            for (Function fn : functionsInBackupMeta) {
+                if (hitFnNames.contains(fn.getFunctionName().getFunction())) {
+                    continue;
+                }
+                restoredFunctions.add(fn);
+            }
         }
         backupMeta.setFunctions(restoredFunctions);
     }
 
-    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)
-            throws DdlException {
+    private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs, RestoreStmt stmt,
+            BackupMeta backupMeta) throws DdlException {
         Set<String> allTbls = Sets.newHashSet();
+        Set<String> originTblName = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {
             String tblName = tblRef.getName().getTbl();
+            originTblName.add(tblName);
             if (!jobInfo.containsTbl(tblName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Table " + tblName + " does not exist in snapshot " + jobInfo.name);
@@ -557,6 +595,26 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             // only retain restore partitions
             tblInfo.retainPartitions(partitionNames == null ? null : partitionNames.getPartitionNames());
             allTbls.add(tblName);
+        }
+
+        if (backupMeta != null) {
+            if (stmt.allTable()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapTable() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
+
+            if (stmt.allMV()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapMaterializedView() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
+
+            if (stmt.allView()) {
+                allTbls.addAll(backupMeta.getTables().values().stream()
+                               .filter(x -> x.isOlapView() && !originTblName.contains(x.getName()))
+                               .map(x -> x.getName()).collect(Collectors.toSet()));
+            }
         }
 
         // only retain restore tables

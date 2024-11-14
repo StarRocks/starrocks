@@ -22,6 +22,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -79,12 +80,21 @@ public class BackupRestoreAnalyzer {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
+
             boolean withOnClause = backupStmt.withOnClause();
+            boolean allFunction = backupStmt.allFunction();
+            boolean allTable = backupStmt.allTable();
+            boolean allMV = backupStmt.allMV();
+            boolean allView = backupStmt.allView();
+
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
-            // If TableRefs is empty and withOnClause is not true, it means that we do not specify any table in Backup stmt.
-            // We should backup all table in current database.
-            if (!withOnClause && tableRefs.isEmpty()) {
+            // There are several cases:
+            // 1. Backup all table/mv/view without `ON` clause.
+            // 2. Backup all table if specify `ALL` for table.
+            // 3. Backup all MV if specify `ALL` for MV.
+            // 4. Backup all VIEW if specify `ALL` for VIEW.
+            if (!withOnClause || allTable || allMV || allView) {
                 for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +
@@ -94,6 +104,16 @@ public class BackupRestoreAnalyzer {
                     if (tbl.isTemporaryTable()) {
                         continue;
                     }
+
+                    if (withOnClause && ((tbl.isOlapTable() && !allTable) || (tbl.isOlapMaterializedView() && !allMV) ||
+                                         (tbl.isOlapView() && !allView))) {
+                        continue;
+                    }
+
+                    if (tableRefs.stream().anyMatch(tableRef -> tableRef.getName().getTbl().equalsIgnoreCase(tbl.getName()))) {
+                        continue;
+                    }
+
                     TableName tableName = new TableName(dbName, tbl.getName());
                     TableRef tableRef = new TableRef(tableName, null, null);
                     tableRefs.add(tableRef);
@@ -136,8 +156,22 @@ public class BackupRestoreAnalyzer {
 
             // analyze and get Function for stmt
             List<FunctionRef> fnRefs = backupStmt.getFnRefs();
-            if (!withOnClause) {
-                fnRefs.add(new FunctionRef(database.getFunctions()));
+            if (!withOnClause || allFunction) /* without `On` or contains `ALL` */ {
+                if (!fnRefs.isEmpty()) {
+                    fnRefs.stream().forEach(x -> x.analyzeForBackup(database));
+                }
+
+                for (Map.Entry<String, List<Function>> entry : database.getNameToFunction().entrySet()) {
+                    String fnName = entry.getKey();
+                    List<Function> fns = entry.getValue();
+
+                    if (fnRefs.stream().anyMatch(x -> x.getFunctions().get(0)
+                                                 .getFunctionName().getFunction().equalsIgnoreCase(fnName))) {
+                        continue;
+                    }
+
+                    fnRefs.add(new FunctionRef(fns));
+                }
             } else {
                 backupStmt.getFnRefs().stream().forEach(x -> x.analyzeForBackup(database));
             }
