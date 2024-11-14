@@ -28,7 +28,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -57,7 +56,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -109,7 +107,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -123,6 +120,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getPartitionProperties;
 
 /**
  * Core logic of materialized view refresh task run
@@ -1563,22 +1561,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LOG.info("Collect base table snapshot infos for materialized view: {}, cost: {} ms",
                 materializedView.getName(), stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return tables;
-    }
-
-    private Map<String, String> getPartitionProperties(MaterializedView materializedView) {
-        Map<String, String> partitionProperties = new HashMap<>(4);
-        partitionProperties.put("replication_num",
-                String.valueOf(materializedView.getDefaultReplicationNum()));
-        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
-        String storageCooldownTime =
-                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
-            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
-            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
-            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
-        }
-        return partitionProperties;
     }
 
     private DistributionDesc getDistributionDesc(MaterializedView materializedView) {
