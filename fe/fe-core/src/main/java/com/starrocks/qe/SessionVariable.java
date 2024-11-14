@@ -830,6 +830,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
 
+    public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2408,6 +2410,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
+
+    @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
+    private boolean enableRewriteUnnestBitmapToArray = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -4400,6 +4405,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isInsertLocalShuffleForWindowPreAgg() {
         return insertLocalShuffleForWindowPreAgg;
+    }
+
+    public boolean isEnableRewriteUnnestBitmapToArray() {
+        return enableRewriteUnnestBitmapToArray;
     }
 
     // Serialize to thrift object
