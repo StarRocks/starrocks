@@ -231,4 +231,13 @@ public interface ParserErrorMsg {
 
     @BaseMessage("`ON` clause is forbidden if no Database explicitly specified in Restore stmt")
     String unsupportedOnClauseWithoutAnyDbNameInRestoreStmt();
+
+    @BaseMessage("Can not sepcify database name for external catalog Backup/Restore")
+    String unsupportedSepcifyDbForExternalCatalog();
+
+    @BaseMessage("Can not sepcify `ON` clause for external catalog Backup/Restore")
+    String unsupportedOnForExternalCatalog();
+
+    @BaseMessage("Can not sepcify database for cancel EXTERNAL CATALOG BACKUP/RESTORE")
+    String unsupportedSepcifyDatabaseForExternalCatalog();
 }

@@ -313,7 +313,7 @@ public class BackupHandlerTest {
         List<TableRef> tblRefs = Lists.newArrayList();
         tblRefs.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
         BackupStmt backupStmt = new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label1"), "repo", tblRefs,
-                                               Lists.newArrayList(), null, false, "", null);
+                                               Lists.newArrayList(), null, null, false, "", null);
         try {
             handler.process(backupStmt);
         } catch (DdlException e1) {
@@ -372,7 +372,7 @@ public class BackupHandlerTest {
         tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
         BackupStmt backupStmt1 =
                     new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1, Lists.newArrayList(),
-                                null, false, "", null);
+                                null, null, false, "", null);
         try {
             handler.process(backupStmt1);
         } catch (DdlException e1) {
@@ -432,7 +432,7 @@ public class BackupHandlerTest {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
-                    Lists.newArrayList(), null, false, "", properties);
+                    Lists.newArrayList(), null, null, false, "", properties);
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
@@ -510,7 +510,7 @@ public class BackupHandlerTest {
         Map<String, String> properties1 = Maps.newHashMap();
         properties1.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt1 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs3,
-                    Lists.newArrayList(), null, false, "", properties1);
+                    Lists.newArrayList(), null, null, false, "", properties1);
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt1, new ConnectContext());
         } catch (SemanticException e2) {
@@ -585,7 +585,7 @@ public class BackupHandlerTest {
         Map<String, String> properties2 = Maps.newHashMap();
         properties2.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt2 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", emptyTableRef,
-                                                   fnRefs, null, false, "", properties2);
+                                                   fnRefs, null, null, false, "", properties2);
         BackupMeta backupMeta = new BackupMeta(Lists.newArrayList());
         List<Function> fns = Lists.newArrayList();
         Function f1 = new Function(new FunctionName(db.getFullName(), "wrong_name"),
@@ -816,7 +816,7 @@ public class BackupHandlerTest {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("backup_timestamp", "2018-08-08-08-08-08");
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(null, "ss2"), "repo", tblRefs2,
-                    Lists.newArrayList(), null, false, "", properties);
+                    Lists.newArrayList(), null, null, false, "", properties);
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
@@ -834,7 +834,7 @@ public class BackupHandlerTest {
         allMarker.add(AbstractBackupStmt.BackupObjectType.MV);
         allMarker.add(AbstractBackupStmt.BackupObjectType.VIEW);
         restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
-                          Lists.newArrayList(), allMarker, true, "", properties);
+                          Lists.newArrayList(), null, allMarker, true, "", properties);
         try {
             BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
         } catch (SemanticException e2) {
