@@ -64,6 +64,7 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -1248,6 +1249,15 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     st.to_protobuf(response->mutable_status());
     uint64_t elapsed_time_ns = watch.elapsed_time();
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

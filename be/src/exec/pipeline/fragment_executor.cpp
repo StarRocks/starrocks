@@ -39,6 +39,7 @@
 #include "exec/workgroup/work_group.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
@@ -623,6 +624,21 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
         return Status::OK();
     }
     std::vector<StreamLoadContext*> stream_load_contexts;
+
+    bool success = false;
+    DeferOp defer_op([&] {
+        if (!success) {
+            for (auto& ctx : stream_load_contexts) {
+                ctx->body_sink->cancel(Status::Cancelled("Failed to prepare stream load pipe"));
+                if (ctx->enable_batch_write) {
+                    exec_env->batch_write_mgr()->unregister_stream_load_pipe(ctx);
+                } else {
+                    exec_env->stream_context_mgr()->remove_channel_context(ctx);
+                }
+            }
+        }
+    });
+
     for (; iter != scan_range_map.end(); iter++) {
         for (; iter2 != iter->second.end(); iter2++) {
             for (const auto& scan_range : iter2->second) {
@@ -634,19 +650,30 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                 TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
                 TUniqueId load_id = broker_scan_range.ranges[0].load_id;
                 long txn_id = broker_scan_range.params.txn_id;
+                bool is_batch_write =
+                        broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
-                RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
-                        exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
-                DeferOp op([&] {
-                    if (ctx->unref()) {
-                        delete ctx;
-                    }
-                });
-                RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                if (is_batch_write) {
+                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
+                                                  exec_env, exec_env->batch_write_mgr(), db_name, table_name,
+                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
+                                                  broker_scan_range.batch_write_interval_ms));
+                } else {
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                            exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                    DeferOp op([&] {
+                        if (ctx->unref()) {
+                            delete ctx;
+                        }
+                    });
+                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                }
                 stream_load_contexts.push_back(ctx);
             }
         }
     }
+
+    success = true;
     _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
     return Status::OK();
 }
