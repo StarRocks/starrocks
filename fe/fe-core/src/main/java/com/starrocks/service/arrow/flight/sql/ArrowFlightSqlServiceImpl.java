@@ -78,7 +78,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         this.location = location;
         sqlInfoBuilder = new SqlInfoBuilder();
         sqlInfoBuilder.withFlightSqlServerName("StarRocks").withFlightSqlServerVersion("1.0")
-                .withFlightSqlServerArrowVersion("17.0.0")
+                .withFlightSqlServerArrowVersion("18.0.0")
                 .withFlightSqlServerReadOnly(false)
                 .withSqlIdentifierQuoteChar("`")
                 .withSqlDdlCatalog(true)
