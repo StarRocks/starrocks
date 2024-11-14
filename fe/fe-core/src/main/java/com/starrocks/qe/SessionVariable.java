@@ -613,6 +613,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+<<<<<<< HEAD
+=======
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
+    public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
+    public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
+    public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
+
+    public static final String ENABLE_PLAN_ANALYZER = "enable_plan_analyzer";
+
+    public static final String ENABLE_PLAN_ADVISOR = "enable_plan_advisor";
+
+    public static final String DISABLE_GENERATED_COLUMN_REWRITE = "disable_generated_column_rewrite";
+    
+    public static final String ENABLE_PUSH_DOWN_PRE_AGG_WITH_RANK = "enable_push_down_pre_agg_with_rank";
+
+    public static final  String INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG = "insert_local_shuffle_for_window_pre_agg";
+
+    public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
+
+>>>>>>> b64adafe04 ([Enhancement]Rewrite unnest(bitmap_to_array) to unnest_bitmap (#52870))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1626,6 +1646,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
+    private String customQueryId = "";
+
+    @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
+    private boolean enableRewriteUnnestBitmapToArray = true;
+
+>>>>>>> b64adafe04 ([Enhancement]Rewrite unnest(bitmap_to_array) to unnest_bitmap (#52870))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -3031,6 +3060,89 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.likePredicateConsolidateMin = value;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+    public void setCustomQueryId(String customQueryId) {
+        this.customQueryId = customQueryId;
+    }
+
+    public int getConnectorRemoteFileAsyncQueueSize() {
+        return connectorRemoteFileAsyncQueueSize;
+    }
+
+    public int getConnectorRemoteFileAsyncTaskSize() {
+        return connectorRemoteFileAsyncTaskSize;
+    }
+
+    public boolean isEnablePlanAnalyzer() {
+        return enablePlanAnalyzer;
+    }
+
+    public void setEnablePlanAnalyzer(boolean enablePlanAnalyzer) {
+        this.enablePlanAnalyzer = enablePlanAnalyzer;
+    }
+
+    public boolean isEnablePlanAdvisor() {
+        return enablePlanAdvisor;
+    }
+
+    public void setEnablePlanAdvisor(boolean enablePlanAdvisor) {
+        this.enablePlanAdvisor = enablePlanAdvisor;
+    }
+
+    public void setCountDistinctImplementation(String countDistinctImplementation) {
+        this.countDistinctImplementation = countDistinctImplementation;
+    }
+
+    public SessionVariableConstants.CountDistinctImplMode getCountDistinctImplementation() {
+        return SessionVariableConstants.CountDistinctImplMode.parse(countDistinctImplementation);
+    }
+
+    public boolean isEnableCountDistinctRewriteByHllBitmap() {
+        return enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public void setEnableCountDistinctRewriteByHllBitmap(boolean enableCountDistinctRewriteByHllBitmap) {
+        this.enableCountDistinctRewriteByHllBitmap = enableCountDistinctRewriteByHllBitmap;
+    }
+
+    public boolean isDisableGeneratedColumnRewrite() {
+        return disableGeneratedColumnRewrite;
+    }
+
+    public int getConnectorIncrementalScanRangeNumber() {
+        return connectorIncrementalScanRangeSize;
+    }
+
+    public void setConnectorIncrementalScanRangeNumber(int v) {
+        connectorIncrementalScanRangeSize = v;
+    }
+
+    public boolean isEnableConnectorIncrementalScanRanges() {
+        return enableConnectorIncrementalScanRanges;
+    }
+
+    public void setEnableConnectorIncrementalScanRanges(boolean v) {
+        enableConnectorIncrementalScanRanges = v;
+    }
+
+    public boolean getEnablePushDownPreAggWithRank() {
+        return enablePushDownPreAggWithRank;
+    }
+
+    public boolean isInsertLocalShuffleForWindowPreAgg() {
+        return insertLocalShuffleForWindowPreAgg;
+    }
+
+    public boolean isEnableRewriteUnnestBitmapToArray() {
+        return enableRewriteUnnestBitmapToArray;
+    }
+
+>>>>>>> b64adafe04 ([Enhancement]Rewrite unnest(bitmap_to_array) to unnest_bitmap (#52870))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

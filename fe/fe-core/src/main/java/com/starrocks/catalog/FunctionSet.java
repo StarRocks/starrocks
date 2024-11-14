@@ -478,6 +478,34 @@ public class FunctionSet {
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
 
+<<<<<<< HEAD
+=======
+    // table function
+    public static final String UNNEST = "unnest";
+    public static final String UNNEST_BITMAP = "unnest_bitmap";
+
+    public static final String CONNECTION_ID = "connection_id";
+    public static final String SESSION_ID = "session_id";
+
+    public static final String CATALOG = "catalog";
+
+    public static final String DATABASE = "database";
+
+    public static final String SCHEMA = "schema";
+
+    public static final String USER = "user";
+
+    public static final String SESSION_USER = "session_user";
+
+    public static final String CURRENT_USER = "current_user";
+
+    public static final String CURRENT_ROLE = "current_role";
+
+    public static final String AGG_STATE_SUFFIX = "_state";
+    public static final String AGG_STATE_UNION_SUFFIX = "_union";
+    public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
+
+>>>>>>> b64adafe04 ([Enhancement]Rewrite unnest(bitmap_to_array) to unnest_bitmap (#52870))
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
