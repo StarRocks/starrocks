@@ -1731,7 +1731,7 @@ privObjectTypePlural
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL CATALOG identifierList)? (DATABASE dbName=identifier)?
+    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
@@ -1748,7 +1748,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM repoName=identifier
-    (ALL EXTERNAL CATALOGS | EXTERNAL CATALOG identifierWithAliasList)?
+    (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?

@@ -3442,9 +3442,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         List<CatalogRef> externalCatalogRefs = new ArrayList<>();
         boolean allExternalCatalog = backupContext != null ?
-                                     (backupContext.CATALOGS() != null) : (restoreContext.CATALOGS() != null);
+                                     (backupContext.ALL() != null) : (restoreContext.ALL() != null);
         if (!allExternalCatalog && (backupContext != null ?
-                                    (backupContext.CATALOG() != null) : (restoreContext.CATALOG() != null))) {
+                                    (backupContext.CATALOG() != null || backupContext.CATALOGS() != null) :
+                                    (restoreContext.CATALOG() != null || restoreContext.CATALOGS() != null))) {
             if (backupContext != null) {
                 StarRocksParser.IdentifierListContext identifierListContext = backupContext.identifierList();
                 externalCatalogRefs = visit(identifierListContext.identifier(), Identifier.class)
