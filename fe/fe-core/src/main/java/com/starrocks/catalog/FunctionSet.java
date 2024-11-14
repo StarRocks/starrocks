@@ -488,6 +488,13 @@ public class FunctionSet {
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
 
+<<<<<<< HEAD
+=======
+    // table function
+    public static final String UNNEST = "unnest";
+    public static final String UNNEST_BITMAP = "unnest_bitmap";
+
+>>>>>>> b64adafe04 ([Enhancement]Rewrite unnest(bitmap_to_array) to unnest_bitmap (#52870))
     public static final String CONNECTION_ID = "connection_id";
 
     public static final String CATALOG = "catalog";
