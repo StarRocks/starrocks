@@ -2519,16 +2519,17 @@ Status ImmutableIndex::_split_keys_info_by_page(size_t shard_idx, std::vector<Ke
 
 Status ImmutableIndex::_read_page(size_t shard_idx, size_t pageid, LargeIndexPage* page, IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
-    IndexPage compressed_page;
+    //IndexPage compressed_page;
+    LargeIndexPage compressed_page(page->_pages.size());
     if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_size * pageid, page->data(),
                                              shard_info.page_size));
     } else {
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], compressed_page.data,
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], compressed_page.data(),
                                              shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]));
         const BlockCompressionCodec* codec = nullptr;
         RETURN_IF_ERROR(get_block_compression_codec(_compression_type, &codec));
-        Slice compressed_body((uint8_t*)compressed_page.data,
+        Slice compressed_body((uint8_t*)compressed_page.data(),
                               shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]);
         Slice decompressed_body((uint8_t*)page->data(), shard_info.page_size);
         RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
