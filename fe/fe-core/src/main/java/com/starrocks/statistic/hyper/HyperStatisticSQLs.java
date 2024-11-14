@@ -54,8 +54,7 @@ public class HyperStatisticSQLs {
     //| max            | varchar(1048576) | NO   | false | <null>  |       |
     //| min            | varchar(1048576) | NO   | false | <null>  |       |
     //| update_time    | datetime         | NO   | false | <null>  |       |
-    static final String TABLE_NAME = "column_statistics";
-    static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    public static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
@@ -66,7 +65,7 @@ public class HyperStatisticSQLs {
             ", $minFunction " + // VARCHAR
             " FROM `$dbName`.`$tableName` partition `$partitionName`";
 
-    static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+    public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(COUNT(*) as BIGINT)" + // BIGINT, row_count
@@ -77,7 +76,7 @@ public class HyperStatisticSQLs {
             ", $minFunction " + // VARCHAR, min
             " FROM `$dbName`.`$tableName` partitions(`$partitionName`) [_META_]";
 
-    static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+    public static final String BATCH_DATA_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
             ", cast(0 as BIGINT)" + // BIGINT, row_count
@@ -88,7 +87,7 @@ public class HyperStatisticSQLs {
             ", '' " + // VARCHAR, min
             " FROM base_cte_table ";
 
-    static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
+    public static final String BATCH_SAMPLE_STATISTIC_SELECT_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
             ", cast($rowCount as BIGINT)" + // BIGINT
@@ -99,13 +98,13 @@ public class HyperStatisticSQLs {
             ", $minFunction " + // VARCHAR
             " FROM base_cte_table ";
 
-    static String build(VelocityContext context, String template) {
+    public static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
     }
 
-    static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
+    public static VelocityContext buildBaseContext(Database db, Table table, Partition p, ColumnStats stats) {
         VelocityContext context = new VelocityContext();
         String columnNameStr = stats.getColumnNameStr();
         String quoteColumnName = stats.getQuotedColumnName();
@@ -119,7 +118,7 @@ public class HyperStatisticSQLs {
         return context;
     }
 
-    static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
+    public static String buildSampleSQL(Database db, Table table, Partition p, List<ColumnStats> stats,
                                         PartitionSampler sampler, String template) {
         String tableName = "`" + db.getOriginName() + "`.`" + table.getName() + "`";
 

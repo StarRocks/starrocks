@@ -29,9 +29,9 @@ public class SubFieldColumnStats extends ColumnStats {
         super(String.join(".", names), columnType);
         this.names = names;
         if (columnType.canStatistic()) {
-            columnStats = new PrimitiveTypeColumnStats("name", columnType);
+            columnStats = new PrimitiveTypeColumnStats(String.join(".", names), columnType);
         } else {
-            columnStats = new ComplexTypeColumnStats("name", columnType);
+            columnStats = new ComplexTypeColumnStats(String.join(".", names), columnType);
         }
     }
 

@@ -72,10 +72,6 @@ public class SampleInfo {
         return totalRowCount;
     }
 
-    public double getRowSampleRatio() {
-        return rowSampleRatio;
-    }
-
     public List<TabletStats> getHighWeightTablets() {
         return highWeightTablets;
     }

@@ -230,12 +230,16 @@ public abstract class HyperQueryJob {
         List<ColumnStats> supportedStats = classifier.getColumnStats();
         List<ColumnStats> dataCollectColumns =
                 supportedStats.stream().filter(ColumnStats::supportData).collect(Collectors.toList());
+        List<ColumnStats> unSupportedStats = classifier.getUnSupportCollectColumns();
 
         List<List<Long>> pids = Lists.partition(partitionIdList, batchLimit);
         List<HyperQueryJob> jobs = Lists.newArrayList();
         for (List<Long> pid : pids) {
             if (!dataCollectColumns.isEmpty()) {
                 jobs.add(new FullQueryJob(context, db, table, dataCollectColumns, pid));
+            }
+            if (!unSupportedStats.isEmpty()) {
+                jobs.add(new ConstQueryJob(context, db, table, unSupportedStats, pid));
             }
         }
         return jobs;
@@ -252,6 +256,7 @@ public abstract class HyperQueryJob {
                 supportedStats.stream().filter(ColumnStats::supportMeta).collect(Collectors.toList());
         List<ColumnStats> dataCollectColumns =
                 supportedStats.stream().filter(c -> !c.supportMeta() && c.supportData()).collect(Collectors.toList());
+        List<ColumnStats> unSupportedStats = classifier.getUnSupportCollectColumns();
 
         List<List<Long>> pids = Lists.partition(partitionIdList, batchLimit);
         List<HyperQueryJob> jobs = Lists.newArrayList();
@@ -261,6 +266,9 @@ public abstract class HyperQueryJob {
             }
             if (!dataCollectColumns.isEmpty()) {
                 jobs.add(new SampleQueryJob(context, db, table, dataCollectColumns, pid, sampler));
+            }
+            if (!unSupportedStats.isEmpty()) {
+                jobs.add(new ConstQueryJob(context, db, table, unSupportedStats, pid));
             }
         }
         return jobs;

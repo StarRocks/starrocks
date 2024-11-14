@@ -119,10 +119,6 @@ public class PartitionSampler {
             long sampleRows = high.getSampleRows() + mediumHigh.getSampleRows() + mediumLow.getSampleRows()
                     + low.getSampleRows();
 
-            if (totalRows <= 0) {
-                continue;
-            }
-
             List<TabletStats> highSampleTablets = high.sample();
             List<TabletStats> mediumHighSampleTablets = mediumHigh.sample();
             List<TabletStats> mediumLowSampleTablets = mediumLow.sample();
