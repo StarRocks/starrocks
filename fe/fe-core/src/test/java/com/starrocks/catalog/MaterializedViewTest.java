@@ -24,22 +24,15 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
-import com.starrocks.connector.ConnectorMetadata;
-=======
-import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
-import com.starrocks.planner.MaterializedViewTestBase;
->>>>>>> 01bf89538c ([BugFix] Unable to set storage_cooldown_time to maximum when creating MaterializedView. (#52079))
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
@@ -54,14 +47,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-=======
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.MVTestUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.parser.SqlParser;
->>>>>>> 01bf89538c ([BugFix] Unable to set storage_cooldown_time to maximum when creating MaterializedView. (#52079))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;

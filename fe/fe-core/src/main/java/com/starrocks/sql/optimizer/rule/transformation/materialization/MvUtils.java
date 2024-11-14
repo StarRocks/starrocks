@@ -46,6 +46,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -105,6 +106,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1319,8 +1321,6 @@ public class MvUtils {
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 
-<<<<<<< HEAD
-=======
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
         Map<String, String> partitionProperties = new HashMap<>(4);
         partitionProperties.put("replication_num",
@@ -1336,18 +1336,6 @@ public class MvUtils {
         return partitionProperties;
     }
 
-    public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
-        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-        if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
-                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
-            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
-        } else {
-            return new RandomDistributionDesc();
-        }
-    }
-
->>>>>>> 01bf89538c ([BugFix] Unable to set storage_cooldown_time to maximum when creating MaterializedView. (#52079))
     /**
      * Trim the input set if its size is larger than maxLength.
      * @return the trimmed set.
