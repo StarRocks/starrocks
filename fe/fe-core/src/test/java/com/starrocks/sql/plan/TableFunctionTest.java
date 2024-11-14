@@ -266,4 +266,14 @@ public class TableFunctionTest extends PlanTestBase {
 
         Assert.assertTrue(e.getMessage().contains("Not unique table/alias: 'table_function_unnest'"));
     }
+
+    @Test
+    public void testRewrite() throws Exception {
+        String sql = "SELECT k1,  unnest AS c3\n" +
+                "    FROM test_agg,unnest(bitmap_to_array(b1)) ORDER BY k1 ASC, c3 ASC\n" +
+                "LIMIT 5;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "tableFunctionName: unnest_bitmap");
+        assertNotContains(plan, "bitmap_to_array");
+    }
 }

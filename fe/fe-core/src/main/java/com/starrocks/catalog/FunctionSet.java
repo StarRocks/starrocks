@@ -517,6 +517,7 @@ public class FunctionSet {
 
     // table function
     public static final String UNNEST = "unnest";
+    public static final String UNNEST_BITMAP = "unnest_bitmap";
 
     public static final String CONNECTION_ID = "connection_id";
     public static final String SESSION_ID = "session_id";
