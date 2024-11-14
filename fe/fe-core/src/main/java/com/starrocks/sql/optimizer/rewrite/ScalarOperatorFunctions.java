@@ -91,6 +91,8 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -443,6 +445,26 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createVarchar(result);
         }
     }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATETIME, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "jodatime_format", argTypes = {DATE, VARCHAR},
+                    returnType = VARCHAR, isMonotonic = true)
+    })
+    public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
+        String format = fmtLiteral.getVarchar();
+        if (format.isEmpty()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
+        DateTime jodaDateTime = new DateTime(date.getDatetime()
+                .atZone(ZoneId.systemDefault()) // Associate with the default time zone of the system
+                .toInstant()
+                .toEpochMilli());
+        return ConstantOperator.createVarchar(jodaDateTime.toString(formatter));
+    }
+
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "to_iso8601", argTypes = {DATETIME}, returnType = VARCHAR, isMonotonic = true),
