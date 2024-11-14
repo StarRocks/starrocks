@@ -192,6 +192,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -999,8 +1000,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
         String fieldString = node.getField().toString().toLowerCase();
-        return  Trino2SRFunctionCallTransformer.convert(fieldString,
+        Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
                 Lists.newArrayList((Expr) visit(node.getExpression(), context)));
+        return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
+                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
     }
 
     @Override
