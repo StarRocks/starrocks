@@ -372,7 +372,7 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
         return;
     }
 
-    auto null_data = _null_column->get_data();
+    const auto& null_data = _null_column->get_data();
     // NULL is treat as 0 when crc32 hash for data loading
     static const int INT_VALUE = 0;
     while (from < to) {
