@@ -12,36 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.statistic.base;
+package com.starrocks.statistic.hyper;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.hyper.ConstQueryJob;
-import com.starrocks.statistic.hyper.HyperQueryJob;
-import com.starrocks.statistic.hyper.HyperStatisticSQLs;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.HyperStatisticsCollectJob;
+import com.starrocks.statistic.NativeAnalyzeStatus;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.base.ColumnClassifier;
+import com.starrocks.statistic.base.ColumnStats;
+import com.starrocks.statistic.base.PartitionSampler;
+import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
+import com.starrocks.statistic.base.SubFieldColumnStats;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.velocity.VelocityContext;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class SampleInfoTest extends DistributedEnvPlanTestBase {
+public class HyperJobTest extends DistributedEnvPlanTestBase {
 
     private static Database db;
 
@@ -69,6 +84,10 @@ public class SampleInfoTest extends DistributedEnvPlanTestBase {
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         pid = table.getPartition("t_struct").getId();
         sampler = PartitionSampler.create(table, List.of(pid), Maps.newHashMap());
+
+        for (Partition partition : ((OlapTable) table).getAllPartitions()) {
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+        }
     }
 
     @Test
@@ -116,6 +135,80 @@ public class SampleInfoTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(1, columnStat.size());
         List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
         Assert.assertTrue(stmt.get(0) instanceof QueryStatement);
+    }
+
+    public Pair<List<String>, List<Type>> initColumn(List<String> cols) {
+        List<String> columnNames = Lists.newArrayList();
+        List<Type> columnTypes = Lists.newArrayList();
+        for (String col : cols) {
+            Column c = table.getColumn(col);
+            columnNames.add(c.getName());
+            columnTypes.add(c.getType());
+        }
+        return Pair.create(columnNames, columnTypes);
+    }
+
+    @Test
+    public void testConstQueryJobs() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+            }
+        };
+        Pair<List<String>, List<Type>> pair = initColumn(List.of("c4", "c5", "c6"));
+
+        HyperStatisticsCollectJob job = new HyperStatisticsCollectJob(db, table, List.of(pid), pair.first, pair.second,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        AnalyzeStatus status = new NativeAnalyzeStatus(1, 1, 1, pair.first, StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        try {
+            job.collect(context, status);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    public void testFullJobs() {
+        Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
+
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, pair.first,
+                pair.second, List.of(pid), 1);
+
+        Assert.assertEquals(2, jobs.size());
+
+        List<String> sql = jobs.get(0).buildQuerySQL();
+        Assert.assertEquals(3, sql.size());
+
+        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(`c1`),");
+        assertContains(sql.get(1), "FROM `test`.`t_struct` partition `t_struct`");
+    }
+
+    @Test
+    public void testSampleJobs() {
+        Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
+
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
+                pair.second, List.of(pid), 1, sampler);
+
+        Assert.assertEquals(2, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof MetaQueryJob);
+        Assert.assertTrue(jobs.get(1) instanceof SampleQueryJob);
+
+        List<String> sql = jobs.get(1).buildQuerySQL();
+        Assert.assertEquals(1, sql.size());
+
+        assertContains(sql.get(0), "with base_cte_table as " +
+                "(SELECT * FROM `test`.`t_struct` LIMIT 200000) " +
+                "SELECT cast(4 as INT), cast(14418 as BIGINT), 'c2', cast(0 as BIGINT), " +
+                "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
+                "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
+                " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
+                "IFNULL(MAX(LEFT(`c2`, 200)), ''), IFNULL(MIN(LEFT(`c2`, 200)), '')  " +
+                "FROM base_cte_table ");
     }
 
     @AfterClass
