@@ -49,6 +49,7 @@
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
+#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/parquet_types.h"
@@ -324,19 +325,32 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
-    if (_filter_group_with_min_max_conjuncts(group_reader)) {
-        return true;
-    }
+    if (_scanner_ctx->conjuncts_manager != nullptr) {
+        auto res = _scanner_ctx->predicate_tree.visit(
+                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader});
+        if (!res.ok()) {
+            LOG(WARNING) << "filter row group failed: " << res.status().message();
+            return false;
+        }
+        if (res.value().has_value() && res.value()->empty()) {
+            return true;
+        }
+        return false;
+    } else {
+        if (_filter_group_with_min_max_conjuncts(group_reader)) {
+            return true;
+        }
 
-    if (_filter_group_with_bloom_filter_min_max_conjuncts(group_reader)) {
-        return true;
-    }
+        if (_filter_group_with_bloom_filter_min_max_conjuncts(group_reader)) {
+            return true;
+        }
 
-    if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(group_reader)) {
-        return true;
-    }
+        if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(group_reader)) {
+            return true;
+        }
 
-    return false;
+        return false;
+    }
 }
 
 Status FileReader::_read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
@@ -483,9 +497,12 @@ Status FileReader::_init_group_readers() {
                 std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
+        _group_reader_param.stats->parquet_total_row_groups += 1;
+
         // You should call row_group_reader->init() before _filter_group()
         if (_filter_group(row_group_reader)) {
             DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+            _group_reader_param.stats->parquet_filtered_row_groups += 1;
             continue;
         }
 

@@ -257,7 +257,7 @@ StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
     RETURN_IF_ERROR(build_olap_filters());
 
     // Only the root builder builds scan keys.
-    if (_is_root_builder) {
+    if (_is_root_builder && _opts.is_olap_scan) {
         RETURN_IF_ERROR(build_scan_keys(_opts.scan_keys_unlimited, _opts.max_scan_key_num));
     }
 

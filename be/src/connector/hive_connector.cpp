@@ -218,6 +218,19 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
+    {
+        std::vector<ExprContext*> cloned_conjunct_ctxs;
+        RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+        for (auto* ctx : cloned_conjunct_ctxs) {
+            _all_conjunct_ctxs.emplace_back(ctx);
+        }
+
+        cloned_conjunct_ctxs.clear();
+        RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
+        for (auto* ctx : cloned_conjunct_ctxs) {
+            _all_conjunct_ctxs.emplace_back(ctx);
+        }
+    }
     return Status::OK();
 }
 
@@ -637,6 +650,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
+    scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

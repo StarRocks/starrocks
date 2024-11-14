@@ -119,6 +119,8 @@ private:
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
+    // whole conjuncts, used to generate PredicateTree
+    std::vector<ExprContext*> _all_conjunct_ctxs{};
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
     std::vector<ExprContext*> _scanner_conjunct_ctxs;
     // conjuncts that contains only one slot.

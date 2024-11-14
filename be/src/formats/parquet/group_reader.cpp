@@ -133,6 +133,14 @@ const tparquet::ColumnChunk* GroupReader::get_chunk_metadata(SlotId slot_id) {
     return it->second->get_chunk_metadata();
 }
 
+const ColumnReader* GroupReader::get_column_reader(SlotId slot_id) {
+    const auto& it = _column_readers.find(slot_id);
+    if (it == _column_readers.end()) {
+        return nullptr;
+    }
+    return it->second.get();
+}
+
 const ParquetField* GroupReader::get_column_parquet_field(SlotId slot_id) {
     const auto& it = _column_readers.find(slot_id);
     if (it == _column_readers.end()) {
@@ -304,6 +312,7 @@ Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     // ColumnReaderOptions is used by all column readers in one row group
     ColumnReaderOptions& opts = _column_reader_opts;
+    opts.file_meta_data = _param.file_metadata;
     opts.timezone = _param.timezone;
     opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
