@@ -434,7 +434,7 @@ under the License.
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
                 <!--same with hadoop 3.4.0-->
-                <version>4.1.115.Final</version>
+                <version>4.1.100.Final</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-mapreduce/1.8.7 -->
@@ -449,7 +449,7 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
-                <version>3.24.3</version>
+                <version>3.25.5</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
