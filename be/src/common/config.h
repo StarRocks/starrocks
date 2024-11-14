@@ -1182,9 +1182,9 @@ CONF_mBool(datacache_auto_adjust_enable, "true");
 // The high disk usage level, which trigger the cache eviction and quota decreased.
 CONF_mInt64(datacache_disk_high_level, "90");
 // The safe disk usage level, the cache quota will be decreased to this level once it reach the high level.
-CONF_mInt64(datacache_disk_safe_level, "70");
+CONF_mInt64(datacache_disk_safe_level, "80");
 // The low disk usage level, which trigger the cache expansion and quota increased.
-CONF_mInt64(datacache_disk_low_level, "50");
+CONF_mInt64(datacache_disk_low_level, "60");
 // The interval seconds to check the disk usage and trigger adjustment.
 CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 // The silent period, only when the disk usage falls bellow the low level for a time longer than this period,
@@ -1200,7 +1200,7 @@ CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
 // Set the parameter to `0` will turn off this optimization.
 CONF_Int32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
-CONF_mBool(datacache_unified_instance, "true");
+CONF_Bool(datacache_unified_instance_enable, "true");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with

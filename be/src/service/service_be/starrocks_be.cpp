@@ -97,59 +97,33 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
             // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
             // we do not automatically rename it when the source and destination directories are on different disks.
             // In this case, users should manually remount the directories and restart them.
-            std::filesystem::path datacache_path(root_path.path + "/datacache");
+            std::string datacache_path = root_path.path + "/datacache";
+            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
 #ifdef USE_STAROS
-            if (config::datacache_unified_instance) {
-                std::filesystem::path starlet_cache_path(root_path.path + "/starlet_cache/star_cache");
-                if (std::filesystem::exists(starlet_cache_path)) {
-                    if (DiskInfo::disk_id(starlet_cache_path.c_str()) != DiskInfo::disk_id(datacache_path.c_str())) {
-                        LOG(ERROR) << "The datacache directory and the old starlet_cache directory cannot be located "
-                                      "on different disks. "
-                                   << "Please manually mount the datacache to the same disk as starlet_cache and then "
-                                      "restart again";
-                        return Status::InternalError(
-                                "The datacache directory is different with old starlet_cache directory");
-                    }
-                    std::error_code ec;
-                    std::filesystem::remove_all(datacache_path, ec);
-                    if (!ec) {
-                        std::filesystem::rename(starlet_cache_path, datacache_path, ec);
-                    }
-                    if (ec) {
-                        LOG(ERROR) << "Fail to rename old starlet_cache directory to datacache, src: "
-                                   << starlet_cache_path.string() << ", dst: " << datacache_path.string()
-                                   << ", reason: " << ec.message();
-                        return Status::InternalError("Fail to handle the old starlet_cache data");
-                    }
-                }
+            if (config::datacache_unified_instance_enable) {
+                RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
             }
 #endif
-
-            std::string disk_path = datacache_path.string();
             // Create it if not exist
-            Status status = FileSystem::Default()->create_dir_if_missing(disk_path);
-            if (!status.ok()) {
-                if (config::ignore_broken_disk) {
-                    continue;
-                }
-                LOG(ERROR) << "Fail to create datacache directory: " << disk_path << ", reason: " << status.message();
+            Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
+            if (!st.ok()) {
+                LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
                 return Status::InternalError("Fail to create datacache directory");
             }
 
             int64_t disk_size =
-                    DataCacheUtils::parse_conf_datacache_disk_size(disk_path, config::datacache_disk_size, -1);
+                    DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, config::datacache_disk_size, -1);
 #ifdef USE_STAROS
             // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
             // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
             // and then automatically adjusted based on the current avalible disk space.
-            if (config::datacache_unified_instance && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-                std::string starlet_cache_percent = fmt::format("{}%", config::starlet_star_cache_disk_size_percent);
-                int64_t starlet_cache_size =
-                        DataCacheUtils::parse_conf_datacache_disk_size(disk_path, starlet_cache_percent, -1);
+            if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
+                std::string percent = fmt::format("{}%", config::starlet_star_cache_disk_size_percent);
+                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, percent, -1);
                 disk_size = std::max(disk_size, starlet_cache_size);
             }
 #endif
-            cache_options.disk_spaces.push_back({.path = disk_path, .size = static_cast<size_t>(disk_size)});
+            cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
             total_quota_bytes += disk_size;
         }
 
@@ -249,7 +223,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     BlockCache* block_cache = BlockCache::instance();
-    if (config::datacache_unified_instance && block_cache->is_initialized()) {
+    if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
         init_staros_worker(block_cache->starcache_instance());
     } else {
         init_staros_worker(nullptr);
