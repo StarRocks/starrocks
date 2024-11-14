@@ -46,6 +46,7 @@ struct OlapScanConjunctsManagerOptions {
     bool scan_keys_unlimited = true;
     int32_t max_scan_key_num = 1024;
     bool enable_column_expr_predicate = false;
+    bool is_olap_scan = true;
 
     PredicateTreeParams pred_tree_params;
 };
