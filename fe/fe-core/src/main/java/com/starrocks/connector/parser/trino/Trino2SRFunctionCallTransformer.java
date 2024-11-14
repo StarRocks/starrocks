@@ -235,7 +235,6 @@ public class Trino2SRFunctionCallTransformer {
 
         // year_of_week  -> weekofyear
         registerFunctionTransformer("year_of_week", 1, "weekofyear", List.of(Expr.class));
-
         // yow  -> year_of_week
         registerFunctionTransformer("yow", 1, "weekofyear", List.of(Expr.class));
     }
