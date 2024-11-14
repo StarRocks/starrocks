@@ -783,7 +783,12 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         Partition p1 = table.getPartition("p1");
         DropPartitionClause dropPartitionClause = new DropPartitionClause(false, p1.getName(), false, true);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("drop_db");
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
+        db.writeLock();
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
+        } finally {
+            db.writeUnlock();
+        }
         starRocksAssert.waitRefreshFinished(mv1.getId());
         mvEntity =
                 (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
