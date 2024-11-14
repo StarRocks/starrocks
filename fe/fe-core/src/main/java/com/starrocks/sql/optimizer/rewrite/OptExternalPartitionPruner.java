@@ -25,7 +25,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -424,30 +423,6 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
-        } else if (table instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            if (operator.getTableVersionRange().end().isEmpty()) {
-                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
-                //  is empty. It's expensive to set all partitions here.
-                return;
-            }
-
-            // Use mutable map instead of immutable map so can be re-partition-prune, see ScanOperatorPredicates#clear().
-            Map<Long, PartitionKey> partitionKeyMap = Maps.newHashMap();
-            if (table.isUnPartitioned()) {
-                partitionKeyMap.put(0L, new PartitionKey());
-            } else {
-                String catalogName = icebergTable.getCatalogName();
-                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(),
-                                operator.getLimit(), operator.getTableVersionRange());
-                for (PartitionKey partitionKey : partitionKeys) {
-                    partitionKeyMap.put(context.getNextUniquePartitionId(), partitionKey);
-                }
-            }
-
-            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
-            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()

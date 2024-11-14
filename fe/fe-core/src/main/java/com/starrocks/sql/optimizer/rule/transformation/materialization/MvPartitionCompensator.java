@@ -99,10 +99,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
 public class MvPartitionCompensator {
     private static final Logger LOG = LogManager.getLogger(MvPartitionCompensator.class);
 
-    /**
-     * External scan operators should be supported if it has been supported in
-     * {@link com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner}
-     */
+    // supported external scan types for partition compensate
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES =
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_HIVE_SCAN)
@@ -113,6 +110,15 @@ public class MvPartitionCompensator {
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_OLAP_SCAN)
                     .addAll(SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES)
+                    .build();
+
+    /**
+     * External scan operators could use {@link com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner}
+     * to prune partitions, so we need to compensate partition predicates for them.
+     */
+    public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES =
+            ImmutableSet.<OperatorType>builder()
+                    .add(OperatorType.LOGICAL_HIVE_SCAN)
                     .build();
 
     /**
@@ -436,6 +442,10 @@ public class MvPartitionCompensator {
 
     private static List<ScalarOperator> compensatePartitionPredicateForExternalTables(MaterializationContext mvContext,
                                                                                       LogicalScanOperator scanOperator) {
+        if (!SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
+            return Lists.newArrayList();
+        }
+
         ScanOperatorPredicates scanOperatorPredicates = null;
         try {
             scanOperatorPredicates = scanOperator.getScanOperatorPredicates();

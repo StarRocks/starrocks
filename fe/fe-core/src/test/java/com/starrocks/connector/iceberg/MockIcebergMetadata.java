@@ -45,7 +45,6 @@ import org.apache.iceberg.types.Types;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -492,12 +491,6 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
-    }
-
-    @Override
-    public List<PartitionKey> getPrunedPartitions(com.starrocks.catalog.Table table, ScalarOperator predicate,
-                                                  long limit, TableVersionRange version) {
-        return new ArrayList<>();
     }
 
     public void addRowsToPartition(String dbName, String tableName, int rowCount, String partitionName) {
