@@ -1135,12 +1135,11 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         if (addSingleColumnPartition &&
                 !listPartitionInfo.isMultiColumnPartition() &&
                 listPartitionInfo.isDeFactoMultiItemPartition()) {
-            for (int i = 0; i < partitionDescs.size(); i++) {
-                MultiItemListPartitionDesc newDesc =
-                        ((SingleItemListPartitionDesc) partitionDescs.get(i)).upgradeToMultiItem();
-                partitionDescs.set(i, newDesc);
-                addPartitionClause.setPartitionDesc(newDesc);
-            }
+            Preconditions.checkState(partitionDescs.size() == 1);
+            MultiItemListPartitionDesc newDesc =
+                    ((SingleItemListPartitionDesc) partitionDescs.get(0)).upgradeToMultiItem();
+            partitionDescs.set(0, newDesc);
+            addPartitionClause.setPartitionDesc(newDesc);
         }
     }
 
