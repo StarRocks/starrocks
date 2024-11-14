@@ -305,6 +305,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 // if timeout happens at the beginning of reading src_chunk, we return the error state
                 // else we will _materialize the lines read before timeout
                 if (src_chunk->num_rows() == 0) {
+                    _reusable_empty_chunk.swap(src_chunk);
                     return status;
                 }
             } else {
@@ -554,6 +555,11 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 }
 
 ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        return std::move(_reusable_empty_chunk);
+    }
+
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
 
     auto chunk = std::make_shared<Chunk>();

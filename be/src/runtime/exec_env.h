@@ -61,6 +61,7 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
+class BatchWriteMgr;
 class MemTracker;
 class MetricRegistry;
 class StorageEngine;
@@ -294,6 +295,7 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
 
@@ -383,6 +385,7 @@ private:
     BrpcStubCache* _brpc_stub_cache = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
+    BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 

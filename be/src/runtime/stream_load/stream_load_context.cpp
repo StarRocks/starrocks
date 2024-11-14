@@ -136,7 +136,7 @@ std::string StreamLoadContext::to_json() const {
 
     // label
     writer.Key("Label");
-    writer.String(label.c_str());
+    writer.String(enable_batch_write ? batch_write_label.c_str() : label.c_str());
 
     // status
     writer.Key("Status");
@@ -196,6 +196,14 @@ std::string StreamLoadContext::to_json() const {
         writer.Key("RejectedRecordPath");
         writer.String(rejected_record_path.c_str());
     }
+    if (enable_batch_write) {
+        // if enable batch write, the user-provided label is treated as the request id
+        writer.Key("RequestId");
+        writer.String(label.c_str());
+        writer.Key("LeftTimeMs");
+        writer.Int64(batch_left_time_nanos / 1000000);
+    }
+
     writer.EndObject();
     return s.GetString();
 }
@@ -243,6 +251,12 @@ std::string StreamLoadContext::brief(bool detail) const {
 bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
     _http_limiter_guard = std::make_unique<ConcurrentLimiterGuard>();
     return _http_limiter_guard->set_limiter(limiter);
+}
+
+void StreamLoadContext::release(StreamLoadContext* context) {
+    if (context != nullptr && context->unref()) {
+        delete context;
+    }
 }
 
 } // namespace starrocks

@@ -45,8 +45,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TBatchWriteRequest;
-import com.starrocks.thrift.TBatchWriteResult;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -69,6 +67,8 @@ import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1210,7 +1210,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testRequestBatchWrite() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TBatchWriteRequest request = new TBatchWriteRequest();
+        TMergeCommitRequest request = new TMergeCommitRequest();
         request.setDb("test");
         request.setTbl("site_access_hour");
         request.setUser("root");
@@ -1233,7 +1233,7 @@ public class FrontendServiceImplTest {
 
         // test success request
         {
-            TBatchWriteResult result = impl.requestBatchWrite(request);
+            TMergeCommitResult result = impl.requestMergeCommit(request);
             assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
             assertEquals("test_label", result.getLabel());
         }
@@ -1241,7 +1241,7 @@ public class FrontendServiceImplTest {
         // test authentication failure
         {
             request.setUser("fake_user");
-            TBatchWriteResult result = impl.requestBatchWrite(request);
+            TMergeCommitResult result = impl.requestMergeCommit(request);
             assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
         }
     }

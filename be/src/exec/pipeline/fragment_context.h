@@ -172,6 +172,8 @@ public:
     void set_report_when_finish(bool report) { _report_when_finish = report; }
 
 private:
+    void _close_stream_load_contexts();
+
     bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
@@ -209,7 +211,6 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
-    bool _channel_stream_load = false;
 
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
