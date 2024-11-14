@@ -146,7 +146,7 @@ void calculate_metrics(void* arg_this) {
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
 #ifdef USE_STAROS
-            if (!config::datacache_unified_instance) {
+            if (!config::datacache_unified_instance_enable) {
                 datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
             }
 #endif

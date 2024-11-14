@@ -34,8 +34,13 @@ protected:
 
     static void TearDownTestCase() {}
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+
+    bool _saved_enable_auto_adjust = false;
 };
 
 TEST_F(BlockCacheTest, copy_to_iobuf) {
