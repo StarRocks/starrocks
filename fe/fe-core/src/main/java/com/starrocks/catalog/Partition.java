@@ -49,6 +49,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +89,7 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
     private DistributionInfo distributionInfo;
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -173,13 +174,6 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         this.versionTxnType = TransactionType.TXN_NORMAL;
 
         this.distributionInfo = distributionInfo;
-    }
-
-    public Partition(long id, String name,
-                     MaterializedIndex baseIndex,
-                     DistributionInfo distributionInfo, long shardGroupId) {
-        this(id, name, baseIndex, distributionInfo);
-        this.shardGroupId = shardGroupId;
     }
 
     public Partition shallowCopy() {
@@ -268,8 +262,22 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         return;
     }
 
+    @Override
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    @Override
+    public List<Long> getShardGroupIds() {
+        List<Long> result = new ArrayList<>();
+        idToVisibleRollupIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        idToShadowIndex.values().stream().map(MaterializedIndex::getShardGroupId).forEach(result::add);
+        result.add(baseIndex.getShardGroupId());
+        return result;
     }
 
     public void setName(String newName) {
@@ -652,6 +660,9 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
         for (PhysicalPartitionImpl subPartition : idToSubPartition.values()) {
             if (subPartition.getName() == null) {
                 subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                subPartition.getBaseIndex().setShardGroupId(baseIndex.getShardGroupId());
             }
             nameToSubPartition.put(subPartition.getName(), subPartition);
         }

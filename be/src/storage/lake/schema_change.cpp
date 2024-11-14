@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
@@ -42,6 +43,9 @@ struct SchemaChangeParams {
     bool sc_sorting = false;
     bool sc_directly = false;
     std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
+
+    // materialzied view parameters
+    DescriptorTbl* desc_tbl = nullptr;
 };
 
 class SchemaChange {
@@ -323,15 +327,26 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     const auto alter_version = request.alter_version;
     ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
     ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
-    auto base_schema = base_tablet.get_schema();
+
+    TabletSchemaCSPtr base_schema;
+    if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
+        base_schema = TabletSchema::copy(*(base_tablet.get_schema()), request.columns);
+    } else {
+        base_schema = base_tablet.get_schema();
+    }
     auto new_schema = new_tablet.get_schema();
     auto has_delete_predicates = base_tablet.has_delete_predicates();
 
     std::vector<std::string> base_table_columns;
-    base_table_columns.reserve(base_schema->columns().size());
-    for (const auto& column : base_schema->columns()) {
-        base_table_columns.emplace_back(column.name());
+    if (!request.base_table_column_names.empty()) {
+        base_table_columns = request.base_table_column_names;
+    } else {
+        base_table_columns.reserve(base_schema->columns().size());
+        for (const auto& column : base_schema->columns()) {
+            base_table_columns.emplace_back(column.name());
+        }
     }
+
     // parse request and create schema change params
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
@@ -340,10 +355,32 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
             std::make_unique<ChunkChanger>(base_schema, new_schema, base_table_columns, request.alter_job_type);
     sc_params.txn_id = request.txn_id;
 
+    auto* chunk_changer = sc_params.chunk_changer.get();
+    if (request.alter_job_type == TAlterJobType::ROLLUP) {
+        if (!request.__isset.query_options || !request.__isset.query_globals) {
+            return Status::InternalError("change materialized view but query_options/query_globals is not set");
+        }
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+
+        RuntimeState* runtime_state = chunk_changer->get_runtime_state();
+        RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
+                                              &sc_params.desc_tbl, runtime_state->chunk_size()));
+        chunk_changer->set_query_slots(sc_params.desc_tbl);
+    }
+
+    // generated column index in new schema
+    std::unordered_set<int> generated_column_idxs;
+    if (request.materialized_column_req.mc_exprs.size() != 0) {
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
+            generated_column_idxs.insert(it.first);
+        }
+    }
+
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map, sc_params.where_expr);
-    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(
-            base_schema, new_schema, sc_params.chunk_changer.get(), sc_params.materialized_params_map,
-            sc_params.where_expr, has_delete_predicates, &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
+    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(base_schema, new_schema, sc_params.chunk_changer.get(),
+                                                     sc_params.materialized_params_map, sc_params.where_expr,
+                                                     has_delete_predicates, &sc_params.sc_sorting,
+                                                     &sc_params.sc_directly, &generated_column_idxs));
 
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();
@@ -351,7 +388,6 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     txn_log->set_txn_id(request.txn_id);
     auto op_schema_change = txn_log->mutable_op_schema_change();
     op_schema_change->set_alter_version(alter_version);
-
     // convert historical rowsets
     RETURN_IF_ERROR(convert_historical_rowsets(sc_params, op_schema_change));
 

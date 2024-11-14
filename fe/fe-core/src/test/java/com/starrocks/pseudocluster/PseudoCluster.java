@@ -213,7 +213,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
             return partitionId;
         }
 

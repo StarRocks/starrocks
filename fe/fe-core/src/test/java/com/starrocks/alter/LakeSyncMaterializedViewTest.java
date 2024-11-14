@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.alter;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateType;
@@ -23,22 +23,18 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -53,10 +49,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
-// If you add a test in this file,
-// please add it in another file LakeSyncMaterializedViewTest too.
-// The test cases for both files are the same, but the RunMode is different.
-public class CreateSyncMaterializedViewTest {
+public class LakeSyncMaterializedViewTest {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -73,9 +66,8 @@ public class CreateSyncMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
-
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        //ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
 
@@ -219,6 +211,7 @@ public class CreateSyncMaterializedViewTest {
     @Test
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+        RunMode mode = RunMode.getCurrentRunMode();
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
@@ -375,20 +368,6 @@ public class CreateSyncMaterializedViewTest {
     }
 
     @Test
-    public void testCreateSynchronousMVOnAnotherMV() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        Table table = getTable("test", "mocked_cloud_table");
-        // Change table type to materialized view
-        Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
-        DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
-        });
-        Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
-    }
-
-    @Test
     public void testCreateSyncMaterializedViewWithWhereMultiSlots1() throws Exception {
         String mv1 = "CREATE MATERIALIZED VIEW test_mv_with_multi_slots1 \n" +
                 "as\n" +
@@ -515,7 +494,7 @@ public class CreateSyncMaterializedViewTest {
                 "t1 a \n" +
                 "WHERE a.k2 > 200\n" +
                 "GROUP BY DATE_FORMAT(a.k1, '%Y-%m')");
-        OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", "t1");
         Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
         Assert.assertTrue(materializedIndices.size() == 2);
@@ -569,7 +548,7 @@ public class CreateSyncMaterializedViewTest {
                 "    k2 = '200'\n" +
                 "GROUP BY\n" +
                 "    a.k3, DATE_FORMAT(a.k4, '%Y-%m')");
-        OlapTable olapTable= (OlapTable) starRocksAssert.getTable("test", "t1");
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", "t1");
         Assert.assertTrue(olapTable.getKeysType() == KeysType.AGG_KEYS);
         List<MaterializedIndexMeta> materializedIndices = olapTable.getVisibleIndexMetas();
         Assert.assertTrue(materializedIndices.size() == 2);
