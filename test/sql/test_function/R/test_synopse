@@ -1,0 +1,29 @@
+-- name: test_synopse
+select r, bar(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+-- result:
+0	
+1	▓▓
+2	▓▓▓▓
+3	▓▓▓▓▓▓
+4	▓▓▓▓▓▓▓▓
+5	▓▓▓▓▓▓▓▓▓▓
+6	▓▓▓▓▓▓▓▓▓▓▓▓
+7	▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+8	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+9	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+10	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+-- !result
+select r, equiwidth_bucket(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+-- result:
+0	0
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+10	10
+-- !result

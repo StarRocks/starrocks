@@ -1327,5 +1327,9 @@ vectorized_functions = [
     [170501, 'named_struct', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 
     # user function
-    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr']
+    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr'],
+    
+    # data synopse functions
+    [181000, 'bar', True, False, 'VARCHAR', ['BIGINT', "BIGINT", 'BIGINT', 'BIGINT'], 'UtilityFunctions::bar'],
+    [181001, 'equiwidth_bucket', True, False, 'BIGINT', ['BIGINT', 'BIGINT', 'BIGINT', 'BIGINT'], 'UtilityFunctions::equiwidth_bucket'],
 ]
