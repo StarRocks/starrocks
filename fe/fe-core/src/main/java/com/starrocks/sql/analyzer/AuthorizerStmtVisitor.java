@@ -2153,7 +2153,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             externalCatalogs.forEach(externalCatalog -> {
                 try {
                     Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                externalCatalog.getCatalogName(), PrivilegeType.CREATE_DATABASE);
+                                externalCatalog.getCatalogName(), PrivilegeType.EXPORT);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             externalCatalog.getCatalogName(),

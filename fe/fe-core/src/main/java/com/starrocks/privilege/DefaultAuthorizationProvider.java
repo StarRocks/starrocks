@@ -83,7 +83,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.USAGE,
                 PrivilegeType.CREATE_DATABASE,
                 PrivilegeType.DROP,
-                PrivilegeType.ALTER));
+                PrivilegeType.ALTER,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(
                 PrivilegeType.ALTER,
@@ -93,7 +94,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
         typeToActionList.put(ObjectType.FUNCTION, Lists.newArrayList(
                 PrivilegeType.USAGE,
-                PrivilegeType.DROP));
+                PrivilegeType.DROP,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.RESOURCE_GROUP, Lists.newArrayList(
                 PrivilegeType.ALTER,
