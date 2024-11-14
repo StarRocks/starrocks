@@ -36,7 +36,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_os_page_cache = !options.enable_direct_io;
     opt.scheduler_thread_ratio_per_cpu = options.scheduler_threads_per_cpu;
     opt.max_flying_memory_mb = options.max_flying_memory_mb;
-    opt.inline_cache_count_limit = options.inline_item_count_limit;
+    //opt.inline_cache_count_limit = options.inline_item_count_limit;
     opt.alloc_mem_threshold = 100;
     opt.evict_touch_mem_probalility = 10;
     opt.evict_touch_disk_probalility = 10;

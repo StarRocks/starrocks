@@ -349,7 +349,8 @@ void init_staros_worker(std::shared_ptr<starcache::StarCache> star_cache) {
     }
 
     if (star_cache) {
-        (void)fslib::set_star_cache(star_cache);
+        //(void)fslib::set_star_cache(star_cache);
+        ;
     }
 
     // skip staros reinit aws sdk
