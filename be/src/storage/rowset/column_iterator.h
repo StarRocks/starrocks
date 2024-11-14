@@ -262,7 +262,10 @@ public:
     virtual Status null_count(size_t* count) { return Status::OK(); };
 
     // RAW interface, should be used carefully
-    virtual ColumnReader* get_column_reader() { return nullptr; };
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
 
 protected:
     ColumnIteratorOptions _opts;

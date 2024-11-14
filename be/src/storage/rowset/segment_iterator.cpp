@@ -2082,6 +2082,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     ColumnId cid = _schema.field(0)->id();
     auto& column_iterator = _column_iterators[cid];
     ColumnReader* column_reader = column_iterator->get_column_reader();
+    RETURN_IF(column_reader == nullptr, Status::InvalidArgument("Not support page smaple: no column_reader"));
     int32_t num_data_pages = column_reader->num_data_pages();
     PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
