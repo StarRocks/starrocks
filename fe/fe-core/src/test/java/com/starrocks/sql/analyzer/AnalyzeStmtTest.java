@@ -472,4 +472,12 @@ public class AnalyzeStmtTest {
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
+
+    @Test
+    public void testAnalyzePredicateColumns() {
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl all columns");
+        Assert.assertTrue(stmt.isAllColumns());
+        stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");
+        Assert.assertTrue(stmt.isUsePredicateColumns());
+    }
 }
