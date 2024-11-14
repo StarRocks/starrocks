@@ -130,6 +130,7 @@ private:
     std::vector<uint32_t> _buf_selective;
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    bool _interpolate_passthrough = false;
 };
 
 } // namespace starrocks

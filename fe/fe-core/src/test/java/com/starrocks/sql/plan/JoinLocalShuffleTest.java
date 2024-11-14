@@ -18,6 +18,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class JoinLocalShuffleTest extends PlanTestBase {
 
@@ -48,5 +49,14 @@ public class JoinLocalShuffleTest extends PlanTestBase {
             assertContains(plan, "  |  can local shuffle: true");
         }
         sv.setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void joinUnderExchange() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        sv.setInterpolatePassthrough(true);
+        String sql = "select l.* from t0 l join [shuffle] t1 on upper(v1) = v5 join [shuffle] t2 on lower(v1) = v9";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "can local shuffle: true");
     }
 }
