@@ -613,6 +613,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+    public static final String ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY = "enable_rewrite_unnest_bitmap_to_array";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1625,6 +1627,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
+
+
+    @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
+    private boolean enableRewriteUnnestBitmapToArray = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -3029,6 +3035,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public boolean isEnableRewriteUnnestBitmapToArray() {
+        return enableRewriteUnnestBitmapToArray;
     }
 
     // Serialize to thrift object
