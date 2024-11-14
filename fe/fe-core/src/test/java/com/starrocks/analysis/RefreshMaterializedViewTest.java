@@ -26,14 +26,16 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.metric.MaterializedViewMetricsEntity;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -742,5 +744,55 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
         Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
 
+    }
+
+    @Test
+    public void testDropPartitionTableInDiffDb() throws Exception {
+        starRocksAssert
+                .createDatabaseIfNotExists("drop_db")
+                .useDatabase("drop_db")
+                .withTable("CREATE TABLE tbl_with_mv\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.createDatabaseIfNotExists("drop_mv_db")
+                .useDatabase("drop_mv_db")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
+                        + "DISTRIBUTED BY HASH(`k2`)\n"
+                        + "REFRESH ASYNC\n"
+                        + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
+
+        executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
+        MaterializedView mv1 = getMv("drop_mv_db", "test_mv");
+        MaterializedViewMetricsEntity mvEntity =
+                (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
+        long count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(0, count);
+
+        OlapTable table = (OlapTable) getTable("drop_db", "tbl_with_mv");
+        Partition p1 = table.getPartition("p1");
+        DropPartitionClause dropPartitionClause = new DropPartitionClause(false, p1.getName(), false, true);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("drop_db");
+        db.writeLock();
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, dropPartitionClause);
+        } finally {
+            db.writeUnlock();
+        }
+        starRocksAssert.waitRefreshFinished(mv1.getId());
+        mvEntity =
+                (MaterializedViewMetricsEntity) MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv1.getMvId());
+        count = mvEntity.histRefreshJobDuration.getCount();
+        Assert.assertEquals(1, count);
     }
 }

@@ -1627,10 +1627,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
+                    MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
+                        Database mvDb = getDb(mvId.getDbId());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), materializedView.getName(), false, null,
+                                mvDb.getFullName(), materializedView.getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 }
@@ -2771,6 +2772,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return null;
         }
         return database.getTable(tblName);
+    }
+
+    public Table getTable(Long dbId, Long tableId) {
+        Database database = getDb(dbId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
     }
 
     public Optional<Table> mayGetTable(String dbName, String tblName) {

@@ -52,6 +52,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -175,6 +176,18 @@ public class StarRocksAssert {
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database `" + dbName + "`;", ctx);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        return this;
+    }
+
+    public StarRocksAssert createDatabaseIfNotExists(String dbName) throws Exception {
+        try {
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database if not exists `"
+                            + dbName + "`;", ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        } catch (AlreadyExistsException e) {
+            // ignore
+        }
         return this;
     }
 
