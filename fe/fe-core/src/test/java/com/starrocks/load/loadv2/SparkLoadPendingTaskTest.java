@@ -370,8 +370,8 @@ public class SparkLoadPendingTaskTest {
         Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         List<EtlPartition> etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(2, etlPartitions.size());
-        Assert.assertEquals(partition1Id, etlPartitions.get(0).partitionId);
-        Assert.assertEquals(partition2Id, etlPartitions.get(1).partitionId);
+        Assert.assertEquals(21, etlPartitions.get(0).physicalPartitionId);
+        Assert.assertEquals(51, etlPartitions.get(1).physicalPartitionId);
 
         // check file group
         List<EtlFileGroup> etlFileGroups = etlTable.fileGroups;
@@ -409,7 +409,7 @@ public class SparkLoadPendingTaskTest {
         Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(1, etlPartitions.size());
-        Assert.assertEquals(partition3Id, etlPartitions.get(0).partitionId);
+        Assert.assertEquals(61, etlPartitions.get(0).physicalPartitionId);
     }
 
 }
