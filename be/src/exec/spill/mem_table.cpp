@@ -116,6 +116,8 @@ Status OrderedMemTable::flush(FlushCallBack callback) {
     _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
     return Status::OK();
 }
 
@@ -126,17 +128,6 @@ Status OrderedMemTable::done() {
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-void OrderedMemTable::reset() {
-    SpillableMemTable::reset();
-    _chunk_slice.reset(nullptr);
-    _chunk.reset();
-    _permutation.clear();
-    _permutation.shrink_to_fit();
-}
-
->>>>>>> 11ac7fbf22 ([BugFix] Fix spill cost too much memory when enable group execution (#51935))
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
     RETURN_IF_ERROR(chunk->upgrade_if_overflow());
     DataSegment segment(_sort_exprs, chunk);
