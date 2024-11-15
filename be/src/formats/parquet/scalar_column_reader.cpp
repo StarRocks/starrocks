@@ -275,6 +275,10 @@ Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const Col
     }
 
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
+
+    // used to hold min/max slice values
+    const ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
+    const ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
     if (is_all_null) {
         // if the entire column's value is null, the min/max value not existed
         zone_map_detail = ZoneMapDetail{Datum{}, Datum{}, true};
@@ -286,9 +290,6 @@ Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const Col
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, *_col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            const ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
-            const ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
-
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(min_column, min_values, *_col_type,
                                                                        get_column_parquet_field(), _opts.timezone));
             RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(max_column, max_values, *_col_type,
