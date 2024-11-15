@@ -234,9 +234,9 @@ public class Trino2SRFunctionCallTransformer {
                 List.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
 
         // year_of_week  -> weekofyear
-        registerFunctionTransformer("year_of_week", 1, "weekofyear", List.of(Expr.class));
+        registerFunctionTransformer("year_of_week", 1, "week_iso", List.of(Expr.class));
         // yow  -> year_of_week
-        registerFunctionTransformer("yow", 1, "weekofyear", List.of(Expr.class));
+        registerFunctionTransformer("yow", 1, "week_iso", List.of(Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
