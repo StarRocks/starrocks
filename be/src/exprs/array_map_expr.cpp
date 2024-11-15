@@ -60,6 +60,20 @@ Status ArrayMapExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     return Status::OK();
 }
+Status ArrayMapExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    for (auto [_, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(expr->open(state, context, scope));
+    }
+    return Status::OK();
+}
+
+void ArrayMapExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    for (auto [_, expr] : _outer_common_exprs) {
+        expr->close(state, context, scope);
+    }
+    Expr::close(state, context, scope);
+}
 
 template <bool all_const_input, bool independent_lambda_expr>
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,

@@ -50,6 +50,10 @@ select array_length(array_map((x,y)->x > y, @arr,@arr)) from table(generate_seri
 1000000
 1000000
 -- !result
+select count(*) from array_map_test where array_map((a1) -> concat(split(id, 'd'), split(id, 'd')), arr_str) is not null;
+-- result:
+1
+-- !result
 -- name: test_array_map_3
 CREATE TABLE `t` (
   `k` bigint NOT NULL COMMENT "",
