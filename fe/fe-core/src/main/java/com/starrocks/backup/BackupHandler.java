@@ -112,6 +112,8 @@ import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
+    
+    private static final long FAKE_DB_ID = -1;
 
     public static final int SIGNATURE_VERSION = 1;
     public static final Path BACKUP_ROOT_DIR = Paths.get(Config.tmp_dir, "backup").normalize();
@@ -337,7 +339,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         tryLock();
         try {
             // Check if there is backup or restore job running on this database
-            AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? -1 : db.getId());
+            AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId());
             if (currentJob != null && !currentJob.isDone()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Can only run one backup or restore job of a database at same time");
@@ -478,7 +480,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         }
 
         // Create a backup job
-        long dbId = stmt.containsExternalCatalog() ? -1 : db.getId();
+        long dbId = stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId();
         String dbName = stmt.containsExternalCatalog() ? "" : db.getOriginName();
 
         BackupJob backupJob = new BackupJob(stmt.getLabel(), dbId, dbName, tblRefs,
@@ -538,7 +540,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             }
         }
 
-        long dbId = stmt.containsExternalCatalog() ? -1 : db.getId();
+        long dbId = stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId();
         String dbName = stmt.containsExternalCatalog() ? "" : db.getOriginName();
 
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
@@ -704,7 +706,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         if (!stmt.isExternalCatalog()) {
             job = getAbstractJobByDbName(stmt.getDbName());
         } else {
-            job = dbIdToBackupOrRestoreJob.get(-1L);
+            job = dbIdToBackupOrRestoreJob.get(FAKE_DB_ID);
         }
         if (job == null || (job instanceof BackupJob && stmt.isRestore())
                 || (job instanceof RestoreJob && !stmt.isRestore())) {
