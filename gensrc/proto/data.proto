@@ -46,6 +46,7 @@ message PQueryStatistics {
     optional int64 cpu_cost_ns = 4;
     optional int64 mem_cost_bytes = 5;
     optional int64 spill_bytes = 6;
+    optional string scan_partitions = 7;
     repeated QueryStatisticsItemPB stats_items = 10;
     repeated NodeExecStatsItemPB node_exec_stats_items = 11;
 }
