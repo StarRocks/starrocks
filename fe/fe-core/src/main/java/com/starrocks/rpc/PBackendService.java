@@ -23,6 +23,8 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -95,5 +97,9 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PInternalService", methodName = "process_dictionary_cache", onceTalkTimeout = 600000)
     Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "fetch_arrow_schema", onceTalkTimeout = 600000)
+    Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request);
+
 }
 

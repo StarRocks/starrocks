@@ -34,6 +34,7 @@
 #include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
+#include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
@@ -281,6 +282,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         exit(1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start http server successfully";
+
+    // Start Arrow Flight SQL server
+    auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
+    if (auto status = arrow_flight_sql_server->start(config::be_arrow_port); !status.ok()) {
+        LOG(ERROR) << process_name << " arrow flight sql server did not start correctly, exiting: " << status.message();
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": start arrow flight sql server successfully";
 
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;

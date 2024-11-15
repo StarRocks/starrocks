@@ -81,8 +81,11 @@ public:
 
     bool isBinaryFormat() const { return _is_binary_format; }
 
+    const RowDescriptor& get_row_desc() const { return _row_desc; }
+
 private:
     Status prepare_exprs(RuntimeState* state);
+    const RowDescriptor& _row_desc;
     TResultSinkType::type _sink_type;
     bool _is_binary_format;
     // set format_type when sink type is HTTP
