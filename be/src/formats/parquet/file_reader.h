@@ -111,8 +111,6 @@ private:
     Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
                                ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
 
-    // StatusOr<std::vector<ZoneMapDetail>> _read_zone_map_from_row_group(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slot);
-
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
 
