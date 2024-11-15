@@ -424,6 +424,51 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
+<<<<<<< HEAD
+=======
+    size_t rows_read = 0;
+
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
+
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+
+    return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (!_need_skip_rowids.empty()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    return 1;
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
+>>>>>>> d85f58cebd ([BugFix] Fix DCHECK failed in hdfs_scanner_orc (#52933))
     ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
     for (;;) {
