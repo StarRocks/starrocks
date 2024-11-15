@@ -14,7 +14,6 @@
 
 package com.starrocks.http;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Multimap;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
@@ -33,7 +32,6 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.ResponseBody;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -45,7 +43,6 @@ import org.apache.http.impl.client.HttpClients;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,7 +52,6 @@ import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
@@ -143,13 +139,6 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     private String getLoadUrl(String host, int port) {
         return String.format("http://%s:%d/api/%s/%s/_stream_load", host, port, DB_NAME, TABLE_NAME);
-    }
-
-    private static Map<String, Object> parseResponseBody(Response response) throws IOException {
-        ResponseBody body = response.body();
-        assertNotNull(body);
-        String bodyStr = body.string();
-        return objectMapper.readValue(bodyStr, new TypeReference<>() {});
     }
 
     @Test
