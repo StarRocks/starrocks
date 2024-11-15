@@ -345,8 +345,7 @@ struct HdfsScannerContext {
 
     // used for parquet zone map filter only
     std::unique_ptr<OlapScanConjunctsManager> conjuncts_manager = nullptr;
-    using PredicatePtr = std::unique_ptr<ColumnPredicate>;
-    std::vector<PredicatePtr> predicate_free_pool;
+    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     PredicateTree predicate_tree;
 };
 
@@ -408,7 +407,6 @@ private:
     std::atomic<bool> _closed = false;
     Status _build_scanner_context();
     void update_hdfs_counter(HdfsScanProfile* profile);
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager;
 
 protected:
     HdfsScannerContext _scanner_ctx;
