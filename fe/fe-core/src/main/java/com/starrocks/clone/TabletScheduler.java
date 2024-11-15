@@ -1795,12 +1795,19 @@ public class TabletScheduler extends FrontendDaemon {
                 // no more tablets
                 break;
             }
-            // ignore tablets that will expire and erase soon
-            if (checkIfTabletExpired(tablet)) {
+            try {
+                // ignore tablets that will expire and erase soon
+                if (checkIfTabletExpired(tablet)) {
+                    continue;
+                }
+                list.add(tablet);
+                count--;
+            } catch (Exception e) {
+                LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
+                        tablet.getTabletId(), e);
+                finalizeTabletCtx(tablet, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
                 continue;
             }
-            list.add(tablet);
-            count--;
         }
         return list;
     }
