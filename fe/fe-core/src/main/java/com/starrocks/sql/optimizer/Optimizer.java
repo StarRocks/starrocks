@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
@@ -438,6 +439,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
+        // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
+        ruleRewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
