@@ -15,7 +15,6 @@
 package com.starrocks.http;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -51,7 +50,6 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.ResponseBody;
 import okio.BufferedSink;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -76,7 +74,6 @@ import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 @FixMethodOrder(MethodSorters.JVM)
@@ -1622,16 +1619,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static String toUri(TransactionOperation txnOpt) {
         return String.format("http://localhost:%d/api/transaction/%s", HTTP_PORT, txnOpt.getValue());
-    }
-
-    private static Map<String, Object> parseResponseBody(Response response) throws IOException {
-        assertNotNull(response);
-        ResponseBody body = response.body();
-        assertNotNull(body);
-        String bodyStr = body.string();
-        System.out.println("Response body:\n" + bodyStr);
-        return objectMapper.readValue(bodyStr, new TypeReference<>() {
-        });
     }
 
     private static TransactionState newTxnState(long txnId,
