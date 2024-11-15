@@ -88,6 +88,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _scanner_params = scanner_params;
 
     RETURN_IF_ERROR(do_init(runtime_state, scanner_params));
+
     return Status::OK();
 }
 

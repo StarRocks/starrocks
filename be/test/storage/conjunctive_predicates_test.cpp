@@ -373,7 +373,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     OlapScanConjunctsManager cm(std::move(opts));
     ASSERT_OK(cm.parse_conjuncts());
 
-    PredicateParser parser(tablet_schema);
+    OlapPredicateParser parser(tablet_schema);
     ColumnPredicatePtrs col_preds_owner;
     auto status_or_pred_tree = cm.get_predicate_tree(&parser, col_preds_owner);
     ASSERT_OK(status_or_pred_tree);
