@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,31 +34,31 @@ public abstract class PartitionDiffer {
      * @param partitionTableAndColumns the partition table and its partition column
      * @param result the result map
      */
-    public static void collectExternalPartitionNameMapping(Map<Table, Column> partitionTableAndColumns,
+    public static void collectExternalPartitionNameMapping(Map<Table, List<Column>> partitionTableAndColumns,
                                                            Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
-        for (Map.Entry<Table, Column> e1 : partitionTableAndColumns.entrySet()) {
-            Table refBaseTable = e1.getKey();
-            Column refPartitionColumn = e1.getValue();
-            collectExternalBaseTablePartitionMapping(refBaseTable, refPartitionColumn, result);
+        for (Map.Entry<Table, List<Column>> e : partitionTableAndColumns.entrySet()) {
+            Table refBaseTable = e.getKey();
+            List<Column> refPartitionColumns = e.getValue();
+            collectExternalBaseTablePartitionMapping(refBaseTable, refPartitionColumns, result);
         }
     }
 
     /**
      * Collect the external base table's partition name to its intersected materialized view names.
      * @param refBaseTable the base table
-     * @param refTablePartitionColumn the partition column of the base table
+     * @param refTablePartitionColumns the partition column of the base table
      * @param result the result map
      * @throws AnalysisException
      */
     private static void collectExternalBaseTablePartitionMapping(
             Table refBaseTable,
-            Column refTablePartitionColumn,
+            List<Column> refTablePartitionColumns,
             Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
         if (refBaseTable.isNativeTableOrMaterializedView()) {
             return;
         }
         Map<String, Set<String>> mvPartitionNameMap = PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
-                refTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
+                refTablePartitionColumns, PartitionUtil.getPartitionNames(refBaseTable));
         result.put(refBaseTable, mvPartitionNameMap);
     }
 }

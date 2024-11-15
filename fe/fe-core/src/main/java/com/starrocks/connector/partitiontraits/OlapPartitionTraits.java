@@ -62,9 +62,8 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) {
-        // TODO: check partition type
-        return ((OlapTable) table).getListPartitionItems();
+    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) {
+        return ((OlapTable) table).getListPartitionItems(Optional.of(partitionColumns));
     }
 
     @Override
@@ -106,7 +105,7 @@ public class OlapPartitionTraits extends DefaultTraits {
             String basePartitionName = versionEntry.getKey();
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
-                // Once there is a partition deleted, refresh all partitions.
+                // TODO: Once there is a partition deleted, refresh all partitions.
                 return baseTable.getVisiblePartitionNames();
             }
             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();

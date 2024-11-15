@@ -220,15 +220,15 @@ public class MVPartitionSlotRefResolver {
      */
     private static class WindowFunctionChecker extends AstTraverser<Expr, SlotRef> {
 
-        private CreateMaterializedViewStatement statement;
         private Expr partitionByExpr;
         private final ExprShuttle exprShuttle = new ExprShuttle(this);
 
-        public static void check(CreateMaterializedViewStatement statement, Expr partitionByExpr) {
+        public static void check(CreateMaterializedViewStatement statement, List<Expr> partitionByExprs) {
             WindowFunctionChecker checker = new WindowFunctionChecker();
-            checker.statement = statement;
-            checker.partitionByExpr = partitionByExpr;
-            partitionByExpr.accept(checker.exprShuttle, statement.getQueryStatement().getQueryRelation());
+            for (Expr partitionByExpr : partitionByExprs) {
+                checker.partitionByExpr = partitionByExpr;
+                partitionByExpr.accept(checker.exprShuttle, statement.getQueryStatement().getQueryRelation());
+            }
         }
 
         private void checkWindowFunction(SelectRelation node) {
@@ -290,8 +290,8 @@ public class MVPartitionSlotRefResolver {
         return expr.accept(EXPR_SHUTTLE, queryStatement.getQueryRelation());
     }
 
-    public static void checkWindowFunction(CreateMaterializedViewStatement statement, Expr partitionByExpr) {
-        WindowFunctionChecker.check(statement, partitionByExpr);
+    public static void checkWindowFunction(CreateMaterializedViewStatement statement, List<Expr> partitionByExprs) {
+        WindowFunctionChecker.check(statement, partitionByExprs);
     }
 
     public static Expr resolveExpr(Expr expr, Relation relation) {

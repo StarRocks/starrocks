@@ -233,7 +233,8 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     private Map<Expr, SlotRef> checkMVPartitionExprs(String sql, Expr slot, int expect) {
         QueryStatement query = getQueryStatement(sql);
-        Map<Expr, SlotRef> result = MVPartitionExprResolver.getMVPartitionExprsChecked(slot, query, null);
+        Map<Expr, SlotRef> result = MVPartitionExprResolver.getMVPartitionExprsChecked(
+                Lists.newArrayList(slot), query, null);
         Assert.assertEquals(expect, result.size());
         return result;
     }

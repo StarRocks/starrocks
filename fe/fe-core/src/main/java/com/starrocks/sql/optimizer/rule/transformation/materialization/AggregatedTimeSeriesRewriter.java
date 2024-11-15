@@ -134,7 +134,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isRangePartition()) {
             return false;
         }
-        Expr mvPartitionExpr = mv.getPartitionExpr();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return false;
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
         if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
             return false;
         }
@@ -204,12 +208,14 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         }
         // split predicates for mv rewritten and non-mv-rewritten
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
-        Map<Table, Column> refBaseTablePartitionCols = mv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> refBaseTablePartitionCols = mv.getRefBaseTablePartitionColumns();
         if (refBaseTablePartitionCols == null || !refBaseTablePartitionCols.containsKey(refBaseTable)) {
             logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot find partition column for ref base table");
             return null;
         }
-        Column refPartitionCol = refBaseTablePartitionCols.get(refBaseTable);
+        List<Column> refPartitionCols = refBaseTablePartitionCols.get(refBaseTable);
+        Preconditions.checkArgument(refPartitionCols.size() == 1);
+        Column refPartitionCol = refPartitionCols.get(0);
         LogicalScanOperator scanOp = scanOperators.get(0);
         // get ref partition column ref from query's scan operator
         Optional<ColumnRefOperator> refPartitionColRefOpt = scanOp.getColRefToColumnMetaMap().keySet().stream()
@@ -521,7 +527,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isExprRangePartitioned()) {
             return null;
         }
-        Expr partitionExpr = mv.getPartitionExpr();
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (partitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = partitionExprOpt.get();
         if (partitionExpr == null || !(partitionExpr instanceof FunctionCallExpr)) {
             return null;
         }

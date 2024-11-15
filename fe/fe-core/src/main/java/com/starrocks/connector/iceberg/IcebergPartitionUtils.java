@@ -14,13 +14,20 @@
 
 package com.starrocks.connector.iceberg;
 
+import autovalue.shaded.com.google.common.common.collect.ImmutableList;
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
@@ -33,6 +40,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+
+import static com.starrocks.connector.iceberg.IcebergPartitionTransform.YEAR;
 
 public class IcebergPartitionUtils {
     private static final Logger LOG = LogManager.getLogger(IcebergPartitionUtils.class);
@@ -49,7 +58,7 @@ public class IcebergPartitionUtils {
         DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         boolean parseFromDate = true;
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
-        if (transform == IcebergPartitionTransform.YEAR) {
+        if (transform == YEAR) {
             partitionName += "-01-01";
         } else if (transform == IcebergPartitionTransform.MONTH) {
             partitionName += "-01";
@@ -129,7 +138,7 @@ public class IcebergPartitionUtils {
 
     public static boolean isSupportedConvertPartitionTransform(IcebergPartitionTransform transform) {
         return transform == IcebergPartitionTransform.IDENTITY ||
-                transform == IcebergPartitionTransform.YEAR ||
+                transform == YEAR ||
                 transform == IcebergPartitionTransform.MONTH ||
                 transform == IcebergPartitionTransform.DAY ||
                 transform == IcebergPartitionTransform.HOUR;
@@ -203,6 +212,50 @@ public class IcebergPartitionUtils {
 
             return StatisticUtils.quoting(partitionColumn) + " >= '" + normalizedPartitionValue + "' and " +
                     StatisticUtils.quoting(partitionColumn) + " < '" + endDateTimeStr + "'";
+        }
+    }
+
+    public static Expr toTransformExpr(IcebergTable table,
+                                       String partitionColumn,
+                                       SlotRef slotRef) {
+        PartitionField partitionField = table.getPartitionFiled(partitionColumn);
+        if (partitionField == null) {
+            throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
+                    partitionColumn, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+        }
+        IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
+        if (transform == IcebergPartitionTransform.IDENTITY) {
+            return slotRef;
+        } else {
+            // transform is year, month, day, hour
+            Type partitiopnColumnType = table.getColumn(partitionColumn).getType();
+            Preconditions.checkState(partitiopnColumnType.isDateType(),
+                    "Partition column %s type must be date or datetime", partitionColumn);
+            String transformFuncName;
+            switch (transform) {
+                case HOUR:
+                    transformFuncName = FunctionSet.HOUR;
+                    break;
+                case DAY:
+                    transformFuncName = FunctionSet.DAY;
+                    break;
+                case MONTH:
+                    transformFuncName = FunctionSet.MONTH;
+                    break;
+                case YEAR:
+                    transformFuncName = FunctionSet.YEAR;
+                    break;
+                default:
+                    throw new StarRocksConnectorException("Unsupported partition transform to add: %s", transform);
+            }
+            Type[] argTypes = {slotRef.getType()};
+            Function transformFn = Expr.getBuiltinFunction(transformFuncName,
+                    argTypes, Function.CompareMode.IS_IDENTICAL);
+            FunctionCallExpr result = new FunctionCallExpr(transformFuncName, ImmutableList.of(slotRef));
+            result.setFn(transformFn);
+            result.setType(slotRef.getType());
+            FunctionAnalyzer.analyze(result);
+            return result;
         }
     }
 }

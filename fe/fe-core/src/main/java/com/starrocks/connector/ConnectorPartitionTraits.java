@@ -180,7 +180,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

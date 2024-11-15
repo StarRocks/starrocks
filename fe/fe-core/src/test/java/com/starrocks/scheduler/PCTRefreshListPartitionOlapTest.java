@@ -1296,4 +1296,18 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
             Assert.fail(e.getMessage());
         }
     }
+
+    @Test
+    public void testCreateMVWithMultiPartitionColumns() {
+        starRocksAssert.withTable(T3, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                    "partition by (province, dt) \n" +
+                    "REFRESH DEFERRED MANUAL \n" +
+                    "properties ('partition_refresh_number' = '-1')" +
+                    "as select dt, province, sum(age) from t3 group by dt, province;");
+            MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+            refreshMV("test", mv);
+            starRocksAssert.dropMaterializedView("mv1");
+        });
+    }
 }

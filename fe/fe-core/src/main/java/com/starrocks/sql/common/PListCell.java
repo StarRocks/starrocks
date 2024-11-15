@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
@@ -105,21 +104,6 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
      */
     public void addItems(List<List<String>> items) {
         partitionItems.addAll(items);
-    }
-
-    /**
-     * Construct a new partition cell by using selected idx
-     */
-    public PListCell toPListCell(List<Integer> selectColIds) {
-        List<List<String>> partitionItems = Lists.newArrayList();
-        for (List<String> partitionKey : this.partitionItems) {
-            List<String> selectedPartitionKey = Lists.newArrayList();
-            for (Integer i : selectColIds) {
-                selectedPartitionKey.add(partitionKey.get(i));
-            }
-            partitionItems.add(selectedPartitionKey);
-        }
-        return new PListCell(partitionItems);
     }
 
     @Override

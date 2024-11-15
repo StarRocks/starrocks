@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -97,10 +98,10 @@ public abstract class MVTimelinessArbiter {
 
     /**
      * Determine the refresh type of the materialized view.
-     * @param refBaseTableAndColumns ref base table partition infos
+     * @param refBaseTablePartitionCols ref base table partition infos
      * @return the refresh type of the materialized view
      */
-    protected boolean needsRefreshOnNonRefBaseTables(Map<Table, Column> refBaseTableAndColumns) {
+    protected boolean needsRefreshOnNonRefBaseTables(Map<Table, List<Column>> refBaseTablePartitionCols) {
         TableProperty tableProperty = mv.getTableProperty();
         boolean isDisableExternalForceQueryRewrite = tableProperty != null &&
                 tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE;
@@ -110,7 +111,7 @@ public abstract class MVTimelinessArbiter {
             if (baseTable.isView()) {
                 continue;
             }
-            if (refBaseTableAndColumns.containsKey(baseTable)) {
+            if (refBaseTablePartitionCols.containsKey(baseTable)) {
                 continue;
             }
             // skip external table not supported for query rewrite, return all partitions ?
@@ -161,11 +162,10 @@ public abstract class MVTimelinessArbiter {
      * @param refBaseTableAndColumns ref base table and columns of mv
      * @return ref base table's changed partition names
      */
-    protected Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, Column> refBaseTableAndColumns,
+    protected Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, List<Column>> refBaseTableAndColumns,
                                                                            MvUpdateInfo mvUpdateInfo) {
         Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
-        for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
-            Table baseTable = e.getKey();
+        for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
                     true, isQueryRewrite);
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
