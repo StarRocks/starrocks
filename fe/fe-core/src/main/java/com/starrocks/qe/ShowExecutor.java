@@ -1812,6 +1812,15 @@ public class ShowExecutor {
                 List<String> info = backupJob.getInfo();
                 infos.add(info);
             }
+
+            // backup info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) jobI;
+                List<String> info = backupJob.getInfo();
+                infos.add(info);
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -1841,6 +1850,15 @@ public class ShowExecutor {
                 List<String> info = restoreJob.getInfo();
                 infos.add(info);
             }
+
+            // restore info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof RestoreJob) {  
+                RestoreJob restoreJob = (RestoreJob) jobI;
+                List<String> info = restoreJob.getInfo();
+                infos.add(info); 
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 

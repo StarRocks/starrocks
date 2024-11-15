@@ -21,15 +21,22 @@ public class CancelBackupStmt extends CancelStmt {
 
     private String dbName;
     private final boolean isRestore;
+    private final boolean isExternalCatalog;
 
     public CancelBackupStmt(String dbName, boolean isRestore) {
-        this(dbName, isRestore, NodePosition.ZERO);
+        this(dbName, isRestore, false, NodePosition.ZERO);
     }
 
-    public CancelBackupStmt(String dbName, boolean isRestore, NodePosition pos) {
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog) {
+        this(dbName, isRestore, isExternalCatalog, NodePosition.ZERO);
+    }
+
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog,
+                            NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.isRestore = isRestore;
+        this.isExternalCatalog = isExternalCatalog;
     }
 
     public String getDbName() {
@@ -42,6 +49,10 @@ public class CancelBackupStmt extends CancelStmt {
 
     public boolean isRestore() {
         return isRestore;
+    }
+
+    public boolean isExternalCatalog() {
+        return isExternalCatalog;
     }
 
     @Override

@@ -46,6 +46,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
@@ -158,6 +159,8 @@ public class BackupJob extends AbstractJob {
 
     @SerializedName(value = "backupFunctions")
     private List<Function> backupFunctions = Lists.newArrayList();
+    @SerializedName(value = "backupCatalogs")
+    private List<Catalog> backupCatalogs = Lists.newArrayList();
 
     public BackupJob() {
         super(JobType.BACKUP);
@@ -204,6 +207,10 @@ public class BackupJob extends AbstractJob {
 
     public void setBackupFunctions(List<Function> functions) {
         this.backupFunctions = functions;
+    }
+
+    public void setBackupCatalogs(List<Catalog> backupCatalogs) {
+        this.backupCatalogs = backupCatalogs;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -463,6 +470,14 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+        if (!backupCatalogs.isEmpty()) {
+            // short cut for external catalogs backup
+            backupMeta = new BackupMeta(Lists.newArrayList());
+            backupMeta.setCatalogs(backupCatalogs);
+            state = BackupJobState.SAVE_META;
+
+            return;
+        }
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");

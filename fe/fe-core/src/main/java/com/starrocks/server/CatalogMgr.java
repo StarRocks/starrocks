@@ -95,6 +95,11 @@ public class CatalogMgr {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
     }
 
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
+    }
+
     // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
@@ -152,6 +157,16 @@ public class CatalogMgr {
             throw e;
         } finally {
             writeUnLock();
+        }
+    }
+
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
         }
     }
 

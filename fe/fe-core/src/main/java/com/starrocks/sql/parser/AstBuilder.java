@@ -187,6 +187,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
@@ -3439,8 +3440,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             backupContext = (StarRocksParser.BackupStatementContext) context;
         }
 
+        List<CatalogRef> externalCatalogRefs = new ArrayList<>();
+        boolean allExternalCatalog = backupContext != null ?
+                                     (backupContext.ALL() != null) : (restoreContext.ALL() != null);
+        if (!allExternalCatalog && (backupContext != null ?
+                                    (backupContext.CATALOG() != null || backupContext.CATALOGS() != null) :
+                                    (restoreContext.CATALOG() != null || restoreContext.CATALOGS() != null))) {
+            if (backupContext != null) {
+                StarRocksParser.IdentifierListContext identifierListContext = backupContext.identifierList();
+                externalCatalogRefs = visit(identifierListContext.identifier(), Identifier.class)
+                                            .stream().map(Identifier::getValue)
+                                            .map(x -> new CatalogRef(x)).collect(Collectors.toList());
+            } else {
+                List<StarRocksParser.IdentifierWithAliasContext> identifierWithAliasList =
+                                                                 restoreContext.identifierWithAliasList().identifierWithAlias();
+                for (StarRocksParser.IdentifierWithAliasContext identifierWithAliasContext : identifierWithAliasList) {
+                    String originalName = getIdentifierName(identifierWithAliasContext.originalName);
+                    String alias = identifierWithAliasContext.AS() != null ?
+                                   getIdentifierName(identifierWithAliasContext.alias) : "";
+                    externalCatalogRefs.add(new CatalogRef(originalName, alias));
+                }
+            }
+        }
+        boolean containsExternalCatalog = allExternalCatalog || !externalCatalogRefs.isEmpty();
+
         boolean specifyDbExplicitly =
                             backupContext != null ? (backupContext.DATABASE() != null) : (restoreContext.DATABASE() != null);
+
+        if (specifyDbExplicitly && containsExternalCatalog) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbForExternalCatalog());
+        }
 
         LabelName labelName = null;
         String repoName = null;
@@ -3458,6 +3487,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<FunctionRef> fnRefs = new ArrayList<>();
         Set<BackupObjectType> allMarker = Sets.newHashSet();
 
+        if (allExternalCatalog) {
+            allMarker.add(BackupObjectType.EXTERNAL_CATALOG);
+        }
+
         labelName = qualifiedNameToLabelName(getQualifiedName(backupContext != null ?
                                                               backupContext.qualifiedName() : restoreContext.qualifiedName()));
         if (specifyDbExplicitly) {
@@ -3471,6 +3504,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
 
             labelName.setDbName(dbAlias != null ? dbAlias : originDb);
+        } else if (containsExternalCatalog && labelName.getDbName() != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDbForExternalCatalog());
         }
         repoName = getIdentifierName(backupContext != null ? backupContext.repoName : restoreContext.repoName);
 
@@ -3548,6 +3583,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedOnClauseWithoutAnyDbNameInRestoreStmt());
         }
 
+        if (withOnClause && containsExternalCatalog) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOnForExternalCatalog());
+        }
+
         // merge mv, view, table
         mixTblRefs.addAll(mvRefs);
         mixTblRefs.addAll(viewRefs);
@@ -3566,10 +3605,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         AbstractBackupStmt stmt = null;
         if (backupContext != null) {
-            stmt = new BackupStmt(labelName, repoName, mixTblRefs, fnRefs, allMarker, withOnClause,
+            stmt = new BackupStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
                                   originDb != null ? originDb : "", properties, createPos(backupContext));
         } else {
-            stmt = new RestoreStmt(labelName, repoName, mixTblRefs, fnRefs, allMarker, withOnClause,
+            stmt = new RestoreStmt(labelName, repoName, mixTblRefs, fnRefs, externalCatalogRefs, allMarker, withOnClause,
                                    originDb != null ? originDb : "", properties, createPos(restoreContext));
         }
 
@@ -3583,11 +3622,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelBackupStatement(StarRocksParser.CancelBackupStatementContext context) {
-        if (context.identifier() == null) {
+        if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-        return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(),
-                false, createPos(context));
+        return new CancelBackupStmt(context.CATALOG() != null ? "" : ((Identifier) visit(context.identifier())).getValue(),
+                false, context.CATALOG() != null, createPos(context));
     }
 
     @Override
@@ -3606,11 +3645,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelRestoreStatement(StarRocksParser.CancelRestoreStatementContext context) {
-        if (context.identifier() == null) {
+        if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-        return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), true,
-                createPos(context));
+        return new CancelBackupStmt(context.CATALOG() != null ? "" :  ((Identifier) visit(context.identifier())).getValue(),
+                true, context.CATALOG() != null, createPos(context));
     }
 
     @Override

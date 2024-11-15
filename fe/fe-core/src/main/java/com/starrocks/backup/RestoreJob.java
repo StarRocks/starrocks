@@ -55,6 +55,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -80,6 +81,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -410,7 +412,8 @@ public class RestoreJob extends AbstractJob {
      * return true if some restored objs have been dropped.
      */
     private void checkIfNeedCancel() {
-        if (state == RestoreJobState.PENDING) {
+        if (state == RestoreJobState.PENDING ||
+                (backupMeta != null && !backupMeta.getCatalogs().isEmpty())) {
             return;
         }
 
@@ -470,6 +473,22 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+        if (backupMeta != null && !backupMeta.getCatalogs().isEmpty()) {
+            // short cut for external catalog restore
+            try {
+                for (Catalog catalog : backupMeta.getCatalogs()) {
+                    globalStateMgr.getCatalogMgr().createCatalogForRestore(catalog);
+                }
+            } catch (DdlException e) {
+                status = new Status(ErrCode.COMMON_ERROR,
+                                    "Failed to restore external catalog, errmsg: " + e.getMessage());
+                return;
+            }
+            state = RestoreJobState.COMMITTING;
+            globalStateMgr.getEditLog().logRestoreJob(this);
+            return;
+        }
+
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -1469,6 +1488,17 @@ public class RestoreJob extends AbstractJob {
     }
 
     private Status allTabletCommitted(boolean isReplay) {
+        if (backupMeta != null && !backupMeta.getCatalogs().isEmpty()) {
+            if (!isReplay) {
+                finishedTime = System.currentTimeMillis();
+                state = RestoreJobState.FINISHED;
+    
+                globalStateMgr.getEditLog().logRestoreJob(this);
+            }
+            LOG.info("job is finished. is replay: {}. {}", isReplay, this);
+            return Status.OK;
+        }
+
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -1739,6 +1769,12 @@ public class RestoreJob extends AbstractJob {
                 for (Function fn : backupMeta.getFunctions()) {
                     db.dropFunctionForRestore(fn);
                 }
+            }
+        }
+
+        if (backupMeta != null && !backupMeta.getCatalogs().isEmpty()) {
+            for (Catalog catalog : backupMeta.getCatalogs()) {
+                globalStateMgr.getCatalogMgr().dropCatalogForRestore(catalog, isReplay);
             }
         }
 

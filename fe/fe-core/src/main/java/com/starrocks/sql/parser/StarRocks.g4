@@ -1731,14 +1731,14 @@ privObjectTypePlural
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP (DATABASE dbName=identifier)?
+    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelBackupStatement
-    : CANCEL BACKUP ((FROM | IN) identifier)?
+    : CANCEL BACKUP ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showBackupStatement
@@ -1748,13 +1748,14 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM repoName=identifier
+    (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelRestoreStatement
-    : CANCEL RESTORE ((FROM | IN) identifier)?
+    : CANCEL RESTORE ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showRestoreStatement
@@ -2813,6 +2814,14 @@ identifier
     | nonReserved            #unquotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
+    ;
+
+identifierWithAlias
+    : originalName=identifier (AS alias=identifier)?
+    ;
+
+identifierWithAliasList
+    : '(' identifierWithAlias (',' identifierWithAlias)* ')'
     ;
 
 identifierList
