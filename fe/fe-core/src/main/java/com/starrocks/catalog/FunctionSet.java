@@ -319,7 +319,6 @@ public class FunctionSet {
     public static final String ARRAY_AVG = "array_avg";
     public static final String ARRAY_CONTAINS = "array_contains";
     public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
-    public static final String ARRAY_CONTAINS_SEQ = "array_contains_seq";
     public static final String ARRAY_CUM_SUM = "array_cum_sum";
 
     public static final String ARRAY_JOIN = "array_join";
@@ -699,13 +698,9 @@ public class FunctionSet {
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
-<<<<<<< HEAD
-=======
             .add(ARRAY_CONTAINS)
             .add(ARRAY_CONTAINS_ALL)
-            .add(ARRAY_CONTAINS_SEQ)
             .add(ARRAY_POSITION)
->>>>>>> ac623b3de5 ([Enhancement][Refactor] optimize array_contains_all/array_contains_seq function (#51701))
             .build();
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()

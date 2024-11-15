@@ -1628,8 +1628,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-=======
 template <LogicalType LT, bool PositionEnabled, typename ReturnType>
 class ArrayContains {
 public:
@@ -2330,5 +2328,4 @@ private:
     }
 };
 
->>>>>>> ac623b3de5 ([Enhancement][Refactor] optimize array_contains_all/array_contains_seq function (#51701))
 } // namespace starrocks
