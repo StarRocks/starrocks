@@ -593,14 +593,14 @@ public class Config extends ConfigBase {
     /**
      * Timeout seconds for doing checkpoint
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static long checkpoint_timeout_seconds = 24 * 3600;
 
     /**
-     * True to only doing checkpoint on leader node.
+     * True to only do checkpoint on leader node.
      * False to do checkpoint on the node with low memory usage.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean checkpoint_only_on_leader = false;
 
     /**

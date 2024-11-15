@@ -241,9 +241,9 @@ public class Frontend extends JsonWriter {
         // Therefore, if the restarted node is its own node, do not cancel the Checkpoint.
         if (!isReplay
                 && !nodeName.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-            GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(nodeName, "FE has restarted");
+            GlobalStateMgr.getCurrentState().getCheckpointController().workerRestarted(nodeName, startTime);
             if (RunMode.isSharedDataMode()) {
-                StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(nodeName, "FE has restarted");
+                StarMgrServer.getCurrentState().getCheckpointController().workerRestarted(nodeName, startTime);
             }
         }
     }

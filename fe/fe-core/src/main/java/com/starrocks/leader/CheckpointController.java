@@ -96,6 +96,7 @@ public class CheckpointController extends FrontendDaemon {
     private final Set<String> nodesToPushImage;
 
     private volatile String workerNodeName;
+    private volatile long workerSelectedTime;
     private volatile long journalId;
     private volatile BlockingQueue<Pair<Boolean, String>> result;
 
@@ -171,6 +172,7 @@ public class CheckpointController extends FrontendDaemon {
             LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
             return Pair.create(false, workerNodeName);
         }
+        workerSelectedTime = System.currentTimeMillis();
 
         // check the worker node is available
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
@@ -459,6 +461,12 @@ public class CheckpointController extends FrontendDaemon {
         if (nodeName.equals(workerNodeName)) {
             result.offer(Pair.create(false, reason));
             LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
+        }
+    }
+
+    public void workerRestarted(String nodeName, long startTime) {
+        if (startTime > workerSelectedTime) {
+            cancelCheckpoint(nodeName, "worker restarted");
         }
     }
 }
