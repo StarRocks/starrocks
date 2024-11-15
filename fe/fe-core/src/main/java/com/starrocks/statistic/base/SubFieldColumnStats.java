@@ -16,6 +16,7 @@ package com.starrocks.statistic.base;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
+import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,15 +30,20 @@ public class SubFieldColumnStats extends ColumnStats {
         super(String.join(".", names), columnType);
         this.names = names;
         if (columnType.canStatistic()) {
-            columnStats = new PrimitiveTypeColumnStats(String.join(".", names), columnType);
+            columnStats = new PrimitiveTypeColumnStats("name", columnType);
         } else {
-            columnStats = new ComplexTypeColumnStats(String.join(".", names), columnType);
+            columnStats = new ComplexTypeColumnStats("name", columnType);
         }
     }
 
     @Override
     public boolean supportMeta() {
         return false;
+    }
+
+    @Override
+    public String getColumnNameStr() {
+        return StringEscapeUtils.escapeSql(String.join(".", names));
     }
 
     @Override
