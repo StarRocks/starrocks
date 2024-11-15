@@ -18,6 +18,7 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
+#include "pipeline/fragment_context.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -160,8 +161,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
     COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
     COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
-    if (_scanner_ctx.conjuncts_manager != nullptr) {
-        root->add_info_string("ParquetZoneMapFilter", _scanner_ctx.predicate_tree.root().debug_string());
+    if (_scanner_ctx.conjuncts_manager != nullptr &&
+        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
     }
 }
 
