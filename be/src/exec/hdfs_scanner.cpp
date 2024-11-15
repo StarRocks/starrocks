@@ -21,6 +21,7 @@
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "pipeline/fragment_context.h"
 #include "storage/predicate_parser.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
@@ -179,7 +180,7 @@ Status HdfsScanner::_build_scanner_context() {
         opts.runtime_state = _runtime_state;
         opts.enable_column_expr_predicate = true;
         opts.is_olap_scan = false;
-        opts.pred_tree_params.enable_or = true;
+        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
         ctx.conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
         RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
         ConnectorPredicateParser predicate_parser{&ctx.slot_descs};
