@@ -211,6 +211,27 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                 "FROM base_cte_table ");
     }
 
+    @Test
+    public void testSubfieldSampleJobs() {
+        List<String> columnNames = Lists.newArrayList("c4.b", "c6.c.b");
+        List<Type> columnTypes = Lists.newArrayList(new ArrayType(Type.ANY_STRUCT), Type.INT);
+
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
+                columnTypes, List.of(pid), 1, sampler);
+
+        Assert.assertEquals(2, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof SampleQueryJob);
+
+        List<String> sql = jobs.get(0).buildQuerySQL();
+        Assert.assertEquals(1, sql.size());
+
+        assertContains(sql.get(0), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) " +
+                "SELECT cast(4 as INT), cast(14418 as BIGINT), 'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), " +
+                "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), " +
+                "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
+                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), '')  FROM base_cte_table");
+    }
+
     @AfterClass
     public static void afterClass() {
         FeConstants.runningUnitTest = false;

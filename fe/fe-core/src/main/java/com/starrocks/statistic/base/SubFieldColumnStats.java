@@ -21,18 +21,18 @@ import org.apache.commons.lang.StringEscapeUtils;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class SubFieldColumnStats extends ColumnStats {
+public class SubFieldColumnStats extends PrimitiveTypeColumnStats {
 
-    public List<String> names;
-    public final ColumnStats columnStats;
+    private List<String> names;
+    public ColumnStats complexStats;
+    private boolean isComplexType = false;
 
     public SubFieldColumnStats(List<String> names, Type columnType) {
         super(String.join(".", names), columnType);
         this.names = names;
-        if (columnType.canStatistic()) {
-            columnStats = new PrimitiveTypeColumnStats("name", columnType);
-        } else {
-            columnStats = new ComplexTypeColumnStats("name", columnType);
+        this.isComplexType = !columnType.canStatistic();
+        if (!columnType.canStatistic()) {
+            complexStats = new ComplexTypeColumnStats("name", columnType);
         }
     }
 
@@ -53,31 +53,36 @@ public class SubFieldColumnStats extends ColumnStats {
 
     @Override
     public String getMax() {
-        return columnStats.getMax();
+        return isComplexType ? complexStats.getMax() : super.getMax();
     }
 
     @Override
     public String getMin() {
-        return columnStats.getMin();
+        return isComplexType ? complexStats.getMin() : super.getMin();
     }
 
     @Override
     public String getFullDateSize() {
-        return columnStats.getFullDateSize();
+        return isComplexType ? complexStats.getFullDateSize() : super.getFullDateSize();
+    }
+
+    @Override
+    public String getFullNullCount() {
+        return isComplexType ? complexStats.getFullNullCount() : super.getFullNullCount();
     }
 
     @Override
     public String getNDV() {
-        return columnStats.getNDV();
+        return isComplexType ? complexStats.getNDV() : super.getNDV();
     }
 
     @Override
     public String getSampleDateSize(SampleInfo info) {
-        return columnStats.getSampleDateSize(info);
+        return isComplexType ? complexStats.getSampleDateSize(info) : super.getSampleDateSize(info);
     }
 
     @Override
     public String getSampleNullCount(SampleInfo info) {
-        return columnStats.getSampleNullCount(info);
+        return isComplexType ? complexStats.getSampleNullCount(info) : super.getSampleNullCount(info);
     }
 }
