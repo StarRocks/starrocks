@@ -45,6 +45,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.Function;
@@ -928,5 +929,20 @@ public class RestoreJobTest {
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
         job.addRestoredFunctions(db);
+    }
+
+    @Test
+    public void testRestoreAddCatalog() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+
+        backupMeta.setCatalogs(Lists.newArrayList(catalog));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        job.addRestoredFunctions(db);
+        job.run();
+        job.run();
     }
 }

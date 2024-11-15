@@ -42,6 +42,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MaterializedIndex;
@@ -602,6 +603,16 @@ public class BackupHandlerTest {
         fns.add(f2);
         backupMeta.setFunctions(fns);
         handler.checkAndFilterRestoreFunctionsInBackupMeta(restoreStmt2, backupMeta);
+
+        // process EXTERNAL CATALOG restore
+        Map<String, String> properties3 = Maps.newHashMap();
+        properties3.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt3 = new RestoreStmt(new LabelName(null, "label2"), "repo", Lists.newArrayList(),
+                                                   Lists.newArrayList(), null, null, false, "", properties3);
+        BackupMeta newBackupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+        newBackupMeta.setCatalogs(Lists.newArrayList(catalog));
+        handler.checkAndFilterRestoreCatalogsInBackupMeta(restoreStmt3, newBackupMeta);
 
         // drop repo
         DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());

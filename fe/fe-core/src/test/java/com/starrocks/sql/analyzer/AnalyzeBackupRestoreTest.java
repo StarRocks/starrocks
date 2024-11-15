@@ -276,10 +276,8 @@ public class AnalyzeBackupRestoreTest {
     public void testCancelRestore() {
         analyzeFail("CANCEL BACKUP;");
         analyzeFail("CANCEL RESTORE;");
-        analyzeFail("CANCEL EXTERNAL CATALOG BACKUP FROM test;");
-        analyzeFail("CANCEL EXTERNAL CATALOG RESTORE FROM test;");
-        analyzeSuccess("CANCEL EXTERNAL CATALOG BACKUP;");
-        analyzeSuccess("CANCEL EXTERNAL CATALOG BACKUP;");
+        analyzeSuccess("CANCEL BACKUP FOR EXTERNAL CATALOG;");
+        analyzeSuccess("CANCEL RESTORE FOR EXTERNAL CATALOG;");
     }
 
 }

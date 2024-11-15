@@ -1738,7 +1738,7 @@ backupStatement
     ;
 
 cancelBackupStatement
-    : CANCEL (EXTERNAL CATALOG)? BACKUP ((FROM | IN) identifier)?
+    : CANCEL BACKUP ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showBackupStatement
@@ -1755,7 +1755,7 @@ restoreStatement
     ;
 
 cancelRestoreStatement
-    : CANCEL (EXTERNAL CATALOG)? RESTORE ((FROM | IN) identifier)?
+    : CANCEL RESTORE ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showRestoreStatement

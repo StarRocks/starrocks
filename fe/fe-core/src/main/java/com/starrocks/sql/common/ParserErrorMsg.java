@@ -237,7 +237,4 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Can not sepcify `ON` clause for external catalog Backup/Restore")
     String unsupportedOnForExternalCatalog();
-
-    @BaseMessage("Can not sepcify database for cancel EXTERNAL CATALOG BACKUP/RESTORE")
-    String unsupportedSepcifyDatabaseForExternalCatalog();
 }

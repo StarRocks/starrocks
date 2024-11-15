@@ -3622,9 +3622,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelBackupStatement(StarRocksParser.CancelBackupStatementContext context) {
-        if (context.CATALOG() != null && context.identifier() != null) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDatabaseForExternalCatalog());
-        }
         if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
@@ -3648,9 +3645,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelRestoreStatement(StarRocksParser.CancelRestoreStatementContext context) {
-        if (context.CATALOG() != null && context.identifier() != null) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedSepcifyDatabaseForExternalCatalog());
-        }
         if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
