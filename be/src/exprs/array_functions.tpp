@@ -18,11 +18,6 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
-<<<<<<< HEAD
-=======
-#include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
->>>>>>> 0c35297f14 ([Enhancement] handle const column in array_filter (#51363))
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
