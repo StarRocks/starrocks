@@ -34,6 +34,7 @@
 
 package com.starrocks.leader;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -57,7 +58,6 @@ import com.starrocks.thrift.TStartCheckpointRequest;
 import com.starrocks.thrift.TStartCheckpointResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
-import com.google.common.base.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
