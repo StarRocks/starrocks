@@ -141,7 +141,24 @@ public:
     DEFINE_VECTORIZED_FN(array_cum_sum_double);
 
     DEFINE_VECTORIZED_FN(array_contains_any);
+
     DEFINE_VECTORIZED_FN(array_contains_all);
+
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> array_contains_all_specific(FunctionContext* context, const Columns& columns) {
+        return ArrayContainsAll<LT, false>::process(context, columns);
+    }
+    template <LogicalType LT>
+    static Status array_contains_all_specific_prepare(FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, false>::prepare(context, scope);
+    }
+    template <LogicalType LT>
+    static Status array_contains_all_specific_close(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+        return ArrayContainsAll<LT, false>::close(context, scope);
+    }
+
     DEFINE_VECTORIZED_FN(array_map);
     DEFINE_VECTORIZED_FN(array_filter);
     DEFINE_VECTORIZED_FN(all_match);
