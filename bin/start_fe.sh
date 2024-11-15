@@ -106,15 +106,19 @@ if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
     exit -1
 fi
 
-# ### Things to know about environment variables of JAVA_OPTS, JAVA_OPTS_FOR_JDK_9 and JAVA_OPTS_FOR_JDK_11
+# ### Things to know about environment variables of JAVA_OPTS, JAVA_OPTS_FOR_JDK_9, JAVA_OPTS_FOR_JDK_11
+# and JAVA_OPTS_FOR_JDK_17
 # * It is historic reason and backwards compatibility consideration to have separate JAVA_OPTS
 #   for diffferent versions of JDK, so that when the user upgrades or downgrades the JDK version,
 #   the JAVA_OPTS won't be suddenly broken.
 # * Ideally, the user will only care about the `JAVA_OPTS`, don't set any JAVA_OPTS_FOR_JDK_*
-# * JAVA_OPTS/JAVA_OPTS_FOR_JDK_9/JAVA_OPTS_FOR_JDK_11 can be either set in the shell before invoking
-#   this script, or can be set in `fe.conf` which will be loaded automatically by `export_env_from_conf`
+# * JAVA_OPTS/JAVA_OPTS_FOR_JDK_9/JAVA_OPTS_FOR_JDK_11/JAVA_OPTS_FOR_JDK_17 can be either set in the shell
+#   before invoking this script, or can be set in `fe.conf` which will be loaded automatically
+#   by `export_env_from_conf`
 #
 # ### Precedence of environment variables
+# For JDK17, it takes the following precedences:
+#    JAVA_OPTS_FOR_JDK_17 > JAVA_OPTS
 # For JDK11, it takes the following precedences:
 #    JAVA_OPTS_FOR_JDK_11 > JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
 # (The `JAVA_OPTS_FOR_JDK_9` here is just for historic reason)
@@ -126,6 +130,10 @@ fi
 #
 final_java_opt=
 case $JAVA_VERSION in
+  17)
+    # take JAVA_OPTS_FOR_JDK_17 or JAVA_OPTS if the former is empty
+    final_java_opt=${JAVA_OPTS_FOR_JDK_17:-$JAVA_OPTS}
+    ;;
   11)
     # take JAVA_OPTS_FOR_JDK_11 or JAVA_OPTS_FOR_JDK_9 if the former is empty
     final_java_opt=${JAVA_OPTS_FOR_JDK_11:-$JAVA_OPTS_FOR_JDK_9}
