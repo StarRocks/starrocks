@@ -232,11 +232,6 @@ public class Trino2SRFunctionCallTransformer {
         // last_day_of_month(x)  -> last_day(x,'month')
         registerFunctionTransformer("last_day_of_month", 1, new FunctionCallExpr("last_day",
                 List.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
-
-        // year_of_week  -> weekofyear
-        registerFunctionTransformer("year_of_week", 1, "week_iso", List.of(Expr.class));
-        // yow  -> year_of_week
-        registerFunctionTransformer("yow", 1, "week_iso", List.of(Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
