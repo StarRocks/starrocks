@@ -184,7 +184,7 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
-        stats->append(kIONsRemote, read_stats.io_ns_remote);
+        stats->append(kIONsRemote, read_stats.io_ns_read_remote);
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
