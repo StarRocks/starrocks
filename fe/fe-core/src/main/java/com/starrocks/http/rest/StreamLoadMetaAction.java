@@ -45,6 +45,27 @@ public class StreamLoadMetaAction extends RestBaseAction {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadMetaAction.class);
 
+    // batch write stream load parameters =====================================================
+
+    // The parameter name to specify the type of metas.
+    private static final String TYPE_PARAM_NAME = "type";
+
+    // The type name for nodes meta. The response will return available BE nodes that can accept load requests.
+    // You can also set the parameter NODE_SERVICE_PARAM to specify the required service the nodes can provide.
+    // There will be a key named "nodes" in the response json, and the value is also a json which contains fields
+    // for each service type. For example, if you want both http and brpc service, the response will be like:
+    // "nodes": {
+    //      "http":"be_ip1:http_port1,be_ip2:http_port2",
+    //      "brpc":"be_ip1:brpc_port1,be_ip2:brpc_port2"
+    // }
+    private static final String NODES_TYPE = "nodes";
+
+    // The parameter name to specify the service type of the nodes. The value can be "http" or "brpc".
+    // If not set this parameter, the response will return all service types. Each type will be a field
+    // in the json, such as "http":"be_ip1:http_port1,be_ip2:http_port2" for http service, and
+    // "brpc":"be_ip1:brpc_port1,be_ip2:brpc_port2" for brpc service
+    private static final String NODE_SERVICE_PARAM = "node_service";
+
     public StreamLoadMetaAction(ActionController controller) {
         super(controller);
     }
@@ -94,26 +115,6 @@ public class StreamLoadMetaAction extends RestBaseAction {
                 new StreamLoadMetaResult(TStatusCode.OK.name(), ActionStatus.OK, "");
         sendResult(request, response, responseResult);
     }
-
-    // batch write stream load =====================================================
-
-    // The parameter name to specify the type of metas.
-    private static final String TYPE_PARAM_NAME = "type";
-
-    // The type name for nodes meta. The response will return available BE nodes that can accept load requests.
-    // You can also set the parameter NODE_SERVICE_PARAM to specify the required service the nodes can provide.
-    // There will be a key named "nodes" in the response json, and the value is also a json which contains fields
-    // for each service type. For example, if you want both http and brpc service, the response will be like:
-    // "nodes": {
-    //      "http":"be_ip1:http_port1,be_ip2:http_port2",
-    //      "brpc":"be_ip1:brpc_port1,be_ip2:brpc_port2"
-    // }
-    private static final String NODES_TYPE = "nodes";
-    // The parameter name to specify the service type of the nodes. The value can be "http" or "brpc".
-    // If not set this parameter, the response will return all service types. Each type will be a field
-    // in the json, such as "http":"be_ip1:http_port1,be_ip2:http_port2" for http service, and
-    // "brpc":"be_ip1:brpc_port1,be_ip2:brpc_port2" for brpc service
-    private static final String NODE_SERVICE_PARAM = "node_service";
 
     private void processBatchWriteStreamLoad(
             BaseRequest request, BaseResponse response, String dbName, String tableName) {
