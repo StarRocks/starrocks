@@ -534,7 +534,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Under the condition of ensuring that the data is correct, we disabled the limit optimization when table has
         // partition evolution because this may cause data diff.
         boolean canPruneManifests = limit != -1 && !icebergTable.isV2Format() && onlyHasPartitionPredicate(table, predicate)
-                && limit < Integer.MAX_VALUE && nativeTbl.spec().specId() == 0 && enablePruneManifest();
+                && limit < Integer.MAX_VALUE && nativeTbl.spec().specId() == 0 && enablePruneManifest()
+                && icebergTable.isAllPartitionColumnsAlwaysIdentity();
 
         if (canPruneManifests) {
             // After iceberg uses partition predicate plan files, each manifests entry must have at least one row of data.
