@@ -36,4 +36,6 @@ public interface HAProtocol {
 
     // remove a node from the group
     boolean removeElectableNode(String nodeName);
+
+    long getLatestEpoch();
 }

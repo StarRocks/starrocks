@@ -1652,10 +1652,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     private static void changeLeader(Frontend fe) {
-        LeaderInfo leaderInfo = new LeaderInfo();
-        leaderInfo.setIp(fe.getHost());
-        leaderInfo.setHttpPort(80);
-        leaderInfo.setRpcPort(fe.getRpcPort());
+        LeaderInfo leaderInfo = new LeaderInfo(fe.getHost(), 80, fe.getRpcPort());
         GlobalStateMgr.getCurrentState().getNodeMgr().setLeader(leaderInfo);
     }
 
@@ -1663,7 +1660,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         FrontendHbResponse hbResponse;
         if (isAlive) {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), fe.getQueryPort(), fe.getRpcPort(),
-                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion());
+                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion(), 0.5f);
         } else {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), "mock-dead-frontend");
         }
