@@ -37,6 +37,8 @@ public:
     explicit ArrayMapExpr(TypeDescriptor type);
 
     Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
