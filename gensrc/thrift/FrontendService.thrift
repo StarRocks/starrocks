@@ -1866,6 +1866,28 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1981,5 +2003,9 @@ service FrontendService {
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
 }
 
