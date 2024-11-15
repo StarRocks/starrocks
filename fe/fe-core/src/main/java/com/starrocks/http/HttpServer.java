@@ -86,6 +86,7 @@ import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StarManagerHttpServiceAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+import com.starrocks.http.rest.StreamLoadMetaAction;
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
@@ -151,6 +152,7 @@ public class HttpServer {
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);
+        StreamLoadMetaAction.registerAction(controller);
         TransactionLoadAction.registerAction(controller);
         GetLoadInfoAction.registerAction(controller);
         SetConfigAction.registerAction(controller);
