@@ -573,10 +573,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
     }
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
-
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
     _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     return Status::OK();
 }
