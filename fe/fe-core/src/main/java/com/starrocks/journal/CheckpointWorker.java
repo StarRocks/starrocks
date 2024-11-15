@@ -40,6 +40,8 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     protected String imageDir;
     protected final Journal journal;
+
+    // the next checkpoint task(epoch, journalId) to do
     private NextPoint nextPoint;
     protected GlobalStateMgr servingGlobalState;
     private String subDir;

@@ -590,8 +590,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
+    /**
+     * Timeout seconds for doing checkpoint
+     */
     @ConfField
     public static long checkpoint_timeout_seconds = 24 * 3600;
+
+    /**
+     * True to only doing checkpoint on leader node.
+     * False to do checkpoint on the node with low memory usage.
+     */
+    @ConfField
+    public static boolean checkpoint_only_on_leader = false;
 
     /**
      * the max txn number which bdbje can roll back when trying to rejoin the group

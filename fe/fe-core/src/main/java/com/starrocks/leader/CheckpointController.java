@@ -246,26 +246,31 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private String selectWorker() {
-        List<Frontend> frontends = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
-        // sort frontends by heap used percent asc
-        frontends.sort((fe1, fe2) -> {
-            if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
-                return 0;
-            } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
-                return 1;
-            } else {
-                return -1;
-            }
-        });
+        List<Frontend> workers;
+        if (Config.checkpoint_only_on_leader) {
+            workers = new ArrayList<>();
+        } else {
+            workers = GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends();
+            // sort workers by heap used percent asc
+            workers.sort((fe1, fe2) -> {
+                if (Math.abs(fe1.getHeapUsedPercent() - fe2.getHeapUsedPercent()) < 1e-6) {
+                    return 0;
+                } else if (fe1.getHeapUsedPercent() > fe2.getHeapUsedPercent()) {
+                    return 1;
+                } else {
+                    return -1;
+                }
+            });
+        }
 
         // put the leader node to the end
-        frontends.add(GlobalStateMgr.getServingState().getNodeMgr().getSelfFe());
+        workers.add(GlobalStateMgr.getServingState().getNodeMgr().getSelfFe());
 
-        for (Frontend frontend : frontends) {
+        for (Frontend frontend : workers) {
             LOG.info("frontend: {} heap used percent: {}", frontend.getNodeName(), frontend.getHeapUsedPercent());
         }
 
-        for (Frontend frontend : frontends) {
+        for (Frontend frontend : workers) {
             if (frontend.isAlive() && doCheckpoint(frontend)) {
                 LOG.info("select worker: {} to do checkpoint", frontend.getNodeName());
                 return frontend.getNodeName();
