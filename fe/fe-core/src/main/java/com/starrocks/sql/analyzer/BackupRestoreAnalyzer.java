@@ -23,6 +23,7 @@ import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -36,6 +37,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class BackupRestoreAnalyzer {
     private static final Logger LOG = LogManager.getLogger(BackupRestoreAnalyzer.class);
@@ -77,6 +80,27 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext context) {
+            if (backupStmt.containsExternalCatalog()) {
+                analyzeBackupProperties(backupStmt);
+
+                if (backupStmt.allExternalCatalog()) {
+                    backupStmt.getExternalCatalogRefs().clear();
+                    // get all catalog from CatalogMgr
+                    backupStmt.getExternalCatalogRefs().addAll(
+                                GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(x -> !x.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+                                .map(x -> new CatalogRef(x)).collect(Collectors.toList()));
+                }
+
+                if (backupStmt.getExternalCatalogRefs().isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                                        "No external catalog can be backed up");
+                }
+
+                backupStmt.getExternalCatalogRefs().stream().forEach(x -> x.analyzeForBackup());
+                return null;
+            }
+
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
@@ -176,6 +200,12 @@ public class BackupRestoreAnalyzer {
                 backupStmt.getFnRefs().stream().forEach(x -> x.analyzeForBackup(database));
             }
 
+            analyzeBackupProperties(backupStmt);
+
+            return null;
+        }
+
+        private void analyzeBackupProperties(BackupStmt backupStmt) {
             Map<String, String> properties = backupStmt.getProperties();
             long timeoutMs = Config.backup_job_default_timeout_ms;
             Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
@@ -211,8 +241,6 @@ public class BackupRestoreAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Unknown backup job properties: " + copiedProperties.keySet());
             }
-
-            return null;
         }
 
         private Map<String, TableRef> reorderTableRefsWithMaterializedView(Database database,
@@ -277,6 +305,9 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitCancelBackupStatement(CancelBackupStmt cancelBackupStmt, ConnectContext context) {
+            if (cancelBackupStmt.isExternalCatalog()) {
+                return null;
+            }
             String dbName = getDbName(cancelBackupStmt.getDbName(), context);
             cancelBackupStmt.setDbName(dbName);
             return null;

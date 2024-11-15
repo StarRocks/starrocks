@@ -33,16 +33,18 @@ public class RestoreStmt extends AbstractBackupStmt {
     private int starrocksMetaVersion = -1;
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
-                       List<FunctionRef> fnRefs, Set<BackupObjectType> allMarker,
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                        boolean withOnClause, String originDbName, Map<String, String> properties) {
-        this(labelName, repoName, tblRefs, fnRefs, allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
+        this(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
     }
 
     public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
-                       List<FunctionRef> fnRefs, Set<BackupObjectType> allMarker,
+                       List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                        boolean withOnClause, String originDbName,
                        Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, fnRefs, allMarker, withOnClause, originDbName, properties, pos);
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public boolean allowLoad() {

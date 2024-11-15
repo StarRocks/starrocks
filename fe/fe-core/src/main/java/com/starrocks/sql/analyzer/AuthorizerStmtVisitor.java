@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -128,6 +129,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
@@ -2110,23 +2112,57 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
-        List<TableRef> tableRefs = statement.getTableRefs();
-        if (statement.withOnClause() && tableRefs.isEmpty() && statement.getFnRefs().isEmpty()) {
-            String dBName = statement.getDbName();
-            throw new SemanticException("Database: %s is empty", dBName);
-        }
-        tableRefs.forEach(tableRef -> {
-            TableName tableName = tableRef.getName();
-            try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
-                        PrivilegeType.EXPORT);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        tableName.getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        if (!statement.containsExternalCatalog()) {
+            List<TableRef> tableRefs = statement.getTableRefs();
+            List<FunctionRef> functionRefs = statement.getFnRefs();
+            if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
+                String dBName = statement.getDbName();
+                throw new SemanticException("Database: %s is empty", dBName);
             }
-        });
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                try {
+                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), tableName,
+                            PrivilegeType.EXPORT);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            tableName.getCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                }
+            });
+
+            functionRefs.forEach(functionRef -> {
+                List<Function> fns = functionRef.getFunctions();
+                for (Function fn : fns) {
+                    try {
+                        Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                db, fn, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                    }
+                }
+            });
+        } else {
+            List<CatalogRef> externalCatalogs = statement.getExternalCatalogRefs();
+            externalCatalogs.forEach(externalCatalog -> {
+                try {
+                    Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                externalCatalog.getCatalogName(), PrivilegeType.USAGE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            externalCatalog.getCatalogName(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.CREATE_DATABASE.name(), ObjectType.CATALOG.name(), externalCatalog.getCatalogName());
+                }
+            });
+        }
+
         return null;
     }
 
@@ -2198,9 +2234,22 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
 
+        if (statement.containsExternalCatalog()) {
+            try {
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.CREATE_EXTERNAL_CATALOG);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.CREATE_EXTERNAL_CATALOG.name(), ObjectType.SYSTEM.name(), null);
+            }
+            return null;
+        }
+
         List<TableRef> tableRefs = statement.getTableRefs();
         // check create_database on current catalog if we're going to restore the whole database
-        if (!statement.withOnClause() && (tableRefs == null || tableRefs.isEmpty())) {
+        if (!statement.withOnClause()) {
             try {
                 Authorizer.checkCatalogAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
