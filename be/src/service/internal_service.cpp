@@ -80,6 +80,7 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
@@ -890,6 +891,27 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
 }
 
 template <typename T>

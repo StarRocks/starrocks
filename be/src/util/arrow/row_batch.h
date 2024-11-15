@@ -67,4 +67,5 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
 
+Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result);
 } // namespace starrocks

@@ -132,6 +132,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -670,18 +671,24 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
+                        }
+
+                        if (context instanceof ArrowFlightSqlConnectContext) {
+                            isAsync = true;
+                            tryProcessProfileAsync(execPlan, i);
                         } else if (context.isProfileEnabled()) {
                             isAsync = tryProcessProfileAsync(execPlan, i);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                if (coord != null && coord.isShortCircuit()) {
-                                    throw new UserException(
-                                            "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                    "you can set it off by using  set enable_short_circuit=false");
-                                }
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+                        }
+
+                        if (parsedStmt.isExplain() &&
+                                StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                            if (coord != null && coord.isShortCircuit()) {
+                                throw new UserException(
+                                        "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                "you can set it off by using  set enable_short_circuit=false");
                             }
+                            handleExplainStmt(ExplainAnalyzer.analyze(
+                                    ProfilingExecPlan.buildFrom(execPlan), profile, null));
                         }
 
                         if (context.getState().isError()) {
@@ -692,8 +699,11 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
-                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                                    context.getSessionVariable().getProfileTimeout() * 1000L);
+                            int timeout = context.getSessionVariable().getQueryTimeoutS();
+                            QeProcessorImpl.INSTANCE
+                                    .monitorQuery(context.getExecutionId(),
+                                            System.currentTimeMillis() + timeout * 1000L +
+                                                    context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -884,7 +894,8 @@ public class StmtExecutor {
     private boolean createTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         try {
             if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
+                CreateTemporaryTableStmt createTemporaryTableStmt =
+                        (CreateTemporaryTableStmt) stmt.getCreateTableStmt();
                 createTemporaryTableStmt.setSessionId(context.getSessionId());
                 return context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(createTemporaryTableStmt);
             } else {
@@ -1186,15 +1197,19 @@ public class StmtExecutor {
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
+
         boolean isPlanAdvisorAnalyze = StatementBase.ExplainLevel.PLAN_ADVISOR.equals(parsedStmt.getExplainLevel());
 
-        boolean isOutfileQuery = (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
+        boolean isOutfileQuery =
+                (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
+
         if (isOutfileQuery) {
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(parsedStmt);
             if (hasTemporaryTable) {
                 throw new SemanticException("temporary table doesn't support select outfile statement");
             }
         }
+
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
                 && canExecuteInFe(context, execPlan.getPhysicalPlan());
 
@@ -1250,9 +1265,15 @@ public class StmtExecutor {
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlan(execPlan);
 
-        RowBatch batch;
+        RowBatch batch = null;
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan, parsedStmt.getOrigStmt().getOrigStmt());
+        } else if (context instanceof ArrowFlightSqlConnectContext) {
+            ArrowFlightSqlConnectContext ctx = (ArrowFlightSqlConnectContext) context;
+            ctx.setReturnFromFE(false);
+            ctx.setExecPlan(execPlan);
+            ctx.setCoordinator(coord);
+            ctx.getState().setEof();
         } else {
             boolean needSendResult = !isPlanAdvisorAnalyze && !isExplainAnalyze
                     && !context.getSessionVariable().isEnableExecutionOnly();
@@ -1299,41 +1320,45 @@ public class StmtExecutor {
                 sendFields(colNames, outputExprs);
             }
         }
+        
+        if (batch != null) {
+            statisticsForAuditLog = batch.getQueryStatistics();
+            if (!isOutfileQuery) {
+                context.getState().setEof();
+            } else {
+                context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
+            }
 
-        statisticsForAuditLog = batch.getQueryStatistics();
-        if (!isOutfileQuery) {
-            context.getState().setEof();
-        } else {
-            context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
-        }
+            if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
+                    statisticsForAuditLog.statsItems.isEmpty()) {
+                return;
+            }
+            analyzePlanWithExecStats(execPlan);
 
-        if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
-                statisticsForAuditLog.statsItems.isEmpty()) {
-            return;
-        }
-        analyzePlanWithExecStats(execPlan);
-
-        // collect table-level metrics
-        Set<Long> tableIds = Sets.newHashSet();
-        for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
-            entity.counterScanRowsTotal.increase(item.scanRows);
-            entity.counterScanBytesTotal.increase(item.scanBytes);
-            tableIds.add(item.tableId);
-        }
-        for (Long tableId : tableIds) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-            entity.counterScanFinishedTotal.increase(1L);
+            // collect table-level metrics
+            Set<Long> tableIds = Sets.newHashSet();
+            for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
+                entity.counterScanRowsTotal.increase(item.scanRows);
+                entity.counterScanBytesTotal.increase(item.scanBytes);
+                tableIds.add(item.tableId);
+            }
+            for (Long tableId : tableIds) {
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                entity.counterScanFinishedTotal.increase(1L);
+            }
         }
     }
 
     private void analyzePlanWithExecStats(ExecPlan execPlan) {
         SessionVariable sessionVariable = context.getSessionVariable();
-        if (!sessionVariable.isEnablePlanAdvisor() || CollectionUtils.isEmpty(statisticsForAuditLog.getNodeExecStatsItems())) {
+        if (!sessionVariable.isEnablePlanAdvisor() ||
+                CollectionUtils.isEmpty(statisticsForAuditLog.getNodeExecStatsItems())) {
             return;
         }
         long elapseMs = System.currentTimeMillis() - context.getStartTime();
-        OperatorTuningGuides usedTuningGuides = PlanTuningAdvisor.getInstance().getOperatorTuningGuides(context.getQueryId());
+        OperatorTuningGuides usedTuningGuides =
+                PlanTuningAdvisor.getInstance().getOperatorTuningGuides(context.getQueryId());
         if (usedTuningGuides != null) {
             usedTuningGuides.addOptimizedRecord(context.getQueryId(), elapseMs);
             PlanTuningAdvisor.getInstance().removeOptimizedQueryRecord(context.getQueryId());
@@ -1343,7 +1368,8 @@ public class StmtExecutor {
                 Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = builder.buildSkeleton(execPlan.getPhysicalPlan());
                 OperatorTuningGuides tuningGuides = new OperatorTuningGuides(context.getQueryId(), elapseMs);
                 PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
-                PlanTuningAdvisor.getInstance().putTuningGuides(parsedStmt.getOrigStmt().getOrigStmt(), pair.first, tuningGuides);
+                PlanTuningAdvisor.getInstance()
+                        .putTuningGuides(parsedStmt.getOrigStmt().getOrigStmt(), pair.first, tuningGuides);
             }
         }
     }
@@ -1352,7 +1378,8 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         TableName tableName = analyzeStmt.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database db =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -1798,6 +1825,13 @@ public class StmtExecutor {
             return;
         }
 
+        // Send result set for Arrow Flight SQL.
+        if (context instanceof ArrowFlightSqlConnectContext) {
+            ((ArrowFlightSqlConnectContext) context).addShowResult(resultSet);
+            context.getState().setEof();
+            return;
+        }
+
         // Send meta data.
         sendMetaData(resultSet.getMetaData());
 
@@ -1819,7 +1853,8 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
+        ShowResultSet resultSet =
+                GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1898,7 +1933,6 @@ public class StmtExecutor {
         }
         return explainString;
     }
-
 
     private void handleDdlStmt() throws DdlException {
         try {
@@ -2097,7 +2131,8 @@ public class StmtExecutor {
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         TableName tableName = insertStmt.getTableName();
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+        Database db =
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
@@ -2404,7 +2439,8 @@ public class StmtExecutor {
                             TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
                             coord == null ? Collections.emptyList() : coord.getFailInfos());
-                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() || targetTable.isIcebergTable() ||
+                } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
+                        targetTable.isIcebergTable() ||
                         targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
                     // schema table does not need txn
                 } else {
@@ -2430,7 +2466,8 @@ public class StmtExecutor {
                             targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                             targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+                        mgr.abortTransaction(database.getId(), transactionId,
+                                ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
@@ -2481,7 +2518,8 @@ public class StmtExecutor {
                         }
                     }
                 }
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos, null);
+                context.getGlobalStateMgr().getMetadataMgr()
+                        .finishSink(catalogName, dbName, tableName, commitInfos, null);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
             } else if (targetTable.isTableFunctionTable()) {
@@ -2514,7 +2552,8 @@ public class StmtExecutor {
                         } else if (partitionVersionMap.size() == 0) {
                             attachment = new InsertTxnCommitAttachment(loadedRows);
                         }
-                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId, partitionVersionMap);
+                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId,
+                                partitionVersionMap);
                     } else {
                         attachment = new InsertTxnCommitAttachment(loadedRows);
                     }
@@ -2698,7 +2737,6 @@ public class StmtExecutor {
     public List<ByteBuffer> getProxyResultBuffer() {
         return proxyResultBuffer;
     }
-
 
     // scenes can execute in FE should meet all these requirements:
     // 1. enable_constant_execute_in_fe = true
