@@ -5,6 +5,9 @@
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
+#if defined(__aarch64__)
+#include "arm_acle.h"
+#endif
 
 namespace starrocks {
 
