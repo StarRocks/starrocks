@@ -35,10 +35,6 @@
 #include "util/hash.h"
 #include "util/slice.h"
 
-#if defined(__aarch64__)
-#include "arm_acle.h"
-#endif
-
 namespace starrocks {
 
 #if defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
