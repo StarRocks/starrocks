@@ -114,8 +114,9 @@ public class Utils {
             nodeToTablets = new HashMap<>();
         }
 
-        // publish version operation should be successful even if the warehouse is not exist
         if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseId)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, WarehouseManager.DEFAULT_WAREHOUSE_ID);
             warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
 
@@ -183,8 +184,9 @@ public class Utils {
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
-        // publish log version operation should be successful even if the warehouse is not exist
         if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseId)) {
+            LOG.warn("publish log version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, WarehouseManager.DEFAULT_WAREHOUSE_ID);
             warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
 
