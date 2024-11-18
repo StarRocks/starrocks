@@ -322,4 +322,106 @@ Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const Col
     return Status::OK();
 }
 
+Status ScalarColumnReader::page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+    const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
+    if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
+        !chunk_meta->__isset.meta_data) {
+        // no page index, select all
+        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
+        return Status::OK();
+    }
+
+    // get column index
+    int64_t column_index_offset = chunk_meta->column_index_offset;
+    uint32_t column_index_length = chunk_meta->column_index_length;
+
+    std::vector<uint8_t> page_index_data;
+    page_index_data.reserve(column_index_length);
+    RETURN_IF_ERROR(_opts.file->read_at_fully(column_index_offset, page_index_data.data(), column_index_length));
+
+    tparquet::ColumnIndex column_index;
+    RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
+                                           &column_index));
+
+    ASSIGN_OR_RETURN(const tparquet::OffsetIndex* offset_index, get_offset_index(rg_first_row));
+
+    const size_t page_num = column_index.min_values.size();
+
+    const std::vector<bool> null_pages = column_index.null_pages;
+
+    ColumnPtr min_column = ColumnHelper::create_column(*_col_type, true);
+    ColumnPtr max_column = ColumnHelper::create_column(*_col_type, true);
+    // deal with min_values
+    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, *_col_type,
+                                                         get_column_parquet_field(), _opts.timezone, &null_pages);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, type " << _col_type->debug_string();
+        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
+        return Status::OK();
+    }
+    // deal with max_values
+    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, *_col_type,
+                                                    get_column_parquet_field(), _opts.timezone, &null_pages);
+    if (!st.ok()) {
+        // swallow error status
+        LOG(INFO) << "Error when decode min/max statistics, type " << _col_type->debug_string();
+        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
+        return Status::OK();
+    }
+
+    DCHECK_EQ(page_num, min_column->size());
+    DCHECK_EQ(page_num, max_column->size());
+
+    // fill ZoneMapDetail
+    std::vector<ZoneMapDetail> zone_map_details{};
+    for (size_t i = 0; i < page_num; i++) {
+        if (null_pages[i]) {
+            // all null
+            zone_map_details.emplace_back(Datum{}, Datum{}, true);
+        } else {
+            bool has_null = column_index.null_counts[i] > 0;
+            zone_map_details.emplace_back(min_column->get(i), max_column->get(i), has_null);
+        }
+    }
+
+    // select all pages by default
+    Filter page_filter(page_num, 1);
+    auto is_satisfy = [&](const ZoneMapDetail& detail) {
+        if (pred_relation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+    for (size_t i = 0; i < page_num; i++) {
+        page_filter[i] = is_satisfy(zone_map_details[i]);
+    }
+
+    if (!SIMD::contain_zero(page_filter)) {
+        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
+        std::cout << "not page has been filtered" << std::endl;
+        return Status::OK();
+    }
+
+    for (int i = 0; i < page_num; i++) {
+        if (page_filter[i]) {
+            int64_t first_row = offset_index->page_locations[i].first_row_index + rg_first_row;
+            int64_t end_row = first_row;
+            if (i != page_num - 1) {
+                end_row = offset_index->page_locations[i + 1].first_row_index + rg_first_row;
+            } else {
+                end_row = rg_first_row + rg_num_rows;
+            }
+            row_ranges->add(Range<uint64_t>(first_row, end_row));
+        }
+    }
+    std::cout << row_ranges->to_string() << std::endl;
+    return Status::OK();
+}
+
 } // namespace starrocks::parquet

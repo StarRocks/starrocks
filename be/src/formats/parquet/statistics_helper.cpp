@@ -40,7 +40,20 @@ namespace starrocks::parquet {
 
 Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
                                                   const TypeDescriptor& type, const ParquetField* field,
-                                                  const std::string& timezone) {
+                                                  const std::string& timezone, const std::vector<bool>* null_page) {
+    std::vector<bool> valid_slots{};
+    if (null_page) {
+        valid_slots.resize(null_page->size());
+        for (size_t i = 0; i < null_page->size(); ++i) {
+            // if the page is a null page, the min/max value is not set
+            valid_slots[i] = !(*null_page)[i];
+        }
+    } else {
+        valid_slots.resize(values.size(), true);
+    }
+
+    DCHECK_EQ(valid_slots.size(), values.size());
+
     std::unique_ptr<ColumnConverter> converter;
     RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
     bool ret = true;
@@ -49,14 +62,22 @@ Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const
         int32_t decode_value = 0;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
+                    ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                } else {
+                    column->append_default();
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
+                    ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
+                } else {
+                    src_column->append_default();
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
@@ -66,14 +87,22 @@ Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const
         int64_t decode_value = 0;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
+                    ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                } else {
+                    column->append_default();
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
+                    ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
+                } else {
+                    src_column->append_default();
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
@@ -85,14 +114,22 @@ Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const
         Slice decode_value;
         if (!converter->need_convert) {
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= column->append_strings(std::vector<Slice>{decode_value});
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
+                    ret &= column->append_strings(std::vector<Slice>{decode_value});
+                } else {
+                    column->append_default();
+                }
             }
         } else {
             ColumnPtr src_column = converter->create_src_column();
             for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= src_column->append_strings(std::vector<Slice>{decode_value});
+                if (valid_slots[i]) {
+                    RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
+                    ret &= src_column->append_strings(std::vector<Slice>{decode_value});
+                } else {
+                    src_column->append_default();
+                }
             }
             RETURN_IF_ERROR(converter->convert(src_column, column.get()));
         }
