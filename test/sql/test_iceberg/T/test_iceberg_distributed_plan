@@ -3,6 +3,7 @@
 create external catalog iceberg_sql_test_${uuid0}
 PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 
+set enable_connector_incremental_scan_ranges=false;
 set enable_profile=true;
 set plan_mode=distributed;
 set new_planner_optimize_timeout=30000;

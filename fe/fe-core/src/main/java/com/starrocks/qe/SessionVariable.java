@@ -2245,7 +2245,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int connectorRemoteFileAsyncTaskSize = 4;
 
     @VarAttr(name = ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES)
-    private boolean enableConnectorIncrementalScanRanges = false;
+    private boolean enableConnectorIncrementalScanRanges = true;
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
