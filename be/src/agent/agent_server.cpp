@@ -201,7 +201,7 @@ void AgentServer::Impl::init_or_die() {
 #endif
         int real_drop_tablet_worker_count = (config::drop_tablet_worker_count != 0)
                                                     ? std::abs(config::drop_tablet_worker_count)
-                                                    : (int32_t)(CpuInfo::num_cores() / 2);
+                                                    : (int)(CpuInfo::num_cores() / 2);
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, real_drop_tablet_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_drop);
 
