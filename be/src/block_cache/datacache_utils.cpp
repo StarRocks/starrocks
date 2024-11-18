@@ -158,8 +158,8 @@ void DataCacheUtils::clean_residual_datacache(const std::string& disk_path) {
 }
 
 Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path) {
-    std::filesystem::path new_path(old_disk_path);
-    std::filesystem::path old_path(new_disk_path);
+    std::filesystem::path old_path(old_disk_path);
+    std::filesystem::path new_path(new_disk_path);
     if (std::filesystem::exists(old_path)) {
         if (DiskInfo::disk_id(old_path.c_str()) != DiskInfo::disk_id(new_path.c_str())) {
             LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
