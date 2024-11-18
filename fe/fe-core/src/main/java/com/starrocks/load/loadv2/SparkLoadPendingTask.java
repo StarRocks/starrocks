@@ -58,6 +58,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SparkResource;
@@ -405,7 +406,11 @@ public class SparkLoadPendingTask extends LoadTask {
                     inKeys.add(initItemOfInKeys(Lists.newArrayList(literalExpr)));
                 }
             }
-            etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, inKeys, bucketNum));
+            }
         }
         return etlPartitions;
     }
@@ -448,13 +453,18 @@ public class SparkLoadPendingTask extends LoadTask {
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
             RangePartitionBoundary boundary = PartitionUtils.calRangePartitionBoundary(entry.getValue());
-            etlPartitions.add(new EtlPartition(
-                    partitionId,
-                    boundary.getStartKeys(),
-                    boundary.getEndKeys(),
-                    boundary.isMinPartition(),
-                    boundary.isMaxPartition(),
-                    bucketNum));
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+
+                etlPartitions.add(new EtlPartition(
+                        physicalPartitionId,
+                        boundary.getStartKeys(),
+                        boundary.getEndKeys(),
+                        boundary.isMinPartition(),
+                        boundary.isMaxPartition(),
+                        bucketNum));
+            }
         }
         return etlPartitions;
     }
@@ -474,8 +484,11 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
 
-            etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
-                    true, true, bucketNum));
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                etlPartitions.add(new EtlPartition(physicalPartitionId, Lists.newArrayList(), Lists.newArrayList(),
+                        true, true, bucketNum));
+            }
         }
         return etlPartitions;
     }
@@ -559,6 +572,14 @@ public class SparkLoadPendingTask extends LoadTask {
             partitionIds = Lists.newArrayList(tablePartitionIds);
         }
 
+        List<Long> physicalPartitionIds = Lists.newArrayList();
+        for (Long partitionId : partitionIds) {
+            Partition partition = table.getPartition(partitionId);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIds.add(physicalPartition.getId());
+            }
+        }
+
         // where
         // TODO: check
         String where = "";
@@ -597,13 +618,13 @@ public class SparkLoadPendingTask extends LoadTask {
         EtlFileGroup etlFileGroup = null;
         if (fileGroup.isLoadFromTable()) {
             etlFileGroup = new EtlFileGroup(SourceType.HIVE, fileFieldNames, hiveDbTableName, hiveTableProperties,
-                    fileGroup.isNegative(), columnMappings, where, partitionIds);
+                    fileGroup.isNegative(), columnMappings, where, physicalPartitionIds);
         } else {
             etlFileGroup = new EtlFileGroup(SourceType.FILE, fileGroup.getFilePaths(), fileFieldNames,
                     fileGroup.getColumnsFromPath(), fileGroup.getColumnSeparator(),
                     fileGroup.getRowDelimiter(), fileGroup.isNegative(),
                     fileGroup.getFileFormat(), columnMappings,
-                    where, partitionIds);
+                    where, physicalPartitionIds);
         }
 
         return etlFileGroup;

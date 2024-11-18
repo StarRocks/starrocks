@@ -171,7 +171,7 @@ public class BackupJobInfo implements Writable {
 
         public void checkAndRecoverAutoIncrementId(Table tbl) {
             Long newId = tbl.getId();
-    
+
             if (autoIncrementId != null) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
@@ -320,14 +320,17 @@ public class BackupJobInfo implements Writable {
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
                 partitionInfo.version = partition.getDefaultPhysicalPartition().getVisibleVersion();
-                if (partition.getSubPartitions().size() == 1) {
-                    for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                            .getMaterializedIndices(IndexExtState.VISIBLE)) {
+
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
+                    physicalPartitionInfo.id = physicalPartition.getId();
+                    physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         BackupIndexInfo idxInfo = new BackupIndexInfo();
                         idxInfo.id = index.getId();
                         idxInfo.name = olapTbl.getIndexNameById(index.getId());
                         idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                        partitionInfo.indexes.put(idxInfo.name, idxInfo);
+                        physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
                         // tablets
                         for (Tablet tablet : index.getTablets()) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
@@ -335,32 +338,14 @@ public class BackupJobInfo implements Writable {
                             idxInfo.tablets.add(tabletInfo);
                         }
                     }
-                } else {
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
-                        physicalPartitionInfo.id = physicalPartition.getId();
-                        physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            BackupIndexInfo idxInfo = new BackupIndexInfo();
-                            idxInfo.id = index.getId();
-                            idxInfo.name = olapTbl.getIndexNameById(index.getId());
-                            idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
-                            physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
-                            // tablets
-                            for (Tablet tablet : index.getTablets()) {
-                                BackupTabletInfo tabletInfo = new BackupTabletInfo();
-                                tabletInfo.id = tablet.getId();
-                                idxInfo.tablets.add(tabletInfo);
-                            }
-                        }
-                        partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
-                    }
+                    partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
                 }
                 tableInfo.partitions.put(partitionInfo.name, partitionInfo);
             }
 
             tableInfo.autoIncrementId = null;
-            Long id = GlobalStateMgr.getCurrentState().getLocalMetastore().getCurrentAutoIncrementIdByTableId(tbl.getId());
+            Long id = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getCurrentAutoIncrementIdByTableId(tbl.getId());
             for (Column col : tbl.getBaseSchema()) {
                 if (col.isAutoIncrement() && id != null) {
                     tableInfo.autoIncrementId = id;
