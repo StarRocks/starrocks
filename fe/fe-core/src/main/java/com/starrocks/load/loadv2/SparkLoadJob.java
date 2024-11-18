@@ -54,7 +54,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
@@ -501,18 +501,17 @@ public class SparkLoadJob extends BulkLoadJob {
 
                     Set<Long> partitionIds = entry.getValue();
                     for (long partitionId : partitionIds) {
-                        Partition partition = table.getPartition(partitionId);
-                        if (partition == null) {
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                        if (physicalPartition == null) {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
-                        long partitionVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+                        long partitionVersion = physicalPartition.getVisibleVersion();
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
                             long indexId = index.getId();
                             int schemaHash = indexToSchemaHash.get(indexId);
