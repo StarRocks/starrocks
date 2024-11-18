@@ -5,10 +5,6 @@ scan:
   skip-dirs:
     # ignore broker's cve
     - apache_hdfs_broker/
-    # installed by thirdparty.
-    # see `HADOOP_DOWNLOAD` in var-<arch>.sh
-    - be/lib/hadoop/common/lib/netty-common-4.1.100.Final.jar
-    - be/lib/hadoop/hdfs/lib/netty-common-4.1.100.Final.jar
   skip-files:
     # hudi required
     - "**/htrace-core4-4.2.0-incubating.jar"
@@ -20,6 +16,7 @@ scan:
     - "**/dnsjava-3.4.0.jar"
     - "**/hadoop-client-runtime-3.4.0.jar"
     - "**/commons-compress-1.24.0.jar"
+    - "**/netty-common-4.1.100.Final.jar"
     # paimon required, already latest
     - "**/paimon-bundle-0.8.2.jar"
     # apache ranger required

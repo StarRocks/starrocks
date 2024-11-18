@@ -70,12 +70,6 @@
             </dependency>
             <!-- java utils -->
 
-            <dependency>
-                <groupId>io.netty</groupId>
-                <artifactId>netty-common</artifactId>
-                <version>4.1.115.Final</version>
-            </dependency>
-
             <!-- hadoop -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
