@@ -647,8 +647,10 @@ public class RestoreJob extends AbstractJob {
                         if (!localColumn.equals(remoteColumn)) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
-                                            + " already exist but with different schema, column: " + localColumn.getName()
-                                            + " in existed table is different from the column in backup snapshot, column: "
+                                            + " already exist but with different schema, column: " +
+                                            localColumn.getName()
+                                            +
+                                            " in existed table is different from the column in backup snapshot, column: "
                                             + remoteColumn.getName());
                             return;
                         }
@@ -658,9 +660,11 @@ public class RestoreJob extends AbstractJob {
                     for (BackupPartitionInfo backupPartInfo : tblInfo.partitions.values()) {
                         Partition localPartition = localOlapTbl.getPartition(backupPartInfo.name);
                         if (localPartition != null) {
-                            if (!backupPartInfo.subPartitions.isEmpty()) {
-                                status = new Status(ErrCode.COMMON_ERROR, "Partition " + backupPartInfo.name + " in table "
-                                        + localTbl.getName() + " is automatic bucket partition, can not be restored");
+                            if (backupPartInfo.subPartitions.size() > 1) {
+                                status = new Status(ErrCode.COMMON_ERROR,
+                                        "Partition " + backupPartInfo.name + " in table "
+                                                + localTbl.getName() +
+                                                " is automatic bucket partition, can not be restored");
                                 return;
                             }
                             // Partition already exist.
@@ -886,7 +890,7 @@ public class RestoreJob extends AbstractJob {
                 db.addFunction(fn, true, false);
             } catch (UserException e) {
                 status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
-                                    " failed when restore");
+                        " failed when restore");
             }
         }
     }
@@ -1087,7 +1091,8 @@ public class RestoreJob extends AbstractJob {
                 int remotetabletSize = remoteIdx.getTablets().size();
                 remoteIdx.clearTabletsForRestore();
                 // generate new table
-                status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
+                status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr,
+                        restoreReplicationNum,
                         visibleVersion, schemaHash, physicalPartition.getId(), null);
                 if (!status.ok()) {
                     return null;
@@ -1099,10 +1104,16 @@ public class RestoreJob extends AbstractJob {
 
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                   BackupPartitionInfo backupPartInfo, boolean overwrite) {
-        if (localPartition.getSubPartitions().size() > 1) {
-            genFileMappingWithSubPartition(localTbl, localPartition, remoteTblId, backupPartInfo, overwrite);
-        } else {
+
+        // There are currently three types of backupPartInfo
+        // 1. Types before version 3.4, information is stored in backupIdxInfo
+        // 2. Non-AutoBucket types after version 3.4, information is stored in subPartitions,
+        //    but there is only one physical partition
+        // 3. AutoBucket types after version 3.4, information is stored in subPartitions
+        if (backupPartInfo.subPartitions == null || backupPartInfo.subPartitions.isEmpty()) {
             genFileMappingWithPartition(localTbl, localPartition, remoteTblId, backupPartInfo, overwrite);
+        } else {
+            genFileMappingWithSubPartition(localTbl, localPartition, remoteTblId, backupPartInfo, overwrite);
         }
     }
 
@@ -1131,23 +1142,52 @@ public class RestoreJob extends AbstractJob {
     // files in repo to files in local
     protected void genFileMappingWithSubPartition(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                                   BackupPartitionInfo backupPartInfo, boolean overwrite) {
-        for (PhysicalPartition physicalPartition : localPartition.getSubPartitions()) {
-            BackupPhysicalPartitionInfo physicalPartitionInfo = backupPartInfo.subPartitions.get(
-                    physicalPartition.getBeforeRestoreId());
-            for (MaterializedIndex localIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                BackupIndexInfo backupIdxInfo = physicalPartitionInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+        if (backupPartInfo.subPartitions.size() == 1) {
+            BackupPhysicalPartitionInfo physicalPartitionInfo =
+                    backupPartInfo.subPartitions.values().stream().findFirst().get();
+            for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                BackupIndexInfo backupIdxInfo =
+                        physicalPartitionInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
                 Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
                 for (int i = 0; i < localIdx.getTablets().size(); i++) {
                     LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
                     BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
                     for (Replica localReplica : localTablet.getImmutableReplicas()) {
-                        IdChain src = new IdChain(remoteTblId, physicalPartitionInfo.id, backupIdxInfo.id, backupTabletInfo.id,
+                        IdChain src = new IdChain(remoteTblId, physicalPartitionInfo.id, backupIdxInfo.id,
+                                backupTabletInfo.id,
                                 -1L /* no replica id */);
-                        IdChain dest = new IdChain(localTbl.getId(), physicalPartition.getId(),
-                                localIdx.getId(), localTablet.getId(), localReplica.getId());
+                        IdChain dest =
+                                new IdChain(localTbl.getId(), localPartition.getDefaultPhysicalPartition().getId(),
+                                        localIdx.getId(), localTablet.getId(), localReplica.getId());
                         fileMapping.putMapping(dest, src, overwrite);
                         LOG.debug("tablet mapping: {} to {} file mapping: {} to {}",
                                 backupTabletInfo.id, localTablet.getId(), src, dest);
+                    }
+                }
+            }
+        } else {
+            for (PhysicalPartition physicalPartition : localPartition.getSubPartitions()) {
+                BackupPhysicalPartitionInfo physicalPartitionInfo = backupPartInfo.subPartitions.get(
+                        physicalPartition.getBeforeRestoreId());
+
+                for (MaterializedIndex localIdx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    BackupIndexInfo backupIdxInfo =
+                            physicalPartitionInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
+                    Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
+                    for (int i = 0; i < localIdx.getTablets().size(); i++) {
+                        LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
+                        BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
+                        for (Replica localReplica : localTablet.getImmutableReplicas()) {
+                            IdChain src = new IdChain(remoteTblId, physicalPartitionInfo.id, backupIdxInfo.id,
+                                    backupTabletInfo.id,
+                                    -1L /* no replica id */);
+                            IdChain dest = new IdChain(localTbl.getId(), physicalPartition.getId(),
+                                    localIdx.getId(), localTablet.getId(), localReplica.getId());
+                            fileMapping.putMapping(dest, src, overwrite);
+                            LOG.debug("tablet mapping: {} to {} file mapping: {} to {}",
+                                    backupTabletInfo.id, localTablet.getId(), src, dest);
+                        }
                     }
                 }
             }
@@ -1296,7 +1336,8 @@ public class RestoreJob extends AbstractJob {
                         try {
                             HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
                         } catch (UserException e) {
-                            status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
+                            status = new Status(ErrCode.COMMON_ERROR,
+                                    "Get properties from " + repo.getLocation() + " error.");
                             return;
                         }
                     }
@@ -1333,7 +1374,8 @@ public class RestoreJob extends AbstractJob {
         LOG.info("waiting {} tasks to finish downloading from repo. {}", unfinishedSignatureToId.size(), this);
     }
 
-    protected void prepareDownloadTasks(List<SnapshotInfo> beSnapshotInfos, Database db, long beId, List<FsBroker> brokerAddrs,
+    protected void prepareDownloadTasks(List<SnapshotInfo> beSnapshotInfos, Database db, long beId,
+                                        List<FsBroker> brokerAddrs,
                                         THdfsProperties hdfsProperties) {
         int totalNum = beSnapshotInfos.size();
         int batchNum = totalNum;

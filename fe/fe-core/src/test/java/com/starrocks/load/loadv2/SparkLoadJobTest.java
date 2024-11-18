@@ -45,6 +45,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ResourceMgr;
@@ -111,6 +112,7 @@ public class SparkLoadJobTest {
     private String etlOutputPath;
     private long tableId;
     private long partitionId;
+    private long physicalPartitionId;
     private long indexId;
     private long tabletId;
     private long replicaId;
@@ -136,6 +138,7 @@ public class SparkLoadJobTest {
         tabletId = 13L;
         replicaId = 14L;
         backendId = 15L;
+        physicalPartitionId = 16L;
         schemaHash = 146886;
     }
 
@@ -350,6 +353,7 @@ public class SparkLoadJobTest {
             @Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
             @Mocked SparkEtlJobHandler handler, @Mocked AgentTaskExecutor executor,
             @Injectable Database db, @Injectable OlapTable table, @Injectable Partition partition,
+            @Injectable PhysicalPartition physicalPartition,
             @Injectable MaterializedIndex index, @Injectable LocalTablet tablet, @Injectable Replica replica,
             @Injectable GlobalTransactionMgr transactionMgr) throws Exception {
         EtlStatus status = new EtlStatus();
@@ -359,7 +363,7 @@ public class SparkLoadJobTest {
         Map<String, Long> filePathToSize = Maps.newHashMap();
         String filePath =
                 String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
-                        tableId, partitionId, indexId, schemaHash);
+                        tableId, physicalPartitionId, indexId, schemaHash);
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
@@ -376,14 +380,16 @@ public class SparkLoadJobTest {
                 result = db;
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 result = table;
-                table.getPartition(partitionId);
-                result = partition;
+
                 table.getPartitionInfo();
                 result = partitionInfo;
+
                 table.getSchemaByIndexId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
-                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
+
                 index.getId();
                 result = indexId;
                 index.getTablets();
@@ -427,7 +433,7 @@ public class SparkLoadJobTest {
         Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
-        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(partitionId));
+        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
         Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
         Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
@@ -444,7 +450,9 @@ public class SparkLoadJobTest {
     public void testUpdateEtlStatusFinishedAndCommitTransactionForLake(
             @Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
             @Mocked SparkEtlJobHandler handler, @Mocked AgentTaskExecutor executor,
-            @Injectable Database db, @Injectable LakeTable table, @Injectable Partition partition,
+            @Injectable Database db, @Injectable LakeTable table,
+            @Injectable Partition partition,
+            @Injectable PhysicalPartition physicalPartition,
             @Injectable MaterializedIndex index, @Injectable LakeTablet tablet, @Injectable Replica replica,
             @Injectable GlobalTransactionMgr transactionMgr) throws Exception {
         EtlStatus status = new EtlStatus();
@@ -454,7 +462,7 @@ public class SparkLoadJobTest {
         Map<String, Long> filePathToSize = Maps.newHashMap();
         String filePath =
                 String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
-                        tableId, partitionId, indexId, schemaHash);
+                        tableId, physicalPartitionId, indexId, schemaHash);
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
@@ -472,23 +480,30 @@ public class SparkLoadJobTest {
                 result = filePathToSize;
                 globalStateMgr.getLocalMetastore().getDb(dbId);
                 result = db;
+
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                 result = table;
-                table.getPartition(partitionId);
-                result = partition;
+
                 table.getPartitionInfo();
                 result = partitionInfo;
+
                 table.getSchemaByIndexId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
-                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
+
                 index.getId();
                 result = indexId;
+
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
+
                 tablet.getId();
                 result = tabletId;
+
                 AgentTaskExecutor.submit((AgentBatchTask) any);
+
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
             }
@@ -513,7 +528,7 @@ public class SparkLoadJobTest {
         Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(tabletId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
-        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(partitionId));
+        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
         Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
         Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
