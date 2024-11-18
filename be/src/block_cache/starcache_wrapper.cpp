@@ -36,10 +36,24 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_os_page_cache = !options.enable_direct_io;
     opt.scheduler_thread_ratio_per_cpu = options.scheduler_threads_per_cpu;
     opt.max_flying_memory_mb = options.max_flying_memory_mb;
+    opt.inline_cache_count_limit = options.inline_item_count_limit;
+    opt.alloc_mem_threshold = 100;
+    opt.evict_touch_mem_probalility = 10;
+    opt.evict_touch_disk_probalility = 10;
     _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
     opt.cache_adaptor = _cache_adaptor.get();
-    opt.instance_name = "dla_cache";
+    if (options.enable_datacache_persistence) {
+        opt.durability_type = starcache::DurabilityType::ROCKSDB;
+    }
+    opt.instance_name = "default_cache";
+
+    if (options.eviction_policy == "slru") {
+        opt.lru_segment_ratios = {35, 65};
+    }
+    opt.lru_segment_freq_bits = 0;
+
     _enable_tiered_cache = options.enable_tiered_cache;
+    _enable_datacache_persistence = options.enable_datacache_persistence;
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
@@ -56,8 +70,11 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     opts.async = options->async;
     opts.keep_alive = options->allow_zero_copy;
     opts.callback = options->callback;
-    opts.mode = _enable_tiered_cache ? starcache::WriteOptions::WriteMode::WRITE_BACK
-                                     : starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    if (!_enable_datacache_persistence && _enable_tiered_cache) {
+        opts.mode = starcache::WriteOptions::WriteMode::WRITE_BACK;
+    } else {
+        opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    }
     opts.evict_probability = options->evict_probability;
     Status st;
     {

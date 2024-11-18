@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
+#include "starcache/star_cache.h"
 
 namespace starrocks {
 
@@ -108,7 +109,7 @@ private:
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
-void init_staros_worker();
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();
 

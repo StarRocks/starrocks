@@ -37,6 +37,8 @@ public:
                                                    std::vector<DirSpace>* disk_spaces);
 
     static void clean_residual_datacache(const std::string& disk_path);
+
+    static Status change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path);
 };
 
 } // namespace starrocks

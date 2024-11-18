@@ -34,8 +34,13 @@ protected:
 
     static void TearDownTestCase() {}
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+
+    bool _saved_enable_auto_adjust = false;
 };
 
 TEST_F(BlockCacheTest, copy_to_iobuf) {
@@ -134,6 +139,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.max_concurrent_inserts = 100000;
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
+    options.inline_item_count_limit = 1000;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 

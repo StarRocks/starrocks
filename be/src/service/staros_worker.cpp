@@ -343,10 +343,15 @@ Status to_status(const absl::Status& absl_status) {
     }
 }
 
-void init_staros_worker() {
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
     if (g_starlet.get() != nullptr) {
         return;
     }
+
+    if (star_cache) {
+        (void)fslib::set_star_cache(star_cache);
+    }
+
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 
