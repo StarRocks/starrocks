@@ -5,6 +5,9 @@ scan:
   skip-dirs:
     # ignore broker's cve
     - apache_hdfs_broker/
+    # installed by thirdparty.
+    # see `HADOOP_DOWNLOAD` in var-<arch>.sh
+    - be/lib/hadoop/
   skip-files:
     # hudi required
     - "**/htrace-core4-4.2.0-incubating.jar"
@@ -20,3 +23,5 @@ scan:
     - "**/paimon-bundle-0.8.2.jar"
     # apache ranger required
     - "**/jackson-mapper-asl-1.9.13.jar"
+    # aws sdk bundle
+    - "**/bundle-2.23.19.jar"
