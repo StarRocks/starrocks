@@ -133,7 +133,7 @@ const tparquet::ColumnChunk* GroupReader::get_chunk_metadata(SlotId slot_id) {
     return it->second->get_chunk_metadata();
 }
 
-const ColumnReader* GroupReader::get_column_reader(SlotId slot_id) {
+ColumnReader* GroupReader::get_column_reader(SlotId slot_id) {
     const auto& it = _column_readers.find(slot_id);
     if (it == _column_readers.end()) {
         return nullptr;

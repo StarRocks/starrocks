@@ -326,14 +326,15 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
-    if (_scanner_ctx->conjuncts_manager != nullptr) {
+    if (config::parquet_advance_zonemap_filter) {
         auto res = _scanner_ctx->predicate_tree.visit(
-                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader});
+                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {
             LOG(WARNING) << "filter row group failed: " << res.status().message();
             return false;
         }
         if (res.value().has_value() && res.value()->empty()) {
+            // no rows selected, the whole row group can be filtered
             return true;
         }
         return false;

@@ -112,7 +112,7 @@ public:
     Status prepare();
     const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
     const ParquetField* get_column_parquet_field(SlotId slot_id);
-    const ColumnReader* get_column_reader(SlotId slot_id);
+    ColumnReader* get_column_reader(SlotId slot_id);
     uint64_t get_row_group_first_row() const { return _row_group_first_row; }
     const tparquet::RowGroup* get_row_group_metadata() const;
     Status get_next(ChunkPtr* chunk, size_t* row_count);

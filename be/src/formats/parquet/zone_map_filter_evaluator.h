@@ -74,7 +74,7 @@ struct ZoneMapEvaluator {
     }
 
     const PredicateTree& pred_tree;
-    const GroupReaderPtr& group_reader;
+    GroupReader* group_reader;
 };
 
 } // namespace starrocks::parquet
