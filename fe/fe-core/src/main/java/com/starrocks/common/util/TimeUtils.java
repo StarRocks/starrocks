@@ -54,6 +54,7 @@ import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.Clock;
 import java.time.DateTimeException;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
@@ -159,6 +160,11 @@ public class TimeUtils {
     // return the time zone of current system
     public static TimeZone getSystemTimeZone() {
         return TimeZone.getTimeZone(ZoneId.of(ZoneId.systemDefault().getId(), TIME_ZONE_ALIAS_MAP));
+    }
+
+    // Return now with system timezone
+    public static LocalDateTime getSystemNow() {
+        return LocalDateTime.now(getSystemTimeZone().toZoneId());
     }
 
     // get time zone of given zone name, or return system time zone if name is null.

@@ -1457,6 +1457,10 @@ public class QueryAnalyzer {
                 }
             }
 
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

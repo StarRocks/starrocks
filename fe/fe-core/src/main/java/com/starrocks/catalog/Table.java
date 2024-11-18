@@ -62,6 +62,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -266,6 +267,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getCatalogDBName() {
         throw new NotImplementedException();
+    }
+
+    public Optional<String> mayGetDatabaseName() {
+        throw new NotImplementedException("not supported");
     }
 
     public String getName() {
