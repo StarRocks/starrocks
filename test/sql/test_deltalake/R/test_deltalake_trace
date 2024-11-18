@@ -10,6 +10,9 @@ create external catalog delta_test_${uuid0} PROPERTIES (
 );
 -- result:
 -- !result
+set enable_connector_incremental_scan_ranges = false;
+-- result:
+-- !result
 set enable_profile=true;
 -- result:
 -- !result

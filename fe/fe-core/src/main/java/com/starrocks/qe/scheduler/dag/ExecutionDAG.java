@@ -278,6 +278,7 @@ public class ExecutionDAG {
         if (build != null) {
             captureVersionFragment = build;
             fragments.add(build);
+            idToFragment.put(captureVersionFragment.getFragmentId(), captureVersionFragment);
         }
     }
 

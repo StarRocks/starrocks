@@ -33,6 +33,7 @@ import org.junit.BeforeClass;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
 
@@ -999,6 +1000,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 scanRangeParams.addAll(x);
             }
         }
-        return scanRangeParams;
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
     }
 }
