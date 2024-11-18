@@ -488,6 +488,9 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+    // table function
+    public static final String UNNEST = "unnest";
+    public static final String UNNEST_BITMAP = "unnest_bitmap";
 
     public static final String CONNECTION_ID = "connection_id";
 
