@@ -16,7 +16,10 @@ scan:
     - "**/dnsjava-3.4.0.jar"
     - "**/hadoop-client-runtime-3.4.0.jar"
     - "**/commons-compress-1.24.0.jar"
+    - "**/netty-common-4.1.100.Final.jar"
     # paimon required, already latest
     - "**/paimon-bundle-0.8.2.jar"
     # apache ranger required
     - "**/jackson-mapper-asl-1.9.13.jar"
+    # aws sdk bundle
+    - "**/bundle-2.23.19.jar"
