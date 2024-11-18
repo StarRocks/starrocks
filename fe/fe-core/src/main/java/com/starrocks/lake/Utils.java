@@ -113,6 +113,12 @@ public class Utils {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
         }
+
+        // publish version operation should be successful even if the warehouse is not exist
+        if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseId)) {
+            warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        }
+
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
@@ -176,6 +182,12 @@ public class Utils {
                                               long warehouseId)
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+
+        // publish log version operation should be successful even if the warehouse is not exist
+        if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseId)) {
+            warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        }
+
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
