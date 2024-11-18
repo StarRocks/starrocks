@@ -31,7 +31,7 @@ struct ZoneMapEvaluator {
         const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
 
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
-            const auto* column_reader = group_reader->get_column_reader(cid);
+            ColumnReader* column_reader = group_reader->get_column_reader(cid);
             if (column_reader == nullptr) {
                 // TODO: For partition column, it's column reader is not existed
                 // So we didn't support partition column yet
@@ -40,12 +40,13 @@ struct ZoneMapEvaluator {
             }
             SparseRange<uint64_t> cur_row_ranges;
             if (level == FilterLevel::ROW_GROUP) {
-                // TODO nullptr check
-                RETURN_IF_ERROR(group_reader->get_column_reader(cid)->row_group_zone_map_filter(
+                RETURN_IF_ERROR(column_reader->row_group_zone_map_filter(
                         col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
                         group_reader->get_row_group_metadata()->num_rows));
             } else {
-                return Status::InternalError("not supported yet");
+                RETURN_IF_ERROR(column_reader->page_index_zone_map_filter(
+                        col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
+                        group_reader->get_row_group_metadata()->num_rows));
             }
 
             merge_row_ranges<Type>(row_ranges, cur_row_ranges);
@@ -74,7 +75,7 @@ struct ZoneMapEvaluator {
     }
 
     const PredicateTree& pred_tree;
-    const GroupReaderPtr& group_reader;
+    GroupReader* group_reader;
 };
 
 } // namespace starrocks::parquet

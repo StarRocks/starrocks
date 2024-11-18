@@ -328,7 +328,7 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (_scanner_ctx->conjuncts_manager != nullptr) {
         auto res = _scanner_ctx->predicate_tree.visit(
-                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader});
+                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {
             LOG(WARNING) << "filter row group failed: " << res.status().message();
             return false;
@@ -449,6 +449,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
+    _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.

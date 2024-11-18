@@ -92,6 +92,10 @@ public:
                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
 
+    Status page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded
     bool _column_all_pages_dict_encoded();
