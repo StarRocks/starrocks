@@ -22,6 +22,10 @@ import com.starrocks.catalog.Type;
 
 import java.util.List;
 
+/*
+ * The classification for the statistics column is split
+ * into PrimaryType Column/ComplexType Column/Subfield Column
+ */
 public class ColumnClassifier {
 
     private final List<ColumnStats> columnStats = Lists.newArrayList();

@@ -18,6 +18,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 import org.apache.commons.lang.StringEscapeUtils;
 
+/*
+ * For describe how to collect statistics on different column type
+ */
 public abstract class ColumnStats {
 
     protected final String columnName;
