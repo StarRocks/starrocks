@@ -213,7 +213,7 @@ void Rowset::warmup_lrucache() {
     if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
         // Move this item to newest item in lru cache.
         // ONLY support non-pk table now.
-        MetadataCache::instance()->warmup_rowset(this);
+        MetadataCache::instance()->refresh_rowset(this);
     }
 #endif
 }
