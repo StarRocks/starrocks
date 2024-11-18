@@ -74,8 +74,11 @@ public:
         }
     }
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -101,6 +104,9 @@ public:
     }
 
     static const int64_t block_size;
+
+private:
+    bool _saved_enable_auto_adjust = false;
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;

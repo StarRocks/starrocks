@@ -116,16 +116,19 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
             std::vector<DirSpace> spaces;
-            Status st = DataCacheUtils::parse_conf_datacache_disk_spaces(
-                    config::datacache_disk_path, config::datacache_disk_size, config::ignore_broken_disk, &spaces);
-            if (!st.ok()) {
-                LOG(WARNING) << "Failed to update datacache disk spaces";
-                return st;
+            BlockCache::instance()->disk_spaces(&spaces);
+            for (auto& space : spaces) {
+                int64_t disk_size =
+                        DataCacheUtils::parse_conf_datacache_disk_size(space.path, config::datacache_disk_size, -1);
+                if (disk_size < 0) {
+                    LOG(WARNING) << "Failed to update datacache disk spaces for the invalid disk_size: " << disk_size;
+                    return Status::InternalError("Fail to update datacache disk spaces");
+                }
+                space.size = disk_size;
             }
-            st = BlockCache::instance()->adjust_disk_spaces(spaces);
+            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
             return st;
         });
-        _config_callback.emplace("datacache_disk_path", _config_callback["datacache_disk_size"]);
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
                 return Status::InvalidArgument(
