@@ -10,6 +10,65 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.6
+
+发布日期：2024 年 11 月 18 日
+
+### 功能优化
+
+- 优化主键表内部修复的逻辑。[#52707](https://github.com/StarRocks/starrocks/pull/52707)
+- 优化统计信息直方图的内部实现。[#52400](https://github.com/StarRocks/starrocks/pull/52400)
+- 支持通过 FE 参数 `sys_log_warn_modules` 选择日志级别以降低 Hudi Catalog 日志的打印量。[#52709](https://github.com/StarRocks/starrocks/pull/52709)
+- 函数 `yearweek` 支持进行常量折叠。[#52714](https://github.com/StarRocks/starrocks/pull/52714)
+- 防止 Lambda 函数被下推。[#52655](https://github.com/StarRocks/starrocks/pull/52655)
+- 拆分监控项 Query Error 为三个部分：Internal Error Rate、Analysis Error Rate 以及 Timeout Rate。[#52646](https://github.com/StarRocks/starrocks/pull/52646)
+- 避免将常量表达式提取为 `array_map` 中的公共表达式。[#52541](https://github.com/StarRocks/starrocks/pull/52541)
+- 优化物化视图的 Text-based Rewrite。[#52498](https://github.com/StarRocks/starrocks/pull/52498)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对存算分离集群内表运行 SHOW CREATE TABLE 时 `unique_constraints` 和 `foreign_constraints` 参数显示不全。[#52804](https://github.com/StarRocks/starrocks/pull/52804)
+- 设置 `enable_mv_automatic_active_check` 为 `false` 后系统仍会将部分物化视图设置为 Active。 [#52799](https://github.com/StarRocks/starrocks/pull/52799)
+- 刷新过时内存后内存占用未能降低。[#52613](https://github.com/StarRocks/starrocks/pull/52613)
+- Hudi File-system View 导致的资源泄漏。[#52738](https://github.com/StarRocks/starrocks/pull/52738)
+- 主键表数据 Publish 和 Update 操作同时发生导致的问题。[#52687](https://github.com/StarRocks/starrocks/pull/52687)
+- 客户端无法正常终止查询。[#52185](https://github.com/StarRocks/starrocks/pull/52185)
+- 多列 List 分区无法下推。[#51036](https://github.com/StarRocks/starrocks/pull/51036)
+- 因 ORC 文件缺少 `hasnull` 导致返回错误结果。[#52555](https://github.com/StarRocks/starrocks/pull/52555)
+- 因建表时 ORDER BY 列使用大写列名导致的问题。[#52513](https://github.com/StarRocks/starrocks/pull/52513)
+- 运行 `ALTER TABLE PARTITION (*) SET ("storage_cooldown_ttl" = "xxx")` 报错。[#52482](https://github.com/StarRocks/starrocks/pull/52482)
+
+### 行为变更
+
+- 历史版本中，缩容操作会因统计信息数据库 `_statistics_` 中的视图副本数不足而失败。v3.3.6 及以后版本中，如缩容至 3 个或以上节点，则系统会将视图的副本数设置为 3，如缩容至 1 个节点，则会将视图的副本数设置为 1，使缩容操作正常进行。[#51799](https://github.com/StarRocks/starrocks/pull/51799)
+
+  受影响的视图包括：
+
+  - `column_statistics`
+  - `histogram_statistics`
+  - `table_statistic_v1`
+  - `external_column_statistics`
+  - `external_histogram_statistics`
+  - `pipe_file_list`
+  - `loads_history`
+  -  `task_run_history`
+
+- 新创建的主键表将不再允许使用 `__op` 作为列名，即使已经将 FE 配置项 `allow_system_reserved_names` 设置为 `true`。历史表不受此变更影响。 [#52621](https://github.com/StarRocks/starrocks/pull/52621)
+- 表达式分区的表不允许变更分区名。[#52557](https://github.com/StarRocks/starrocks/pull/52557)
+- 废弃 FE 配置项 `heartbeat_mgr_blocking_queue_size` 和 `profile_process_threads_num`。[#52236](https://github.com/StarRocks/starrocks/pull/52236)
+- 存算分离集群中的主键表默认开启基于对象存储的持久化索引。 [#52209](https://github.com/StarRocks/starrocks/pull/52209)
+- 使用随机分桶方式的表禁止手动更改分桶方式。 [#52120](https://github.com/StarRocks/starrocks/pull/52120)
+- 备份还原相关参数变更：[#52111](https://github.com/StarRocks/starrocks/pull/52111)
+  - `make_snapshot_worker_count` 支持动态配置。
+  - `release_snapshot_worker_count` 支持动态配置。
+  - `upload_worker_count` 支持动态配置，默认值从 `1` 改为等同于节点 CPU 核数。
+  - `download_worker_count` 支持动态配置，默认值从 `1` 改为等同于节点 CPU 核数。
+- `SELECT @@autocommit` 的返回值从 BOOLEAN 类型改为 BIGINT 类型。 [#51946](https://github.com/StarRocks/starrocks/pull/51946)
+- 新增 FE 参数 `max_bucket_number_per_partition`，为单个分区增加分桶上限控制。 [#47852](https://github.com/StarRocks/starrocks/pull/47852)
+- 主键表默认开启内存占用检查。 [#52393](https://github.com/StarRocks/starrocks/pull/52393)
+
 ## 3.3.5
 
 发布日期：2024 年 10 月 23 日
