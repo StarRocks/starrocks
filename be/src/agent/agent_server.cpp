@@ -199,10 +199,11 @@ void AgentServer::Impl::init_or_die() {
                                        _thread_pool_publish_version);
         REGISTER_THREAD_POOL_METRICS(publish_version, _thread_pool_publish_version);
 #endif
-        int real_drop_tablet_worker_count = (config::drop_tablet_worker_count != 0) ? std::abs(config::drop_tablet_worker_count)
-                                                                                    : (int32_t)(CpuInfo::num_cores() / 2);
-        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, real_drop_tablet_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_drop);
+        int real_drop_tablet_worker_count = (config::drop_tablet_worker_count != 0)
+                                                    ? std::abs(config::drop_tablet_worker_count)
+                                                    : (int32_t)(CpuInfo::num_cores() / 2);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, real_drop_tablet_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_drop);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", 1, config::create_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_create_tablet);
