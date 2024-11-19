@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -49,53 +49,55 @@ public class PredicateColumnsMgr {
         return INSTANCE;
     }
 
-    public void recordScanColumns(Map<ColumnRefOperator, Column> scanColumns, Table table) {
+    public void recordScanColumns(Map<ColumnRefOperator, Column> scanColumns, Table table, OptExpression optExpr) {
         for (Column column : scanColumns.values()) {
             addOrUpdateColumnUsage(table, column, ColumnUsage.UseCase.NORMAL);
         }
     }
 
-    public void recordPredicateColumns(ScalarOperator predicate, ColumnRefFactory factory) {
+    public void recordPredicateColumns(ScalarOperator predicate, ColumnRefFactory factory, OptExpression optExpr) {
         if (predicate == null) {
             return;
         }
         List<ColumnRefOperator> refs = Utils.collect(predicate, ColumnRefOperator.class);
-        addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.PREDICATE);
+        addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.PREDICATE, optExpr);
     }
 
-    public void recordJoinPredicate(List<BinaryPredicateOperator> onPredicates, ColumnRefFactory factory) {
+    public void recordJoinPredicate(List<BinaryPredicateOperator> onPredicates, ColumnRefFactory factory,
+                                    OptExpression optExpr) {
         for (BinaryPredicateOperator op : onPredicates) {
             List<ColumnRefOperator> refs = Utils.collect(op, ColumnRefOperator.class);
-            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.JOIN);
+            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.JOIN, optExpr);
         }
     }
 
     public void recordGroupByColumns(Map<ColumnRefOperator, CallOperator> aggregations,
                                      List<ColumnRefOperator> groupBys,
-                                     ColumnRefFactory factory) {
+                                     ColumnRefFactory factory, OptExpression optExpr) {
         for (var entry : aggregations.entrySet()) {
             if (entry.getValue().isDistinct()) {
                 List<ColumnRefOperator> refs = Utils.collect(entry.getValue(), ColumnRefOperator.class);
-                addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.DISTINCT);
+                addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.DISTINCT, optExpr);
             }
         }
 
-        addOrUpdateColumnUsage(groupBys, factory, ColumnUsage.UseCase.GROUP_BY);
+        addOrUpdateColumnUsage(groupBys, factory, ColumnUsage.UseCase.GROUP_BY, optExpr);
     }
 
-    public void recordWindowPartitionBy(List<ScalarOperator> partitionByList, ColumnRefFactory factory) {
+    public void recordWindowPartitionBy(List<ScalarOperator> partitionByList, ColumnRefFactory factory,
+                                        OptExpression optExpr) {
         for (var partitionBy : ListUtils.emptyIfNull(partitionByList)) {
             List<ColumnRefOperator> refs = Utils.collect(partitionBy, ColumnRefOperator.class);
-            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.GROUP_BY);
+            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.GROUP_BY, optExpr);
         }
     }
 
     private void addOrUpdateColumnUsage(List<ColumnRefOperator> refs, ColumnRefFactory factory,
-                                        ColumnUsage.UseCase useCase) {
+                                        ColumnUsage.UseCase useCase, OptExpression optExpr) {
         for (ColumnRefOperator ref : ListUtils.emptyIfNull(refs)) {
-            Pair<Table, Column> pair = factory.getTableAndColumn(ref);
-            if (pair != null) {
-                addOrUpdateColumnUsage(pair.first, pair.second, useCase);
+            var tables = Utils.resolveColumnRefRecursive(ref, factory, optExpr);
+            for (var column : ListUtils.emptyIfNull(tables)) {
+                addOrUpdateColumnUsage(column.first, column.second, useCase);
             }
         }
     }
@@ -106,12 +108,8 @@ public class PredicateColumnsMgr {
             return;
         }
         ColumnUsage usage = mayUsage.get();
-        ColumnUsage oldValue = id2columnUsage.get(usage);
-        if (oldValue == null) {
-            id2columnUsage.put(usage, usage);
-        } else {
-            oldValue.useNow(useCase);
-        }
+        ColumnUsage oldValue = id2columnUsage.computeIfAbsent(usage, k -> usage);
+        oldValue.useNow(useCase);
     }
 
     public List<ColumnUsage> query(TableName tableName) {

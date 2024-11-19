@@ -74,6 +74,10 @@ public class ColumnUsage {
     }
 
     public String getUseCaseString() {
+        if (useCase.size() > 1 && useCase.contains(UseCase.NORMAL)) {
+            return useCase.stream().filter(x -> x != UseCase.NORMAL).map(UseCase::toString)
+                    .collect(Collectors.joining(","));
+        }
         return useCase.stream().map(UseCase::toString).collect(Collectors.joining(","));
     }
 
