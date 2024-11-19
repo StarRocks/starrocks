@@ -15,12 +15,15 @@
 package com.starrocks.memory;
 
 import com.starrocks.common.Pair;
-import org.apache.spark.util.SizeEstimator;
+import org.openjdk.jol.info.ClassLayout;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public interface MemoryTrackable {
+    Map<String, Long> CLASS_SIZE = new ConcurrentHashMap<>();
+
     default long estimateSize() {
         List<Pair<List<Object>, Long>> samples = getSamples();
         long totalBytes = 0;
@@ -28,11 +31,17 @@ public interface MemoryTrackable {
             List<Object> sampleObjects = pair.first;
             long size = pair.second;
             if (!sampleObjects.isEmpty()) {
-                totalBytes += (long) (((double) SizeEstimator.estimate(sampleObjects)) / sampleObjects.size() * size);
+                long sampleSize = sampleObjects.stream().mapToLong(this::getInstanceSize).sum();
+                totalBytes += (long) (((double) sampleSize) / sampleObjects.size() * size);
             }
         }
 
         return totalBytes;
+    }
+
+    default long getInstanceSize(Object object) {
+        String className = object.getClass().getName();
+        return CLASS_SIZE.computeIfAbsent(className, s -> ClassLayout.parseInstance(object).instanceSize());
     }
 
     Map<String, Long> estimateCount();
