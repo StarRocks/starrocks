@@ -101,7 +101,7 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         result.add(ConstantOperator.createVarchar(tableName.getDb()));
         result.add(ConstantOperator.createVarchar(tableName.getTbl()));
         result.add(ConstantOperator.createVarchar(columnUsage.getColumnId().getId()));
-        result.add(ConstantOperator.createVarchar(columnUsage.getUseCase().toString()));
+        result.add(ConstantOperator.createVarchar(columnUsage.getUseCaseString()));
         result.add(ConstantOperator.createDatetime(columnUsage.getLastUsed()));
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));
         return result;

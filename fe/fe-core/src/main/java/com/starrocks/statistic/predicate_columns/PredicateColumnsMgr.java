@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic.predicate_columns;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -24,9 +25,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -103,6 +106,23 @@ public class PredicateColumnsMgr {
     public List<ColumnUsage> query(TableName tableName) {
         TablePredicate predicate = new TablePredicate(tableName);
         return id2columnUsage.values().stream().filter(predicate).collect(Collectors.toList());
+    }
+
+    public List<ColumnUsage> queryPredicateColumns(TableName tableName) {
+        return queryByUseCase(tableName, EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN,
+                ColumnUsage.UseCase.GROUP_BY));
+    }
+
+    public List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
+        TablePredicate predicate = new TablePredicate(tableName);
+        Predicate<ColumnUsage> useCasePredicate = (c) -> !SetUtils.intersection(c.getUseCases(), useCases).isEmpty();
+        Predicate<ColumnUsage> pred = predicate.and(useCasePredicate);
+        return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
+    }
+
+    @VisibleForTesting
+    public void reset() {
+        id2columnUsage.clear();
     }
 
     public void persist() {

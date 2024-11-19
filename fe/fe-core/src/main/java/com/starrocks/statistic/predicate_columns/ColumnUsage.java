@@ -22,8 +22,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class ColumnUsage {
 
@@ -37,7 +39,7 @@ public class ColumnUsage {
     private LocalDateTime lastUsed;
 
     @SerializedName("useCase")
-    private UseCase useCase;
+    private EnumSet<UseCase> useCase;
 
     @SerializedName("created")
     private LocalDateTime created;
@@ -45,7 +47,7 @@ public class ColumnUsage {
     public ColumnUsage(ColumnId columnId, TableName tableName, UseCase useCase) {
         this.columnId = columnId;
         this.tableName = tableName;
-        this.useCase = useCase;
+        this.useCase = EnumSet.of(useCase);
         this.lastUsed = TimeUtils.getSystemNow();
         this.created = TimeUtils.getSystemNow();
     }
@@ -67,8 +69,12 @@ public class ColumnUsage {
         return tableName;
     }
 
-    public UseCase getUseCase() {
+    public EnumSet<UseCase> getUseCases() {
         return useCase;
+    }
+
+    public String getUseCaseString() {
+        return useCase.stream().map(UseCase::toString).collect(Collectors.joining(","));
     }
 
     public LocalDateTime getLastUsed() {
@@ -82,7 +88,7 @@ public class ColumnUsage {
     // NOTE: mutable
     public void useNow(UseCase useCase) {
         this.lastUsed = LocalDateTime.now(TimeUtils.getSystemTimeZone().toZoneId());
-        this.useCase = useCase;
+        this.useCase.add(useCase);
     }
 
     @Override
