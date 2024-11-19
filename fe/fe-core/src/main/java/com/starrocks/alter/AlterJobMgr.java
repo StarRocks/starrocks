@@ -723,6 +723,8 @@ public class AlterJobMgr {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BUCKET_SIZE);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            olapTable.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
