@@ -729,7 +729,7 @@ public class AlterJobMgr {
                                 PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
                     } catch (Exception e) {
                         throw new DdlException("Failed to update base compaction forbidden time ranges for "
-                                + tableName.getTbl() + ": " + e.getMessage()); 
+                                + tableName + ": " + e.getMessage()); 
                     }
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
