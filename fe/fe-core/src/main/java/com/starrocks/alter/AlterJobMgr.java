@@ -723,8 +723,13 @@ public class AlterJobMgr {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BUCKET_SIZE);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            olapTable.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    try {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                olapTable.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    } catch (Exception e) {
+                        throw new DdlException("Failed to update base compaction forbidden time ranges for "
+                                + tableName.getTbl() + ": " + e.getMessage()); 
+                    }
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
