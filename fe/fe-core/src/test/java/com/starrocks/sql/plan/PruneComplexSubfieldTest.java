@@ -125,6 +125,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(2);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @After

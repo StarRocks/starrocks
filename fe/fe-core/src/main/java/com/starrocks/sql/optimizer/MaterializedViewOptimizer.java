@@ -69,19 +69,29 @@ public class MaterializedViewOptimizer {
                     containsNonDeterministicFunctions.second);
             return new MvPlanContext(false, invalidPlanReason);
         }
-        // get optimized plan of mv's defined query
-        Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
-        if (plans == null) {
-            return new MvPlanContext(false, "No query plan for it");
+        int originAggPushDownMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        if (originAggPushDownMode != -1) {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         }
-        OptExpression mvPlan = plans.first;
-        boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
-        // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
-        String invalidPlanReason = "";
-        if (!isValidPlan) {
-            invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+
+        try {
+            // get optimized plan of mv's defined query
+            Pair<OptExpression, LogicalPlan> plans =
+                    MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
+            if (plans == null) {
+                return new MvPlanContext(false, "No query plan for it");
+            }
+            OptExpression mvPlan = plans.first;
+            boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
+            // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
+            String invalidPlanReason = "";
+            if (!isValidPlan) {
+                invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+            }
+            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
         }
-        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+
     }
 }
