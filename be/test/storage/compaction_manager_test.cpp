@@ -188,6 +188,7 @@ TEST_F(CompactionManagerTest, test_disable_compaction) {
         TabletSharedPtr tablet = std::make_shared<Tablet>();
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
+        tablet_meta->TEST_set_table_id(1);
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         tablet->set_tablet_state(TABLET_RUNNING);
@@ -195,6 +196,7 @@ TEST_F(CompactionManagerTest, test_disable_compaction) {
         CompactionCandidate candidate;
         candidate.tablet = tablet;
         candidate.score = i;
+        candidate.type = BASE_COMPACTION;
         candidates.push_back(candidate);
     }
 
@@ -204,22 +206,7 @@ TEST_F(CompactionManagerTest, test_disable_compaction) {
 
     _engine->compaction_manager()->update_candidates(candidates);
 
-    {
-        ASSERT_EQ(10, _engine->compaction_manager()->candidates_size());
-
-        int64_t valid_condidates = 0;
-        while (true) {
-            CompactionCandidate candidate;
-            auto valid = _engine->compaction_manager()->pick_candidate(&candidate);
-            if (!valid) {
-                break;
-            }
-            ++valid_condidates;
-        }
-        ASSERT_EQ(10, valid_condidates);
-    }
-
-    _engine->compaction_manager()->disable_table_compaction(0, UnixSeconds() + 3600);
+    _engine->compaction_manager()->disable_table_compaction(1, UnixSeconds() + 5);
 
     {
         int64_t valid_condidates = 0;
@@ -232,6 +219,49 @@ TEST_F(CompactionManagerTest, test_disable_compaction) {
             ++valid_condidates;
         }
         ASSERT_EQ(0, valid_condidates);
+    }
+}
+
+TEST_F(CompactionManagerTest, test_remove_disable_compaction) {
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    for (int i = 0; i < 10; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet_meta->TEST_set_table_id(2);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidate.type = BASE_COMPACTION;
+        candidates.push_back(candidate);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(candidates.begin(), candidates.end(), g);
+
+    _engine->compaction_manager()->update_candidates(candidates);
+
+    _engine->compaction_manager()->disable_table_compaction(2, UnixSeconds());
+
+    sleep(1);
+
+    {
+        int64_t valid_condidates = 0;
+        while (true) {
+            CompactionCandidate candidate;
+            auto valid = _engine->compaction_manager()->pick_candidate(&candidate);
+            if (!valid) {
+                break;
+            }
+            ++valid_condidates;
+        }
+        ASSERT_EQ(10, valid_condidates);
     }
 }
 

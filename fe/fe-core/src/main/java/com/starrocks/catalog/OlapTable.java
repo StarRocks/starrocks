@@ -2687,6 +2687,18 @@ public class OlapTable extends Table {
         tableProperty.buildBaseCompactionForbiddenTimeRanges();
     }
 
+    public void updateBaseCompactionForbiddenTimeRanges(boolean isDrop) {
+        try {
+            if (isDrop && getBaseCompactionForbiddenTimeRanges().isEmpty()) {
+                return;
+            }
+            GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                    getId(), isDrop ? "" : getBaseCompactionForbiddenTimeRanges());
+        } catch (Exception e) {
+            LOG.warn("Failed to update base compaction forbidden time ranges for " + getName(), e);
+        }
+    }
+
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -3158,6 +3170,7 @@ public class OlapTable extends Table {
         analyzePartitionInfo();
         analyzeRollupIndexMeta();
         tryToAssignIndexId();
+        updateBaseCompactionForbiddenTimeRanges(false);
 
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
@@ -3295,6 +3308,8 @@ public class OlapTable extends Table {
         if (!replay && hasAutoIncrementColumn()) {
             sendDropAutoIncrementMapTask();
         }
+
+        updateBaseCompactionForbiddenTimeRanges(true);
 
         // unregister constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
