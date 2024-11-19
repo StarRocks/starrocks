@@ -635,9 +635,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     TScanRange* scan_range = scan_morsel->get_scan_range();
     ScanSplitContext* split_context = scan_morsel->get_split_context();
 
-    if (scan_range->__isset.broker_scan_range) {
-        scan_range->broker_scan_range.params.__set_non_blocking_read(true);
-    }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
     _data_source->set_split_context(split_context);

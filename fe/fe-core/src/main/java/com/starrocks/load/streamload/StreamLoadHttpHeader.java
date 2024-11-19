@@ -59,10 +59,10 @@ public class StreamLoadHttpHeader {
     public static final String HTTP_STRIP_OUTER_ARRAY = "strip_outer_array";
 
     // Headers for batch write ==========================
-    public static final String HTTP_ENABLE_BATCH_WRITE = "enable_batch_write";
-    public static final String HTTP_BATCH_WRITE_ASYNC = "batch_write_async";
-    public static final String HTTP_BATCH_WRITE_INTERVAL_MS = "batch_write_interval_ms";
-    public static final String HTTP_BATCH_WRITE_PARALLEL = "batch_write_parallel";
+    public static final String HTTP_ENABLE_BATCH_WRITE = "enable_merge_commit";
+    public static final String HTTP_BATCH_WRITE_ASYNC = "merge_commit_async";
+    public static final String HTTP_BATCH_WRITE_INTERVAL_MS = "merge_commit_interval_ms";
+    public static final String HTTP_BATCH_WRITE_PARALLEL = "merge_commit_parallel";
 
     // A list of all headers. If add a new header, should also add it to the list.
     public static final List<String> HTTP_HEADER_LIST = Arrays.asList(

@@ -34,7 +34,7 @@
 
 // NOTE(XXX): DEPRECATED, just use to compatible with old version.
 // Make system can grayscale upgrade
-syntax="proto2";
+syntax = "proto2";
 
 import "internal_service.proto";
 
@@ -84,4 +84,6 @@ service PBackendService {
     rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
 
     rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
+    rpc stream_load(starrocks.PStreamLoadRequest)
+        returns (starrocks.PStreamLoadResponse);
 };
