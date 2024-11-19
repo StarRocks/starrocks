@@ -49,6 +49,10 @@
 #include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
+namespace arrow {
+class RecordBatch;
+}
+
 namespace google::protobuf {
 class Closure;
 } // namespace google::protobuf
@@ -96,6 +100,7 @@ public:
     // this method is reserved and is only used in the non-pipeline engine
     Status add_batch(TFetchDataResult* result, bool need_free = true);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
+    Status add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result);
 
     // non-blocking version of add_batch
     Status add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results);
@@ -107,6 +112,7 @@ public:
     Status get_batch(TFetchDataResult* result);
 
     void get_batch(GetResultBatchCtx* ctx);
+    Status get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result);
 
     // close buffer block, set _status to exec_status and set _is_close to true;
     // called because data has been read or error happened.
@@ -132,10 +138,14 @@ public:
 private:
     void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
 
+    void _process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result);
+
     StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
     // as no idea of whether sending sorted results, can't use concurrentQueue here.
     typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;
+    typedef std::list<std::shared_ptr<arrow::RecordBatch>> ArrowResultQueue;
+
     // result's query id
     TUniqueId _fragment_id;
     std::atomic_bool _is_close;
@@ -144,9 +154,13 @@ private:
     std::atomic_int64_t _buffer_bytes;
     int _buffer_limit;
     std::atomic<int64_t> _packet_num;
+    int _arrow_rows_limit;
+    int _arrow_rows;
 
     // blocking queue for batch
     ResultQueue _batch_queue;
+    ArrowResultQueue _arrow_batch_queue;
+
     // protects all subsequent data in this block
     mutable std::mutex _lock;
     // signal arrival of new batch or the eos/cancelled condition

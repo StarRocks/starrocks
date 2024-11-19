@@ -23,4 +23,5 @@ add_library(ServiceBE
     internal_service.cpp
     lake_service.cpp
     starrocks_be.cpp
+    arrow_flight_sql_service.cpp
 )

@@ -67,6 +67,7 @@ from lib.mysql_lib import MysqlLib
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
+from lib.arrow_sql_lib import ArrowSqlLib
 from lib import *
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
@@ -167,6 +168,8 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
+        self.arrow_sql_lib = ArrowSqlLib()
+        self.arrow_port = ""
 
         # connection pool
         self.connection_pool = None
@@ -533,6 +536,7 @@ class StarrocksSQLApiLib(object):
         self.host_user = _get_value(cluster_conf, "host_user")
         self.host_password = _get_value(cluster_conf, "host_password")
         self.cluster_path = _get_value(cluster_conf, "cluster_path")
+        self.arrow_port = _get_value(cluster_conf, "arrow_port")
 
         # client
         client_conf = _get_value(config_parser, "client")
@@ -566,6 +570,15 @@ class StarrocksSQLApiLib(object):
                 self.__setattr__(each_env_key, each_env_value)
 
         StarrocksSQLApiLib._instance = True
+
+    def connect_starrocks_arrow(self):
+        args_dict = {
+            "host": self.mysql_host,
+            "arrow_port": self.arrow_port if self.arrow_port else 9408,
+            "user": self.mysql_user,
+            "password": self.mysql_password,
+        }
+        self.arrow_sql_lib.connect(args_dict)
 
     def connect_starrocks(self):
         mysql_dict = {
@@ -622,6 +635,9 @@ class StarrocksSQLApiLib(object):
 
     def close_hive(self):
         self.hive_lib.close()
+
+    def close_starrocks_arrow(self):
+        self.arrow_sql_lib.close()
 
     def create_database(self, database_name, tolerate_exist=False):
         """
@@ -819,6 +835,11 @@ class StarrocksSQLApiLib(object):
         except Exception as e:
             print("unknown error", e)
             raise
+
+    def arrow_execute_sql(self, sql):
+        """arrow execute query"""
+        self.connect_starrocks_arrow()
+        return self.conn_execute_sql(self.arrow_sql_lib.connector, sql)
 
     def trino_execute_sql(self, sql):
         """trino execute query"""
@@ -1136,7 +1157,6 @@ class StarrocksSQLApiLib(object):
         """
         execute single statement and return result
         """
-
         order = False
         res_container = res_container if res_container is not None else self.res_log
 
@@ -1220,6 +1240,24 @@ class StarrocksSQLApiLib(object):
                 self.record_function_res(sql, actual_res, res_container)
 
             actual_res_log = ""
+        elif statement.startswith(ARROW_FLAG):
+            statement = statement[len(ARROW_FLAG):]
+
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            self_print("[ARROW]: %s" % statement)
+            log.info("[%s] ARROW: %s" % (sql_id, statement))
+
+            actual_res = self.arrow_execute_sql(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
         else:
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
