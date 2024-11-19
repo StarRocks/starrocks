@@ -113,11 +113,25 @@ public class Utils {
             nodeToTablets = new HashMap<>();
         }
 
+<<<<<<< HEAD
+=======
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
+>>>>>>> 208089e6c2 ([BugFix] Publish version operation should be successful even if the warehouse is not exist (#52967))
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
-                throw new NoAliveBackendException("No alive node for handle publish version request");
+                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
         }
@@ -175,11 +189,23 @@ public class Utils {
                                               long warehouseId)
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish log version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
-                throw new NoAliveBackendException("No alive node for handle publish version request");
+                LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
         }
