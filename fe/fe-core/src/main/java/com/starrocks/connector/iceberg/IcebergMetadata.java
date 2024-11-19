@@ -522,86 +522,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        Map<String, Partition> partitionMap = Maps.newHashMap();
         IcebergTable icebergTable = (IcebergTable) table;
-        PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
-                createMetadataTableInstance(icebergTable.getNativeTable(), org.apache.iceberg.MetadataTableType.PARTITIONS);
-
-        if (icebergTable.isUnPartitioned()) {
-            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
-                for (FileScanTask task : tasks) {
-                    // partitionsTable Table schema :
-                    // record_count,
-                    // file_count,
-                    // total_data_file_size_in_bytes,
-                    // position_delete_record_count,
-                    // position_delete_file_count,
-                    // equality_delete_record_count,
-                    // equality_delete_file_count,
-                    // last_updated_at,
-                    // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the last updated time of the table according to the table schema
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(7, Long.class);
-                        } catch (NullPointerException e) {
-                            LOG.error("The table [{}] snapshot [{}] has been expired",
-                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), e);
-                        }
-                        Partition partition = new Partition(lastUpdated);
-                        return ImmutableList.of(partition);
-                    }
-                }
-                // for empty table, use -1 as last updated time
-                return ImmutableList.of(new Partition(-1));
-            } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
-            }
-        } else {
-            // For partition table, we need to get all partitions from PartitionsTable.
-            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
-                for (FileScanTask task : tasks) {
-                    // partitionsTable Table schema :
-                    // partition,
-                    // spec_id,
-                    // record_count,
-                    // file_count,
-                    // total_data_file_size_in_bytes,
-                    // position_delete_record_count,
-                    // position_delete_file_count,
-                    // equality_delete_record_count,
-                    // equality_delete_file_count,
-                    // last_updated_at,
-                    // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the partition data/spec id/last updated time according to the table schema
-                        StructProjection partitionData = row.get(0, StructProjection.class);
-                        int specId = row.get(1, Integer.class);
-                        PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
-                        String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
-
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(9, Long.class);
-                        } catch (NullPointerException e) {
-                            LOG.error("The table [{}.{}] snapshot [{}] has been expired",
-                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), partitionName, e);
-                        }
-                        Partition partition = new Partition(lastUpdated);
-                        partitionMap.put(partitionName, partition);
-                    }
-                }
-            } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
-            }
-        }
-        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
-        partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
-        return partitions.build();
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        List<Partition> ans = icebergCatalog.getPartitions(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+                nativeTable.currentSnapshot().snapshotId(), null,
+                partitionNames);
+        return new ArrayList<>(ans);
     }
 
     @Override
@@ -941,9 +867,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                    .useSnapshot(snapshotId)
-                    .metricsReporter(metricsReporter)
-                    .planWith(jobPlanningExecutor);
+                .useSnapshot(snapshotId)
+                .metricsReporter(metricsReporter)
+                .planWith(jobPlanningExecutor);
 
         if (enableCollectColumnStats) {
             scan = scan.includeColumnStats();
@@ -1015,7 +941,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         return ((StarRocksIcebergTableScan) scan).getDeleteFiles(content);
     }
-
 
     /**
      * To optimize the MetricsModes of the Iceberg tables, it's necessary to display the columns MetricsMode in the
