@@ -92,8 +92,11 @@ public class PartitionInfoTest {
         Date time2 = dateFormat.parse("2024-10-23 16:00:00");
         Date time3 = dateFormat.parse("2024-10-23 18:00:00");
 
-        Partition partition = new Partition(partitionId, "p0", null, null);
-        partition.updateVisibleVersion(2, time2.getTime());
+        Partition partition = new Partition(partitionId, "p0", null);
+        PhysicalPartition physicalPartition = new PhysicalPartition(
+                1, "", 1, null);
+        partition.addSubPartition(physicalPartition);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(2, time2.getTime());
 
         info.setExternalCoolDownSyncedTimeMs(partitionId, time2.getTime());
         info.setExternalCoolDownConsistencyCheckTimeMs(partitionId, time3.getTime());
@@ -102,7 +105,7 @@ public class PartitionInfoTest {
         Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition));
         Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition, time1.getTime()));
 
-        partition.updateVisibleVersion(3, time2.getTime());
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(3, time2.getTime());
         Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition));
         Assert.assertTrue(info.couldUseExternalCoolDownPartition(partition, time1.getTime()));
 

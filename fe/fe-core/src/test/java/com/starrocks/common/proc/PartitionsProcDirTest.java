@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -65,7 +66,8 @@ public class PartitionsProcDirTest {
         db.registerTableUnlocked(cloudNativTable);
 
         MaterializedIndex index1 = new MaterializedIndex(1001L, IndexState.NORMAL);
-        Partition partition = new Partition(1028L, "p2", index1, new RandomDistributionInfo(10));
+        Partition partition = new Partition(1028L, "p2", new RandomDistributionInfo(10));
+        partition.addSubPartition(new PhysicalPartition(1, "p2_128", 1028L, index1));
         List<Column> col1 = Lists.newArrayList(new Column("province", Type.VARCHAR));
         PartitionInfo listPartition1 = new ListPartitionInfo(PartitionType.LIST, col1);
         listPartition1.addPartition(partition.getId(), DataProperty.getInferredDefaultDataProperty(), (short) 1, true);
@@ -93,7 +95,7 @@ public class PartitionsProcDirTest {
         BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, olapTable, false).fetchResult();
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
-        Assert.assertEquals("1028", list1.get(0));
+        Assert.assertEquals("1", list1.get(0));
         Assert.assertEquals("p2", list1.get(1));
         Assert.assertEquals("1", list1.get(2));
         Assert.assertEquals("\\N", list1.get(20));

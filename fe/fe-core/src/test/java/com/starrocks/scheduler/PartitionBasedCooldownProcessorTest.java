@@ -211,34 +211,39 @@ public class PartitionBasedCooldownProcessorTest {
                 .getTable(TEST_DB_NAME, "tbl1"));
 
         Partition partition = olapTable.getPartition("p20200101");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         triggerExternalCooldown(testDb, olapTable, partition, true);
 
         Partition partition1 = olapTable.getPartition("p20200102");
-        partition1.setVisibleVersion(partition1.getVisibleVersion() + 1,
+        partition1.getDefaultPhysicalPartition().setVisibleVersion(
+                partition1.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         Assert.assertThrows(DdlException.class, () -> triggerExternalCooldown(testDb, olapTable, partition1, false));
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         Long syncedTimeMs = partitionInfo.getExternalCoolDownSyncedTimeMs(partition.getId());
         Assert.assertNotNull(syncedTimeMs);
-        Assert.assertEquals((Long) partition.getVisibleVersionTime(), syncedTimeMs);
+        Assert.assertEquals((Long) partition.getDefaultPhysicalPartition().getVisibleVersionTime(), syncedTimeMs);
 
         partition = olapTable.getPartition("p20200101");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         partition = olapTable.getPartition("p20200102");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         partition = olapTable.getPartition("p20200103");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         triggerExternalCooldown(testDb, olapTable, true);
     }
 
     @Test
-    public void testExecutorIsNull() throws Exception {
+    public void testExecutorIsNull() {
         new MockUp<StatementBase>() {
             @Mock
             public void setOrigStmt(OriginStatement origStmt) {
@@ -250,13 +255,14 @@ public class PartitionBasedCooldownProcessorTest {
                 .getTable(TEST_DB_NAME, "tbl1"));
 
         Partition partition = olapTable.getPartition("p20200101");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         Assert.assertThrows(RuntimeException.class, () -> triggerExternalCooldown(testDb, olapTable, partition, false));
     }
 
     @Test
-    public void testStateErr() throws Exception {
+    public void testStateErr() {
         new MockUp<QueryState>() {
             @Mock
             public QueryState.MysqlStateType getStateType() {
@@ -268,7 +274,8 @@ public class PartitionBasedCooldownProcessorTest {
                 .getTable(TEST_DB_NAME, "tbl1"));
 
         Partition partition = olapTable.getPartition("p20200101");
-        partition.setVisibleVersion(partition.getVisibleVersion() + 1,
+        partition.getDefaultPhysicalPartition().setVisibleVersion(
+                partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
                 System.currentTimeMillis() - 3600 * 1000);
         Assert.assertThrows(DdlException.class, () -> triggerExternalCooldown(testDb, olapTable, partition, true));
     }
@@ -323,7 +330,7 @@ public class PartitionBasedCooldownProcessorTest {
     }
 
     @Test
-    public void testPrepare1() throws Exception {
+    public void testPrepare1() {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
         OlapTable olapTable1 = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(TEST_DB_NAME, "tbl2"));
@@ -338,7 +345,7 @@ public class PartitionBasedCooldownProcessorTest {
     }
 
     @Test
-    public void testPrepare2() throws Exception {
+    public void testPrepare2() {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
         OlapTable olapTable1 = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(TEST_DB_NAME, "tbl2"));
@@ -353,7 +360,7 @@ public class PartitionBasedCooldownProcessorTest {
     }
 
     @Test
-    public void testPrepare3() throws Exception {
+    public void testPrepare3() {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
         OlapTable olapTable1 = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(TEST_DB_NAME, "tbl2"));

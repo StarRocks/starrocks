@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -136,14 +137,19 @@ public class ExternalCooldownPartitionSelector {
         if (externalCoolDownWaitSeconds <= 0) {
             return false;
         }
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        if (physicalPartition == null) {
+            return false;
+        }
+
         // partition with init version has no data, doesn't need do external cool down
-        if (partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION) {
+        if (physicalPartition.getVisibleVersion() == PhysicalPartition.PARTITION_INIT_VERSION) {
             LOG.debug("table[{}] partition[{}] is init version. ignore", tableName, partition.getName());
             return false;
         }
 
         // after partition update, should wait a while to avoid unnecessary duplicate external cool down
-        long changedMillis = System.currentTimeMillis() - partition.getVisibleVersionTime();
+        long changedMillis = System.currentTimeMillis() - physicalPartition.getVisibleVersionTime();
         if (changedMillis <= externalCoolDownWaitMillis) {
             LOG.debug("partition[{}]'s changed time hasn't reach {} {}. ignore", partition.getId(),
                     PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, externalCoolDownWaitSeconds);
@@ -154,7 +160,7 @@ public class ExternalCooldownPartitionSelector {
         Long partitionCoolDownSyncedTimeMs = partitionInfo.getExternalCoolDownSyncedTimeMs(partition.getId());
         Long consistencyCheckTimeMs = partitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partition.getId());
         // partition has never do external cool down or has changed since last external cool down
-        if (partitionCoolDownSyncedTimeMs == null || partitionCoolDownSyncedTimeMs < partition.getVisibleVersionTime()) {
+        if (partitionCoolDownSyncedTimeMs == null || partitionCoolDownSyncedTimeMs < physicalPartition.getVisibleVersionTime()) {
             return true;
         }
         // wait consistency check if has done external cooldown
@@ -286,7 +292,6 @@ public class ExternalCooldownPartitionSelector {
             if (partition == null) {
                 continue;
             }
-
             boolean isSatisfied = isPartitionSatisfied(partition);
             if (isSatisfied) {
                 LOG.info("choose partition[{}-{}] to external cool down", tableName, partition.getName());

@@ -265,13 +265,14 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     }
 
     public boolean couldUseExternalCoolDownPartition(Partition partition) {
-        return partition.getVisibleVersionTime() <= this.getExternalCoolDownSyncedTimeMs(partition.getId()) &&
+        long visibleVersionTime = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
+        return visibleVersionTime <= this.getExternalCoolDownSyncedTimeMs(partition.getId()) &&
                 this.getExternalCoolDownSyncedTimeMs(partition.getId()) > 0;
     }
 
     public boolean couldUseExternalCoolDownPartition(Partition partition, long visibleVersionTime) {
         // just change from 1(initial version) to 2
-        if (partition.getVisibleVersion() == 2) {
+        if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 2) {
             return true;
         }
 

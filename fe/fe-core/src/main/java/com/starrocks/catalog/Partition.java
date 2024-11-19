@@ -173,14 +173,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         return distributionInfo;
     }
 
-    public long getVisibleVersion() {
-        return visibleVersion;
-    }
-
-    public long getVisibleVersionTime() {
-        return visibleVersionTime;
-    }
-
     public void setDistributionInfo(DistributionInfo distributionInfo) {
         this.distributionInfo = distributionInfo;
     }

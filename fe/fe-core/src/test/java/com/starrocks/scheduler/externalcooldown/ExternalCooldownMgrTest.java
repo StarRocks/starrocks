@@ -17,7 +17,7 @@ package com.starrocks.scheduler.externalcooldown;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -114,7 +114,7 @@ public class ExternalCooldownMgrTest {
         Assert.assertEquals(0, mgr.getRunnableJobs().size());
 
         long updateTime = System.currentTimeMillis() - 3600 * 1000;
-        Partition p1 = table.getPartition("p20200101");
+        PhysicalPartition p1 = table.getPartition("p20200101").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         String sql1 = "ALTER TABLE tbl1 SET(\"external_cooldown_target\" = \"iceberg0.partitioned_transforms_db.t0_day\");";

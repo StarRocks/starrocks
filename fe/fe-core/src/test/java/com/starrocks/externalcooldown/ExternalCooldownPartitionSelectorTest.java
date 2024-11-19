@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -323,13 +324,13 @@ public class ExternalCooldownPartitionSelectorTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl1");
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p2 = table.getPartition("p2");
+        PhysicalPartition p2 = table.getPartition("p2").getDefaultPhysicalPartition();
         p2.updateVisibleVersion(p2.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
-        Partition p5 = table.getPartition("p5");
+        PhysicalPartition p5 = table.getPartition("p5").getDefaultPhysicalPartition();
         p5.updateVisibleVersion(p5.getVisibleVersion() + 1, System.currentTimeMillis());
 
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -355,13 +356,13 @@ public class ExternalCooldownPartitionSelectorTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl2");
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p2 = table.getPartition("p2");
+        PhysicalPartition p2 = table.getPartition("p2").getDefaultPhysicalPartition();
         p2.updateVisibleVersion(p2.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
-        Partition p5 = table.getPartition("p5");
+        PhysicalPartition p5 = table.getPartition("p5").getDefaultPhysicalPartition();
         p5.updateVisibleVersion(p5.getVisibleVersion() + 1, updateTime);
 
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -387,13 +388,13 @@ public class ExternalCooldownPartitionSelectorTest {
     public void testForce() throws Exception {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl3");
 
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
-        Partition p2 = table.getPartition("p2");
+        PhysicalPartition p2 = table.getPartition("p2").getDefaultPhysicalPartition();
         p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
-        Partition p4 = table.getPartition("p4");
+        PhysicalPartition p4 = table.getPartition("p4").getDefaultPhysicalPartition();
         p4.updateVisibleVersion(p4.getVisibleVersion() + 1);
-        Partition p5 = table.getPartition("p5");
+        PhysicalPartition p5 = table.getPartition("p5").getDefaultPhysicalPartition();
         p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
 
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -421,7 +422,7 @@ public class ExternalCooldownPartitionSelectorTest {
         OlapTable olapTable = (OlapTable) table;
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("tbl4");
+        PhysicalPartition p1 = table.getPartition("tbl4").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(olapTable);
@@ -451,9 +452,9 @@ public class ExternalCooldownPartitionSelectorTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl5");
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector((OlapTable) table);
@@ -473,9 +474,9 @@ public class ExternalCooldownPartitionSelectorTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl6");
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector((OlapTable) table);
@@ -533,9 +534,9 @@ public class ExternalCooldownPartitionSelectorTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl7");
 
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector((OlapTable) table);
@@ -551,7 +552,7 @@ public class ExternalCooldownPartitionSelectorTest {
     public void testNonPartitionTableWithIcebergPartitioned() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl8");
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("tbl8");
+        PhysicalPartition p1 = table.getPartition("tbl8").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector((OlapTable) table);
@@ -563,11 +564,11 @@ public class ExternalCooldownPartitionSelectorTest {
     public void testGetPartitionsInRange() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl9");
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
-        Partition p4 = table.getPartition("p4");
+        PhysicalPartition p4 = table.getPartition("p4").getDefaultPhysicalPartition();
         p4.updateVisibleVersion(p4.getVisibleVersion() + 1, updateTime);
 
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(
@@ -601,7 +602,7 @@ public class ExternalCooldownPartitionSelectorTest {
     public void testGetPartitionsNull() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl9");
         long updateTime = System.currentTimeMillis() - 2000;
-        Partition p1 = table.getPartition("p1");
+        PhysicalPartition p1 = table.getPartition("p1").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         new MockUp<OlapTable>() {
@@ -639,28 +640,32 @@ public class ExternalCooldownPartitionSelectorTest {
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(table);
         long updateTime = System.currentTimeMillis() - 2000;
         Partition p1 = table.getPartition("p1");
-        p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
+        p1.getDefaultPhysicalPartition().updateVisibleVersion(
+                p1.getDefaultPhysicalPartition().getVisibleVersion() + 1, updateTime);
         partitionInfo.setExternalCoolDownSyncedTimeMs(p1.getId(), updateTime);
         partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(p1.getId(), updateTime + 1000);
         partitionInfo.setCoolDownConsistencyCheckDifference(p1.getId(), 0);
         Assert.assertFalse(selector.isPartitionSatisfied(p1));
 
         Partition p2 = table.getPartition("p2");
-        p2.updateVisibleVersion(p2.getVisibleVersion() + 1, updateTime);
+        p2.getDefaultPhysicalPartition().updateVisibleVersion(
+                p2.getDefaultPhysicalPartition().getVisibleVersion() + 1, updateTime);
         partitionInfo.setExternalCoolDownSyncedTimeMs(p2.getId(), updateTime);
         partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(p2.getId(), updateTime - 1000);
         partitionInfo.setCoolDownConsistencyCheckDifference(p2.getId(), 0);
         Assert.assertFalse(selector.isPartitionSatisfied(p2));
 
         Partition p3 = table.getPartition("p3");
-        p3.updateVisibleVersion(p3.getVisibleVersion() + 1, updateTime);
+        p3.getDefaultPhysicalPartition().updateVisibleVersion(
+                p3.getDefaultPhysicalPartition().getVisibleVersion() + 1, updateTime);
         partitionInfo.setExternalCoolDownSyncedTimeMs(p3.getId(), updateTime);
         partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(p3.getId(), updateTime + 1000);
         partitionInfo.setCoolDownConsistencyCheckDifference(p3.getId(), 1);
         Assert.assertTrue(selector.isPartitionSatisfied(p3));
 
         Partition p4 = table.getPartition("p4");
-        p4.updateVisibleVersion(p4.getVisibleVersion() + 1, updateTime);
+        p4.getDefaultPhysicalPartition().updateVisibleVersion(
+                p4.getDefaultPhysicalPartition().getVisibleVersion() + 1, updateTime);
         partitionInfo.setExternalCoolDownSyncedTimeMs(p4.getId(), updateTime);
         partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(p4.getId(), updateTime - 1000);
         partitionInfo.setCoolDownConsistencyCheckDifference(p4.getId(), -1);
@@ -684,7 +689,7 @@ public class ExternalCooldownPartitionSelectorTest {
             }
         };
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl12");
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, p3.getVisibleVersionTime());
         ExternalCooldownPartitionSelector selector3 = new ExternalCooldownPartitionSelector(table);
         List<Partition> satisfiedPartitions3 = selector3.computeSatisfiedPartitions(-1);
@@ -700,7 +705,7 @@ public class ExternalCooldownPartitionSelectorTest {
             }
         };
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl12");
-        Partition p3 = table.getPartition("p3");
+        PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
         p3.updateVisibleVersion(p3.getVisibleVersion() + 1, p3.getVisibleVersionTime());
         ExternalCooldownPartitionSelector selector3 = new ExternalCooldownPartitionSelector(
                 table, "2024-03-02 00:00:00", "2024-03-05 00:00:00", true);
@@ -715,7 +720,7 @@ public class ExternalCooldownPartitionSelectorTest {
                     new AnalysisException("test"));
 
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl12");
-            Partition p3 = table.getPartition("p3");
+            PhysicalPartition p3 = table.getPartition("p3").getDefaultPhysicalPartition();
             p3.updateVisibleVersion(p3.getVisibleVersion() + 1, p3.getVisibleVersionTime());
             ExternalCooldownPartitionSelector selector3 = new ExternalCooldownPartitionSelector(
                     table, "2024-03-02 00:00:00", "2024-03-05 00:00:00", true);

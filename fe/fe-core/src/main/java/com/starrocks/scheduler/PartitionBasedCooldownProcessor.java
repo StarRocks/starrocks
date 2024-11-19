@@ -141,7 +141,7 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
                     .setCatalog(ctx.getCurrentCatalog())
                     .setStmt(definition);
 
-            long visibleVersionTime = partition.getVisibleVersionTime();
+            long visibleVersionTime = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
             StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(definition, 0));
             executor = new StmtExecutor(ctx, sqlStmt);

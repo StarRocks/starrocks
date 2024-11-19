@@ -17,7 +17,7 @@ package com.starrocks.scheduler.externalcooldown;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -164,7 +164,7 @@ public class ExternalCooldownMaintenanceJobTest {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl1");
         long updateTime = System.currentTimeMillis() - 3600 * 1000;
-        Partition p1 = table.getPartition("p20200101");
+        PhysicalPartition p1 = table.getPartition("p20200101").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         // 1. Write job to file
@@ -231,7 +231,7 @@ public class ExternalCooldownMaintenanceJobTest {
         Assert.assertFalse(job3.isRunnable());
 
         long updateTime = System.currentTimeMillis() - 3600 * 1000;
-        Partition p1 = table.getPartition("p20200101");
+        PhysicalPartition p1 = table.getPartition("p20200101").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1, updateTime);
 
         String sql1 = "ALTER TABLE tbl2 SET(\"external_cooldown_target\" = \"iceberg0.partitioned_transforms_db.t0_day\");";

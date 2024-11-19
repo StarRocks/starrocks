@@ -16,7 +16,7 @@
 package com.starrocks.scheduler.externalcooldown;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
@@ -114,13 +114,13 @@ public class ExternalCooldownExecutorTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt1);
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(TEST_DB_NAME, "tbl1");
-        Partition p1 = table.getPartition("p20200101");
+        PhysicalPartition p1 = table.getPartition("p20200101").getDefaultPhysicalPartition();
         p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
-        Partition p2 = table.getPartition("p20200102");
+        PhysicalPartition p2 = table.getPartition("p20200102").getDefaultPhysicalPartition();
         p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
-        Partition p4 = table.getPartition("p20200104");
+        PhysicalPartition p4 = table.getPartition("p20200104").getDefaultPhysicalPartition();
         p4.updateVisibleVersion(p4.getVisibleVersion() + 1);
-        Partition p5 = table.getPartition("p20200105");
+        PhysicalPartition p5 = table.getPartition("p20200105").getDefaultPhysicalPartition();
         p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
 
         // run
