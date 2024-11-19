@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.lattice;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.FeConstants;
@@ -114,6 +115,39 @@ public class AutoMVSSBTest {
             printer.addItemsWithDelNl(";", row);
             System.out.println(printer.getResult());
         }
+    }
+
+    @Test
+    public void testFlatQ11Q12Q13Merge() {
+        ConnectContext ctx = STARROCKS_ASSERT.get().getCtx();
+        List<Pair<String, String>> queryList = ImmutableList.of(
+                Pair.create("ssb1.1", "select sum(lo_revenue) as revenue\n" +
+                        "from lineorder join dates on lo_orderdate = d_datekey\n" +
+                        "where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25"),
+                Pair.create("ssb1.2", "select sum(lo_revenue) as revenue\n" +
+                        "from lineorder\n" +
+                        "join dates on lo_orderdate = d_datekey\n" +
+                        "where d_yearmonthnum = 199401\n" +
+                        "and lo_discount between 4 and 6\n" +
+                        "and lo_quantity between 26 and 35"),
+                Pair.create("ssb1.3", "select sum(lo_revenue) as revenue\n" +
+                        "from lineorder\n" +
+                        "join dates on lo_orderdate = d_datekey\n" +
+                        "where d_weeknuminyear = 6 and d_year = 1994\n" +
+                        "and lo_discount between 5 and 7\n" +
+                        "and lo_quantity between 26 and 35")
+
+        );
+        AutoMVUtil.mockUpCustomizedQueryExecutor(queryList);
+        TableName tableName = new TableName(null, "db", "_tunespace_");
+        ShowRecommendationsStmt stmt = new ShowRecommendationsStmt(tableName, -1, -1);
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioLWM(1.0);
+        ctx.getSessionVariable().setAutoMVCardRowCountRatioHWM(1.0);
+        ctx.getSessionVariable().setAutoMVUseHllCountDistinct(true);
+        ShowResultSet showResultSet = TunespaceExecutor.execute(stmt, ctx);
+        String expectString = "[\"ssb1.1.part.0\", \"ssb1.2.part.0\", \"ssb1.3.part.0\"]";
+        boolean result = showResultSet.getResultRows().stream().anyMatch(row -> row.get(14).equals(expectString));
+        Assert.assertTrue(result);
     }
 
     @Test

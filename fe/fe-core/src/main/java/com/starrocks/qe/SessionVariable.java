@@ -835,6 +835,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String AUTOMV_SAMPLING_TIMEOUT = "automv_sampling_timeout";
     public static final String AUTOMV_CARD_ROWCOUNT_RATIO_LWM = "automv_card_rowcount_ratio_lwm";
     public static final String AUTOMV_CARD_ROWCOUNT_RATIO_HWM = "automv_card_rowcount_ratio_hwm";
+
+    public static final String AUTOMV_CARD_ROWCOUNT_RATIO_LWM_V2 = "automv_card_rowcount_ratio_lwm_v2";
+    public static final String AUTOMV_CARD_ROWCOUNT_RATIO_HWM_V2 = "automv_card_rowcount_ratio_hwm_v2";
     public static final String AUTOMV_MAX_CALCULATE_STEPS = "automv_max_calculate_steps";
 
     public static final String AUTOMV_ENABLE_COMPLEX_DERIVED_METRICS = "automv_enable_complex_derived_metrics";
@@ -2334,10 +2337,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = AUTOMV_SAMPLING_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private long autoMVSamplingTimeout = 300000;
 
-    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_LWM)
+    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_LWM_V2, alias = AUTOMV_CARD_ROWCOUNT_RATIO_LWM,
+            show = AUTOMV_CARD_ROWCOUNT_RATIO_LWM)
     private double autoMVCardRowCountRatioLWM = 0.1;
 
-    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_HWM)
+    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_HWM_V2, alias = AUTOMV_CARD_ROWCOUNT_RATIO_HWM,
+            show = AUTOMV_CARD_ROWCOUNT_RATIO_HWM)
     private double autoMVCardRowCountRatioHWM = 0.6;
 
     @VarAttr(name = AUTOMV_MAX_CALCULATE_STEPS, flag = VariableMgr.INVISIBLE)

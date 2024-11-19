@@ -449,6 +449,7 @@ public class AutoMVPartitionPolicyTest {
         };
         AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
                 sv -> {
+                    GlobalVariable.setEnableAutoMVLifecycleKeeper(true);
                     GlobalVariable.setAutoMVPerLatticeMVLimit(1);
                     GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.1);
                     GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);
@@ -490,6 +491,7 @@ public class AutoMVPartitionPolicyTest {
             int mvLimit = n;
             AutoMVUtil.testHelper(getStarRocksAssert().getCtx(), queryList,
                     sv -> {
+                        GlobalVariable.setEnableAutoMVLifecycleKeeper(true);
                         GlobalVariable.setAutoMVPerLatticeMVLimit(mvLimit);
                         GlobalVariable.setAutoMVPerLatticeMVSelectivityRatio(0.3);
                         GlobalVariable.setAutoMVPartitionedMVCardMax(1.0E11);

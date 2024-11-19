@@ -318,18 +318,24 @@ public class MVRecommender {
                 .collect(Collectors.toList());
     }
 
+    // Only AutoMV L3 shall turn on MV Selector
+    private boolean enableMVSelector() {
+        return GlobalVariable.isEnableAutoMVLifecycleKeeper() &&
+                (GlobalVariable.getAutoMVPerLatticeMVLimit() > 0 ||
+                        GlobalVariable.getAutoMVPerLatticeMVSelectivityRatio() > 0);
+    }
+
     private TieredList<MVRecommendation> pickupRecommendations(List<PlanPiece> pieces,
                                                                CardEstimationPolicy cardEstimationPolicy) {
 
         Lattice lattice = Lattice.createLattice(pieces, options.isDecayAcceleratedQueries());
         TieredList<MVRecommendation> recommendations = cardEstimationPolicy.estimate(lattice);
-        if (GlobalVariable.getAutoMVPerLatticeMVLimit() <= 0 &&
-                GlobalVariable.getAutoMVPerLatticeMVSelectivityRatio() <= 0) {
-            return recommendations;
+        if (enableMVSelector()) {
+            MVRecommendationSelectOptions selectOptions = new MVRecommendationSelectOptions();
+            MVRecommendationSelector selector = new MVRecommendationSelector(selectOptions);
+            return selector.select(recommendations);
         }
-        MVRecommendationSelectOptions selectOptions = new MVRecommendationSelectOptions();
-        MVRecommendationSelector selector = new MVRecommendationSelector(selectOptions);
-        return selector.select(recommendations);
+        return recommendations;
     }
 
     public List<MVRecommendation> recommendUsingCardinalityEstimation(Collection<List<PlanPiece>> pieceGroups,

@@ -30,6 +30,7 @@ public final class QueryGenerateContext {
     private final List<Pair<Integer, GenericColumn>> outputColumns;
     private final ColumnRefSet inputColumnIds;
     private List<QueryGenerateResult> inputResults;
+
     private QueryGenerateContext(boolean trace, boolean reserveConjuncts, boolean newTableAliasForTopPiece,
                                  boolean rectifyTableName, List<Pair<Integer, GenericColumn>> outputColumns,
                                  ColumnRefSet inputColumnIds) {
