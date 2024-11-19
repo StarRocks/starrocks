@@ -101,10 +101,15 @@ public class PartitionUtil {
 
     public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
 
+    @Deprecated
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
     }
 
+    /**
+     * Use createPartitionKey instead, because `createPartitionKeyWithType` not takes care timezone.
+     */
+    @Deprecated
     public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
                                                           Table.TableType tableType) throws AnalysisException {
         return ConnectorPartitionTraits.build(tableType).createPartitionKeyWithType(values, types);
@@ -406,7 +411,7 @@ public class PartitionUtil {
                                 .map(p -> getPartitionNameForJDBCTable(partitionColumns.get(p), partitionName))
                                 .collect(Collectors.toList()),
                         partitionColumnIdxes.stream().map(partitionColumns::get).collect(Collectors.toList()),
-                        table.getType());
+                        table);
                 String mvPartitionName = generateMVPartitionName(partitionKey);
                 mvPartitionKeySetMap.computeIfAbsent(mvPartitionName, x -> Sets.newHashSet())
                         .add(partitionName);
