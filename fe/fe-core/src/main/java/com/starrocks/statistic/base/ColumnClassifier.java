@@ -50,6 +50,7 @@ public class ColumnClassifier {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
                 }
             } else {
+                // to split & valid struct subfield column, like 'a.b.c.d'
                 int start = 0;
                 int end;
                 List<String> names = Lists.newArrayList();
