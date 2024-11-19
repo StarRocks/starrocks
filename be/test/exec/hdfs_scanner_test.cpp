@@ -2299,6 +2299,47 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
+    TypeDescriptor array_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    array_col.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"array", array_col},
+                            {"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_last_element_is_empty.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.__set_field_delim(DEFAULT_FIELD_DELIM);
+        range->text_file_desc.__set_collection_delim(DEFAULT_COLLECTION_DELIM);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        std::vector<std::string> hive_column_names{"id", "array", "sex"};
+        param->hive_column_names = &hive_column_names;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['1', ['1','2',''], 'man']", chunk->debug_row(0));
+        EXPECT_EQ("['2', ['2','3',''], 'female']", chunk->debug_row(1));
+        EXPECT_EQ("['3', ['3','4','5'], 'man']", chunk->debug_row(2));
+        scanner->close();
+    }
+}
+
 TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
 
