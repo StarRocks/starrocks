@@ -143,6 +143,26 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t7` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t8` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `colocate_t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
