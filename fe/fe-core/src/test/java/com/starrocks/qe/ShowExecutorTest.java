@@ -51,7 +51,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -1176,7 +1175,7 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowKeysFromExternalTable() {
+    public void testShowKeysFromTable() {
         ShowIndexStmt stmt = new ShowIndexStmt("test_db",
                 new TableName(null, "test_db", "test_table"));
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
