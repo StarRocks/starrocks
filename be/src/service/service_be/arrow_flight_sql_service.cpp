@@ -51,7 +51,7 @@ void ArrowFlightSqlServer::stop() {
         return;
     }
     _running = false;
-    if (const Status status = Shutdown(); !status.ok()) {
+    if (const auto status = Shutdown(); !status.ok()) {
         LOG(INFO) << "[ARROW] Failed to stop Arrow Flight SQL Server [error=" << status << "]";
     }
 }
