@@ -72,6 +72,24 @@ public class ConfigTest {
     }
 
     @Test
+    public void testDisableStoreConfig() throws Exception {
+        Config.setIsPersisted(false);
+        Config.setMutableConfig("adaptive_choose_instances_threshold", "98");
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
+        List<List<String>>  configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("98", configs.get(0).get(2));
+        Assert.assertEquals(98, Config.adaptive_choose_instances_threshold);
+
+        // Reload from file
+        URL resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
+        assert resource != null;
+        config.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configs = Config.getConfigInfo(matcher);
+        Assert.assertEquals("99", configs.get(0).get(2));
+        Assert.assertEquals(99, Config.adaptive_choose_instances_threshold);
+    }
+
+    @Test
     public void testConfigGetCompatibleWithOldName() throws Exception {
         URL resource = getClass().getClassLoader().getResource("conf/config_test2.properties");
         assert resource != null;

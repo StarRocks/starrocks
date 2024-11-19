@@ -34,6 +34,7 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +82,7 @@ public class ConfigBase {
 
     protected Properties props = new Properties();
     private static String mutableConfigPath;
+    private static boolean isPersisted = false;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
@@ -104,6 +106,9 @@ public class ConfigBase {
             props.load(reader);
         }
         setFields();
+        if (Files.isWritable(path)) {
+            isPersisted = true;
+        }
     }
 
 
@@ -321,6 +326,10 @@ public class ConfigBase {
     }
 
     public static void storeMutable(String key, String value) throws Exception {
+        if (!isPersisted) {
+            LOG.warn("Config file:{} is not writable, skip saving config", mutableConfigPath);
+            return;
+        }
         Properties props = new Properties();
         try (FileReader reader = new FileReader(mutableConfigPath)) {
             props.load(reader);
@@ -402,5 +411,10 @@ public class ConfigBase {
         }
 
         return configs;
+    }
+
+    @VisibleForTesting
+    public static void setIsPersisted(boolean isPersisted) {
+        ConfigBase.isPersisted = isPersisted;
     }
 }
