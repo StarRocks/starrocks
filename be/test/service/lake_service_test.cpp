@@ -129,7 +129,7 @@ TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
     request.add_tablet_ids(_tablet_id);
     _lake_service.publish_version(&cntl, &request, &response, nullptr);
     ASSERT_TRUE(cntl.Failed());
-    ASSERT_EQ("neither txn_ids nor txn_infos is set, one of them must be set", cntl.ErrorText());
+    ASSERT_EQ("missing txn_ids and txn_infos", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
