@@ -46,7 +46,7 @@ public:
     void evict_rowset(Rowset* ptr);
 
     // warmup rowset, so we can make this rowset as newest entry in lru cache.
-    void warmup_rowset(Rowset* ptr);
+    void refresh_rowset(Rowset* ptr);
 
     // Memory usage of lru cache
     size_t get_memory_usage() const;
@@ -55,7 +55,7 @@ public:
     void set_capacity(size_t capacity);
 
 private:
-    void _insert(const std::string& key, Rowset* ptr, size_t size);
+    void _insert(const std::string& key, std::weak_ptr<Rowset>* ptr, size_t size);
     void _erase(const std::string& key);
     void _warmup(const std::string& key);
     static void _cache_value_deleter(const CacheKey& /*key*/, void* value);
