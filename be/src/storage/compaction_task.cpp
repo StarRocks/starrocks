@@ -134,7 +134,17 @@ void CompactionTask::run() {
     // get elapsed_time in us
     _task_info.elapsed_time = _watch.elapsed_time() / 1000;
     is_finished = true;
+<<<<<<< HEAD
     LOG(INFO) << "compaction finish. status:" << status.to_string() << ", task info:" << _task_info.to_string();
+=======
+    std::string msg = strings::Substitute("compaction finish. status:$0, task info:$1", status.to_string(),
+                                          _task_info.to_string());
+    if (!status.ok()) {
+        LOG(WARNING) << msg;
+    } else {
+        LOG(INFO) << msg;
+    }
+>>>>>>> 49f6f36538 ([BugFix] Fix disable base compaction with minute granularity & fe/be recover (#52923))
 }
 
 bool CompactionTask::should_stop() const {
