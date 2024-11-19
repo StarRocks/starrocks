@@ -37,6 +37,7 @@
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
+#include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
@@ -53,6 +54,7 @@ class TabletManager;
 
 class LakeTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriter = lake::AsyncDeltaWriter;
+    using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
     LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
@@ -118,6 +120,11 @@ private:
             info->set_schema_hash(0); // required field
         }
 
+        void add_txn_log(const TxnLogPtr& txn_log) {
+            std::lock_guard l(_mtx);
+            _response->mutable_lake_tablet_data()->add_txn_logs()->CopyFrom(*txn_log);
+        }
+
     private:
         friend class LakeTabletsChannel;
 
@@ -177,6 +184,7 @@ private:
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
     bool _is_incremental_channel{false};
+    lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
 
     std::set<int64_t> _immutable_partition_ids;
     std::map<string, string> _column_to_expr_value;
@@ -233,6 +241,10 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _index_id = params.index_id();
     _schema = schema;
     _is_incremental_channel = is_incremental;
+    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
+        _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
+                                                                   : lake::DeltaWriterFinishMode::kDontWriteTxnLog;
+    }
 
     _senders = std::vector<Sender>(params.num_senders());
     if (_is_incremental_channel) {
@@ -417,13 +429,19 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                     continue;
                 }
-                dw->finish([&, id = tablet_id](const Status& st) {
-                    if (st.ok()) {
+                dw->finish(_finish_mode, [&, id = tablet_id](StatusOr<TxnLogPtr> res) {
+                    if (!res.ok()) {
+                        context->update_status(res.status());
+                        LOG(ERROR) << "Fail to finish tablet " << id << ": " << res.status();
+                    } else if (_finish_mode == lake::DeltaWriterFinishMode::kWriteTxnLog) {
                         context->add_finished_tablet(id);
                         VLOG(5) << "Finished tablet " << id;
+                    } else if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+                        context->add_finished_tablet(id);
+                        context->add_txn_log(res.value());
+                        VLOG(5) << "Finished tablet " << id;
                     } else {
-                        context->update_status(st);
-                        LOG(ERROR) << "Fail to finish tablet " << id << ": " << st;
+                        CHECK(false) << "Unhandled finish mode: " << _finish_mode;
                     }
                     count_down_latch.count_down();
                 });

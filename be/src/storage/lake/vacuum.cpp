@@ -416,6 +416,11 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
             if (txn_id >= min_active_txn_id) {
                 return true;
             }
+        } else if (is_combined_txn_log(entry.name)) {
+            auto txn_id = parse_combined_txn_log_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
         } else {
             return true;
         }

@@ -288,7 +288,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
-    RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
+    RETURN_IF_ERROR(writer->finish(DeltaWriterFinishMode::kDontWriteTxnLog));
 
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));

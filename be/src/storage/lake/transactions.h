@@ -19,6 +19,10 @@
 #include "common/statusor.h"
 #include "storage/lake/tablet_metadata.h"
 
+namespace starrocks {
+class TxnInfoPB;
+}
+
 namespace starrocks::lake {
 
 class TabletManager;
@@ -28,7 +32,7 @@ class TabletManager;
 // This function does the following:
 //
 // 1. Load the base tablet metadata with id 'tablet_id' and version 'base_version'.
-// 2. Read the transaction logs for all 'txn_ids' sequentially and apply them to the base metadata.
+// 2. Read the transaction logs for all 'txns' sequentially and apply them to the base metadata.
 // 3. Save the result as a new tablet metadata with version 'new_version'.
 // 4. Update the metadata's commit timestamp to 'commit_time'.
 // 5. Persist the new metadata to the object storage.
@@ -39,11 +43,12 @@ class TabletManager;
 // - base_version Version of the base metadata
 // - new_version The new version to be published
 // - txns Transactions to apply in sequence
+// - commit_time New commit timestamp
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, const std::vector<TxnInfoPB>& txns);
+                                            int64_t new_version, std::span<const TxnInfoPB> txns);
 
 // Publish a batch new versions of transaction logs.
 //
@@ -73,11 +78,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
-// - txn_ids A `std::span` of `int64_t` containing the transaction IDs to be aborted.
-// - txn_types A `std::span` of `int32_t(TxnTypePB)` containing the transaction types to be aborted.
-//             Using int32_t instead of TxnTypePB due to protobuf uses int32_t to store enum
+// - txns A `std::span` of `TxnInfoPB` containing information of the transactions to be aborted.
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
-               std::span<const int32_t> txn_types);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
 
 } // namespace starrocks::lake
