@@ -1383,6 +1383,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             checkPartitionType(partitionInfo);
 
             // analyze add partition
+            upgradeDeprecatedSingleItemListPartitionDesc(olapTable, partitionDescs, addPartitionClause, partitionInfo);
             analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
@@ -1465,6 +1466,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
             throw e;
+        }
+    }
+
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    private void upgradeDeprecatedSingleItemListPartitionDesc(OlapTable table,
+                                                              List<PartitionDesc> partitionDescs,
+                                                              AddPartitionClause addPartitionClause,
+                                                              PartitionInfo partitionInfo) throws AnalysisException {
+        if (!partitionInfo.isListPartition()) {
+            return;
+        }
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        boolean addSingleColumnPartition = partitionDescs.get(0) instanceof SingleItemListPartitionDesc;
+        if (addSingleColumnPartition &&
+                !listPartitionInfo.isMultiColumnPartition() &&
+                listPartitionInfo.isDeFactoMultiItemPartition()) {
+            Preconditions.checkState(partitionDescs.size() == 1);
+            MultiItemListPartitionDesc newDesc =
+                    ((SingleItemListPartitionDesc) partitionDescs.get(0)).upgradeToMultiItem();
+            partitionDescs.set(0, newDesc);
+            addPartitionClause.setPartitionDesc(newDesc);
         }
     }
 
