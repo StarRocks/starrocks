@@ -40,6 +40,10 @@ public class RelationId {
         return new RelationId(requireNonNull(sourceNode, "source cannot be null"));
     }
 
+    public Relation getSourceNode() {
+        return sourceNode;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

@@ -409,3 +409,62 @@ DROP VIEW v1;
 CREATE VIEW v2 AS WITH tmp AS (SELECT t1.k AS col1, t1.v AS col2, t2.k AS col3, t2.v AS col4 FROM t1, t2) SELECT tmp.col1 + 10, tmp.col3 + 10 FROM tmp;
 function: assert_explain_contains('SELECT * FROM v2', "k + 10")
 DROP VIEW v2;
+
+-- name: test_view_analyzed_rewrite_failure
+CREATE TABLE `t_view_analyzed_rewrite_failure_1` (
+  `id_1` bigint(20) NOT NULL COMMENT "",
+  `col_2` STRING AS CONCAT(CAST(id_1 AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id_1`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_view_analyzed_rewrite_failure_2` (
+  `id_3` bigint(20) NOT NULL COMMENT "",
+  `col_4` STRING AS CONCAT(CAST(id_3 AS STRING), "_abc")
+) ENGINE=OLAP 
+DUPLICATE KEY(`id_3`)
+DISTRIBUTED BY RANDOM BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_view_analyzed_rewrite_failure_1 VALUES (1);
+INSERT INTO t_view_analyzed_rewrite_failure_2 VALUES (1);
+INSERT INTO t_view_analyzed_rewrite_failure_2 VALUES (2);
+
+CREATE VIEW v1 (v1_col1, v1_col2, v1_col3, v1_col4) as
+WITH tmp as (SELECT id_1, col_2 from `t_view_analyzed_rewrite_failure_1`)
+select tmp.id_1, tmp.col_2, t_view_analyzed_rewrite_failure_2.id_3, t_view_analyzed_rewrite_failure_2.col_4 from tmp, t_view_analyzed_rewrite_failure_2 where
+CONCAT(CAST(tmp.id_1 AS STRING), "_abc") = CONCAT(CAST(t_view_analyzed_rewrite_failure_2.id_3 AS STRING), "_abc");
+
+CREATE VIEW v2 (v1_col1, v1_col2, v1_col3, v1_col4) as
+(WITH tmp as (SELECT id_1, col_2 from `t_view_analyzed_rewrite_failure_1`)
+select tmp.id_1, tmp.col_2, t_view_analyzed_rewrite_failure_2.id_3, t_view_analyzed_rewrite_failure_2.col_4 from tmp, t_view_analyzed_rewrite_failure_2 where
+CONCAT(CAST(tmp.id_1 AS STRING), "_abc") = CONCAT(CAST(t_view_analyzed_rewrite_failure_2.id_3 AS STRING), "_abc"));
+
+CREATE VIEW v3 (v1_col1, v1_col2, v1_col3, v1_col4) as
+WITH tmp as (SELECT id_1, col_2 from `t_view_analyzed_rewrite_failure_1`)
+select tmp.id_1 AS new_col1, tmp.col_2 AS new_col2, t_view_analyzed_rewrite_failure_2.id_3 AS new_col3, t_view_analyzed_rewrite_failure_2.col_4 AS new_col4 from tmp, t_view_analyzed_rewrite_failure_2 where
+CONCAT(CAST(tmp.id_1 AS STRING), "_abc") = CONCAT(CAST(t_view_analyzed_rewrite_failure_2.id_3 AS STRING), "_abc");
+
+function: assert_explain_not_contains('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v1', "abc")
+function: assert_is_identical_explain_plan('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v1', "SELECT v1_col2 from v1")
+
+function: assert_explain_not_contains('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v2', "abc")
+function: assert_is_identical_explain_plan('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v2', "SELECT v1_col2 from v2")
+
+function: assert_explain_not_contains('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v3', "abc")
+function: assert_is_identical_explain_plan('SELECT CONCAT(CAST(v1_col1 AS STRING), "_abc") from v3', "SELECT v1_col2 from v3")
