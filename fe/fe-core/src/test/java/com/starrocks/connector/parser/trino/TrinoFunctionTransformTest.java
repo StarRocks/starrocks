@@ -349,6 +349,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testExtractFnTransform() throws Exception {
+        String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "dayofweek_iso('2022-10-20 05:10:00')");
+        sql = "SELECT extract(week FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "week_iso('2022-10-20 05:10:00')");
+    }
+
+
+    @Test
     public void testBitFnTransform() throws Exception {
         String sql = "select bitwise_and(19,25)";
         assertPlanContains(sql, "17");
