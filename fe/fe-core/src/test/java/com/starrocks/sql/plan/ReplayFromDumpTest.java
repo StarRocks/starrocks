@@ -1005,6 +1005,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testPushdownSubfield() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/pushdown_subfield");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        queryDumpInfo.getSessionVariable().setCboExtractCommonPlan(false);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  10:Project\n" +
