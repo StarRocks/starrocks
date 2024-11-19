@@ -63,6 +63,22 @@ public class EditLogEPack extends EditLog {
         logEdit(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
     }
 
+    public void logCreatePasswordPolicy(CreatePasswordPolicyLog createPasswordPolicyLog) {
+        logEdit(OperationTypeEPack.OP_CREATE_PASSWORD_POLICY, createPasswordPolicyLog);
+    }
+
+    public void logDropPasswordPolicy(DropPasswordPolicyLog dropPasswordPolicyLog) {
+        logEdit(OperationTypeEPack.OP_DROP_PASSWORD_POLICY, dropPasswordPolicyLog);
+    }
+
+    public void logSetGlobalPasswordPolicy(SetPasswordPolicyLog setPasswordPolicyLog) {
+        logEdit(OperationTypeEPack.OP_SET_PASSWORD_POLICY, setPasswordPolicyLog);
+    }
+
+    public void logUnsetGlobalPasswordPolicy(UnsetPasswordPolicyLog unsetPasswordPolicyLog) {
+        logEdit(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, unsetPasswordPolicyLog);
+    }
+
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
@@ -108,6 +124,25 @@ public class EditLogEPack extends EditLog {
                 case OperationTypeEPack.OP_DROP_ROLE_MAPPING: {
                     RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayDropRoleMapping(info.name);
+                    break;
+                }
+                case OperationTypeEPack.OP_CREATE_PASSWORD_POLICY: {
+                    CreatePasswordPolicyLog createPasswordPolicyLog = (CreatePasswordPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().doCreatePasswordPolicy(createPasswordPolicyLog);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_PASSWORD_POLICY: {
+                    DropPasswordPolicyLog dropPasswordPolicyLog = (DropPasswordPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().doDropPasswordPolicy(dropPasswordPolicyLog);
+                    break;
+                }
+                case OperationTypeEPack.OP_SET_PASSWORD_POLICY: {
+                    SetPasswordPolicyLog setPasswordPolicyLog = (SetPasswordPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().setGlobalPasswordPolicy(setPasswordPolicyLog.getPasswordPolicyId());
+                    break;
+                }
+                case OperationTypeEPack.OP_UNSET_PASSWORD_POLICY: {
+                    globalStateMgr.getSecurityPolicyManager().setGlobalPasswordPolicy(-1);
                     break;
                 }
                 default: {

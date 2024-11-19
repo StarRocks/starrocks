@@ -113,6 +113,9 @@ public:
     static Status get_policy_references(const SchemaScannerState& state, const TGetPolicyReferencesRequest& request,
                                         TGetPolicyReferenceResponse* response);
 
+    static Status get_users(const SchemaScannerState& state, const TGetUsersRequest& request,
+                            TGetUsersResponse* response);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

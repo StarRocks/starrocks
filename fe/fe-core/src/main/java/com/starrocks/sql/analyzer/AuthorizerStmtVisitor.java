@@ -74,12 +74,12 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
-import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -104,6 +104,7 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
@@ -1122,19 +1123,34 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     // ---------------------------------------- Privilege Statement -----------------------------------
 
     @Override
-    public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
+    public Void visitCreateUserStatement(CreateUserStmt statement, ConnectContext context) {
         try {
-            if (statement.getUserIdentity().equals(UserIdentity.ROOT)
-                    && !context.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
-                throw new SemanticException("Can not modify root user, except root itself");
-            }
-
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
+        if (!statement.getUserIdentity().equals(context.getCurrentUserIdentity())) {
+            try {
+                if (statement.getUserIdentity().equals(UserIdentity.ROOT)
+                        && !context.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
+                    throw new SemanticException("Can not modify root user, except root itself");
+                }
+
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.GRANT.name(), ObjectType.SYSTEM.name(), null);
+            }
         }
         return null;
     }

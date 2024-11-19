@@ -2,6 +2,7 @@
 
 package com.starrocks.epack.authorization;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
@@ -10,11 +11,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
+import com.starrocks.epack.persist.CreatePasswordPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.DropPasswordPolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.persist.SetPasswordPolicyLog;
+import com.starrocks.epack.persist.UnsetPasswordPolicyLog;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -34,6 +42,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -50,12 +59,23 @@ public class SecurityPolicyMgr {
     private final ConcurrentMap<TableUID, PolicyAppliedContext> policyContextMap;
     private final ReentrantReadWriteLock policyLock;
 
+    // Password Policy
+    private final Map<Long, PasswordPolicy> passwordPolicyMap;
+    private final Map<String, Long> passwordPolicyNameToId;
+    private long globalPasswordPolicy;
+    private final ReentrantReadWriteLock passwordPolicyLock;
+
     public SecurityPolicyMgr() {
         idToPolicy = new HashMap<>();
         nameToMaskingPolicy = new HashMap<>();
         nameToRowAccessPolicy = new HashMap<>();
         policyContextMap = new ConcurrentHashMap<>();
         policyLock = new ReentrantReadWriteLock();
+
+        passwordPolicyMap = new HashMap<>();
+        passwordPolicyNameToId = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        globalPasswordPolicy = -1;
+        passwordPolicyLock = new ReentrantReadWriteLock();
     }
 
     public boolean hasTableAppliedPolicy(TableUID tablePEntryObject) {
@@ -370,7 +390,7 @@ public class SecurityPolicyMgr {
     public void save(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for idToPolicy size, 1 json for policyContextMap size, others for each map key and value
-            int cnt = 1 + 1 + idToPolicy.size() + policyContextMap.size() * 2;
+            int cnt = 1 + 1 + idToPolicy.size() + policyContextMap.size() * 2 + passwordPolicyMap.size() + 2;
             SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, cnt);
 
             writer.writeInt(idToPolicy.size());
@@ -383,6 +403,14 @@ public class SecurityPolicyMgr {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
+
+            writer.writeJson(passwordPolicyMap.size());
+            for (Map.Entry<Long, PasswordPolicy> entry : passwordPolicyMap.entrySet()) {
+                PasswordPolicy passwordPolicy = entry.getValue();
+                writer.writeJson(new CreatePasswordPolicyLog(passwordPolicy.getPolicyId(),
+                        passwordPolicy.getPolicyName(), passwordPolicy.getComment(), passwordPolicy.getProperties()));
+            }
+            writer.writeJson(globalPasswordPolicy);
 
             writer.close();
         } catch (SRMetaBlockException e) {
@@ -401,6 +429,22 @@ public class SecurityPolicyMgr {
         });
 
         reader.readMap(TableUID.class, PolicyAppliedContext.class, policyContextMap::put);
+
+        int passwordPolicySize = reader.readJson(int.class);
+        for (int i = 0; i < passwordPolicySize; ++i) {
+            CreatePasswordPolicyLog createPasswordPolicyLog = reader.readJson(CreatePasswordPolicyLog.class);
+
+            passwordPolicyMap.put(createPasswordPolicyLog.getPolicyId(),
+                    new PasswordPolicy(
+                            createPasswordPolicyLog.getPolicyId(),
+                            createPasswordPolicyLog.getPolicyName(),
+                            createPasswordPolicyLog.getComment(),
+                            createPasswordPolicyLog.getProperties()));
+
+            passwordPolicyNameToId.put(createPasswordPolicyLog.getPolicyName(), createPasswordPolicyLog.getPolicyId());
+        }
+
+        this.globalPasswordPolicy = reader.readJson(Long.class);
     }
 
     public void applyMaskingPolicyContext(ConnectContext ctx, TableName tableName, String columnName,
@@ -585,5 +629,133 @@ public class SecurityPolicyMgr {
 
     public ConcurrentMap<TableUID, PolicyAppliedContext> getPolicyContextMap() {
         return policyContextMap;
+    }
+
+    public void createPasswordPolicy(CreatePasswordPolicyStmt stmt) throws DdlException {
+        long policyId = GlobalStateMgr.getCurrentState().getNextId();
+        CreatePasswordPolicyLog createPasswordPolicyLog =
+                new CreatePasswordPolicyLog(policyId, stmt.getPolicyName(), stmt.getComment(), stmt.getProperties());
+        doCreatePasswordPolicy(createPasswordPolicyLog);
+
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logCreatePasswordPolicy(createPasswordPolicyLog);
+    }
+
+    public void doCreatePasswordPolicy(CreatePasswordPolicyLog log) throws DdlException {
+        passwordPolicyLock.writeLock().lock();
+        try {
+            if (passwordPolicyNameToId.containsKey(log.getPolicyName())) {
+                throw new DdlException("Policy " + log.getPolicyName() + " has exist");
+            }
+            PasswordPolicy passwordPolicy = new PasswordPolicy(
+                    log.getPolicyId(), log.getPolicyName(), log.getComment(), log.getProperties());
+
+
+            passwordPolicyNameToId.put(log.getPolicyName(), log.getPolicyId());
+            passwordPolicyMap.put(log.getPolicyId(), passwordPolicy);
+        } finally {
+            passwordPolicyLock.writeLock().unlock();
+        }
+    }
+
+    public void dropPasswordPolicy(DropPasswordPolicyStmt stmt) throws DdlException {
+        String policyName = stmt.getPolicyName();
+        Long passwordPolicyId = passwordPolicyNameToId.get(policyName);
+        if (passwordPolicyId == null) {
+            throw new DdlException("policy " + policyName + " not exists");
+        }
+
+        DropPasswordPolicyLog dropPasswordPolicyLog = new DropPasswordPolicyLog(passwordPolicyId, policyName);
+        doDropPasswordPolicy(dropPasswordPolicyLog);
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logDropPasswordPolicy(dropPasswordPolicyLog);
+    }
+
+    public void doDropPasswordPolicy(DropPasswordPolicyLog log) throws DdlException {
+        passwordPolicyLock.writeLock().lock();
+        try {
+            Long passwordPolicyId = log.getPolicyId();
+            PasswordPolicy passwordPolicy = passwordPolicyMap.get(passwordPolicyId);
+            if (passwordPolicy == null) {
+                throw new DdlException("Password Policy " + log.getPolicyName() + " is not exist");
+            }
+
+            if (passwordPolicyId == globalPasswordPolicy) {
+                throw new DdlException("Policy " + passwordPolicy.getPolicyName() +
+                        " cannot be dropped as it is associated with the current system.");
+            }
+
+            passwordPolicyMap.remove(passwordPolicyId);
+            passwordPolicyNameToId.remove(passwordPolicy.getPolicyName());
+        } finally {
+            passwordPolicyLock.writeLock().unlock();
+        }
+    }
+
+    public List<PasswordPolicy> getAllPasswordPolicies() {
+        passwordPolicyLock.readLock().lock();
+        try {
+            return new ArrayList<>(passwordPolicyMap.values());
+        } finally {
+            passwordPolicyLock.readLock().unlock();
+        }
+    }
+
+    public PasswordPolicy getPasswordPolicy(String policyName) {
+        passwordPolicyLock.readLock().lock();
+        try {
+            Long passwordPolicyId = passwordPolicyNameToId.get(policyName);
+            if (passwordPolicyId == null) {
+                return null;
+            }
+            return passwordPolicyMap.get(passwordPolicyId);
+        } finally {
+            passwordPolicyLock.readLock().unlock();
+        }
+    }
+
+    public void setGlobalPasswordPolicy(String passwordPolicyName) throws DdlException {
+        passwordPolicyLock.writeLock().lock();
+        try {
+            if (!passwordPolicyNameToId.containsKey(passwordPolicyName)) {
+                throw new DdlException("Password Policy " + passwordPolicyName + " not exist");
+            }
+
+            this.globalPasswordPolicy = passwordPolicyNameToId.get(passwordPolicyName);
+        } finally {
+            passwordPolicyLock.writeLock().unlock();
+        }
+        SetPasswordPolicyLog setPasswordPolicyLog = new SetPasswordPolicyLog(this.globalPasswordPolicy);
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logSetGlobalPasswordPolicy(setPasswordPolicyLog);
+    }
+
+    public void setGlobalPasswordPolicy(long globalPasswordPolicy) {
+        passwordPolicyLock.writeLock().lock();
+        try {
+            this.globalPasswordPolicy = globalPasswordPolicy;
+        } finally {
+            passwordPolicyLock.writeLock().unlock();
+        }
+    }
+
+    public void unsetGlobalPasswordPolicy() {
+        passwordPolicyLock.writeLock().lock();
+        try {
+            this.globalPasswordPolicy = -1;
+        } finally {
+            passwordPolicyLock.writeLock().unlock();
+        }
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logUnsetGlobalPasswordPolicy(new UnsetPasswordPolicyLog());
+    }
+
+    public PasswordPolicy getGlobalPasswordPolicy() {
+        passwordPolicyLock.readLock().lock();
+        try {
+            return passwordPolicyMap.get(globalPasswordPolicy);
+        } finally {
+            passwordPolicyLock.readLock().unlock();
+        }
     }
 }

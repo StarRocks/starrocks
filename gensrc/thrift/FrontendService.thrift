@@ -1894,6 +1894,31 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+struct TGetUsersRequest {
+
+}
+
+struct TGetUsersResponse {
+    1: optional list<TGetUsersResponseItem> users;
+}
+
+struct TGetUsersResponseItem {
+    1: optional string host;
+    2: optional string user;
+    3: optional bool password_expired;
+    4: optional string password_policy;
+    5: optional string password_last_change;
+    6: optional bool is_locked;
+}
+
+struct TUserSecurityPolicyRequest {
+    1: optional TAuthInfo authInfo;
+}
+
+struct TUserSecurityPolicyResponse {
+
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2015,5 +2040,8 @@ service FrontendService {
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
-}
 
+    TGetUsersResponse getUsers(TGetUsersRequest request)
+
+    TUserSecurityPolicyResponse increasePasswordErrorTimes(TUserSecurityPolicyRequest request)
+}

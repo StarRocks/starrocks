@@ -513,8 +513,16 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
+                context.getGlobalStateMgr().getAuthenticationMgr().alterUser(
+                        stmt.getUserIdentity(),
+                        stmt.getAuthenticationInfo(),
+                        stmt.getPasswordOption(),
+                        stmt.getLockOption(),
+                        stmt.getProperties());
+
+                if (stmt.getAuthenticationInfo() != null) {
+                    context.setPasswordExpired(false);
+                }
             });
             return null;
         }

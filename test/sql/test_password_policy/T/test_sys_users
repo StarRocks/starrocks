@@ -1,0 +1,23 @@
+-- name: test_sys_users
+
+CREATE PASSWORD POLICY pp1 comment "pp1 comment"
+properties (
+    "PASSWORD_MIN_LENGTH" = "8",
+    "PASSWORD_MIN_UPPER_CASE_CHARS" = "1",
+    "PASSWORD_MIN_LOWER_CASE_CHARS" = "1",
+    "PASSWORD_MIN_NUMERIC_CHARS" = "1",
+    "PASSWORD_MIN_SPECIAL_CHARS" = "1",
+    "PASSWORD_MAX_AGE_DAYS" = "7"
+);
+
+alter system set password policy pp1;
+
+drop user if exists u1;
+create user u1 expire_password=true;
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
+alter user u1 expire_password=false;
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users where USER="u1";
+
+alter system unset password policy;
+
+drop password policy pp1;

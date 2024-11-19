@@ -74,6 +74,7 @@ import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
+import com.starrocks.catalog.system.sys.SysUsers;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -247,6 +248,8 @@ import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
+import com.starrocks.thrift.TGetUsersRequest;
+import com.starrocks.thrift.TGetUsersResponse;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TImmutablePartitionRequest;
@@ -326,7 +329,10 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TUserPrivDesc;
+import com.starrocks.thrift.TUserSecurityPolicyRequest;
+import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.CommitRateExceededException;
@@ -776,7 +782,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (baseIdx == mvMeta.getIndexId()) {
                 continue;
             }
-
 
             if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
                     matcher, caseSensitive)) {
@@ -2986,5 +2991,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
         return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
+    }
+
+    @Override
+    public TGetUsersResponse getUsers(TGetUsersRequest request) {
+        return SysUsers.getUsers(request);
+    }
+
+    @Override
+    public TUserSecurityPolicyResponse increasePasswordErrorTimes(TUserSecurityPolicyRequest request)
+            throws TException {
+        TUserIdentity tUserIdentity = request.authInfo.current_user_ident;
+        UserIdentity userIdentity = UserIdentity.fromThrift(tUserIdentity);
+
+        AuthenticationMgr authenticationMgr =
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        try {
+            authenticationMgr.increasePasswordErrorTimes(userIdentity);
+        } catch (DdlException e) {
+            throw new TException(e);
+        }
+
+        return new TUserSecurityPolicyResponse();
     }
 }

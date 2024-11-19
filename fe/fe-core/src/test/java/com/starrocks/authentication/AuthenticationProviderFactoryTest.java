@@ -38,21 +38,11 @@ public class AuthenticationProviderFactoryTest {
         };
         String fakeName = "fake";
 
-        AuthenticationProviderFactory.installPlugin(fakeName, fakeProvider);
-        AuthenticationProviderFactory.create(fakeName);
-
-        // install multiple times will success
-        AuthenticationProviderFactory.installPlugin(fakeName, fakeProvider);
-        AuthenticationProviderFactory.create(fakeName);
-
-        AuthenticationProviderFactory.uninstallPlugin(fakeName);
         try {
             AuthenticationProviderFactory.create(fakeName);
             Assert.fail();
         } catch (AuthenticationException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot find " + fakeName + " from"));
         }
-        AuthenticationProviderFactory.uninstallPlugin(fakeName);
-
     }
 }

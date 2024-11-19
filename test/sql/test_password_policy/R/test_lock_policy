@@ -1,0 +1,15 @@
+-- name: test_lock_policy
+create password policy pp1 properties ("PASSWORD_MAX_RETRIES" = "1", "PASSWORD_LOCKOUT_TIME_MINS" = "1");
+-- result:
+-- !result
+show password policies;
+-- result:
+pp1		password_max_retries = 1, password_lockout_time_mins = 1	FALSE
+-- !result
+show create password policy pp1;
+-- result:
+pp1	CREATE PASSWORD POLICY pp1 COMMENT "" PROPERTIES ("password_max_retries" = "1", "password_lockout_time_mins" = "1")
+-- !result
+drop password policy pp1;
+-- result:
+-- !result

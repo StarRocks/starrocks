@@ -160,6 +160,9 @@ public class ConnectContext {
     // `currentUserIdentity` and `qualifiedUser` are the same user,
     // but currentUserIdentity may be modified by execute as statement.
     protected UserIdentity currentUserIdentity;
+
+    protected boolean passwordExpired = false;
+
     // currentRoleIds is the role that has taken effect in the current session.
     // Note that this set is not all roles belonging to the current user.
     // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
@@ -389,6 +392,14 @@ public class ConnectContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    public void setPasswordExpired(boolean passwordExpired) {
+        this.passwordExpired = passwordExpired;
+    }
+
+    public boolean isPasswordExpired() {
+        return passwordExpired;
     }
 
     public Set<Long> getCurrentRoleIds() {

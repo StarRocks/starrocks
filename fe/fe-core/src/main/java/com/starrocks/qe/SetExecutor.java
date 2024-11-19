@@ -85,7 +85,9 @@ public class SetExecutor {
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo, null);
+                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo, null, null, null);
+
+            ctx.setPasswordExpired(false);
         }
     }
 

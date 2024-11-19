@@ -156,6 +156,30 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropPasswordPolicyStatement(DropPasswordPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowPasswordPolicyStatement(ShowPasswordPolicyStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreatePasswordPolicyStatement(ShowCreatePasswordPolicyStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitSetPasswordPolicyStatement(SetPasswordPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitUnsetPasswordPolicyStatement(UnsetPasswordPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // -------------------------------------------- Failover Group Statement -----------------------------------------------------
 
     default R visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, C context) {

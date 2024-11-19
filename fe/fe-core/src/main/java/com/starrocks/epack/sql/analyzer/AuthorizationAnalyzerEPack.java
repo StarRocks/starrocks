@@ -40,10 +40,10 @@ import java.util.Set;
 
 public class AuthorizationAnalyzerEPack extends AuthorizationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
-        new PrivilegeStatementAnalyzerVisitorEPack().analyze(statement, session);
+        new AuthorizationAnalyzerVisitorEPack().analyze(statement, session);
     }
 
-    static class PrivilegeStatementAnalyzerVisitorEPack extends AuthorizationAnalyzerVisitor {
+    static class AuthorizationAnalyzerVisitorEPack extends AuthorizationAnalyzerVisitor {
         /**
          * When 'authorization_enable_admin_user_protection' is set to true,
          * these privileges cannot be granted to any user or role except by root.

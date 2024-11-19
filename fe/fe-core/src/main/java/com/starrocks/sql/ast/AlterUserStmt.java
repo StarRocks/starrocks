@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -21,9 +22,13 @@ import java.util.Map;
 public class AlterUserStmt extends BaseCreateAlterUserStmt {
     private final boolean ifExists;
 
-    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists, UserAuthOption userAuthOption,
-                         Map<String, String> properties, NodePosition pos) {
-        super(userIdentity, userAuthOption, properties, pos);
+    public AlterUserStmt(UserIdentity userIdentity, boolean ifExists,
+                         UserAuthOption userAuthOption,
+                         UserPasswordOption passwordOption,
+                         UserLockOption lockOption,
+                         Map<String, String> properties,
+                         NodePosition pos) {
+        super(userIdentity, userAuthOption, passwordOption, lockOption, properties, pos);
         this.ifExists = ifExists;
     }
 

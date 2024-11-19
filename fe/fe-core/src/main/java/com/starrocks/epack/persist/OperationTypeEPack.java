@@ -16,6 +16,11 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_REVOKE_MASKING_POLICY = 20009;
     public static final short OP_REVOKE_ROW_ACCESS_POLICY = 20010;
 
+    public static final short OP_CREATE_PASSWORD_POLICY = 20020;
+    public static final short OP_DROP_PASSWORD_POLICY = 20021;
+    public static final short OP_SET_PASSWORD_POLICY = 20022;
+    public static final short OP_UNSET_PASSWORD_POLICY = 20023;
+
     // warehouse
     //public static final short OP_CREATE_WAREHOUSE = 20101;
     //public static final short OP_DROP_WAREHOUSE = 20102;

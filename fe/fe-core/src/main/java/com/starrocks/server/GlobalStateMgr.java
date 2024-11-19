@@ -115,6 +115,7 @@ import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.epack.alter.SystemHandlerEPack;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPGroupCacheMgr;
+import com.starrocks.epack.authentication.PasswordExpiredChecker;
 import com.starrocks.epack.authorization.AuthorizationMgrEpack;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
 import com.starrocks.epack.authorization.AuthorizerEPack;
@@ -523,6 +524,7 @@ public class GlobalStateMgr {
 
     private TemporaryTableMgr temporaryTableMgr;
     private TemporaryTableCleaner temporaryTableCleaner;
+    private final PasswordExpiredChecker passwordExpiredChecker;
 
     private final GtidGenerator gtidGenerator;
     private final GlobalConstraintManager globalConstraintManager;
@@ -838,6 +840,7 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutorVisitorEPack.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+        this.passwordExpiredChecker = new PasswordExpiredChecker();
     }
 
     public static void destroyCheckpoint() {
@@ -1505,6 +1508,8 @@ public class GlobalStateMgr {
         temporaryTableCleaner.start();
 
         connectorTableTriggerAnalyzeMgr.start();
+
+        passwordExpiredChecker.start();
     }
 
     // start threads that should run on all FE

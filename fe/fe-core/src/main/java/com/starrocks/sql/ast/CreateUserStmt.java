@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -40,10 +41,12 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
                           UserAuthOption authOption,
+                          UserPasswordOption passwordOption,
+                          UserLockOption lockOption,
                           List<String> defaultRoles,
                           Map<String, String> properties,
                           NodePosition pos) {
-        super(userIdentity, authOption, properties, pos);
+        super(userIdentity, authOption, passwordOption, lockOption, properties, pos);
         this.ifNotExists = ifNotExists;
         this.setRoleType = SetRoleType.ROLE;
         this.defaultRoles = defaultRoles;

@@ -175,6 +175,7 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
     SCH_TEMP_TABLES,
+    SYS_USERS,
 
     // Used by epack
     STARROCKS_POLICY_REFERENCES = 20000

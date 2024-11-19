@@ -45,8 +45,7 @@ public class ExecuteAsExecutor {
         ctx.setCurrentRoleIds(user);
 
         if (!user.isEphemeral()) {
-            UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
-                    .getUserProperty(user.getUser());
+            UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr().getUserProperty(user.getUser());
             ctx.updateByUserProperty(userProperty);
         }
     }

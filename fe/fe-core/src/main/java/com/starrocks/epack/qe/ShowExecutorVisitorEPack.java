@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.epack.qe;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -31,16 +32,21 @@ import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.AuthorizerEPack;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
+import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.RoleMapping;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
+import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
@@ -79,6 +85,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -429,5 +436,50 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         }
 
         return new ShowResultSet(statement.getMetaData(), userAuthInfos);
+    }
+
+    @Override
+    public ShowResultSet visitShowCreatePasswordPolicyStatement(ShowCreatePasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+        PasswordPolicy passwordPolicy = securityPolicyMgr.getPasswordPolicy(statement.getPolicyName());
+        if (passwordPolicy == null) {
+            throw new SemanticException("Password Policy " + statement.getPolicyName() + " not exist");
+        }
+
+        List<String> passwordPolicyRow = Lists.newArrayList();
+        passwordPolicyRow.add(passwordPolicy.getPolicyName());
+        passwordPolicyRow.add(AstToSQLBuilder.toSQL(new CreatePasswordPolicyStmt(
+                passwordPolicy.getPolicyName(), passwordPolicy.getComment(), passwordPolicy.getProperties(), NodePosition.ZERO)));
+
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(passwordPolicyRow);
+        return new ShowResultSet(statement.getMetaData(), rows);
+    }
+
+    @Override
+    public ShowResultSet visitShowPasswordPolicyStatement(ShowPasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+        List<PasswordPolicy> passwordPolicies = securityPolicyMgr.getAllPasswordPolicies();
+        PasswordPolicy globalPasswordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();
+
+        List<List<String>> rows = Lists.newArrayList();
+        for (PasswordPolicy passwordPolicy : passwordPolicies) {
+            List<String> row = Lists.newArrayList();
+            row.add(passwordPolicy.getPolicyName());
+            row.add(passwordPolicy.getComment());
+            row.add(Joiner.on(", ").join(passwordPolicy.getProperties().entrySet()
+                    .stream().map(entry -> entry.getKey() + " = " + entry.getValue()).collect(Collectors.toList())));
+
+            if (globalPasswordPolicy != null
+                    && Objects.equals(globalPasswordPolicy.getPolicyId(), passwordPolicy.getPolicyId())) {
+                row.add("TRUE");
+            } else {
+                row.add("FALSE");
+            }
+
+            rows.add(row);
+        }
+
+        return new ShowResultSet(statement.getMetaData(), rows);
     }
 }

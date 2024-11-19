@@ -242,6 +242,12 @@ statement
     | alterRowAccessPolicyStatement
     | showRowAccessPolicyStatement
     | showCreateRowAccessPolicyStatement
+    | createPasswordPolicy
+    | dropPasswordPolicy
+    | showPasswordPolicy
+    | showCreatePasswordPolicy
+    | setPasswordPolicy
+    | unsetPasswordPolicy
 
     // Backup Restore Statement
     | backupStatement
@@ -1773,7 +1779,7 @@ helpStatement
 // ------------------------------------------- Authz Statement -----------------------------------------------------
 
 createUserStatement
-    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? properties?
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE roleList)? (passwordOption | lockOption)? properties?
     ;
 
 dropUserStatement
@@ -1781,13 +1787,21 @@ dropUserStatement
     ;
 
 alterUserStatement
-    : ALTER USER (IF EXISTS)? user authOption
+    : ALTER USER (IF EXISTS)? user authOption? (passwordOption | lockOption)?
     | ALTER USER (IF EXISTS)? user DEFAULT ROLE (NONE| ALL | roleList)
     | ALTER USER (IF EXISTS)? user SET properties
     ;
 
 showUserStatement
     : SHOW (USER | USERS)
+    ;
+
+passwordOption
+    : EXPIRE_PASSWORD '=' booleanValue
+    ;
+
+lockOption
+    : LOCK | UNLOCK
     ;
 
 showAuthenticationStatement
@@ -2002,6 +2016,30 @@ showCreateRowAccessPolicyStatement
     ;
 
 policySignature : identifier type;
+
+createPasswordPolicy
+    : CREATE PASSWORD POLICY identifier comment? properties
+    ;
+
+dropPasswordPolicy
+    : DROP PASSWORD POLICY identifier
+    ;
+
+showPasswordPolicy
+    : SHOW PASSWORD POLICIES
+    ;
+
+showCreatePasswordPolicy
+    : SHOW CREATE PASSWORD POLICY identifier
+    ;
+
+setPasswordPolicy
+    : ALTER SYSTEM SET PASSWORD POLICY identifier
+    ;
+
+unsetPasswordPolicy
+    : ALTER SYSTEM UNSET PASSWORD POLICY
+    ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
@@ -3164,7 +3202,7 @@ nonReserved
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
-    | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
+    | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT | EXPIRE_PASSWORD
     | FAILOVER | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
     | GLOBAL | GRANTS | GROUP_CONCAT

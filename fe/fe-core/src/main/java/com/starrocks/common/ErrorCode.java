@@ -268,6 +268,12 @@ public enum ErrorCode {
     ERR_ACCESS_DENIED_FOR_NON_SSL_CONNECTION(5205, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; SSL connection is required"),
 
+    ERR_AUTHENTICATION_LOCK(5206, new byte[] {'2', '8', '0', '0', '0'},
+            "Access denied for user %s. Account is locked, please contact your administrator."),
+    ERR_AUTHENTICATION_PASSWORD_EXPIRED(5207, new byte[] {'2', '8', '0', '0', '0'},
+            "Your password has expired. Please change your password," +
+                    " otherwise you will not be able to perform other operations."),
+
     /**
      * 5300 - 5399: Lock and Transaction
      */

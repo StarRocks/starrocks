@@ -60,6 +60,7 @@
 #include "exec/schema_scanner/sys_fe_locks.h"
 #include "exec/schema_scanner/sys_fe_memory_usage.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
+#include "exec/schema_scanner/sys_users_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/literal.h"
@@ -216,6 +217,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SYS_USERS:
+        return std::make_unique<SysUsersScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

@@ -12,6 +12,7 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -19,13 +20,18 @@ import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
+import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -70,46 +76,82 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     // ---------------------------------------- Privilege Statement ------------------------------------------------
 
     @Override
-    public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-        AuthorizationAnalyzerEPack.analyze(stmt, session);
+    public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, ConnectContext session) {
+        AuthorizationAnalyzerEPack.analyze(statement, session);
         return null;
     }
 
     @Override
-    public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-        AuthorizationAnalyzerEPack.analyze(stmt, session);
+    public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext session) {
+        AuthorizationAnalyzerEPack.analyze(statement, session);
         return null;
     }
 
     // ---------------------------------------- Security Policy Statement ------------------------------------------
 
     @Override
-    public Void visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext context) {
-        SecurityPolicyAnalyzer.analyze(stmt, context);
+    public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
         return null;
     }
 
     @Override
-    public Void visitDropPolicyStatement(DropPolicyStmt stmt, ConnectContext context) {
-        SecurityPolicyAnalyzer.analyze(stmt, context);
+    public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
         return null;
     }
 
     @Override
-    public Void visitAlterPolicyStatement(AlterPolicyStmt stmt, ConnectContext context) {
-        SecurityPolicyAnalyzer.analyze(stmt, context);
+    public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
         return null;
     }
 
     @Override
-    public Void visitShowPolicyStatement(ShowPolicyStmt stmt, ConnectContext context) {
-        SecurityPolicyAnalyzer.analyze(stmt, context);
+    public Void visitShowPolicyStatement(ShowPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
         return null;
     }
 
     @Override
-    public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt stmt, ConnectContext context) {
-        SecurityPolicyAnalyzer.analyze(stmt, context);
+    public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPasswordPolicyStatement(DropPasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowPasswordPolicyStatement(ShowPasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowCreatePasswordPolicyStatement(ShowCreatePasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSetPasswordPolicyStatement(SetPasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitUnsetPasswordPolicyStatement(UnsetPasswordPolicyStmt statement, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(statement, context);
         return null;
     }
 

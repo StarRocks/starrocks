@@ -68,6 +68,26 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
         return null;
     }
 
+    public boolean checkUserLocked(UserIdentity userIdentity) {
+        readLock();
+        try {
+            UserAuthenticationInfo userAuthenticationInfo = getUserAuthenticationInfoByUserIdentity(userIdentity);
+            return userAuthenticationInfo.isLock();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public boolean checkUserPasswordExpired(UserIdentity userIdentity) {
+        readLock();
+        try {
+            UserAuthenticationInfo userAuthenticationInfo = getUserAuthenticationInfoByUserIdentity(userIdentity);
+            return userAuthenticationInfo.isPasswordExpired();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void createSecurityIntegration(String name,
                                           Map<String, String> propertyMap,
                                           boolean isReplay) throws DdlException {
@@ -160,5 +180,4 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
             throws DdlException {
         dropSecurityIntegration(name, true);
     }
-
 }

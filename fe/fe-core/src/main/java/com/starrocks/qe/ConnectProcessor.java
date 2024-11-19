@@ -53,6 +53,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -68,11 +69,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -111,7 +115,6 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
-
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -344,6 +347,28 @@ public class ConnectProcessor {
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+
+
+                if (ctx.isPasswordExpired()) {
+                    if (!((parsedStmt instanceof AlterUserStmt && ((AlterUserStmt) parsedStmt).getAuthOption() != null)
+                            || ((parsedStmt instanceof SetStmt)
+                            && ((SetStmt) parsedStmt).getSetListItems().get(0) instanceof SetPassVar)
+                            || parsedStmt instanceof ExecuteAsStmt)) {
+                        ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_PASSWORD_EXPIRED);
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
+                }
+
+                AuthenticationMgrEPack authenticationMgrEPack =
+                        (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                if (authenticationMgrEPack.checkUserLocked(ctx.getCurrentUserIdentity())) {
+                    if (!(parsedStmt instanceof ExecuteAsStmt)) {
+                        ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_LOCK, ctx.getCurrentUserIdentity());
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);

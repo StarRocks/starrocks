@@ -1,0 +1,9 @@
+-- name: test_lock_policy
+
+create password policy pp1 properties ("PASSWORD_MAX_RETRIES" = "1", "PASSWORD_LOCKOUT_TIME_MINS" = "1");
+
+show password policies;
+
+show create password policy pp1;
+
+drop password policy pp1;

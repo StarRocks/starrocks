@@ -44,6 +44,17 @@ public class UserAuthenticationInfo implements Writable {
     @SerializedName(value = "u")
     private String origUser;
 
+    @SerializedName(value = "pe")
+    private boolean passwordExpired = false;
+    @SerializedName(value = "plm")
+    private long passwordLastModifiedTimestamp = System.currentTimeMillis();
+
+    @SerializedName(value = "lock")
+    private boolean lock;
+    @SerializedName(value = "freezeTs")
+    private long lockTimestamp;
+    private int errorPasswordRetries = 0;
+
     @Expose(serialize = false)
     private boolean isAnyUser;
     @Expose(serialize = false)
@@ -52,6 +63,9 @@ public class UserAuthenticationInfo implements Writable {
     protected PatternMatcher userPattern;
     @Expose(serialize = false)
     protected PatternMatcher hostPattern;
+
+    public UserAuthenticationInfo() {
+    }
 
     /**
      * extra user authentication info when authenticating, it may have different usage for different
@@ -92,6 +106,10 @@ public class UserAuthenticationInfo implements Writable {
         return origHost;
     }
 
+    public String getOrigUser() {
+        return origUser;
+    }
+
     public String getTextForAuthPlugin() {
         return textForAuthPlugin;
     }
@@ -112,5 +130,49 @@ public class UserAuthenticationInfo implements Writable {
         this.origUser = origUser;
         this.origHost = origHost;
         analyze();
+    }
+
+    public void setPasswordExpired(boolean passwordExpired) {
+        this.passwordExpired = passwordExpired;
+    }
+
+    public boolean isPasswordExpired() {
+        return passwordExpired;
+    }
+
+    public void setPasswordLastModifiedTimestamp(long passwordLastModifiedTimestamp) {
+        this.passwordLastModifiedTimestamp = passwordLastModifiedTimestamp;
+    }
+
+    public long getPasswordLastModifiedTimestamp() {
+        return passwordLastModifiedTimestamp;
+    }
+
+    public void setLock(boolean lock) {
+        this.lock = lock;
+    }
+
+    public boolean isLock() {
+        return lock;
+    }
+
+    public int getErrorPasswordRetries() {
+        return errorPasswordRetries;
+    }
+
+    public void increasePasswordErrorTimes() {
+        errorPasswordRetries++;
+    }
+
+    public void clearPasswordErrorTimes() {
+        errorPasswordRetries = 0;
+    }
+
+    public void setLockTimestamp(long lockTimestamp) {
+        this.lockTimestamp = lockTimestamp;
+    }
+
+    public long getLockTimestamp() {
+        return lockTimestamp;
     }
 }

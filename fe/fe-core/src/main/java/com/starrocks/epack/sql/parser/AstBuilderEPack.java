@@ -24,6 +24,7 @@ import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -34,6 +35,7 @@ import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DisableDiskClause;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -42,12 +44,16 @@ import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
+import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -540,6 +546,42 @@ public class AstBuilderEPack extends AstBuilder {
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
         }
+    }
+
+    @Override
+    public ParseNode visitCreatePasswordPolicy(StarRocksParser.CreatePasswordPolicyContext ctx) {
+        String policyName = getIdentifierName(ctx.identifier());
+        String comment = ctx.comment() == null ? "" : ((StringLiteral) visit(ctx.comment())).getStringValue();
+        Map<String, String> properties = getProperties(ctx.properties());
+        return new CreatePasswordPolicyStmt(policyName, comment, properties, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitDropPasswordPolicy(StarRocksParser.DropPasswordPolicyContext ctx) {
+        String policyName = getIdentifierName(ctx.identifier());
+        return new DropPasswordPolicyStmt(policyName, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowPasswordPolicy(StarRocksParser.ShowPasswordPolicyContext ctx) {
+        return new ShowPasswordPolicyStmt(createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowCreatePasswordPolicy(StarRocksParser.ShowCreatePasswordPolicyContext ctx) {
+        String policyName = getIdentifierName(ctx.identifier());
+        return new ShowCreatePasswordPolicyStmt(policyName, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitSetPasswordPolicy(StarRocksParser.SetPasswordPolicyContext ctx) {
+        String policyName = getIdentifierName(ctx.identifier());
+        return new SetPasswordPolicyStmt(policyName, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitUnsetPasswordPolicy(StarRocksParser.UnsetPasswordPolicyContext ctx) {
+        return new UnsetPasswordPolicyStmt(createPos(ctx));
     }
 
     // ---------------------------------------- Warehouse Statement ---------------------------------------------------

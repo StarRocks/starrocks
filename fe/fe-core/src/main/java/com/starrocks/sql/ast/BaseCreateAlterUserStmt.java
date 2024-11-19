@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -23,18 +24,26 @@ import java.util.Map;
 public abstract class BaseCreateAlterUserStmt extends DdlStmt {
     protected UserIdentity userIdentity;
     protected UserAuthOption authOption;
+    protected UserPasswordOption passwordOption;
+    protected UserLockOption lockOption;
 
     // used in new RBAC privilege framework
     private UserAuthenticationInfo authenticationInfo = null;
 
     private final Map<String, String> properties;
 
-    public BaseCreateAlterUserStmt(UserIdentity userIdentity, UserAuthOption authOption,
-                                   Map<String, String> properties, NodePosition pos) {
+    public BaseCreateAlterUserStmt(UserIdentity userIdentity,
+                                   UserAuthOption authOption,
+                                   UserPasswordOption passwordOption,
+                                   UserLockOption lockOption,
+                                   Map<String, String> properties,
+                                   NodePosition pos) {
         super(pos);
 
         this.userIdentity = userIdentity;
         this.authOption = authOption;
+        this.passwordOption = passwordOption;
+        this.lockOption = lockOption;
         this.properties = properties;
     }
 
@@ -44,6 +53,14 @@ public abstract class BaseCreateAlterUserStmt extends DdlStmt {
 
     public UserAuthOption getAuthOption() {
         return authOption;
+    }
+
+    public UserPasswordOption getPasswordOption() {
+        return passwordOption;
+    }
+
+    public UserLockOption getLockOption() {
+        return lockOption;
     }
 
     public UserAuthenticationInfo getAuthenticationInfo() {

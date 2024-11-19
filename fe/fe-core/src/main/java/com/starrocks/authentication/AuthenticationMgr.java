@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
@@ -21,9 +20,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
-import com.starrocks.epack.authentication.LDAPAuthProviderForNative;
 import com.starrocks.epack.authentication.SecurityIntegration;
+import com.starrocks.epack.authorization.PasswordPolicy;
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.ImageWriter;
@@ -38,11 +37,18 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserLockOption;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUserSecurityPolicyRequest;
+import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -127,14 +133,6 @@ public class AuthenticationMgr {
 
     public AuthenticationMgr() {
         // default plugin
-        AuthenticationProviderFactory.installPlugin(
-                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
-        AuthenticationProviderFactory.installPlugin(
-                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -150,19 +148,19 @@ public class AuthenticationMgr {
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
     }
 
-    private void readLock() {
+    protected void readLock() {
         lock.readLock().lock();
     }
 
-    private void readUnlock() {
+    protected void readUnlock() {
         lock.readLock().unlock();
     }
 
-    private void writeLock() {
+    protected void writeLock() {
         lock.writeLock().lock();
     }
 
-    private void writeUnlock() {
+    protected void writeUnlock() {
         lock.writeLock().unlock();
     }
 
@@ -178,6 +176,7 @@ public class AuthenticationMgr {
     /**
      * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
      * but some external system, like LDAP, return default max connection number
+     *
      * @param currUserIdentity user identity of current connection
      * @return max connection number of the user
      */
@@ -193,6 +192,7 @@ public class AuthenticationMgr {
     /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
+     *
      * @param userName plain username saved in SR
      * @return max connection number of the user
      */
@@ -243,6 +243,7 @@ public class AuthenticationMgr {
             String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
         Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
                 getBestMatchedUserIdentity(remoteUser, remoteHost);
+
         if (matchedUserIdentity == null) {
             LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
         } else {
@@ -255,6 +256,28 @@ public class AuthenticationMgr {
             } catch (AuthenticationException e) {
                 LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                         remoteUser, remoteHost, e.getMessage());
+
+                try {
+                    if (GlobalStateMgr.getCurrentState().isLeader()) {
+                        increasePasswordErrorTimes(matchedUserIdentity.getKey());
+                    } else {
+                        TAuthInfo tAuthInfo = new TAuthInfo();
+                        tAuthInfo.current_user_ident = matchedUserIdentity.getKey().toThrift();
+
+                        TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
+                        tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
+
+                        Pair<String, Integer> ipAndPort =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+                        TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
+                                ThriftConnectionPool.frontendPool,
+                                thriftAddress,
+                                client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));
+                    }
+                } catch (Exception ex) {
+                    LOG.error(ex);
+                }
             }
         }
 
@@ -329,6 +352,12 @@ public class AuthenticationMgr {
                 return;
             }
 
+            if (stmt.getPasswordOption() != null) {
+                info.setPasswordExpired(stmt.getPasswordOption().isExpirePassword());
+            }
+
+            userToAuthenticationInfo.put(userIdentity, info);
+
             UserProperty userProperty = null;
             String userName = userIdentity.getUser();
             if (userNameToProperty.containsKey(userName)) {
@@ -367,7 +396,10 @@ public class AuthenticationMgr {
 
     // This method is used to update user information, including authentication information and user properties
     // Note: if properties is null, we should keep the original properties
-    public void alterUser(UserIdentity userIdentity, UserAuthenticationInfo userAuthenticationInfo,
+    public void alterUser(UserIdentity userIdentity,
+                          UserAuthenticationInfo userAuthenticationInfo,
+                          UserPasswordOption userPasswordOption,
+                          UserLockOption lockOption,
                           Map<String, String> properties) throws DdlException {
         writeLock();
         try {
@@ -378,12 +410,35 @@ public class AuthenticationMgr {
                 return;
             }
 
-            updateUserNoLock(userIdentity, userAuthenticationInfo, true);
-            if (properties != null && properties.size() > 0) {
+            UserAuthenticationInfo authenticationInfo;
+            if (userAuthenticationInfo != null) {
+                authenticationInfo = userAuthenticationInfo;
+                authenticationInfo.setPasswordExpired(false);
+                authenticationInfo.setPasswordLastModifiedTimestamp(System.currentTimeMillis());
+            } else {
+                authenticationInfo = userToAuthenticationInfo.get(userIdentity);
+            }
+
+            if (userPasswordOption != null) {
+                authenticationInfo.setPasswordExpired(userPasswordOption.isExpirePassword());
+            }
+
+            if (lockOption != null) {
+                if (lockOption.isLock()) {
+                    authenticationInfo.setLockTimestamp(System.currentTimeMillis());
+                } else {
+                    authenticationInfo.clearPasswordErrorTimes();
+                }
+
+                authenticationInfo.setLock(lockOption.isLock());
+            }
+
+            updateUserNoLock(userIdentity, authenticationInfo, true);
+            if (properties != null && !properties.isEmpty()) {
                 UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
                 userProperty.update(userIdentity, UserProperty.changeToPairList(properties));
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, authenticationInfo, properties);
         } catch (AuthenticationException e) {
             throw new DdlException("failed to alter user " + userIdentity, e);
         } finally {
@@ -683,5 +738,21 @@ public class AuthenticationMgr {
         }
 
         return matchedUserIdentity.getKey();
+    }
+
+    public void increasePasswordErrorTimes(UserIdentity userIdentity)
+            throws DdlException {
+        PasswordPolicy passwordPolicy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                .getGlobalPasswordPolicy();
+        if (passwordPolicy != null && passwordPolicy.getPasswordMaxRetries() != null) {
+            UserAuthenticationInfo userAuthenticationInfo = userToAuthenticationInfo.get(userIdentity);
+            userAuthenticationInfo.increasePasswordErrorTimes();
+            int errorTimes = userAuthenticationInfo.getErrorPasswordRetries();
+
+            int retryTimes = passwordPolicy.getPasswordMaxRetries();
+            if (errorTimes >= retryTimes) {
+                alterUser(userIdentity, null, null, new UserLockOption(true), null);
+            }
+        }
     }
 }

@@ -109,6 +109,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.TagOptions;
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -459,6 +460,7 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserLockOption;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -5843,7 +5845,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateUserStmt(user, ifNotExists, authOption, roles, properties, createPos(context));
+
+        UserPasswordOption userPasswordOption = null;
+        if (context.passwordOption() != null) {
+            boolean expirePassword = Boolean.parseBoolean(context.passwordOption().booleanValue().getText());
+            userPasswordOption = new UserPasswordOption(expirePassword);
+        }
+
+        UserLockOption lockOption = null;
+        if (context.lockOption() != null) {
+            boolean lock = context.lockOption().LOCK() != null;
+            lockOption = new UserLockOption(lock);
+        }
+
+        return new CreateUserStmt(user, ifNotExists, authOption, userPasswordOption, lockOption,
+                roles, properties, createPos(context));
     }
 
     @Override
@@ -5875,25 +5891,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SetDefaultRoleStmt(user, setRoleType, roles, createPos(context));
         }
 
-        if (context.authOption() != null) {
-            UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
-            Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            if (context.properties() != null) {
-                List<Property> propertyList = visit(context.properties().property(), Property.class);
-                for (Property property : propertyList) {
-                    properties.put(property.getKey(), property.getValue());
-                }
+        if (context.SET() != null) {
+            // handle alter user xxx set properties
+            List<SetUserPropertyVar> list = new ArrayList<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                list.add(new SetUserPropertyVar(property.getKey(), property.getValue()));
             }
-            return new AlterUserStmt(user, context.EXISTS() != null, authOption, properties, createPos(context));
+            return new SetUserPropertyStmt(user.getUser(), list, createPos(context));
         }
 
-        // handle alter user xxx set properties
-        List<SetUserPropertyVar> list = new ArrayList<>();
-        List<Property> propertyList = visit(context.properties().property(), Property.class);
-        for (Property property : propertyList) {
-            list.add(new SetUserPropertyVar(property.getKey(), property.getValue()));
-        }
-        return new SetUserPropertyStmt(user.getUser(), list, createPos(context));
+        UserAuthOption authOption = context.authOption() != null ?
+                (UserAuthOption) visitIfPresent(context.authOption()) : null;
+
+        UserPasswordOption userPasswordOption = context.passwordOption() != null ?
+                new UserPasswordOption(Boolean.parseBoolean(context.passwordOption().booleanValue().getText())) : null;
+
+        UserLockOption lockOption = context.lockOption() != null ?
+                new UserLockOption(context.lockOption().LOCK() != null) : null;
+
+        return new AlterUserStmt(user, context.EXISTS() != null, authOption, userPasswordOption, lockOption,
+                null, createPos(context));
     }
 
     @Override
@@ -8017,7 +8035,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private ParseNode visitIfPresent(ParserRuleContext context) {
+    protected ParseNode visitIfPresent(ParserRuleContext context) {
         if (context != null) {
             return visit(context);
         } else {
@@ -8034,7 +8052,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new FunctionArgsDef(typeDefList, isVariadic);
     }
 
-    private String getIdentifierName(StarRocksParser.IdentifierContext context) {
+    protected String getIdentifierName(StarRocksParser.IdentifierContext context) {
         return ((Identifier) visit(context)).getValue();
     }
 

@@ -220,6 +220,12 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     });
 }
 
+Status SchemaHelper::get_users(const SchemaScannerState& state, const TGetUsersRequest& request,
+                               TGetUsersResponse* response) {
+    return _call_rpc(
+            state, [&request, &response](FrontendServiceConnection& client) { client->getUsers(*response, request); });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

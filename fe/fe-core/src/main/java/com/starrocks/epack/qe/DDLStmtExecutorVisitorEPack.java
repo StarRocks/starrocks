@@ -27,16 +27,20 @@ import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
+import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
+import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -254,6 +258,38 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
                                                                 ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() ->
                 context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupResume(stmt)
+        );
+        return null;
+    }
+
+    @Override
+    public ShowResultSet visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt stmt, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() ->
+                context.getGlobalStateMgr().getSecurityPolicyManager().createPasswordPolicy(stmt)
+        );
+        return null;
+    }
+
+    @Override
+    public ShowResultSet visitDropPasswordPolicyStatement(DropPasswordPolicyStmt stmt, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() ->
+                context.getGlobalStateMgr().getSecurityPolicyManager().dropPasswordPolicy(stmt)
+        );
+        return null;
+    }
+
+    @Override
+    public ShowResultSet visitSetPasswordPolicyStatement(SetPasswordPolicyStmt stmt, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() ->
+                context.getGlobalStateMgr().getSecurityPolicyManager().setGlobalPasswordPolicy(stmt.getPolicyName())
+        );
+        return null;
+    }
+
+    @Override
+    public ShowResultSet visitUnsetPasswordPolicyStatement(UnsetPasswordPolicyStmt stmt, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() ->
+                context.getGlobalStateMgr().getSecurityPolicyManager().unsetGlobalPasswordPolicy()
         );
         return null;
     }

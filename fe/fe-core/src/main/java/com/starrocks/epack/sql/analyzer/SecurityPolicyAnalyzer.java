@@ -7,16 +7,23 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
+import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.UnsetPasswordPolicyStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -33,6 +40,8 @@ import com.starrocks.sql.common.TypeManager;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 public class SecurityPolicyAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -137,6 +146,78 @@ public class SecurityPolicyAnalyzer {
             PolicyName policyName = stmt.getPolicyName();
             normalizationPolicyName(session, policyName);
             return null;
+        }
+
+        @Override
+        public Void visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt statement, ConnectContext context) {
+            FeNameFormat.checkColumnName(statement.getPolicyName());
+
+            SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+            if (securityPolicyMgr.getPasswordPolicy(statement.getPolicyName()) != null) {
+                throw new SemanticException("Password policy " + statement.getPolicyName() + " already exists.");
+            }
+
+            Map<String, String> properties = statement.getProperties();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!PasswordPolicy.validPasswordProperties.contains(entry.getKey())) {
+                    throw new SemanticException("Can't support property " + entry.getKey());
+                }
+
+                try {
+                    int propertyValue = Integer.parseInt(entry.getValue());
+                    if (propertyValue < 0) {
+                        throw new SemanticException("Password Policy property " + entry.getValue() + " can not less than 0");
+                    }
+                } catch (NumberFormatException e) {
+                    throw new SemanticException("Password Policy property " + entry.getValue() + " value must be integer");
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitDropPasswordPolicyStatement(DropPasswordPolicyStmt statement, ConnectContext context) {
+            SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+
+            PasswordPolicy passwordPolicy = securityPolicyMgr.getPasswordPolicy(statement.getPolicyName());
+            if (passwordPolicy == null) {
+                throw new SemanticException("Password Policy " + statement.getPolicyName() + " is not exist");
+            }
+
+            PasswordPolicy globalPasswordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();
+            if (globalPasswordPolicy != null) {
+                if (Objects.equals(passwordPolicy.getPolicyId(), globalPasswordPolicy.getPolicyId())) {
+                    throw new SemanticException("Cannot delete a password policy that is in use. " +
+                            "You can use unset first and then delete it");
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowPasswordPolicyStatement(ShowPasswordPolicyStmt statement, ConnectContext context) {
+            return visitShowStatement(statement, context);
+        }
+
+        @Override
+        public Void visitShowCreatePasswordPolicyStatement(ShowCreatePasswordPolicyStmt statement, ConnectContext context) {
+            return visitShowStatement(statement, context);
+        }
+
+        @Override
+        public Void visitSetPasswordPolicyStatement(SetPasswordPolicyStmt statement, ConnectContext context) {
+            SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+            PasswordPolicy passwordPolicy = securityPolicyMgr.getPasswordPolicy(statement.getPolicyName());
+            if (passwordPolicy == null) {
+                throw new SemanticException("Password Policy " + statement.getPolicyName() + " is not exist");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUnsetPasswordPolicyStatement(UnsetPasswordPolicyStmt statement, ConnectContext context) {
+            return visitStatement(statement, context);
         }
     }
 

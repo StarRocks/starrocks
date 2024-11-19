@@ -35,12 +35,12 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,13 +71,28 @@ public class MysqlProto {
 
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
-        AuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
+        AuthenticationMgrEPack authenticationManager =
+                (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
         UserIdentity currentUser = null;
         if (Config.enable_auth_check) {
+            Map.Entry<UserIdentity, UserAuthenticationInfo> bestUser =
+                    authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
+            if (bestUser != null) {
+                UserAuthenticationInfo authInfo = bestUser.getValue();
+                if (authInfo.isLock()) {
+                    ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_LOCK, bestUser.getKey());
+                    return false;
+                }
+            }
+
             currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
             if (currentUser == null) {
                 ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
                 return false;
+            }
+
+            if (authenticationManager.checkUserPasswordExpired(currentUser)) {
+                context.setPasswordExpired(true);
             }
         } else {
             Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
@@ -97,6 +112,7 @@ public class MysqlProto {
             context.setAuthDataSalt(randomString);
         }
         context.setQualifiedUser(user);
+
         return true;
     }
 

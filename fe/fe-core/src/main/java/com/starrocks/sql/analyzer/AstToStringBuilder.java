@@ -85,6 +85,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ObjectType;
@@ -234,7 +235,6 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
-
         public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
             StringBuilder sb = new StringBuilder();
             if (authOption == null) {
@@ -373,6 +373,21 @@ public class AstToStringBuilder {
 
             if (stmt.getComment() != null && !stmt.getComment().equals("")) {
                 sb.append(" COMMENT \"").append(stmt.getComment()).append("\"");
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE PASSWORD POLICY ");
+            sb.append(stmt.getPolicyName());
+            sb.append(" COMMENT \"").append(stmt.getComment()).append("\"");
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            if (!stmt.getProperties().isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
             }
 
             return sb.toString();

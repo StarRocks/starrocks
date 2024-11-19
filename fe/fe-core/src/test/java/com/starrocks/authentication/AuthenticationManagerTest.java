@@ -494,7 +494,8 @@ public class AuthenticationManagerTest {
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo(), null);
+        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo(),
+                null, null, null);
         Assert.assertEquals(testUser, masterManager.checkPassword(
                 testUser.getUser(), "10.1.1.1", scramble, seed));
 

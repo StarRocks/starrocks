@@ -54,13 +54,17 @@ import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreateFailoverGroupLog;
+import com.starrocks.epack.persist.CreatePasswordPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropFailoverGroupLog;
+import com.starrocks.epack.persist.DropPasswordPolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
+import com.starrocks.epack.persist.SetPasswordPolicyLog;
+import com.starrocks.epack.persist.UnsetPasswordPolicyLog;
 import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -751,6 +755,22 @@ public class JournalEntity implements Writable {
             case OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY:
             case OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY: {
                 data = ApplyOrRevokeRowAccessPolicyLog.read(in);
+                break;
+            }
+            case OperationTypeEPack.OP_CREATE_PASSWORD_POLICY: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CreatePasswordPolicyLog.class);
+                break;
+            }
+            case OperationTypeEPack.OP_DROP_PASSWORD_POLICY: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DropPasswordPolicyLog.class);
+                break;
+            }
+            case OperationTypeEPack.OP_SET_PASSWORD_POLICY: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), SetPasswordPolicyLog.class);
+                break;
+            }
+            case OperationTypeEPack.OP_UNSET_PASSWORD_POLICY: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), UnsetPasswordPolicyLog.class);
                 break;
             }
             case OperationType.OP_MV_JOB_STATE: {

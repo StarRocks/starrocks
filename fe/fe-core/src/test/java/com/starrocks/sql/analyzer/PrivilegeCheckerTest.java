@@ -1569,7 +1569,7 @@ public class PrivilegeCheckerTest {
         sql = "drop user test";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
-        sql = "alter user test identified by 'asdf'";
+        sql = "alter user test2 identified by 'asdf'";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
         sql = "show roles";

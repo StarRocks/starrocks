@@ -14,10 +14,14 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
@@ -35,6 +39,12 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgrEPack.checkUserLocked(ctx.getCurrentUserIdentity())) {
+                throw ErrorReportException.report(ErrorCode.ERR_AUTHENTICATION_LOCK, ctx.getCurrentUserIdentity());
+            }
+
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())

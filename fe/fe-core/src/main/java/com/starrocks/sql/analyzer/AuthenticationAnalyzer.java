@@ -20,6 +20,7 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
+import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserLockOption;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -84,6 +86,18 @@ public class AuthenticationAnalyzer {
             }
 
             UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
+
+            UserPasswordOption userPasswordOption = stmt.getPasswordOption();
+            if (userPasswordOption != null) {
+                userAuthenticationInfo.setPasswordExpired(userPasswordOption.isExpirePassword());
+            }
+            userAuthenticationInfo.setPasswordLastModifiedTimestamp(System.currentTimeMillis());
+
+            UserLockOption lockOption = stmt.getLockOption();
+            if (lockOption != null) {
+                userAuthenticationInfo.setLock(lockOption.isLock());
+            }
+
             stmt.setAuthenticationInfo(userAuthenticationInfo);
             return null;
         }
@@ -96,8 +110,15 @@ public class AuthenticationAnalyzer {
                         + " : user not exists");
             }
 
-            UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            if (stmt.getAuthOption() != null) {
+                UserAuthenticationInfo userAuthenticationInfo = analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
+                stmt.setAuthenticationInfo(userAuthenticationInfo);
+            }
+
+            if (stmt.getPasswordOption() != null && stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("Cannot expire root's password");
+            }
+
             return null;
         }
 
