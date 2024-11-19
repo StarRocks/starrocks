@@ -488,27 +488,27 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     private BrokerLoadJob genBrokerLoadJob(long whId) throws MetaNotFoundException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         mockConnectContext(whId);
-        return new BrokerLoadJob(TEST_DB_ID, "broker-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
+        return new BrokerLoadJob(testDbId, "broker-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
     }
 
     private SparkLoadJob genSparkLoadJob(long whId) throws MetaNotFoundException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         mockConnectContext(whId);
-        return new SparkLoadJob(TEST_DB_ID, "spark-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
+        return new SparkLoadJob(testDbId, "spark-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
     }
 
     private RoutineLoadJob genRoutineLoadJob(Long whId) {
         KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(NEXT_INDEX.getAndIncrement(),
                 "routine-load-" + NEXT_INDEX.getAndIncrement(),
-                TEST_DB_ID, TEST_TABLE_ID, "brokerList", "topic");
+                testDbId, testTableId, "brokerList", "topic");
         job.setWarehouseId(whId);
         return job;
 
     }
 
     private StreamLoadTask genStreamLoadJob(Long whId) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
-        Table table = db.getTable(TEST_TABLE_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        Table table = db.getTable(testTableId);
         return new StreamLoadTask(NEXT_INDEX.getAndIncrement(),
                 db,
                 (OlapTable) table, "", "",
@@ -542,7 +542,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             InsertLoadJob job = loadMgr.registerInsertLoadJob(
                     "insert-load-" + NEXT_INDEX.getAndIncrement(),
                     DB_NAME,
-                    TEST_TABLE_ID,
+                    testTableId,
                     0, "", "",
                     EtlJobType.INSERT,
                     System.currentTimeMillis(),

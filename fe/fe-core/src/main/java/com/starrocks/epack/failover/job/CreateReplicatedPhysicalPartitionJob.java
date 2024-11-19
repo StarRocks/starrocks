@@ -44,7 +44,7 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
         long warehouseId = GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundWarehouse().getId();
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().addSubPartitions(localDatabase, localTable,
-                    localPartition, 1, new String[] { remotePhysicalPartition.getName() }, warehouseId);
+                    localPartition, 1, warehouseId);
         } catch (Exception e) {
             failoverGroup.addErrorMessage("Failed to create physical partition " + localDatabase.getFullName() + "." +
                     localTable.getName() + "." + localPartition.getName() + "." + remotePhysicalPartition.getName() +

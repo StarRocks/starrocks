@@ -101,24 +101,20 @@ public class RuntimeFilterTest {
                         ") tbl order by 1 desc limit 15";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
         System.out.println(plan);
-        Assert.assertTrue(plan, plan.contains("4:Project\n" +
+        Assert.assertTrue(plan, plan.contains("7:Project\n" +
                 "  |  output columns:\n" +
-                "  |  14 <-> [14: k1, DATE, true]\n" +
-                "  |  26 <-> [26: k13, DECIMAL128(27,9), true]\n" +
+                "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
-                "  3:OlapScanNode\n" +
+                "  6:OlapScanNode\n" +
                 "     table: duplicate_par_tbl, rollup: duplicate_par_tbl\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: [26: k13, DECIMAL128(27,9), true] > 60, 16: k3 IN ('beijing', '')\n" +
+                "     Predicates: [39: k13, DECIMAL128(27,9), true] > 60, 31: k5 IS NULL\n" +
                 "     partitionsRatio=1/3, tabletsRatio=3/3\n" +
-                "     tabletList=10007,10009,10011\n" +
-                "     actualRows=0, avgRowSize=3.0\n" +
+                "     tabletList=10015,10017,10019\n" +
+                "     actualRows=0, avgRowSize=2.0\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (26: k13)\n" +
-                "     - filter_id = 1, probe_expr = (26: k13)\n" +
-                "\n" +
-                "PLAN FRAGMENT 7(F00)"));
+                "     - filter_id = 1, probe_expr = (39: k13)"));
     }
 }

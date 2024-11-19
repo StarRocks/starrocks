@@ -78,7 +78,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
     private static final String TABLE_SCHEMA_URL_PATTERN =
             BASE_URL + "/api/v2/catalogs/%s/databases/%s/tables/%s/schema";
 
-    private static final Long TB_GET_TABLE_SCHEMA_ID = TEST_TABLE_ID + 10000L;
+    private static final Long TB_GET_TABLE_SCHEMA_ID = testTableId + 10000L;
     private static final String TB_GET_TABLE_SCHEMA_NAME = "tb_table_schema_test";
 
     private static final Gson GSON = GsonUtils.GSON.newBuilder()
@@ -104,7 +104,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
     @Override
     protected void doSetUp() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(TB_GET_TABLE_SCHEMA_ID, TB_GET_TABLE_SCHEMA_NAME));
     }
 

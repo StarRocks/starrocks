@@ -120,7 +120,8 @@ public class ConcurrentDDLTest {
         // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
         for (long threadId : threadIds) {
             table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_tbl_" + threadId);
-            List<Long> tablets = table.getPartitions().stream().findFirst().get().getBaseIndex().getTabletIdsInOrder();
+            List<Long> tablets = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition()
+                    .getBaseIndex().getTabletIdsInOrder();
             List<Long> backendIdList = tablets.stream()
                         .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                         .map(replicaList -> replicaList.get(0).getBackendId())

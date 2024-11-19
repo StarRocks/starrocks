@@ -93,9 +93,12 @@ public class DeleteTest {
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
+    private final long physicalPartitionId = 6L;
+
     private static final long TABLET_1_ID = 10L;
     private static final long TABLET_2_ID = 11L;
     private static final long BACKEND_ID = 20L;
+
     private final String dbName = "db1";
     private final String tableName = "t1";
     private final String partitionName = "p1";
@@ -149,7 +152,7 @@ public class DeleteTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);

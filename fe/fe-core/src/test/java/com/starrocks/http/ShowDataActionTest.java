@@ -36,7 +36,7 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
 
     @Override
     public void doSetUp() {
-        Database db = new Database(1000 + TEST_DB_ID, SHOW_DATA_DB_NAME);
+        Database db = new Database(1000 + testDbId, SHOW_DATA_DB_NAME);
         OlapTable table = newTable("ShowDataTable");
         db.registerTableUnlocked(table);
         expectedSize = table.getDataSize();
@@ -47,7 +47,7 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
 
         ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
-        idToDb.put(1000 + TEST_DB_ID, db);
+        idToDb.put(1000 + testDbId, db);
     }
 
     @Test

@@ -682,10 +682,11 @@ public class OlapTable extends Table {
 
     public boolean hasMaterializedView() {
         Optional<Partition> partition = idToPartition.values().stream().findFirst();
-        if (!partition.isPresent()) {
+        if (partition.isEmpty()) {
             return false;
         } else {
-            return partition.get().hasMaterializedView();
+            PhysicalPartition physicalPartition = partition.get().getDefaultPhysicalPartition();
+            return physicalPartition.hasMaterializedView();
         }
     }
 
@@ -845,7 +846,7 @@ public class OlapTable extends Table {
             partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
         }
 
-        // reset partiton info
+        // reset partition info
         partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
 
         // reset partitions
@@ -865,7 +866,7 @@ public class OlapTable extends Table {
             });
             origPhysicalPartitions.forEach(physicalPartition -> {
                 if (physicalPartition.getId() != newPartitionId) {
-                    physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
                     physicalPartition.setParentId(newPartitionId);
                     partition.addSubPartition(physicalPartition);
                 }
@@ -1423,6 +1424,7 @@ public class OlapTable extends Table {
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
         physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
+        physicalPartitionNameToPartitionId.put(physicalPartition.getName(), physicalPartition.getParentId());
     }
 
     // This is a private method.
@@ -1685,7 +1687,8 @@ public class OlapTable extends Table {
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
-                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+                return (int) (h2.getDefaultPhysicalPartition().getVisibleVersion()
+                        - h1.getDefaultPhysicalPartition().getVisibleVersion());
             }
         });
 
@@ -2117,8 +2120,8 @@ public class OlapTable extends Table {
                 // Every partition has a ShardGroup previously,
                 // and now every Materialized index has a shardGroup.
                 // So the original partition's shardGroup is moved to the base materialized index for compatibility
-                if (partition.getShardGroupId() != PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
-                    partition.getBaseIndex().setShardGroupId(partition.getShardGroupId());
+                if (physicalPartition.getShardGroupId() != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                    physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
                 }
             }
         }
@@ -2324,8 +2327,10 @@ public class OlapTable extends Table {
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
             Partition partition = optionalPartition.get();
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
-            MaterializedIndex baseIdx = partition.getBaseIndex();
+            MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
@@ -3022,7 +3027,7 @@ public class OlapTable extends Table {
         Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
-                    String.valueOf(partition.getVisibleVersion()));
+                    String.valueOf(partition.getDefaultPhysicalPartition().getVisibleVersion()));
         }
         return result;
     }
@@ -3526,10 +3531,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
         }
         return null;
     }

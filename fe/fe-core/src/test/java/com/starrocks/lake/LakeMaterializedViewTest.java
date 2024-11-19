@@ -125,6 +125,7 @@ public class LakeMaterializedViewTest {
         long mvId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+        long physicalPartitionId = 6L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -149,7 +150,7 @@ public class LakeMaterializedViewTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -391,6 +392,9 @@ public class LakeMaterializedViewTest {
         long indexId = 3L;
         long partition1Id = 20L;
         long partition2Id = 21L;
+        long physicalPartitionId1 = 22L;
+        long physicalPartitionId2 = 23L;
+
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -417,7 +421,7 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
         index1.addTablet(tablet1, tabletMeta1);
-        Partition partition1 = new Partition(partition1Id, "p1", index1, distributionInfo);
+        Partition partition1 = new Partition(partition1Id, physicalPartitionId1, "p1", index1, distributionInfo);
 
         LocalDate upper1 = LocalDate.now().minus(duration);
         LocalDate lower1 = upper1.minus(duration);
@@ -430,7 +434,7 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
         index2.addTablet(tablet2, tabletMeta2);
-        Partition partition2 = new Partition(partition2Id, "p2", index1, distributionInfo);
+        Partition partition2 = new Partition(partition2Id, physicalPartitionId2, "p2", index1, distributionInfo);
 
         LocalDate upper2 = LocalDate.now();
         LocalDate lower2 = upper2.minus(duration);

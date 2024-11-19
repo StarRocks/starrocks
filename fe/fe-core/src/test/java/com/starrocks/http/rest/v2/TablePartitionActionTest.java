@@ -84,10 +84,10 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static final String PAGE_NUM_KEY = "page_num";
     private static final String PAGE_SIZE_KEY = "page_size";
 
-    private static final Long TB_OLAP_TABLE_ID = TEST_TABLE_ID + 11000L;
+    private static final Long TB_OLAP_TABLE_ID = testTableId + 11000L;
     private static final String TB_OLAP_TABLE_NAME = "tb_olap_table_test";
 
-    private static final Long TB_LAKE_TABLE_ID = TEST_TABLE_ID + 12000L;
+    private static final Long TB_LAKE_TABLE_ID = testTableId + 12000L;
     private static final String TB_LAKE_TABLE_NAME = "tb_lake_table_test";
 
     private static final Long BASE_PARTITION_ID = testPartitionId + 11000L;
@@ -106,7 +106,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testOlapTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -153,7 +153,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLakeTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newLakeTable(
                 TB_LAKE_TABLE_ID, TB_LAKE_TABLE_NAME, PARTITION_SIZE));
 
@@ -200,7 +200,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testPages() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_ID);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -351,7 +351,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                TEST_DB_ID, TB_OLAP_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                testDbId, TB_OLAP_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(new Replica(
@@ -368,9 +368,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));
@@ -414,7 +416,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta = new TabletMeta(
-                TEST_DB_ID, TB_LAKE_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD, true);
+                testDbId, TB_LAKE_TABLE_ID, BASE_PARTITION_ID, testIndexId, testSchemaHash, TStorageMedium.HDD, true);
         baseIndex.addTablet(tablet, tabletMeta);
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -458,9 +460,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));

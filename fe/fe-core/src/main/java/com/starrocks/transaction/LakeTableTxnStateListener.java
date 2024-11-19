@@ -137,7 +137,12 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         if (enableIngestSlowdown()) {
             long currentTimeMs = System.currentTimeMillis();
-            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(dirtyPartitionSet, currentTimeMs);
+            Set<Long> partitionIds = Sets.newHashSet();
+            for (Long partitionId : dirtyPartitionSet) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                partitionIds.add(partition.getParentId());
+            }
+            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
         }
 
         List<Long> unfinishedTablets = null;

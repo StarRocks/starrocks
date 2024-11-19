@@ -108,7 +108,8 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                 if (localPartition == null) {
                     return;
                 }
-                if (localPartition.getCommittedVersion() < remotePartition.getVisibleVersion()) {
+                if (localPartition.getDefaultPhysicalPartition().getCommittedVersion()
+                        < remotePartition.getDefaultPhysicalPartition().getVisibleVersion()) {
                     needReplication = true;
                 }
             }
@@ -155,7 +156,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
             if (Config.failover_group_allow_drop_inconsistent_partition) {
                 if (localTable.getPartitionInfo().isPartitioned()) {
-                    if (localPartition.getVisibleVersionTime() < failoverGroup.getSchedule()
+                    if (localPartition.getDefaultPhysicalPartition().getVisibleVersionTime() < failoverGroup.getSchedule()
                             .getRoundScheduledTimeMs()) {
                         // If local partition is created in previous replication round, drop and create
                         DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
@@ -353,18 +354,23 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             }
         }
 
-        if (localPartition.getCommittedVersion() > remotePartition.getVisibleVersion()) {
+        if (localPartition.getDefaultPhysicalPartition().getCommittedVersion()
+                > remotePartition.getDefaultPhysicalPartition().getVisibleVersion()) {
             LOG.warn("Local partition {}.{}.{} has greater committed version {} than remote visible version {}",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    localPartition.getCommittedVersion(), remotePartition.getVisibleVersion());
+                    localPartition.getDefaultPhysicalPartition().getCommittedVersion(),
+                    remotePartition.getDefaultPhysicalPartition().getVisibleVersion());
             return false;
         }
 
-        if (localPartition.hasData() && localPartition.getVersionEpoch() != remotePartition.getVersionEpoch()) {
+        if (localPartition.hasData() && localPartition.getDefaultPhysicalPartition().getVersionEpoch()
+                != remotePartition.getDefaultPhysicalPartition().getVersionEpoch()) {
             LOG.warn("Local partition {}.{}.{} has different version epoch {}:{} with remote version epoch {}:{}",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    localPartition.getVisibleVersion(), localPartition.getVersionEpoch(),
-                    remotePartition.getVisibleVersion(), remotePartition.getVersionEpoch());
+                    localPartition.getDefaultPhysicalPartition().getVisibleVersion(),
+                    localPartition.getDefaultPhysicalPartition().getVersionEpoch(),
+                    remotePartition.getDefaultPhysicalPartition().getVisibleVersion(),
+                    remotePartition.getDefaultPhysicalPartition().getVersionEpoch());
             return false;
         }
 

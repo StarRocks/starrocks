@@ -90,7 +90,7 @@ public abstract class BatchWriteTestBase {
         List<TTabletCommitInfo> commitInfos = new ArrayList<>();
         for (Partition partition : TABLE_1_1.getPartitions()) {
             List<MaterializedIndex> materializedIndices =
-                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : materializedIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     for (long backendId : tablet.getBackendIds()) {

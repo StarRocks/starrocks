@@ -110,7 +110,8 @@ public class DatabaseTest {
         Assert.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "baseTable", baseIndex, new RandomDistributionInfo(10));
+        Partition partition = new Partition(20000L, 20001L,
+                "baseTable", baseIndex, new RandomDistributionInfo(10));
         List<Column> baseSchema = new LinkedList<Column>();
         OlapTable table = new OlapTable(2000, "baseTable", baseSchema, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));

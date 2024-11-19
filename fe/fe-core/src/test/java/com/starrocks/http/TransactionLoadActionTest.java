@@ -1646,7 +1646,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                                 LoadJobSourceType sourceType,
                                                 TransactionStatus txnStatus) {
         TransactionState txnState = new TransactionState(
-                TEST_DB_ID,
+                testDbId,
                 new ArrayList<>(0),
                 txnId,
                 label,

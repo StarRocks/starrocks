@@ -199,7 +199,7 @@ public abstract class MVTimelinessArbiter {
             return;
         }
         mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
-            if (!mv.getPartition(mvPartitionName).hasStorageData()) {
+            if (!mv.getPartition(mvPartitionName).getDefaultPhysicalPartition().hasStorageData()) {
                 // add empty partitions
                 mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
             }

@@ -441,7 +441,7 @@ public class DatabaseTransactionMgrTest {
         List<Comparable> tableTransInfo = tableTransInfos.get(0);
         assertEquals(2, tableTransInfo.size());
         assertEquals(2L, tableTransInfo.get(0));
-        assertEquals("3", tableTransInfo.get(1));
+        assertEquals("103", tableTransInfo.get(1));
     }
 
     @Test
@@ -454,7 +454,7 @@ public class DatabaseTransactionMgrTest {
         assertEquals(1, partitionTransInfos.size());
         List<Comparable> partitionTransInfo = partitionTransInfos.get(0);
         assertEquals(2, partitionTransInfo.size());
-        assertEquals(3L, partitionTransInfo.get(0));
+        assertEquals(103L, partitionTransInfo.get(0));
         assertEquals(13L, partitionTransInfo.get(1));
     }
 

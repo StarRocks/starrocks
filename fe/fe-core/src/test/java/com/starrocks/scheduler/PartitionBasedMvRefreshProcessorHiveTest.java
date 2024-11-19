@@ -161,11 +161,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         MockedHiveMetadata mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
@@ -173,22 +178,32 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
         initAndExecuteTaskRun(taskRun);
-        Assert.assertEquals(1, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         task.setType(Constants.TaskType.MANUAL);
         taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -403,7 +418,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv1").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv1").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv1");
     }
@@ -451,11 +467,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -499,7 +520,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv2").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_tbl_mv2").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_tbl_mv2");
     }
@@ -545,7 +567,8 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("hive_join_internal_mv").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("hive_join_internal_mv").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_join_internal_mv");
     }
@@ -593,11 +616,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -644,11 +672,16 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(6, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980102").getVisibleVersion());
-        Assert.assertEquals(3, materializedView.getPartition("p19980103").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980104").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980105").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980105").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -694,9 +727,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assert.assertEquals(3, partitions.size());
-        Assert.assertEquals(3, materializedView.getPartition("p0").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p1").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p2").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p0").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p1").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p2").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         starRocksAssert.useDatabase("test").dropMaterializedView("hive_parttbl_mv1");
     }
@@ -716,8 +752,10 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         Collection<Partition> partitions = materializedView.getPartitions();
 
         Assert.assertEquals(2, partitions.size());
-        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
+                .getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+                .getVisibleVersion());
 
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();

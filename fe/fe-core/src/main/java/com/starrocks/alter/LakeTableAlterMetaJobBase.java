@@ -385,13 +385,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     void updateNextVersion(@NotNull LakeTable table) {
         for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            long commitVersion = commitVersionMap.get(partitionId);
-            Preconditions.checkState(partition.getNextVersion() == commitVersion,
-                    "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
-            partition.setNextVersion(commitVersion + 1);
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+            long commitVersion = commitVersionMap.get(physicalPartition.getId());
+            Preconditions.checkState(physicalPartition.getNextVersion() == commitVersion,
+                    "partitionNextVersion=" + physicalPartition.getNextVersion() + " commitVersion=" + commitVersion);
+            physicalPartition.setNextVersion(commitVersion + 1);
             LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
-                    jobId, partition.getId(), commitVersion);
+                    jobId, physicalPartition.getId(), commitVersion);
         }
     }
 

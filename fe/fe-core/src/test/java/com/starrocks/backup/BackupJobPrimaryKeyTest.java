@@ -47,6 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -61,6 +62,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GtidGenerator;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -174,8 +176,14 @@ public class BackupJobPrimaryKeyTest {
         db = UnitTestUtil.createDbByName(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS,
                     testDbName, testTableName);
 
+        LockManager lockManager = new LockManager();
+
         new Expectations(globalStateMgr) {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
@@ -187,6 +195,14 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
 
                 globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
                 minTimes = 0;

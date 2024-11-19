@@ -36,7 +36,7 @@ import static org.junit.Assert.assertTrue;
 
 public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
-    private static final long DB_ID = 1000 + TEST_DB_ID;
+    private static final long DB_ID = 1000 + testDbId;
     private static final String DB_NAME = "TEST_DB";
     private static final String TABLE_NAME = "TEST_TABLE";
     private static final long EXPECTED_SINGLE_REPLICA_SIZE = 1024L;

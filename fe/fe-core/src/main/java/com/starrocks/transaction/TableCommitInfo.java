@@ -81,7 +81,7 @@ public class TableCommitInfo implements Writable {
             int elementNum = in.readInt();
             for (int i = 0; i < elementNum; ++i) {
                 PartitionCommitInfo partitionCommitInfo = PartitionCommitInfo.read(in);
-                idToPartitionCommitInfo.put(partitionCommitInfo.getPartitionId(), partitionCommitInfo);
+                idToPartitionCommitInfo.put(partitionCommitInfo.getPhysicalPartitionId(), partitionCommitInfo);
             }
         }
     }
@@ -95,7 +95,7 @@ public class TableCommitInfo implements Writable {
     }
 
     public void addPartitionCommitInfo(PartitionCommitInfo info) {
-        this.idToPartitionCommitInfo.put(info.getPartitionId(), info);
+        this.idToPartitionCommitInfo.put(info.getPhysicalPartitionId(), info);
     }
 
     public void removePartition(long partitionId) {

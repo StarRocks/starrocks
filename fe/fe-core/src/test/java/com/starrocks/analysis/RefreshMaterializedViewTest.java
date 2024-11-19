@@ -209,7 +209,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         OlapTable table = (OlapTable) getTable("test", "tbl_with_mv");
         Partition p1 = table.getPartition("p1");
         Partition p2 = table.getPartition("p2");
-        if (p2.getVisibleVersion() == 3) {
+        if (p2.getDefaultPhysicalPartition().getVisibleVersion() == 3) {
             MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
             Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
             Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
@@ -221,8 +221,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
         } else {
             // publish version is async, so version update may be late
             // for debug
-            System.out.println("p1 visible version:" + p1.getVisibleVersion());
-            System.out.println("p2 visible version:" + p2.getVisibleVersion());
+            System.out.println("p1 visible version:" + p1.getDefaultPhysicalPartition().getVisibleVersion());
+            System.out.println("p2 visible version:" + p2.getDefaultPhysicalPartition().getVisibleVersion());
             System.out.println("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
             System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
         }
@@ -330,7 +330,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
 
                         Table tbl1 = getTable("test", "tbl_staleness2");
                         Optional<Long> maxPartitionRefreshTimestamp =
-                                tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                tbl1.getPartitions().stream().map(
+                                        p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                         Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                         MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
@@ -348,7 +349,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
 
                         Table tbl1 = getTable("test", "tbl_staleness2");
                         Optional<Long> maxPartitionRefreshTimestamp =
-                                tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                tbl1.getPartitions().stream().map(
+                                        p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                         Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                         MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness2");
@@ -413,7 +415,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         {
                             Table tbl1 = getTable("test", "tbl_staleness3");
                             Optional<Long> maxPartitionRefreshTimestamp =
-                                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                    tbl1.getPartitions().stream().map(
+                                            p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                             Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
@@ -428,7 +431,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         {
                             Table tbl1 = getTable("test", "mv_with_mv_rewrite_staleness21");
                             Optional<Long> maxPartitionRefreshTimestamp =
-                                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                    tbl1.getPartitions().stream().map(
+                                            p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                             Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
@@ -446,7 +450,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         {
                             Table tbl1 = getTable("test", "tbl_staleness3");
                             Optional<Long> maxPartitionRefreshTimestamp =
-                                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                    tbl1.getPartitions().stream().map(
+                                            p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                             Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");
@@ -467,7 +472,8 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                         {
                             Table tbl1 = getTable("test", "mv_with_mv_rewrite_staleness21");
                             Optional<Long> maxPartitionRefreshTimestamp =
-                                    tbl1.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+                                    tbl1.getPartitions().stream().map(
+                                            p -> p.getDefaultPhysicalPartition().getVisibleVersionTime()).max(Long::compareTo);
                             Assert.assertTrue(maxPartitionRefreshTimestamp.isPresent());
 
                             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness22");
@@ -531,9 +537,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            long version = partition.getVisibleVersion() + 1;
-                            partition.setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getBaseIndex();
+                            long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
+                            partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -635,9 +641,9 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            long version = partition.getVisibleVersion() + 1;
-                            partition.setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getBaseIndex();
+                            long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
+                            partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

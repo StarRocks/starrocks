@@ -172,7 +172,7 @@ public class MetaUtils {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            return table.getPhysicalPartition(partitionId) != null;
+            return table.getPartition(partitionId) != null;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }

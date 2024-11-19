@@ -169,7 +169,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(pInfo1 instanceof SinglePartitionInfo);
 
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
-        Partition partition = new Partition(2, "mv_name", index, distributionInfo);
+        Partition partition = new Partition(2, 22, "mv_name", index, distributionInfo);
         mv.addPartition(partition);
         Partition tmpPartition = mv.getPartition("mv_name");
         Assert.assertTrue(tmpPartition != null);
@@ -194,7 +194,7 @@ public class MaterializedViewTest {
         Assert.assertEquals("new_name_2", mv2.getName());
         PartitionInfo pInfo2 = mv2.getPartitionInfo();
         Assert.assertTrue(pInfo2 instanceof RangePartitionInfo);
-        Partition partition2 = new Partition(3, "p1", index, distributionInfo);
+        Partition partition2 = new Partition(3, 33, "p1", index, distributionInfo);
         mv2.addPartition(partition2);
         Partition tmpPartition2 = mv2.getPartition("p1");
         Assert.assertTrue(tmpPartition2 != null);

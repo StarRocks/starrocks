@@ -64,6 +64,7 @@ public class LakeTabletsProcNodeTest {
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+        long physicalPartitionId = 6L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -101,7 +102,7 @@ public class LakeTabletsProcNodeTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);

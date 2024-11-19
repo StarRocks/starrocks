@@ -439,9 +439,9 @@ public class PartitionsProcDir implements ProcDirInterface {
             try {
                 partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
             } catch (NumberFormatException e) {
-                partition = table.getPartition(partitionIdOrName, false);
+                partition = table.getPartition(partitionIdOrName, false).getDefaultPhysicalPartition();
                 if (partition == null) {
-                    partition = table.getPartition(partitionIdOrName, true);
+                    partition = table.getPartition(partitionIdOrName, true).getDefaultPhysicalPartition();
                 }
             }
 

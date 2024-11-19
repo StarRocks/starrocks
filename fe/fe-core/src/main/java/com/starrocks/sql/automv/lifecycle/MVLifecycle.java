@@ -146,11 +146,13 @@ public class MVLifecycle {
     }
 
     public boolean hasRefreshed() {
-        return refreshState(partitions -> partitions.stream().anyMatch(Partition::hasStorageData));
+        return refreshState(partitions -> partitions.stream()
+                .anyMatch(p -> p.getDefaultPhysicalPartition().hasStorageData()));
     }
 
     public boolean neverRefreshed() {
-        return refreshState(partitions -> partitions.stream().noneMatch(Partition::hasStorageData));
+        return refreshState(partitions -> partitions.stream()
+                .noneMatch(p -> p.getDefaultPhysicalPartition().hasStorageData()));
     }
 
     public boolean isPresent() {

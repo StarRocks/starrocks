@@ -16,7 +16,9 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,8 +33,6 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 public class OlapTableSinkTest2 {
     private static StarRocksAssert starRocksAssert;
@@ -61,14 +61,15 @@ public class OlapTableSinkTest2 {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
 
-        List<Long> partitionIds = olapTable.getAllPartitionIds();
-
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
-        for (Long partitionId : partitionIds) {
-            tPartition.setId(partitionId);
-            partitionParam.addToPartitions(tPartition);
+        for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                tPartition.setId(physicalPartition.getId());
+                partitionParam.addToPartitions(tPartition);
+            }
         }
+
         try {
             OlapTableSink.createLocation(olapTable, partitionParam, false);
         } catch (UserException e) {

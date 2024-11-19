@@ -517,7 +517,7 @@ public class FragmentNormalizer {
     }
 
     List<Expr> getPartitionRangePredicates(List<Expr> conjuncts,
-                                           List<Map.Entry<Long, Range<PartitionKey>>> rangeMap,
+                                           List<Pair<Long, Range<PartitionKey>>> rangeMap,
                                            List<Column> partitionColumns,
                                            SlotId partitionSlotId) {
 
@@ -546,20 +546,20 @@ public class FragmentNormalizer {
         //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
         //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
-            for (Map.Entry<Long, Range<PartitionKey>> range : rangeMap) {
-                selectedRangeMap.put(range.getKey(), range.getValue().toString());
+            for (Pair<Long, Range<PartitionKey>> range : rangeMap) {
+                selectedRangeMap.put(range.first, range.second.toString());
             }
             return conjuncts;
         }
 
         Column partitionColumn = partitionColumns.get(0);
         List<Range<PartitionKey>> partitionRanges = rangeMap.stream()
-                .map(Map.Entry::getValue).collect(Collectors.toList());
+                .map(r -> r.second).collect(Collectors.toList());
 
         // compute the intersection region of partition range and region predicates
         for (Expr expr : boundSimpleRegionExprs) {
@@ -579,16 +579,16 @@ public class FragmentNormalizer {
                 continue;
             }
             range = toClosedOpenRange(range);
-            Map.Entry<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
+            Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
             if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
+                selectedRangeMap.put(partitionKeyRange.first, range.toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
         // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            createSimpleRangeMap(rangeMap.stream().map(r -> r.first).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -602,7 +602,7 @@ public class FragmentNormalizer {
     // just create a simple selectedRangeMap which is used to construct cache key in BE.
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
-        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+        selectedPartitionIds.forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 
     public Set<SlotId> getSlotsUseAggColumns() {
