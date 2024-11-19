@@ -1071,6 +1071,12 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions1() {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1089,6 +1095,13 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions2() {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableG;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1112,6 +1125,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.refresh();
         mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
         mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
