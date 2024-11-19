@@ -836,6 +836,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 if (olapTable == null) {
                     continue;
                 }
+
+                if (!olapTable.needSchedule(true)) {
+                    continue;
+                }
+
                 // check tablet healthy
                 if (isTabletUnhealthy(tabletMeta.getDbId(), olapTable, tabletId, tabletMeta, aliveBeIds)) {
                     continue;
@@ -1706,6 +1711,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
+                    if (!olapTbl.needSchedule(isLocalBalance)) {
+                        continue;
+                    }
+                    
                     boolean isLabelLocationTable = olapTbl.getLocation() != null;
 
                     for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
