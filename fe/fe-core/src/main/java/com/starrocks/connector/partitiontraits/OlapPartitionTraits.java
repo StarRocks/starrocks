@@ -106,8 +106,8 @@ public class OlapPartitionTraits extends DefaultTraits {
             String basePartitionName = versionEntry.getKey();
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
-                // TODO: Once there is a partition deleted, refresh all partitions.
-                return baseTable.getVisiblePartitionNames();
+                // If this partition is dropped, ignore it.
+                continue;
             }
             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
             if (mvRefreshedPartitionInfo == null) {

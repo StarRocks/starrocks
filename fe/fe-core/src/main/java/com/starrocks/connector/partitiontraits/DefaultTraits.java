@@ -161,8 +161,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : versionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
                 if (!latestPartitionInfo.containsKey(basePartitionName)) {
-                    // TODO: If one partition has been dropped, refresh all existed partitions again.
-                    return latestPartitionInfo.keySet();
+                    // If this partition is dropped, ignore it.
+                    continue;
                 }
                 long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
