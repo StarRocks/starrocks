@@ -159,7 +159,138 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
+<<<<<<< HEAD
         unsupportedException("Not support");
+=======
+        try {
+            Map<String, String> properties = clause.getProperties();
+            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.WRITE_QUORUM);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties, TTabletMetaType.INMEMORY);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                if (table.isCloudNativeTable()) {
+                    Locker locker = new Locker();
+                    locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    try {
+                        schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
+                    } finally {
+                        locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    }
+
+                    isSynchronous = false;
+                } else {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                        throw new DdlException("StarRocks doesn't support alter persistent_index_type under shared-nothing mode");
+                    }
+                    schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                            TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.REPLICATED_STORAGE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.BUCKET_SIZE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.MUTABLE_BUCKET_NUM);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.ENABLE_LOAD_PROFILE);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
+                try {
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            table.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                            TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                } catch (Exception e) {
+                    LOG.warn("Failed to update base compaction forbidden time ranges: " + tableName.getTbl(), e);
+                    throw new DdlException("Failed to update base compaction forbidden time ranges for "
+                            + tableName.getTbl() + ": " + e.getMessage());
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
+                boolean isSuccess = schemaChangeHandler.updateBinlogConfigMeta(db, table.getId(),
+                        properties, TTabletMetaType.BINLOG_CONFIG);
+                if (!isSuccess) {
+                    throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                schemaChangeHandler.updateTableConstraint(db, tableName.getTbl(), properties);
+            } else {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                try {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                        if (olapTable.getLocation() != null) {
+                            ErrorReport.reportDdlException(
+                                    ErrorCode.ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL, olapTable.getName());
+                        }
+                        String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+                        GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                                .modifyTableColocate(db, olapTable, colocateGroup, false, null);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
+                    } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
+                        if (!olapTable.dynamicPartitionExists()) {
+                            try {
+                                DynamicPartitionUtil.checkInputDynamicPartitionProperties(
+                                        olapTable, properties, olapTable.getPartitionInfo());
+                            } catch (DdlException e) {
+                                // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                                throw new DdlException("Table " + db.getOriginName() + "." +
+                                        olapTable.getName() + " is not a dynamic partition table.");
+                            }
+                        }
+                        if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
+                            String colocateGroup = olapTable.getColocateGroup();
+                            if (colocateGroup != null) {
+                                throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
+                                        "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
+                            }
+                        }
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .modifyTableDynamicPartition(db, olapTable, properties);
+                    } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                        Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+                        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .modifyTableDefaultReplicationNum(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableReplicationNum(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else {
+                        schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
+                    }
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                }
+
+                isSynchronous = false;
+            }
+        } catch (UserException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
+>>>>>>> 49f6f36538 ([BugFix] Fix disable base compaction with minute granularity & fe/be recover (#52923))
         return null;
     }
 

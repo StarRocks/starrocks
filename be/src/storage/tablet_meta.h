@@ -237,6 +237,9 @@ public:
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
+    // for test
+    void TEST_set_table_id(int64_t table_id);
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -310,6 +313,10 @@ inline TabletUid TabletMeta::tablet_uid() const {
 
 inline int64_t TabletMeta::table_id() const {
     return _table_id;
+}
+
+inline void TabletMeta::TEST_set_table_id(int64_t table_id) {
+    _table_id = table_id;
 }
 
 inline int64_t TabletMeta::partition_id() const {
