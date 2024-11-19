@@ -143,6 +143,8 @@ void CompactionTask::run() {
                                           _task_info.to_string());
     if (!status.ok()) {
         LOG(WARNING) << msg;
+    } else {
+        LOG(INFO) << msg;
     }
 }
 
