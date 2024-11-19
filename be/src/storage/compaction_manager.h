@@ -146,6 +146,7 @@ private:
     CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
     void _dispatch_worker();
+    bool _check_compaction_disabled(const CompactionCandidate& candidate);
     bool _check_precondition(const CompactionCandidate& candidate);
     void _schedule();
     void _notify();

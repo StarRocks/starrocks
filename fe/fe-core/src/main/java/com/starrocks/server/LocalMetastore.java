@@ -4088,6 +4088,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
+                } else if (opCode == OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES) {
+                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                            tableId, tableProperty.getBaseCompactionForbiddenTimeRanges());
                 }
             }
         } catch (Exception ex) {

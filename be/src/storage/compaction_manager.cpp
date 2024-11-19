@@ -162,6 +162,9 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             }
         }
         for (auto& candidate : candidates) {
+            if (_check_compaction_disabled(candidate)) {
+                continue;
+            }
             if (candidate.tablet->enable_compaction()) {
                 VLOG(2) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
@@ -200,6 +203,25 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     }
 }
 
+bool CompactionManager::_check_compaction_disabled(const CompactionCandidate& candidate) {
+    if (candidate.type == CompactionType::BASE_COMPACTION &&
+        _table_to_disable_deadline_map.find(candidate.tablet->tablet_meta()->table_id()) !=
+                _table_to_disable_deadline_map.end()) {
+        int64_t deadline = _table_to_disable_deadline_map[candidate.tablet->tablet_meta()->table_id()];
+        if (deadline > 0 && UnixSeconds() < deadline) {
+            return true;
+        } else {
+            // disable compaction deadline has passed, remove it from map
+            _table_to_disable_deadline_map.erase(candidate.tablet->tablet_meta()->table_id());
+            // check if the tablet should compact now after the deadline
+            update_tablet_async(candidate.tablet);
+            LOG(INFO) << "remove disable table compaction, table_id:" << candidate.tablet->tablet_meta()->table_id()
+                      << ", deadline:" << deadline;
+        }
+    }
+    return false;
+}
+
 bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
     if (!candidate.tablet) {
         LOG(WARNING) << "candidate with null tablet";
@@ -210,19 +232,6 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
                 << ", not RUNNING";
         return false;
-    }
-
-    // check if the table base compaction is disabled
-    if (candidate.type == CompactionType::BASE_COMPACTION &&
-        _table_to_disable_deadline_map.find(tablet->tablet_meta()->table_id()) !=
-                _table_to_disable_deadline_map.end()) {
-        int64_t deadline = _table_to_disable_deadline_map[tablet->tablet_meta()->table_id()];
-        if (deadline > 0 && UnixSeconds() < deadline) {
-            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because table is disabled";
-            return false;
-        } else {
-            _table_to_disable_deadline_map.erase(tablet->tablet_meta()->table_id());
-        }
     }
 
     int64_t last_failure_ts = 0;
@@ -291,6 +300,10 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
 
     auto iter = _compaction_candidates.begin();
     while (iter != _compaction_candidates.end()) {
+        if (_check_compaction_disabled(*iter)) {
+            _compaction_candidates.erase(iter++);
+            continue;
+        }
         if (_check_precondition(*iter)) {
             *candidate = *iter;
             _compaction_candidates.erase(iter);
@@ -654,8 +667,11 @@ int CompactionManager::get_waiting_task_num() {
 
 void CompactionManager::disable_table_compaction(int64_t table_id, int64_t deadline) {
     std::lock_guard lg(_candidates_mutex);
-    VLOG(2) << "disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
+    if (_table_to_disable_deadline_map.find(table_id) == _table_to_disable_deadline_map.end()) {
+        LOG(INFO) << "start disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
+    }
     _table_to_disable_deadline_map[table_id] = deadline;
+    VLOG(2) << "disable table compaction, table_id:" << table_id << ", deadline:" << deadline;
 }
 
 } // namespace starrocks

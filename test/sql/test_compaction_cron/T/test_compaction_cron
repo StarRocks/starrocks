@@ -1,12 +1,4 @@
--- name: test_create_alter_compaction_control
-create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
-show create table t;
-alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
-show create table t;
-alter table t set ('base_compaction_forbidden_time_ranges'='');
-show create table t;
-
--- name: test_disable_compaction
+-- name: test_disable_compaction @sequential
 create database test_disable_compaction;
 use test_disable_compaction;
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * *');
@@ -20,8 +12,20 @@ delete from t where k = 5;
 select sleep(3);
 select min(NUM_VERSION) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='test_disable_compaction';
 
--- name: test_primary_key
+-- name: test_primary_key @sequential
 create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
 create table t(k int, v int) primary key(k);
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 
+-- name: test_invalid_cron @sequential
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='5 8-18 * * *');
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='-1 * * * *');
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* * * * 0');
+
+-- name: test_create_alter_compaction_control @sequential
+create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
+show create table t;
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+show create table t;
+alter table t set ('base_compaction_forbidden_time_ranges'='');
+show create table t;

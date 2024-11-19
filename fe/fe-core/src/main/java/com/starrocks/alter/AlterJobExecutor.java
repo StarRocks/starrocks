@@ -387,8 +387,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } catch (Exception e) {
-                    LOG.warn("Failed to update base compaction forbidden time ranges: ", e);
-                    throw new DdlException("Failed to update base compaction forbidden time ranges: " + e.getMessage());
+                    LOG.warn("Failed to update base compaction forbidden time ranges: " + tableName.getTbl(), e);
+                    throw new DdlException("Failed to update base compaction forbidden time ranges for "
+                            + tableName.getTbl() + ": " + e.getMessage());
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
