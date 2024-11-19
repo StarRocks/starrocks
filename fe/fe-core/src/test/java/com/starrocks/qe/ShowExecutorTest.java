@@ -51,6 +51,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -105,6 +106,7 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -1171,6 +1173,14 @@ public class ShowExecutorTest {
                                 "PARTITION BY (year, dt)\n" +
                                 "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                     resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowKeysFromExternalTable() {
+        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
+                new TableName(null, "test_db", "test_table"));
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals(0, resultSet.getResultRows().size());
     }
 
     @Test
