@@ -80,8 +80,13 @@ bool HiveTextArrayReader::split_array_elements(Slice s, std::vector<Slice>* elem
             left = right + 1;
         }
     }
+<<<<<<< HEAD
     if (right > left) {
         elements->push_back(Slice(s.data + left, right - left));
+=======
+    if (right >= left) {
+        elements.emplace_back(s.data + left, right - left);
+>>>>>>> 14d6654838 ([BugFix] Fix hive text reader can't recognize last empty element (#52990))
     }
 
     return true;
