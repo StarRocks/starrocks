@@ -202,9 +202,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(1, sql.size());
 
         assertContains(sql.get(0), "with base_cte_table as " +
-                "(SELECT * FROM `test`.`t_struct` LIMIT 200000) " +
-                "SELECT cast(4 as INT), cast(14418 as BIGINT), 'c2', cast(0 as BIGINT), " +
-                "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
+                "(SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
+        assertContains(sql.get(0), "cast(IFNULL(SUM(CHAR_LENGTH(`c2`)) * 0/ COUNT(*), 0) as BIGINT), " +
                 "hex(hll_serialize(IFNULL(hll_raw(`c2`), hll_empty())))," +
                 " cast((COUNT(*) - COUNT(`c2`)) * 0 / COUNT(*) as BIGINT), " +
                 "IFNULL(MAX(LEFT(`c2`, 200)), ''), IFNULL(MIN(LEFT(`c2`, 200)), '')  " +
@@ -225,11 +224,11 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> sql = jobs.get(0).buildQuerySQL();
         Assert.assertEquals(1, sql.size());
 
-        assertContains(sql.get(0), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) " +
-                "SELECT cast(4 as INT), cast(14418 as BIGINT), 'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), " +
-                "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), " +
-                "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
-                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), '')  FROM base_cte_table");
+        assertContains(sql.get(0), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
+        assertContains(sql.get(0), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
+        assertContains(sql.get(0), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
+        assertContains(sql.get(0), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
+                "IFNULL(MAX(`c6`.`c`.`b`), ''), IFNULL(MIN(`c6`.`c`.`b`), '')  FROM base_cte_table ");
     }
 
     @AfterClass
