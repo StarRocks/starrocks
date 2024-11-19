@@ -18,6 +18,7 @@
 
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "storage/predicate_parser.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 
@@ -269,6 +270,25 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
     t_expr.nodes = nodes;
 
     tExprs->emplace_back(t_expr);
+}
+
+void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
+                                            RuntimeState* runtime_state, HdfsScannerContext* params) {
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &conjuncts;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = runtime_state->obj_pool();
+    opts.runtime_filters = runtime_state->obj_pool()->add(new RuntimeFilterProbeCollector());
+    opts.runtime_state = runtime_state;
+    opts.enable_column_expr_predicate = true;
+    opts.is_olap_scan = false;
+    opts.pred_tree_params = {true, true};
+    params->conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+    ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
+    ConnectorPredicateParser predicate_parser{&params->slot_descs};
+    auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);
+    ASSERT_TRUE(st.ok());
+    params->predicate_tree = st.value();
 }
 
 } // namespace starrocks::parquet
