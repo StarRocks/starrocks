@@ -23,8 +23,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
@@ -58,33 +60,42 @@ public class PredicateColumnsMgr {
             return;
         }
         List<ColumnRefOperator> refs = Utils.collect(predicate, ColumnRefOperator.class);
-        for (ColumnRefOperator ref : refs) {
-            Pair<Table, Column> pair = factory.getTableAndColumn(ref);
-            if (pair != null) {
-                addOrUpdateColumnUsage(pair.first, pair.second, ColumnUsage.UseCase.PREDICATE);
-            }
-        }
-
+        addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.PREDICATE);
     }
 
     public void recordJoinPredicate(List<BinaryPredicateOperator> onPredicates, ColumnRefFactory factory) {
         for (BinaryPredicateOperator op : onPredicates) {
             List<ColumnRefOperator> refs = Utils.collect(op, ColumnRefOperator.class);
-            for (ColumnRefOperator ref : refs) {
-                Pair<Table, Column> pair = factory.getTableAndColumn(ref);
-                if (pair != null) {
-                    addOrUpdateColumnUsage(pair.first, pair.second, ColumnUsage.UseCase.JOIN);
-                }
+            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.JOIN);
+        }
+    }
+
+    public void recordGroupByColumns(Map<ColumnRefOperator, CallOperator> aggregations,
+                                     List<ColumnRefOperator> groupBys,
+                                     ColumnRefFactory factory) {
+        for (var entry : aggregations.entrySet()) {
+            if (entry.getValue().isDistinct()) {
+                List<ColumnRefOperator> refs = Utils.collect(entry.getValue(), ColumnRefOperator.class);
+                addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.DISTINCT);
             }
         }
 
+        addOrUpdateColumnUsage(groupBys, factory, ColumnUsage.UseCase.GROUP_BY);
     }
 
-    public void recordGroupByColumns(List<ColumnRefOperator> groupBys, ColumnRefFactory factory) {
-        for (ColumnRefOperator ref : groupBys) {
+    public void recordWindowPartitionBy(List<ScalarOperator> partitionByList, ColumnRefFactory factory) {
+        for (var partitionBy : ListUtils.emptyIfNull(partitionByList)) {
+            List<ColumnRefOperator> refs = Utils.collect(partitionBy, ColumnRefOperator.class);
+            addOrUpdateColumnUsage(refs, factory, ColumnUsage.UseCase.GROUP_BY);
+        }
+    }
+
+    private void addOrUpdateColumnUsage(List<ColumnRefOperator> refs, ColumnRefFactory factory,
+                                        ColumnUsage.UseCase useCase) {
+        for (ColumnRefOperator ref : ListUtils.emptyIfNull(refs)) {
             Pair<Table, Column> pair = factory.getTableAndColumn(ref);
             if (pair != null) {
-                addOrUpdateColumnUsage(pair.first, pair.second, ColumnUsage.UseCase.GROUP_BY);
+                addOrUpdateColumnUsage(pair.first, pair.second, useCase);
             }
         }
     }
@@ -109,8 +120,7 @@ public class PredicateColumnsMgr {
     }
 
     public List<ColumnUsage> queryPredicateColumns(TableName tableName) {
-        return queryByUseCase(tableName, EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN,
-                ColumnUsage.UseCase.GROUP_BY));
+        return queryByUseCase(tableName, ColumnUsage.UseCase.getPredicateColumnUseCase());
     }
 
     public List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {

@@ -112,11 +112,16 @@ public class ColumnUsage {
         NORMAL,
         PREDICATE,
         JOIN,
-        GROUP_BY;
+        GROUP_BY,
+        DISTINCT;
 
         @Override
         public String toString() {
             return this.name().toLowerCase();
+        }
+
+        public static EnumSet<UseCase> getPredicateColumnUseCase() {
+            return EnumSet.of(PREDICATE, JOIN, GROUP_BY, DISTINCT);
         }
     }
 }
