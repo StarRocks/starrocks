@@ -23,6 +23,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.predicate_columns.PredicateColumnsStorage;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,8 +47,8 @@ public class TableKeeper {
 
     private boolean databaseExisted = false;
     private boolean tableExisted = false;
-    private boolean tableCorrected = false;
-    private Supplier<Integer> ttlSupplier;
+    private final boolean tableCorrected = false;
+    private final Supplier<Integer> ttlSupplier;
 
     public TableKeeper(String database,
                        String table,
@@ -116,6 +117,9 @@ public class TableKeeper {
     }
 
     public void changeTTL() {
+        if (ttlSupplier == null) {
+            return;
+        }
         Optional<OlapTable> table = mayGetTable();
         if (table.isEmpty()) {
             return;
@@ -211,6 +215,7 @@ public class TableKeeper {
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(PredicateColumnsStorage.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }

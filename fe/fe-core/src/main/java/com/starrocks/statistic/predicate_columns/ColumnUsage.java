@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic.predicate_columns;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -45,9 +46,13 @@ public class ColumnUsage {
     private LocalDateTime created;
 
     public ColumnUsage(ColumnId columnId, TableName tableName, UseCase useCase) {
+        this(columnId, tableName, EnumSet.of(useCase));
+    }
+
+    public ColumnUsage(ColumnId columnId, TableName tableName, EnumSet<UseCase> useCase) {
         this.columnId = columnId;
         this.tableName = tableName;
-        this.useCase = EnumSet.of(useCase);
+        this.useCase = useCase;
         this.lastUsed = TimeUtils.getSystemNow();
         this.created = TimeUtils.getSystemNow();
     }
@@ -93,6 +98,14 @@ public class ColumnUsage {
     public void useNow(UseCase useCase) {
         this.lastUsed = LocalDateTime.now(TimeUtils.getSystemTimeZone().toZoneId());
         this.useCase.add(useCase);
+    }
+
+    public ColumnUsage merge(ColumnUsage other) {
+        Preconditions.checkArgument(other.equals(this));
+        ColumnUsage merged = new ColumnUsage(this.columnId, this.tableName, EnumSet.copyOf(this.useCase));
+        merged.useCase.addAll(other.useCase);
+        merged.lastUsed = this.lastUsed.isBefore(other.getLastUsed()) ? other.getLastUsed() : lastUsed;
+        return merged;
     }
 
     @Override

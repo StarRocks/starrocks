@@ -19,6 +19,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -28,9 +31,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -43,12 +46,13 @@ public class PredicateColumnsMgr {
     private static final PredicateColumnsMgr INSTANCE = new PredicateColumnsMgr();
 
     // Why Map? To update the usage
-    private final Map<ColumnUsage, ColumnUsage> id2columnUsage = Maps.newHashMap();
+    private final Map<ColumnUsage, ColumnUsage> id2columnUsage = Maps.newConcurrentMap();
 
     public static PredicateColumnsMgr getInstance() {
         return INSTANCE;
     }
 
+    // ============================ Record predicate columns from query ========================= //
     public void recordScanColumns(Map<ColumnRefOperator, Column> scanColumns, Table table, OptExpression optExpr) {
         for (Column column : scanColumns.values()) {
             addOrUpdateColumnUsage(table, column, ColumnUsage.UseCase.NORMAL);
@@ -112,20 +116,48 @@ public class PredicateColumnsMgr {
         oldValue.useNow(useCase);
     }
 
+    //==================================== Query ============================================ //
     public List<ColumnUsage> query(TableName tableName) {
+        // FIXME: use Storage.queryGlobalState interface
         TablePredicate predicate = new TablePredicate(tableName);
         return id2columnUsage.values().stream().filter(predicate).collect(Collectors.toList());
     }
 
     public List<ColumnUsage> queryPredicateColumns(TableName tableName) {
+        // FIXME: use Storage.queryGlobalState interface
         return queryByUseCase(tableName, ColumnUsage.UseCase.getPredicateColumnUseCase());
     }
 
     public List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
+        // FIXME: use Storage.queryGlobalState interface
         TablePredicate predicate = new TablePredicate(tableName);
         Predicate<ColumnUsage> useCasePredicate = (c) -> !SetUtils.intersection(c.getUseCases(), useCases).isEmpty();
         Predicate<ColumnUsage> pred = predicate.and(useCasePredicate);
         return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
+    }
+
+    //==================================== Maintenance ============================================ //
+    public void persist() {
+        getStorage().persist(id2columnUsage.values());
+    }
+
+    public void vacuum() {
+        long ttlHour = Config.statistic_predicate_columns_ttl_hours;
+        LocalDateTime ttlTime = TimeUtils.getSystemNow().minusHours(ttlHour);
+        Predicate<ColumnUsage> outdated = x -> x.getLastUsed().isBefore(ttlTime);
+
+        id2columnUsage.values().removeIf(outdated);
+    }
+
+    public void restore() {
+        List<ColumnUsage> state = getStorage().restore();
+        for (ColumnUsage usage : ListUtils.emptyIfNull(state)) {
+            id2columnUsage.merge(usage, usage, ColumnUsage::merge);
+        }
+    }
+
+    private PredicateColumnsStorage getStorage() {
+        return PredicateColumnsStorage.getInstance();
     }
 
     @VisibleForTesting
@@ -133,12 +165,8 @@ public class PredicateColumnsMgr {
         id2columnUsage.clear();
     }
 
-    public void persist() {
-        throw new NotImplementedException("todo");
-    }
-
-    public void vacuum() {
-        throw new NotImplementedException("todo");
+    public void startDaemon() {
+        DaemonThread.getInstance().start();
     }
 
     /**
@@ -173,4 +201,38 @@ public class PredicateColumnsMgr {
             return true;
         }
     }
+
+    static class DaemonThread extends FrontendDaemon {
+
+        private static final DaemonThread INSTANCE = new DaemonThread();
+
+        public DaemonThread() {
+            super("PredicateColumnsDaemonThread");
+        }
+
+        public static DaemonThread getInstance() {
+            return INSTANCE;
+        }
+
+        public void start() {
+
+        }
+
+        @Override
+        protected void runAfterCatalogReady() {
+            setInterval(Config.statistic_predicate_columns_persist_interval_sec * 1000L);
+
+            PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+            PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
+
+            if (!storage.isRestored()) {
+                mgr.restore();
+                storage.finishRestore();
+            } else {
+                mgr.vacuum();
+                mgr.persist();
+            }
+        }
+    }
+
 }

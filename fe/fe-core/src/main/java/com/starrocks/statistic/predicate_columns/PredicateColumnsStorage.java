@@ -1,0 +1,228 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved. //
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.statistic.predicate_columns;
+
+import com.google.common.base.Stopwatch;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.app.VelocityEngine;
+
+import java.io.StringWriter;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * 1. Persistence:
+ * The in-memory state is periodically persisted, so we use the ColumnUsage.lastUsage and this.lastPersist to
+ * identify whether one ColumnUsage needs to be persisted.
+ * 2. Query:
+ * The in-memory state can only represent local state, the persisted state is shared by all fe nodes
+ * 3. Vacuum:
+ * If the ColumnUsage.lastUsage is less than now() - ttl, it would be removed from memory state and persisted state
+ * 4. Restore:
+ * Before restoring persisted state into memory, some queries may already come up, so we need to merge these two
+ * kinds of state. Before restoring state we cannot persist otherwise they would conflict
+ */
+public class PredicateColumnsStorage extends FrontendDaemon {
+
+    private static Logger LOG = LogManager.getLogger(PredicateColumnsStorage.class);
+
+    private static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
+    private static final String TABLE_NAME = "predicate_columns";
+    private static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
+    private static final String TABLE_DDL = "CREATE TABLE " + TABLE_NAME + "( " +
+            "id BIGINT AUTO_INCREMENT NOT NULL, " +
+            "fe_id STRING NOT NULL," +
+            "table_catalog STRING NOT NULL," +
+            "table_database STRING NOT NULL," +
+            "table_name STRING NOT NULL," +
+            "column_name STRING NOT NULL," +
+            "usage STRING NOT NULL," +
+            "last_used DATETIME NOT NULL," +
+            "created DATETIME DEFAULT CURRENT_TIMESTAMP" +
+            ") " +
+            "PRIMARY KEY(id)" +
+            "DISTRIBUTED BY HASH(table_name,column_name) BUCKETS 8";
+    private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, TABLE_DDL, null);
+
+    private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
+
+    static {
+        DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
+        DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+    }
+
+    private static final int INSERT_BATCH_SIZE = 1024;
+    private static final String SQL_COLUMN_LIST =
+            "fe_id, table_catalog, table_database, table_name, column_name, usage, last_used ";
+    private static final String SQL_COLUMN_LIST_WITH_CREATED = SQL_COLUMN_LIST + ", created";
+
+    private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
+    private static final String INSERT_VALUE = "($feId, $tableCatalog, $tableDatabase, $tableName, " +
+            "$columnName, $usage, $lastUsed)";
+
+    private static final String QUERY = "SELECT " + SQL_COLUMN_LIST_WITH_CREATED + " FROM " + TABLE_FULL_NAME + " " +
+            "WHERE ";
+    private static final String WHERE_TABLE_IS =
+            " table_catalog = '$tableCatalog' " +
+                    "AND table_database = '$tableDatabase' " +
+                    "AND table_name = '$tableName'";
+    private static final String WHERE_THIS_FE = "fe_id = '$feId'";
+
+    private static final PredicateColumnsStorage INSTANCE = new PredicateColumnsStorage();
+
+    /**
+     * MIN: the persisted state has not been restored, we cannot persist
+     */
+    private final LocalDateTime systemStartTime = TimeUtils.getSystemNow();
+    private LocalDateTime lastPersist = LocalDateTime.MIN;
+
+    public static TableKeeper createKeeper() {
+        return KEEPER;
+    }
+
+    public static PredicateColumnsStorage getInstance() {
+        return INSTANCE;
+    }
+
+    /**
+     * Query state from all FEs
+     */
+    public List<ColumnUsage> queryGlobalState(TableName tableName) {
+        VelocityContext context = new VelocityContext();
+        context.put("tableCatalog", tableName.getCatalog());
+        context.put("tableDatabase", tableName.getDb());
+        context.put("tableName", tableName.getTbl());
+
+        String template = QUERY + WHERE_TABLE_IS;
+        StringWriter sw = new StringWriter();
+        DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
+        String sql = sw.toString();
+
+        List<TResultBatch> tResultBatches = RepoExecutor.getInstance().executeDQL(sql);
+        return resultToColumnUsage(tResultBatches);
+    }
+
+    /**
+     * Persist changed records
+     */
+    public void persist(Collection<ColumnUsage> columnUsageList) {
+        if (lastPersist == LocalDateTime.MIN) {
+            return;
+        }
+        Stopwatch watch = Stopwatch.createStarted();
+        List<ColumnUsage> diff =
+                columnUsageList.stream().filter(x -> x.getLastUsed().isAfter(lastPersist)).collect(Collectors.toList());
+        for (var batch : ListUtils.partition(diff, INSERT_BATCH_SIZE)) {
+            persistDiff(batch);
+        }
+        lastPersist = TimeUtils.getSystemNow();
+        String elapsed = watch.toString();
+        LOG.info("persist {} diffed predicate columns elapsed {}", diff.size(), elapsed);
+    }
+
+    private void persistDiff(List<ColumnUsage> diff) {
+        StringBuilder insert = new StringBuilder(ADD_RECORD);
+        boolean first = true;
+        for (ColumnUsage usage : diff) {
+            StringWriter sw = new StringWriter();
+
+            VelocityContext context = new VelocityContext();
+            context.put("tableCatalog", usage.getTableName().getCatalog());
+
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_VALUE);
+            if (!first) {
+                insert.append(", ");
+            }
+            insert.append(sw.toString());
+            first = false;
+        }
+
+        String sql = insert.toString();
+        RepoExecutor.getInstance().executeDML(sql);
+    }
+
+    /**
+     * Restore all states
+     */
+    public List<ColumnUsage> restore() {
+        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfFe().getNodeName();
+
+        VelocityContext context = new VelocityContext();
+        context.put("feId", selfName);
+
+        String template = QUERY + WHERE_THIS_FE;
+        StringWriter sw = new StringWriter();
+        DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
+        String sql = sw.toString();
+
+        List<TResultBatch> tResultBatches = RepoExecutor.getInstance().executeDQL(sql);
+        return resultToColumnUsage(tResultBatches);
+    }
+
+    public boolean isRestored() {
+        return lastPersist != LocalDateTime.MIN;
+    }
+
+    public void finishRestore() {
+        lastPersist = systemStartTime;
+        LOG.info("finish restore state");
+    }
+
+    static class ColumnUsageJsonRecord {
+
+        @SerializedName("data")
+        public List<ColumnUsage> data;
+
+        public static ColumnUsageJsonRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, ColumnUsageJsonRecord.class);
+        }
+    }
+
+    private static List<ColumnUsage> resultToColumnUsage(List<TResultBatch> batches) {
+        List<ColumnUsage> res = new ArrayList<>();
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                try {
+                    res.addAll(ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data));
+                } catch (Exception e) {
+                    throw new RuntimeException("failed to deserialize ColumnUsage record: " + jsonString, e);
+                }
+            }
+        }
+        return res;
+    }
+
+}
