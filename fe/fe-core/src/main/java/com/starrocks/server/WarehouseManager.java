@@ -123,6 +123,12 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public boolean warehouseExists(long warehouseId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToWh.containsKey(warehouseId);
+        }
+    }
+
     public List<Long> getAllComputeNodeIds(String warehouseName) {
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
