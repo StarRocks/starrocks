@@ -55,14 +55,18 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class LoadAction extends RestBaseAction {
@@ -86,18 +90,36 @@ public class LoadAction extends RestBaseAction {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
             resp.msg = e.getClass() + ": " + e.getMessage();
-            LOG.warn("Failed to execute executeWithoutPasswordInternal", e);
+            String firstStackTrace = "<null>";
+            Optional<StackTraceElement> stElem = Arrays.stream(e.getStackTrace()).findFirst();
+            if (stElem.isPresent()) {
+                firstStackTrace = stElem.get().toString();
+            }
+            LOG.warn("Failed to execute executeWithoutPasswordInternal: {}, The most inner stack: {}",
+                    e.getMessage(), firstStackTrace);
 
             sendResult(request, response, resp);
         }
     }
 
+    // Basically a complete copy of the private interface HttpUtil.isExpectHeaderValid.
+    private static boolean isExpectHeaderValid(final HttpRequest message) {
+        /*
+         * Expect: 100-continue is for requests only and it works only on HTTP/1.1 or later. Note further that RFC 7231
+         * section 5.1.1 says "A server that receives a 100-continue expectation in an HTTP/1.0 request MUST ignore
+         * that expectation."
+         */
+        return message.protocolVersion().compareTo(HttpVersion.HTTP_1_1) >= 0;
+    }
+
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
             AccessDeniedException {
 
-        // A 'Load' request must have "Expect: 100-continue" header
-        if (!HttpUtil.is100ContinueExpected(request.getRequest())) {
+        // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
+        // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
+        if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
             // TODO: should respond "HTTP 417 Expectation Failed"
+            response.setForceCloseConnection(true);
             throw new DdlException("There is no 100-continue header");
         }
         // close the connection forcibly after the request, so the `Expect: 100-Continue` won't
