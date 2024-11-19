@@ -30,7 +30,7 @@ public enum MVTransparentState {
     UNKNOWN;
 
     public boolean isNoRewrite() {
-        return this == NO_REWRITE;
+        return this == NO_REWRITE || this == UNKNOWN;
     }
 
     public boolean isNoCompensate() {
@@ -39,5 +39,9 @@ public enum MVTransparentState {
 
     public boolean isCompensate() {
         return this == COMPENSATE;
+    }
+
+    public boolean isUnknown() {
+        return this == UNKNOWN;
     }
 }

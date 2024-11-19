@@ -2098,4 +2098,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         return this.defineQueryParseNode;
     }
+
+    @Override
+    public List<Column> getBaseSchema() {
+        if (!hasGeneratedColumn()) {
+            return getSchemaByIndexId(baseIndexId);
+        }
+
+        List<Column> schema = Lists.newArrayList(getSchemaByIndexId(baseIndexId));
+        while (schema.size() > 0) {
+            // check last column is whether is a generated column or not
+            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
+                schema.remove(schema.size() - 1);
+            } else {
+                break;
+            }
+        }
+        return schema;
+    }
 }
