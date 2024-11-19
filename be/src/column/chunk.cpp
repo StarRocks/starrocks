@@ -133,6 +133,10 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
 }
 
 void Chunk::append_column(ColumnPtr column, SlotId slot_id) {
+    DCHECK(!_slot_id_to_index.contains(slot_id)) << "slot_id:" + std::to_string(slot_id) << std::endl;
+    if (UNLIKELY(_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} already exists", slot_id));
+    }
     _slot_id_to_index[slot_id] = _columns.size();
     _columns.emplace_back(std::move(column));
     check_or_die();
