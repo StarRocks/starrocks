@@ -256,6 +256,10 @@ public class ComputeNode implements IComputable, Writable {
         return arrowFlightPort;
     }
 
+    public void setArrowFlightPort(int arrowFlightPort) {
+        this.arrowFlightPort = arrowFlightPort;
+    }
+
     public TNetworkAddress getAddress() {
         return new TNetworkAddress(host, bePort);
     }
