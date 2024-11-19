@@ -12,15 +12,9 @@ delete from t where k = 5;
 select sleep(3);
 select min(NUM_VERSION) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='test_disable_compaction';
 
-<<<<<<< HEAD
--- name: test_primary_key
-create table t(k int, v int) primary key(k) distributed by hash(k) properties('base_compaction_forbidden_time_ranges'='* * * * *');
-create table t(k int, v int) primary key(k) distributed by hash(k);
-=======
 -- name: test_primary_key @sequential
 create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
 create table t(k int, v int) primary key(k);
->>>>>>> 49f6f36538 ([BugFix] Fix disable base compaction with minute granularity & fe/be recover (#52923))
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 
 -- name: test_invalid_cron @sequential
