@@ -2985,11 +2985,7 @@ public class OlapTable extends Table {
     public void onReload() {
         analyzePartitionInfo();
         analyzeRollupIndexMeta();
-<<<<<<< HEAD
-=======
-        tryToAssignIndexId();
         updateBaseCompactionForbiddenTimeRanges(false);
->>>>>>> 49f6f36538 ([BugFix] Fix disable base compaction with minute granularity & fe/be recover (#52923))
 
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
