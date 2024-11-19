@@ -64,7 +64,6 @@ public class ConfigTest {
 
         // Reload from file
         URL resource = getClass().getClassLoader().getResource("conf/config_mutable.properties");
-        assert resource != null;
         config.initMutable(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("98", configs.get(0).get(2));
