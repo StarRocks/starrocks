@@ -27,6 +27,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/s3/poco_common.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -377,6 +378,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
     }
 #endif
+
+    if (config::enable_poco_client_for_aws_sdk) {
+        starrocks::poco::HTTPSessionPools::instance().shutdown();
+        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
+    }
 
     http_server->join();
     http_server.reset();
