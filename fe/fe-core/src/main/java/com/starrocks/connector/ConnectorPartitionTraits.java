@@ -153,6 +153,11 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract String getDbName();
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
