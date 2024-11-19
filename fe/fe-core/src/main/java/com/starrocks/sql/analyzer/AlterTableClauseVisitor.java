@@ -1002,4 +1002,5 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
         return null;
     }
+
 }
