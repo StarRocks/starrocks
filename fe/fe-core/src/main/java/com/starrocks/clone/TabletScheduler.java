@@ -1801,13 +1801,13 @@ public class TabletScheduler extends FrontendDaemon {
                     continue;
                 }
                 list.add(tablet);
-                count--;
             } catch (Exception e) {
                 LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
                         tablet.getTabletId(), e);
                 finalizeTabletCtx(tablet, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
                 continue;
             }
+            count--;
         }
         return list;
     }
