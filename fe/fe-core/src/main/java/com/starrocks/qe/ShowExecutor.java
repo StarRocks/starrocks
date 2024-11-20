@@ -1316,7 +1316,11 @@ public class ShowExecutor {
     private void handleShowIndex() throws AnalysisException {
         ShowIndexStmt showStmt = (ShowIndexStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
+        String catalogName = showStmt.getTableName().getCatalog();
+        if (catalogName == null) {
+            catalogName = connectContext.getCurrentCatalog();
+        }
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, showStmt.getDbName());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         db.readLock();
         try {
