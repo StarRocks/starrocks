@@ -2099,6 +2099,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return this.defineQueryParseNode;
     }
 
+    /**
+     * For MV, its schema has relations with defined query's schema.`getBaseSchema` should not return the generated columns
+     * since they are inner columns and not visible to users.
+     * For now, the generated columns of mv can be created when mv's partition expression is not slot ref and its partition type
+     * is LIST.
+     */
     @Override
     public List<Column> getBaseSchema() {
         if (!hasGeneratedColumn()) {

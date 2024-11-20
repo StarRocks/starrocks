@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
@@ -112,45 +112,6 @@ public class IcebergPartitionUtils {
         } catch (Exception e) {
             LOG.warn("parse partition name failed, partitionName: {}, partitionField: {}, type: {}",
                     partitionName, partitionField, type);
-            throw new StarRocksConnectorException("parse/format partition name failed", e);
-        }
-        return result;
-    }
-
-    /// Convert partition value to Iceberg UTC time
-    public static String toIcebergUTCTime(String partitionVal,
-                                          PartitionField partitionField,
-                                          Schema schema,
-                                          Type type) {
-        if (!(type.isDate() || type.isDatetime())) {
-            return partitionVal;
-        }
-        if (!schema.findType(partitionField.sourceId()).equals(Types.TimestampType.withZone())) {
-            return partitionVal;
-        }
-        // If has timestamp with time zone, should compute the time zone offset to UTC
-        ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
-
-        String result;
-        try {
-            LocalDateTime datetime;
-            DateTimeFormatter formatter = null;
-            if (type.isDate()) {
-                formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                // since it's from date, it can be converted to LocalDateTime by atStartOfDay
-                datetime = LocalDate.parse(partitionVal, formatter).atStartOfDay();
-            } else {
-                // parse from datetime which contains hour
-                formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                datetime = LocalDateTime.parse(partitionVal, formatter);
-            }
-            // convert from UTC to local time
-            LocalDateTime localDateTime = convertTimezone(datetime, zoneId, ZoneOffset.UTC);
-            // format to string
-            result = localDateTime.format(formatter);
-        } catch (Exception e) {
-            LOG.warn("parse partition name failed, partitionName: {}, partitionField: {}, type: {}",
-                    partitionVal, partitionField, type);
             throw new StarRocksConnectorException("parse/format partition name failed", e);
         }
         return result;
@@ -283,6 +244,14 @@ public class IcebergPartitionUtils {
         return getIcebergTablePartitionPredicateExpr(table, partitionColName, slotRef, ImmutableList.of(expr));
     }
 
+    /**
+     * Generate Iceberg's partition predicate according its partition transform.
+     * eg:
+     * Iceberg table partition column: day(dt)
+     * partition value      : 2023-01-02
+     * generated predicate  : dt >= '2023-01-01 00:08:00' and dt < '2023-01-02:00:08:00'
+     * NOTE: use range predicate rather than `date_trunc` function for better partition prune in Iceberg SDK.
+     */
     public static Expr getIcebergTablePartitionPredicateExpr(IcebergTable table,
                                                              String partitionColName,
                                                              SlotRef slotRef,

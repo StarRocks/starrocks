@@ -1426,11 +1426,18 @@ public class MaterializedViewAnalyzer {
         return mvPartitionColumn;
     }
 
-    public static Column getGeneratedPartitionColumn(List<Column> mvColumns,
-                                                     TableName mvTableName,
-                                                     FunctionCallExpr partitionByExpr,
-                                                     Map<TableName, Table> tableNameTableMap,
-                                                     int placeHolderSlotId) {
+    /**
+     * For list partitioned mv and its partition expr is a function call, deduce generated partition columns.
+     * For iceberg table with timestamp-with-zone type, we need to adjust partition expr timezone.
+     * NOTE:
+     * - Iceberg table's timestamp-with-zone's default timezone is UTC
+     * - Starrocks table's timestamp type is no timezone and its time is converted to local timezone.
+     */
+    private static Column getGeneratedPartitionColumn(List<Column> mvColumns,
+                                                      TableName mvTableName,
+                                                      FunctionCallExpr partitionByExpr,
+                                                      Map<TableName, Table> tableNameTableMap,
+                                                      int placeHolderSlotId) {
         List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
@@ -1497,7 +1504,7 @@ public class MaterializedViewAnalyzer {
             throw new SemanticException("Materialized view partition column in partition exp " +
                     "must be base table partition column");
         }
-        PartitionField partitionField = getIcebergPartitionField(icebergTable, refPartitionColOpt.get());
+        PartitionField partitionField = icebergTable.getPartitionField(refPartitionColOpt.get().getName());
         if (partitionField.transform().dedupName().equalsIgnoreCase("time")) {
             org.apache.iceberg.Schema icebegSchema = icebergTable.getNativeTable().schema();
             if (icebegSchema.findType(partitionField.sourceId()).equals(Types.TimestampType.withZone())) {
@@ -1518,11 +1525,10 @@ public class MaterializedViewAnalyzer {
         return (offset2.getTotalSeconds() - offset1.getTotalSeconds()) / 3600;
     }
 
-    private static PartitionField getIcebergPartitionField(IcebergTable icebergTable,
-                                                           Column refPartitionCol) {
-        return icebergTable.getPartitionField(refPartitionCol.getName());
-    }
-
+    /**
+     * For mv's partition function experssion with timezone, adjust timezone to local timezone; otherwise MV refresh
+     * cannot match target partition by referring specific Iceberg input partition.
+     */
     private static Expr getAdjustPartitionExpr(Expr partitionByExpr,
                                                SlotRef slotRef,
                                                int zoneHourOffset) {
@@ -1559,6 +1565,10 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    /**
+     * For generated column, change its referred slot ref from original ref-base-table's output columns to
+     * MV's output columns.
+     */
     private static void resolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
         int columnId = 0;

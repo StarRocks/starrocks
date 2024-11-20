@@ -28,7 +28,7 @@ public enum MVTransparentState {
     NO_COMPENSATE,  // MV can be used for rewrite without any compensation
     COMPENSATE,     // MV can be used for rewrite with partition compensation union.
     UNKNOWN;        // MV's compensation state is unknown, it cannot be used to rewrite in `CHECKED` mode, but can be used in
-                    // `LOOSE` mode.
+    // `LOOSE` mode.
 
     public boolean isNoRewrite() {
         return this == NO_REWRITE;
