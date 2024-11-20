@@ -14,8 +14,9 @@
 
 #include "runtime/current_thread.h"
 
+#include <thread>
+
 #include "runtime/exec_env.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks {
 
@@ -49,6 +50,21 @@ starrocks::MemTracker* CurrentThread::singleton_check_mem_tracker() {
 
 CurrentThread& CurrentThread::current() {
     return tls_thread_status;
+}
+
+void CurrentThread::set_scan_seq(int32_t operator_id, int32_t scan_seq) {
+    _operator_id = operator_id;
+    _scan_seq = scan_seq;
+}
+
+int32_t CurrentThread::get_unique_execution_id() const {
+    if (_driver_id > 0 || _scan_seq > 0) {
+        // Assumption:
+        // scan_seq at most 512
+        // operators at most 131072
+        return (_driver_id << 16) + (_operator_id << 8) + _scan_seq;
+    }
+    return std::hash<std::thread::id>()(std::this_thread::get_id());
 }
 
 } // namespace starrocks

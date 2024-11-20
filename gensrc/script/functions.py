@@ -171,14 +171,21 @@ vectorized_functions = [
     [10298, "greatest", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::greatest<TYPE_DATETIME>"],
     [10299, "greatest", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::greatest<TYPE_VARCHAR>"],
 
-    [10300, "rand", True, False, "DOUBLE", [], "MathFunctions::rand", "MathFunctions::rand_prepare",
-     "MathFunctions::rand_close"],
-    [10301, "random", True, False, "DOUBLE", [], "MathFunctions::rand", "MathFunctions::rand_prepare",
-     "MathFunctions::rand_close"],
-    [10302, "rand", True, False, "DOUBLE", ["BIGINT"], "MathFunctions::rand_seed", "MathFunctions::rand_prepare",
-     "MathFunctions::rand_close"],
-    [10303, "random", True, False, "DOUBLE", ["BIGINT"], "MathFunctions::rand_seed", "MathFunctions::rand_prepare",
-     "MathFunctions::rand_close"],
+    # random number generators
+    # bernoulli uniform
+    [10300, "rand", True, False, "DOUBLE", [], "MathFunctions::rand"],
+    [10301, "random", True, False, "DOUBLE", [], "MathFunctions::rand"],
+    [10302, "rand", True, False, "DOUBLE", ["BIGINT"], "MathFunctions::rand_seed", "MathFunctions::rand_prepare", "MathFunctions::rand_close"],
+    [10303, "random", True, False, "DOUBLE", ["BIGINT"], "MathFunctions::rand_seed", "MathFunctions::rand_prepare", "MathFunctions::rand_close"],
+    # uniform
+    [10304, "uniform_distribution", True, False, "BIGINT", ["BIGINT", "BIGINT"], "MathFunctions::uniform_distribution"],
+    [10305, "uniform_distribution", True, False, "BIGINT", ["BIGINT", "BIGINT", "BIGINT"], "MathFunctions::uniform_distribution", "MathFunctions::rand_prepare", "MathFunctions::rand_close"],
+    # normal
+    [10306, "normal_distribution", True, False, "DOUBLE", ["DOUBLE", "DOUBLE"], "MathFunctions::normal_distribution"],
+    [10307, "normal_distribution", True, False, "DOUBLE", ["DOUBLE", "DOUBLE", "BIGINT"], "MathFunctions::normal_distribution", "MathFunctions::rand_prepare", "MathFunctions::rand_close"],
+    # possion
+    [10308, "poisson_distribution", True, False, "BIGINT", ["BIGINT"], "MathFunctions::poisson_distribution"],
+    [10309, "poisson_distribution", True, False, "BIGINT", ["BIGINT", "BIGINT"], "MathFunctions::poisson_distribution", "MathFunctions::rand_prepare", "MathFunctions::rand_close"],
 
     [10311, "bin", True, False, "VARCHAR", ['BIGINT'], "MathFunctions::bin"],
 

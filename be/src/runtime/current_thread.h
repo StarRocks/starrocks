@@ -242,6 +242,13 @@ public:
     const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
+    void set_scan_seq(int32_t operator_id, int32_t scan_seq);
+
+    // A unique id to distinguish execution units
+    // If in pipeline execution threads: it would be driver_id
+    // If in scan threads: it would be the combination of driver_id and scan sequence of io tasks
+    // If in non-pipeline engine: it would be thread-id
+    int32_t get_unique_execution_id() const;
 
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
@@ -371,7 +378,9 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     std::string _custom_coredump_msg{};
-    int32_t _driver_id = 0;
+    int32_t _driver_id = 0; // driver_id of pipeline execution: the basic parallel unit of execution thread
+    int32_t _operator_id = 0;
+    int32_t _scan_seq = 0; // scan_seq of scan thread: the basic parallel unit of io thread
     bool _check = true;
     bool _reserve_mod = false;
 };
