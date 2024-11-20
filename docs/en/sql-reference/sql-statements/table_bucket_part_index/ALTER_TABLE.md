@@ -106,7 +106,7 @@ Currently, column comments cannot be modified.
 
 #### ADD PARTITION(S)
 
-You can choose to add range partitions or list partitions.
+You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
 
 Syntax：
 
