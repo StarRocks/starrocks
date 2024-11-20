@@ -175,9 +175,6 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
-                            " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
-                            " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
                         String mvName = (String) obj;
@@ -239,9 +236,6 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
-                            " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
-                            " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
                         String mvName = (String) obj;
