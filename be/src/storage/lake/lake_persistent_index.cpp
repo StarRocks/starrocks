@@ -436,6 +436,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
         ss_debug << sstable_pb.filename() << " | ";
     }
     sstable::Options options;
+    if (config::enable_zstd) {
+        options.set_compression(CompressionTypePB::ZSTD);
+    }
     (*merging_iter_ptr).reset(sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
     (*merging_iter_ptr)->SeekToFirst();
     iters.clear(); // Clear the vector without deleting iterators since they are now managed by merge_iter_ptr.
@@ -488,6 +491,9 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     sstable::Options options;
+    if (config::enable_zstd) {
+        options.set_compression(CompressionTypePB::ZSTD);
+    }
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     options.filter_policy = filter_policy.get();
