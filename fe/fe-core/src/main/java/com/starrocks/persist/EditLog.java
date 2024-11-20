@@ -1152,7 +1152,8 @@ public class EditLog {
             entity.write(buffer);
         } catch (IOException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialize, ", e);
+            LOG.info("failed to serialize journal data", e);
+            throw new RuntimeException("failed to serialize journal data", e);
         }
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
