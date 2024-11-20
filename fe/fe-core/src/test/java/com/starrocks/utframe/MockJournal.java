@@ -183,5 +183,10 @@ public class MockJournal implements Journal {
         public boolean removeElectableNode(String nodeName) {
             return true;
         }
+
+        @Override
+        public long getLatestEpoch() {
+            return 0;
+        }
     }
 }

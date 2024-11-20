@@ -51,6 +51,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -133,6 +134,8 @@ public class MetaHelper {
         if (!partFile.renameTo(imageFile)) {
             throw new IOException("rename file:" + partFile.getName() + " to file:" + destFilename + " failed");
         }
+
+        LOG.info("successfully download image file: {}", imageFile.getAbsolutePath());
     }
 
     public static OutputStream getOutputStream(String filename, File dir)
@@ -140,6 +143,27 @@ public class MetaHelper {
         File file = new File(dir, filename + MetaHelper.PART_SUFFIX);
         return new FileOutputStream(file);
     }
+
+    public static void httpGet(String urlStr, int timeout) throws IOException {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = null;
+
+        try {
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(timeout);
+            conn.setReadTimeout(timeout);
+
+            try (InputStream in = conn.getInputStream()) {
+                byte[] buf = new byte[BUFFER_BYTES];
+                while (in.read(buf) >= 0) {}
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
 
     // download file from remote node
     public static void getRemoteFile(String urlStr, int timeout, OutputStream out)
