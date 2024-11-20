@@ -520,13 +520,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
-<<<<<<< HEAD
         db.readLock();;
-=======
-
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
->>>>>>> dca57fc0ed ([BugFix] Only repair mv when table's version/version time are matched with mv's version map (#49240))
         try {
             for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
                 long partitionId = partitionVersion.getKey();
@@ -542,11 +536,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {
-<<<<<<< HEAD
             db.readUnlock();
-=======
-            locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
->>>>>>> dca57fc0ed ([BugFix] Only repair mv when table's version/version time are matched with mv's version map (#49240))
         }
 
         if (partitionRepairInfos.isEmpty()) {

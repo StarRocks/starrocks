@@ -95,12 +95,7 @@ public interface MVRepairHandler {
             Map<Long, PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo();
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
-<<<<<<< HEAD
             db.readLock();
-=======
-            Locker locker = new Locker();
-            locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
->>>>>>> dca57fc0ed ([BugFix] Only repair mv when table's version/version time are matched with mv's version map (#49240))
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
@@ -117,11 +112,7 @@ public interface MVRepairHandler {
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
-<<<<<<< HEAD
                 db.readUnlock();
-=======
-                locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
->>>>>>> dca57fc0ed ([BugFix] Only repair mv when table's version/version time are matched with mv's version map (#49240))
             }
 
             if (partitionRepairInfos.isEmpty()) {
