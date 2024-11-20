@@ -499,7 +499,7 @@ public class Locker {
     }
 
     /**
-     * Try lock database and table with intensive db lock.
+     * Try to lock a database and a table id with intensive db lock.
      *
      * @return try if try lock success, false otherwise.
      */
