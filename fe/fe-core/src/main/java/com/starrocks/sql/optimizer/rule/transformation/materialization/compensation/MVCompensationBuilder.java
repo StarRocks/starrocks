@@ -350,7 +350,7 @@ public class MVCompensationBuilder {
                     return MVCompensation.createNoCompensateState(sessionVariable);
                 }
             }
-            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
+            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
             List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
                     refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
