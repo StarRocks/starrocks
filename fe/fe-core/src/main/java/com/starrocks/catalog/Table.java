@@ -401,7 +401,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isHMSTable() {
-        return type == TableType.HIVE || type ==TableType.HUDI || type == TableType.ODPS;
+        return type == TableType.HIVE || type == TableType.HUDI || type == TableType.ODPS;
     }
 
     // for create table

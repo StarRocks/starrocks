@@ -112,11 +112,13 @@ public class IcebergTable extends Table {
         return resourceName;
     }
 
-    public String getRemoteDbName() {
+    @Override
+    public String getDbName() {
         return remoteDbName;
     }
 
-    public String getRemoteTableName() {
+    @Override
+    public String getName() {
         return remoteTableName;
     }
 
