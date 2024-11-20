@@ -111,7 +111,7 @@ public class CachingDeltaLakeMetastoreTest {
         Assert.assertTrue(table instanceof DeltaLakeTable);
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Assert.assertEquals("db1", deltaLakeTable.getDbName());
-        Assert.assertEquals("table1", deltaLakeTable.getTableName());
+        Assert.assertEquals("table1", deltaLakeTable.getName());
         Assert.assertEquals("s3://bucket/path/to/table", deltaLakeTable.getTableLocation());
     }
 

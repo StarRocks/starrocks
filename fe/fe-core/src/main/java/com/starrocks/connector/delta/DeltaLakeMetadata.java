@@ -123,7 +123,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
+        String tableName = deltaLakeTable.getName();
         PredicateSearchKey key =
                 PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
 
@@ -154,7 +154,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
+        String tableName = deltaLakeTable.getName();
         Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
