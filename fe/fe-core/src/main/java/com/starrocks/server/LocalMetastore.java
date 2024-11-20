@@ -1769,50 +1769,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 throw new DdlException("Only support adding physical partition to random distributed table");
             }
 
-<<<<<<< HEAD
             copiedTable = getShadowCopyTable(olapTable);
-=======
-            Preconditions.checkNotNull(olapTable);
-            Preconditions.checkNotNull(copiedTable);
-
-            List<PhysicalPartition> subPartitions = new ArrayList<>();
-            // create physical partition
-            for (int i = 0; i < numSubPartition; i++) {
-                PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition, warehouseId);
-                subPartitions.add(subPartition);
-            }
-
-            // build partitions
-            buildPartitions(db, copiedTable, subPartitions, warehouseId);
-
-            // check again
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-                throw new DdlException("db " + db.getFullName()
-                        + "(" + db.getId() + ") has been dropped");
-            }
-            try {
-                olapTable = checkTable(db, table.getId());
-                // check if meta changed
-                checkIfMetaChange(olapTable, copiedTable, table.getName());
-
-                if (olapTable.getPartition(partition.getId()) == null) {
-                    throw new DdlException("Partition[" + partition.getName() + "]' has been dropped.");
-                }
-
-                for (PhysicalPartition subPartition : subPartitions) {
-                    // add sub partition
-                    partition.addSubPartition(subPartition);
-                    olapTable.addPhysicalPartition(subPartition);
-                }
-
-                olapTable.setShardGroupChanged(true);
-
-                // add partition log
-                addSubPartitionLog(db, olapTable, partition, subPartitions);
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
-            }
->>>>>>> 981c85f2bb ([BugFix] Fix add sub partition when partition is dropped (#53033))
         } finally {
             db.readUnlock();
         }
@@ -1840,6 +1797,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // check if meta changed
             checkIfMetaChange(olapTable, copiedTable, tableName);
 
+            if (olapTable.getPartition(partition.getId()) == null) {
+                throw new DdlException("Partition[" + partition.getName() + "]' has been dropped.");
+            }
+
             for (PhysicalPartition subPartition : subPartitions) {
                 // add sub partition
                 partition.addSubPartition(subPartition);
@@ -1857,15 +1818,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Database db = this.getDb(info.getDbId());
         db.writeLock();
         try {
-<<<<<<< HEAD
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
-=======
-            OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             if (olapTable == null) {
                 LOG.warn("replay add sub partition failed, table is null, info: {}", info);
                 return;
             }
->>>>>>> 981c85f2bb ([BugFix] Fix add sub partition when partition is dropped (#53033))
             Partition partition = olapTable.getPartition(info.getPartitionId());
             if (partition == null) {
                 LOG.warn("replay add sub partition failed, partition is null, info: {}", info);
