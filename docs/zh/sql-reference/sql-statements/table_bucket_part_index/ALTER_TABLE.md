@@ -98,7 +98,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### 增加分区 (ADD PARTITION)
 
-增加分区时支持使用 Range 分区和 List 分区。
+增加分区时支持使用 Range 分区和 List 分区。不支持增加表达式分区。
 
 语法：
 
