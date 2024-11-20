@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -118,22 +119,22 @@ public class PredicateColumnsMgr {
 
     //==================================== Query ============================================ //
     public List<ColumnUsage> query(TableName tableName) {
-        // FIXME: use Storage.queryGlobalState interface
-        TablePredicate predicate = new TablePredicate(tableName);
-        return id2columnUsage.values().stream().filter(predicate).collect(Collectors.toList());
+        return queryByUseCase(tableName, ColumnUsage.UseCase.all());
     }
 
     public List<ColumnUsage> queryPredicateColumns(TableName tableName) {
-        // FIXME: use Storage.queryGlobalState interface
         return queryByUseCase(tableName, ColumnUsage.UseCase.getPredicateColumnUseCase());
     }
 
-    public List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
-        // FIXME: use Storage.queryGlobalState interface
+    private List<ColumnUsage> queryByUseCase(TableName tableName, EnumSet<ColumnUsage.UseCase> useCases) {
         TablePredicate predicate = new TablePredicate(tableName);
         Predicate<ColumnUsage> useCasePredicate = (c) -> !SetUtils.intersection(c.getUseCases(), useCases).isEmpty();
         Predicate<ColumnUsage> pred = predicate.and(useCasePredicate);
-        return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
+        if (FeConstants.runningUnitTest) {
+            return id2columnUsage.values().stream().filter(pred).collect(Collectors.toList());
+        } else {
+            return getStorage().queryGlobalState(tableName).stream().filter(pred).collect(Collectors.toList());
+        }
     }
 
     //==================================== Maintenance ============================================ //
@@ -207,15 +208,11 @@ public class PredicateColumnsMgr {
         private static final DaemonThread INSTANCE = new DaemonThread();
 
         public DaemonThread() {
-            super("PredicateColumnsDaemonThread");
+            super("PredicateColumnsDaemonThread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
         }
 
         public static DaemonThread getInstance() {
             return INSTANCE;
-        }
-
-        public void start() {
-
         }
 
         @Override

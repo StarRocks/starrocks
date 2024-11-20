@@ -13,9 +13,11 @@
 
 package com.starrocks.statistic.predicate_columns;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -27,8 +29,10 @@ import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -57,11 +61,11 @@ public class PredicateColumnsStorage extends FrontendDaemon {
 
     private static Logger LOG = LogManager.getLogger(PredicateColumnsStorage.class);
 
-    private static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
-    private static final String TABLE_NAME = "predicate_columns";
-    private static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
+    public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
+    public static final String TABLE_NAME = "predicate_columns";
+    public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
     private static final String TABLE_DDL = "CREATE TABLE " + TABLE_NAME + "( " +
-            "id BIGINT AUTO_INCREMENT NOT NULL, " +
+            "id BIGINT NOT NULL AUTO_INCREMENT, " +
             "fe_id STRING NOT NULL," +
             "table_catalog STRING NOT NULL," +
             "table_database STRING NOT NULL," +
@@ -71,8 +75,10 @@ public class PredicateColumnsStorage extends FrontendDaemon {
             "last_used DATETIME NOT NULL," +
             "created DATETIME DEFAULT CURRENT_TIMESTAMP" +
             ") " +
-            "PRIMARY KEY(id)" +
-            "DISTRIBUTED BY HASH(table_name,column_name) BUCKETS 8";
+            "PRIMARY KEY(id) " +
+            "DISTRIBUTED BY HASH(id) BUCKETS 8\n" +
+            "PROPERTIES('replication_num'='1')";
+
     private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, TABLE_DDL, null);
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -88,15 +94,11 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private static final String SQL_COLUMN_LIST_WITH_CREATED = SQL_COLUMN_LIST + ", created";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
-    private static final String INSERT_VALUE = "($feId, $tableCatalog, $tableDatabase, $tableName, " +
-            "$columnName, $usage, $lastUsed)";
+    private static final String INSERT_VALUE = "('$feId', '$tableCatalog', '$tableDatabase', '$tableName', " +
+            "'$columnName', '$usage', '$lastUsed')";
 
     private static final String QUERY = "SELECT " + SQL_COLUMN_LIST_WITH_CREATED + " FROM " + TABLE_FULL_NAME + " " +
             "WHERE ";
-    private static final String WHERE_TABLE_IS =
-            " table_catalog = '$tableCatalog' " +
-                    "AND table_database = '$tableDatabase' " +
-                    "AND table_name = '$tableName'";
     private static final String WHERE_THIS_FE = "fe_id = '$feId'";
 
     private static final PredicateColumnsStorage INSTANCE = new PredicateColumnsStorage();
@@ -107,6 +109,8 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private final LocalDateTime systemStartTime = TimeUtils.getSystemNow();
     private LocalDateTime lastPersist = LocalDateTime.MIN;
 
+    private final RepoExecutor executor;
+
     public static TableKeeper createKeeper() {
         return KEEPER;
     }
@@ -115,21 +119,31 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         return INSTANCE;
     }
 
+    public PredicateColumnsStorage() {
+        this.executor = RepoExecutor.getInstance();
+    }
+
+    public PredicateColumnsStorage(RepoExecutor executor) {
+        this.executor = executor;
+    }
+
     /**
      * Query state from all FEs
      */
     public List<ColumnUsage> queryGlobalState(TableName tableName) {
-        VelocityContext context = new VelocityContext();
-        context.put("tableCatalog", tableName.getCatalog());
-        context.put("tableDatabase", tableName.getDb());
-        context.put("tableName", tableName.getTbl());
+        StringBuilder sb = new StringBuilder(QUERY + " WHERE true");
+        if (StringUtils.isNotEmpty(tableName.getCatalog())) {
+            sb.append(" AND table_catalog = ").append(Strings.quote(tableName.getCatalog()));
+        }
+        if (StringUtils.isNotEmpty(tableName.getDb())) {
+            sb.append(" AND table_database = ").append(Strings.quote(tableName.getDb()));
+        }
+        if (StringUtils.isNotEmpty(tableName.getTbl())) {
+            sb.append(" AND table_name = ").append(Strings.quote(tableName.getTbl()));
+        }
 
-        String template = QUERY + WHERE_TABLE_IS;
-        StringWriter sw = new StringWriter();
-        DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
-        String sql = sw.toString();
-
-        List<TResultBatch> tResultBatches = RepoExecutor.getInstance().executeDQL(sql);
+        String sql = sb.toString();
+        List<TResultBatch> tResultBatches = executor.executeDQL(sql);
         return resultToColumnUsage(tResultBatches);
     }
 
@@ -158,7 +172,13 @@ public class PredicateColumnsStorage extends FrontendDaemon {
             StringWriter sw = new StringWriter();
 
             VelocityContext context = new VelocityContext();
+            context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
             context.put("tableCatalog", usage.getTableName().getCatalog());
+            context.put("tableDatabase", usage.getTableName().getDb());
+            context.put("tableName", usage.getTableName().getTbl());
+            context.put("columnName", usage.getColumnId());
+            context.put("usage", usage.getUseCaseString());
+            context.put("lastUsed", Strings.quote(DateUtils.formatDateTimeUnix(usage.getLastUsed())));
 
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_VALUE);
             if (!first) {
@@ -169,14 +189,15 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         }
 
         String sql = insert.toString();
-        RepoExecutor.getInstance().executeDML(sql);
+        executor.executeDML(sql);
     }
 
     /**
+     * TODO: splice the result into batch, to reduce memory consumption
      * Restore all states
      */
     public List<ColumnUsage> restore() {
-        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfFe().getNodeName();
+        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
 
         VelocityContext context = new VelocityContext();
         context.put("feId", selfName);
@@ -186,7 +207,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();
 
-        List<TResultBatch> tResultBatches = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> tResultBatches = executor.executeDQL(sql);
         return resultToColumnUsage(tResultBatches);
     }
 
@@ -199,6 +220,12 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         LOG.info("finish restore state");
     }
 
+    @VisibleForTesting
+    protected void finishRestore(LocalDateTime lastPersistTime) {
+        lastPersist = lastPersistTime;
+    }
+
+    @VisibleForTesting
     static class ColumnUsageJsonRecord {
 
         @SerializedName("data")
@@ -209,7 +236,8 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         }
     }
 
-    private static List<ColumnUsage> resultToColumnUsage(List<TResultBatch> batches) {
+    @VisibleForTesting
+    protected static List<ColumnUsage> resultToColumnUsage(List<TResultBatch> batches) {
         List<ColumnUsage> res = new ArrayList<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {

@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -86,6 +87,14 @@ public class ColumnUsage {
         return useCase.stream().map(UseCase::toString).collect(Collectors.joining(","));
     }
 
+    public void setLastUsed(LocalDateTime lastUsed) {
+        this.lastUsed = lastUsed;
+    }
+
+    public void setCreated(LocalDateTime created) {
+        this.created = created;
+    }
+
     public LocalDateTime getLastUsed() {
         return lastUsed;
     }
@@ -96,6 +105,7 @@ public class ColumnUsage {
 
     // NOTE: mutable
     public void useNow(UseCase useCase) {
+        // FIXME: make it thread-safe
         this.lastUsed = LocalDateTime.now(TimeUtils.getSystemTimeZone().toZoneId());
         this.useCase.add(useCase);
     }
@@ -125,6 +135,15 @@ public class ColumnUsage {
         return Objects.hash(columnId, tableName);
     }
 
+    @Override
+    public String toString() {
+        return toJson();
+    }
+
+    public String toJson() {
+        return (GsonUtils.GSON.toJson(this));
+    }
+
     public enum UseCase {
         NORMAL,
         PREDICATE,
@@ -135,6 +154,10 @@ public class ColumnUsage {
         @Override
         public String toString() {
             return this.name().toLowerCase();
+        }
+
+        public static EnumSet<UseCase> all() {
+            return EnumSet.allOf(UseCase.class);
         }
 
         public static EnumSet<UseCase> getPredicateColumnUseCase() {
