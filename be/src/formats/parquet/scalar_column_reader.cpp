@@ -23,6 +23,27 @@
 
 namespace starrocks::parquet {
 
+Status PartitionColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                        SparseRange<uint64_t>* row_ranges,
+                                                        CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                        const uint64_t rg_num_rows) const {
+    DCHECK(row_ranges->empty());
+    ZoneMapDetail zone_map{_partition_value, _partition_value, false};
+    auto is_satisfy = [&](const ZoneMapDetail& detail) {
+        if (pred_relation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+    if (is_satisfy(zone_map)) {
+        row_ranges->add({rg_first_row, rg_first_row + rg_num_rows});
+    }
+    return Status::OK();
+}
+
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
     _need_lazy_decode =
@@ -258,6 +279,7 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
 Status ScalarColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                      SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    DCHECK(row_ranges->empty());
     const uint64_t rg_end_row = rg_first_row + rg_num_rows;
 
     if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {

@@ -26,24 +26,30 @@ struct ZoneMapEvaluator {
     template <CompoundNodeType Type>
     StatusOr<std::optional<SparseRange<uint64_t>>> operator()(const PredicateCompoundNode<Type>& node) {
         std::optional<SparseRange<uint64_t>> row_ranges = std::nullopt;
+        const uint64_t rg_first_row = group_reader->get_row_group_first_row();
+        const uint64_t rg_num_rows = group_reader->get_row_group_metadata()->num_rows;
 
         const auto& ctx = pred_tree.compound_node_context(node.id());
         const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
 
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
-            const auto* column_reader = group_reader->get_column_reader(cid);
-            if (column_reader == nullptr) {
-                // TODO: For partition column, it's column reader is not existed
-                // So we didn't support partition column yet
-                // Eg. WHERE a = 1 OR dt = '2012'
-                continue;
-            }
             SparseRange<uint64_t> cur_row_ranges;
-            if (level == FilterLevel::ROW_GROUP) {
-                // TODO nullptr check
-                RETURN_IF_ERROR(group_reader->get_column_reader(cid)->row_group_zone_map_filter(
-                        col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
-                        group_reader->get_row_group_metadata()->num_rows));
+
+            const auto* column_reader = group_reader->get_column_reader(cid);
+            // if not find ColumnReader from GroupReader, try to search from PartitionColumn
+            if (column_reader == nullptr) {
+                auto it = partition_column_readers->find(cid);
+                if (it != partition_column_readers->end()) {
+                    column_reader = it->second.get();
+                }
+            }
+
+            if (column_reader == nullptr) {
+                // ColumnReader not found, select all by default
+                cur_row_ranges.add({rg_first_row, rg_first_row + rg_num_rows});
+            } else if (level == FilterLevel::ROW_GROUP) {
+                RETURN_IF_ERROR(column_reader->row_group_zone_map_filter(col_preds, &cur_row_ranges, Type, rg_first_row,
+                                                                         rg_num_rows));
             } else {
                 return Status::InternalError("not supported yet");
             }
@@ -75,6 +81,7 @@ struct ZoneMapEvaluator {
 
     const PredicateTree& pred_tree;
     GroupReader* group_reader;
+    std::unordered_map<SlotId, ColumnReaderPtr>* partition_column_readers;
 };
 
 } // namespace starrocks::parquet

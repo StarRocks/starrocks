@@ -22,6 +22,36 @@
 
 namespace starrocks::parquet {
 
+class PartitionColumnReader final : public ColumnReader {
+public:
+    explicit PartitionColumnReader(Datum partition_value)
+            : ColumnReader(nullptr), _partition_value(std::move(partition_value)) {}
+
+    ~PartitionColumnReader() override = default;
+
+    Status prepare() override { return Status::NotSupported("Not implemented"); }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        return Status::NotSupported("Not implemented");
+    }
+
+    Status row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                     SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                     const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
+
+private:
+    const Datum _partition_value;
+};
+
 class ScalarColumnReader final : public ColumnReader {
 public:
     explicit ScalarColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,

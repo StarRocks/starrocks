@@ -44,8 +44,8 @@
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/column_converter.h"
-#include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
@@ -105,6 +105,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
 
+    // should put it before _init_group_readers()
+    RETURN_IF_ERROR(_init_partition_column_readers());
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
@@ -327,8 +329,8 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (config::parquet_advance_zonemap_filter) {
-        auto res = _scanner_ctx->predicate_tree.visit(
-                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
+        auto res = _scanner_ctx->predicate_tree.visit(ZoneMapEvaluator<FilterLevel::ROW_GROUP>{
+                _scanner_ctx->predicate_tree, group_reader.get(), &_partition_column_readers});
         if (!res.ok()) {
             LOG(WARNING) << "filter row group failed: " << res.status().message();
             return false;
@@ -433,6 +435,16 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
         return true;
     }
     return false;
+}
+
+Status FileReader::_init_partition_column_readers() {
+    for (size_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
+        const auto& column = _scanner_ctx->partition_columns[i];
+        const auto* slot_desc = column.slot_desc;
+        const auto value = _scanner_ctx->partition_values[i];
+        _partition_column_readers.emplace(slot_desc->id(), std::make_unique<PartitionColumnReader>(value->get(0)));
+    }
+    return Status::OK();
 }
 
 Status FileReader::_init_group_readers() {
