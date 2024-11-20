@@ -265,7 +265,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     max_thread_cnt);
         });
         _config_callback.emplace("drop_tablet_worker_count", [&]() -> Status {
-            int max_thread_cnt = CpuInfo::num_cores() / 2;
+            int max_thread_cnt = std::max((int)CpuInfo::num_cores() / 2, (int)1);
             if (config::drop_tablet_worker_count > 0) {
                 max_thread_cnt = config::drop_tablet_worker_count;
             }
