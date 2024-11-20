@@ -16,7 +16,6 @@ package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
-import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 
@@ -29,6 +28,7 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     public PartitionKey createEmptyKey() {
         return new DeltaLakePartitionKey();
     }
+
     @Override
     public boolean isSupportPCTRefresh() {
         return false;
