@@ -1805,8 +1805,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(icebergTable.getDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.JDBC) {

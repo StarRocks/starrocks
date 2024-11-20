@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.common;
 
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -127,7 +124,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
-        return "LogicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getName() +
+        return "LogicalHiveScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -137,7 +134,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalIcebergScan(LogicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
-        sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
+        sb.append(" {").append("table=").append(node.getTable().getName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
                 .append("}");
@@ -146,7 +143,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-        return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getName() +
+        return "LogicalHudiScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -347,7 +344,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
-        return "PhysicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getName() +
+        return "PhysicalHiveScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -357,7 +354,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, Void context) {
         StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
-        sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getRemoteTableName())
+        sb.append(" {").append("table=").append(node.getTable().getName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
                 .append("}");
@@ -366,7 +363,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-        return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getName() +
+        return "PhysicalHudiScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +

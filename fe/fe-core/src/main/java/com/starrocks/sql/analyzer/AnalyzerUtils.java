@@ -817,8 +817,8 @@ public class AnalyzerUtils {
                 tables.put(tableName, table);
             } else if (table.isIcebergTable()) {
                 IcebergTable icebergTable = (IcebergTable) table;
-                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
-                        icebergTable.getRemoteTableName());
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getDbName(),
+                        icebergTable.getName());
                 tables.put(tableName, table);
             } else if (table.isPaimonTable()) {
                 PaimonTable paimonTable = (PaimonTable) table;

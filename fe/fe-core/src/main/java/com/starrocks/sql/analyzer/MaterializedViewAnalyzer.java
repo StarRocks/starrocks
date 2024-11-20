@@ -1095,7 +1095,7 @@ public class MaterializedViewAnalyzer {
                 } else if (table.isIcebergTable()) {
                     IcebergTable icebergTable = (IcebergTable) table;
                     if (icebergTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                            icebergTable.getRemoteDbName().equals(baseTableInfo.getDbName()) &&
+                            icebergTable.getDbName().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));

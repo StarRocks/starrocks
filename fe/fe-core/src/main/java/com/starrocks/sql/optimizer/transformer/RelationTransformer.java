@@ -652,7 +652,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
-            String catalogName = ((IcebergTable) node.getTable()).getCatalogName();
+            String catalogName = node.getTable().getCatalogName();
             if (isResourceMappingCatalog(catalogName)) {
                 String dbName = node.getName().getDb();
                 GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(

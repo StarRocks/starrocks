@@ -37,22 +37,10 @@ import java.util.List;
 import java.util.Optional;
 
 public class IcebergPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((IcebergTable) table).getRemoteDbName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
     }
-
-    @Override
-    public String getTableName() {
-        return ((IcebergTable) table).getRemoteTableName();
-    }
-
     @Override
     public PartitionKey createEmptyKey() {
         return new IcebergPartitionKey();

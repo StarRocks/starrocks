@@ -483,9 +483,9 @@ public class StatisticUtils {
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getDbName(), icebergTable.getName());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getDbName(), icebergTable.getName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
                     table.getType().name());

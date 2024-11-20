@@ -135,7 +135,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             // refresh iceberg table's metadata
             IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
             String catalogName = cachedIcebergTable.getCatalogName();
-            String dbName = cachedIcebergTable.getRemoteDbName();
+            String dbName = cachedIcebergTable.getDbName();
             TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
             Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
             if (currentTable == null) {
