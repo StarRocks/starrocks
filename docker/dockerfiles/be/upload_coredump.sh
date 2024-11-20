@@ -82,7 +82,7 @@ while true; do
   coredump_log "$(ls -lh ${COREDUMP_FILE_ZIP})"
 
 
-  rclone --config=/opt/starrocks/rclone.conf --bwlimit 1000M --multi-thread-streams 100 --multi-thread-cutoff 8M --progress sync $COREDUMP_FILE_ZIP coredump:${COREDUMP_BLOBSTORE_PREFIX}/${KUBE_CLUSTER_NAME}/${POD_NAMESPACE}
+  rclone --config=$STARROCKS_ROOT/rclone.conf --bwlimit 1000M --multi-thread-streams 100 --multi-thread-cutoff 8M --progress sync $COREDUMP_FILE_ZIP coredump:${COREDUMP_BLOBSTORE_PREFIX}/${KUBE_CLUSTER_NAME}/${POD_NAMESPACE}
 
 
   coredump_log "Upload complete: ${latestCoreFile}"
