@@ -431,13 +431,13 @@ public class OlapScanNode extends ScanNode {
             long tabletId = internalScanRange.getTablet_id();
             int expectedSchemaHash = Integer.parseInt(expectedSchemaHashStr);
             long expectedVersion = Long.parseLong(expectedVersionStr);
-            Long partitionId = internalScanRange.partition_id;
+            Long physicalPartitionId = internalScanRange.partition_id;
 
-            final Partition partition = olapTable.getPartition(partitionId);
-            final MaterializedIndex selectedTable = partition.getDefaultPhysicalPartition().getIndex(selectedIndexId);
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+            final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
-                throw new UserException("Tablet " + tabletId + " doesn't exist in partition " + partitionId);
+                throw new UserException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
             }
 
             int schemaHash = olapTable.getSchemaHashByIndexId(selectedTable.getId());
@@ -472,7 +472,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion(expectedVersionStr);
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
-            internalRange.setPartition_id(partition.getId());
+            internalRange.setPartition_id(physicalPartitionId);
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {

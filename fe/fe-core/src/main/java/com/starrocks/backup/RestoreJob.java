@@ -968,7 +968,8 @@ public class RestoreJob extends AbstractJob {
         AgentTaskExecutor.submit(batchTask);
     }
 
-    private boolean genFileMappingWhenBackupReplicasEqual(PartitionInfo localPartInfo, Partition localPartition,
+    private boolean genFileMappingWhenBackupReplicasEqual(PartitionInfo localPartInfo,
+                                                          Partition localPartition,
                                                           Table localTbl,
                                                           BackupPartitionInfo backupPartInfo, BackupTableInfo tblInfo) {
         if (localPartInfo.getReplicationNum(localPartition.getId()) != restoreReplicationNum) {
@@ -984,8 +985,27 @@ public class RestoreJob extends AbstractJob {
         OlapTable localOlapTbl = (OlapTable) localTbl;
         genFileMapping(localOlapTbl, localPartition, tblInfo.id, backupPartInfo,
                 true /* overwrite when commit */);
-        restoredVersionInfo.put(localOlapTbl.getId(), localPartition.getId(),
-                backupPartInfo.version);
+        if (backupPartInfo.subPartitions == null || backupPartInfo.subPartitions.isEmpty()) {
+            restoredVersionInfo.put(localOlapTbl.getId(), localPartition.getDefaultPhysicalPartition().getId(),
+                    backupPartInfo.version);
+        } else {
+            if (backupPartInfo.subPartitions.size() == 1) {
+                BackupPhysicalPartitionInfo physicalPartitionInfo =
+                        backupPartInfo.subPartitions.values().stream().findFirst().get();
+                restoredVersionInfo.put(localTbl.getId(),
+                        localPartition.getDefaultPhysicalPartition().getId(),
+                        physicalPartitionInfo.version);
+            } else {
+                for (PhysicalPartition physicalPartition : localPartition.getSubPartitions()) {
+                    BackupPhysicalPartitionInfo physicalPartitionInfo = backupPartInfo.subPartitions.get(
+                            physicalPartition.getBeforeRestoreId());
+                    restoredVersionInfo.put(localTbl.getId(),
+                            physicalPartition.getId(),
+                            physicalPartitionInfo.version);
+                }
+            }
+        }
+
         return false;
     }
 
