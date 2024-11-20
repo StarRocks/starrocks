@@ -35,10 +35,22 @@ import java.util.List;
 
 public class PruneSubfieldRule extends TransformationRule {
 
+    public static final List<String> SUPPORT_JSON_FUNCTIONS = ImmutableList.<String>builder()
+            // arguments: Json, path
+            .add(FunctionSet.GET_JSON_INT)
+            .add(FunctionSet.GET_JSON_DOUBLE)
+            .add(FunctionSet.GET_JSON_STRING)
+            .add(FunctionSet.GET_JSON_OBJECT)
+            .add(FunctionSet.JSON_QUERY)
+            .add(FunctionSet.JSON_EXISTS)
+            .add(FunctionSet.JSON_LENGTH)
+            .build();
+
     public static final List<String> PRUNE_FUNCTIONS = ImmutableList.<String>builder()
             .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
+            .addAll(SUPPORT_JSON_FUNCTIONS)
             .build();
 
     public static final List<String> PUSHDOWN_FUNCTIONS = ImmutableList.<String>builder()
