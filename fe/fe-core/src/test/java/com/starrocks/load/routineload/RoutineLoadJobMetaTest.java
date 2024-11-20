@@ -61,7 +61,7 @@ public class RoutineLoadJobMetaTest {
     }
 
     @Test
-    public void testMetaNotFound() throws UserException {
+    public void testMetaNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb("test");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), 2L, "", "");
@@ -71,13 +71,13 @@ public class RoutineLoadJobMetaTest {
     }
 
     @Test
-    public void testTxnNotFound() throws UserException {
+    public void testTxnNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
-        Exception e = Assert.assertThrows(MetaNotFoundException.class,
+        Exception e = Assert.assertThrows(UserException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }
