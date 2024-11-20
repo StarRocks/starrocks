@@ -101,13 +101,16 @@ public class PredicateColumnsStorage extends FrontendDaemon {
             "WHERE ";
     private static final String WHERE_THIS_FE = "fe_id = '$feId'";
 
+    private static final String VACUUM = "DELETE FROM " + TABLE_FULL_NAME +
+            " WHERE fe_id='$feId' AND last_used < '$lastUsed'";
+
     private static final PredicateColumnsStorage INSTANCE = new PredicateColumnsStorage();
 
     /**
      * MIN: the persisted state has not been restored, we cannot persist
      */
     private final LocalDateTime systemStartTime = TimeUtils.getSystemNow();
-    private LocalDateTime lastPersist = LocalDateTime.MIN;
+    private volatile LocalDateTime lastPersist = LocalDateTime.MIN;
 
     private final RepoExecutor executor;
 
@@ -154,15 +157,18 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         if (lastPersist == LocalDateTime.MIN) {
             return;
         }
+        LocalDateTime nextPersist = TimeUtils.getSystemNow();
         Stopwatch watch = Stopwatch.createStarted();
         List<ColumnUsage> diff =
-                columnUsageList.stream().filter(x -> x.getLastUsed().isAfter(lastPersist)).collect(Collectors.toList());
+                columnUsageList.stream().filter(x -> !x.getCreated().isBefore(lastPersist))
+                        .collect(Collectors.toList());
         for (var batch : ListUtils.partition(diff, INSERT_BATCH_SIZE)) {
             persistDiff(batch);
         }
-        lastPersist = TimeUtils.getSystemNow();
+        lastPersist = nextPersist;
         String elapsed = watch.toString();
-        LOG.info("persist {} diffed predicate columns elapsed {}", diff.size(), elapsed);
+        LOG.info("persist {} diffed predicate columns elapsed {}, update lastPersist to {}", diff.size(), elapsed,
+                lastPersist);
     }
 
     private void persistDiff(List<ColumnUsage> diff) {
@@ -211,13 +217,30 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         return resultToColumnUsage(tResultBatches);
     }
 
+    /**
+     * Remove all records if the lastUsed < ttlTime
+     */
+    public void vacuum(LocalDateTime ttlTime) {
+        VelocityContext context = new VelocityContext();
+        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        context.put("feId", selfName);
+        context.put("lastUsed", DateUtils.formatDateTimeUnix(ttlTime));
+
+        StringWriter sw = new StringWriter();
+        DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", VACUUM);
+
+        String sql = sw.toString();
+        executor.executeDML(sql);
+        LOG.info("vacuum column usage from storage before {}", ttlTime);
+    }
+
     public boolean isRestored() {
         return lastPersist != LocalDateTime.MIN;
     }
 
     public void finishRestore() {
         lastPersist = systemStartTime;
-        LOG.info("finish restore state");
+        LOG.info("finish restore state, update lastPersist to {}", lastPersist);
     }
 
     @VisibleForTesting

@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TResultBatch;
+import org.apache.logging.log4j.util.Strings;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -93,6 +94,10 @@ class PredicateColumnsStorageTest extends PlanTestBase {
                 "AND table_database = 'test' AND table_name = 't0'");
 
         // TODO: vacuum
+        instance.vacuum(lastPersist);
+        Mockito.verify(repo).executeDML("DELETE FROM _statistics_.predicate_columns " +
+                "WHERE fe_id=" + Strings.quote(feName) +
+                " AND last_used < '2024-11-10 01:00:00'");
 
         guard.close();
     }

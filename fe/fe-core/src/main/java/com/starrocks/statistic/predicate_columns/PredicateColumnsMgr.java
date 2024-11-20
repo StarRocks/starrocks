@@ -33,6 +33,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -44,6 +46,7 @@ import java.util.stream.Collectors;
 
 public class PredicateColumnsMgr {
 
+    private static final Logger LOG = LogManager.getLogger(PredicateColumnsMgr.class);
     private static final PredicateColumnsMgr INSTANCE = new PredicateColumnsMgr();
 
     // Why Map? To update the usage
@@ -147,7 +150,16 @@ public class PredicateColumnsMgr {
         LocalDateTime ttlTime = TimeUtils.getSystemNow().minusHours(ttlHour);
         Predicate<ColumnUsage> outdated = x -> x.getLastUsed().isBefore(ttlTime);
 
-        id2columnUsage.values().removeIf(outdated);
+        long before = id2columnUsage.size();
+        if (id2columnUsage.values().removeIf(outdated)) {
+            long after = id2columnUsage.size();
+            LOG.info("removed {} objects from predicate columns because of ttl {}", before - after,
+                    Config.statistic_predicate_columns_ttl_hours);
+        }
+
+        // If the process crashed before vacuum the storage, the storage may be different from in-memory state,
+        // but it doesn't matter. Because we will remove them finally.
+        getStorage().vacuum(ttlTime);
     }
 
     public void restore() {
