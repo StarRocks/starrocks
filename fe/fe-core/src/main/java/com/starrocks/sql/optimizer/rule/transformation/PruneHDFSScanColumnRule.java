@@ -149,8 +149,10 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 newScanOperator.setTableVersionRange(scanOperator.getTableVersionRange());
 
                 if (newScanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
-                    ((LogicalIcebergScanOperator) newScanOperator).setMORParam(
-                            ((LogicalIcebergScanOperator) scanOperator).getMORParam());
+                    LogicalIcebergScanOperator newIcebergScanOp = (LogicalIcebergScanOperator) newScanOperator;
+                    newIcebergScanOp.setMORParam(((LogicalIcebergScanOperator) scanOperator).getMORParam());
+                    newIcebergScanOp.setTableFullMORParams(((LogicalIcebergScanOperator) scanOperator).
+                            getTableFullMORParams());
                 }
 
                 return Lists.newArrayList(new OptExpression(newScanOperator));
