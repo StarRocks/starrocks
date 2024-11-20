@@ -38,86 +38,11 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class LoadActionTest extends StarRocksHttpTestCase {
-<<<<<<< HEAD
-    private HttpPut buildPutRequest(int bodyLength) {
-=======
-
-    private OkHttpClient noRedirectClient = new OkHttpClient.Builder()
-            .readTimeout(100, TimeUnit.SECONDS)
-            .followRedirects(false)
-            .build();
-
-    @Test
-    public void testBatchWriteStreamLoadSuccess() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        map.put(HTTP_ENABLE_BATCH_WRITE, "true");
-        Request request = buildRequest(map);
-        List<ComputeNode> computeNodes = new ArrayList<>();
-        List<String> redirectLocations = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
-            String host = "192.0.0." + i;
-            int httpPort = 8040;
-            computeNodes.add(new ComputeNode(i, host, 9050));
-            computeNodes.get(i - 1).setHttpPort(httpPort);
-            redirectLocations.add(getLoadUrl(host, httpPort));
-        }
-
-        new MockUp<BatchWriteMgr>() {
-            @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
-                return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
-            }
-        };
-
-        try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(307, response.code());
-            String location = response.header("Location");
-            assertTrue(redirectLocations.contains(location));
-        }
-    }
-
-    @Test
-    public void testBatchWriteStreamLoadFailure() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        map.put(HTTP_ENABLE_BATCH_WRITE, "true");
-        Request request = buildRequest(map);
-
-        new MockUp<BatchWriteMgr>() {
-            @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
-                TStatus status = new TStatus();
-                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
-                status.addToError_msgs("artificial failure");
-                return new RequestCoordinatorBackendResult(status, null);
-            }
-        };
-
-        try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(200, response.code());
-            Map<String, Object> result = parseResponseBody(response);
-            assertEquals("INTERNAL_ERROR", result.get("code"));
-            assertEquals("FAILED", result.get("status"));
-            assertEquals("artificial failure", result.get("message"));
-            assertEquals("artificial failure", result.get("msg"));
-        }
-    }
-
-    private Request buildRequest(Map<String, String> headers) {
-        Request.Builder builder = new Request.Builder();
-        builder.addHeader("Authorization", rootAuth);
-        builder.addHeader("Expect", "100-continue");
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            builder.addHeader(entry.getKey(), entry.getValue());
-        }
-        builder.put(RequestBody.create(new byte[0]));
-        builder.url(String.format("%s/api/%s/%s/_stream_load", BASE_URL, DB_NAME, TABLE_NAME));
-        return builder.build();
-    }
 
     private HttpPut buildPutRequest(int bodyLength, boolean setExpectHeader) {
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
         HttpPut put = new HttpPut(String.format("%s/api/%s/%s/_stream_load", BASE_URL, DB_NAME, TABLE_NAME));
         if (setExpectHeader) {
             put.setHeader(HttpHeaders.EXPECT, "100-continue");
@@ -226,7 +151,8 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                         response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
 
                 String body = new BasicResponseHandler().handleResponse(response);
-                Map<String, Object> result = objectMapper.readValue(body, new TypeReference<>() {});
+                Map<String, Object> result =
+                        objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {});
 
                 // {"Status":"FAILED","Message":"class com.starrocks.common.DdlException: There is no 100-continue header"}
                 Assert.assertEquals("FAILED", result.get("Status"));

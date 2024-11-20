@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -124,6 +125,8 @@ public abstract class StarRocksHttpTestCase {
     protected static String BASE_URL;
 
     protected String rootAuth = Credentials.basic("root", "");
+
+    protected static ObjectMapper objectMapper = new ObjectMapper();
 
     @Mocked
     private static EditLog editLog;

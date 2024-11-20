@@ -62,11 +62,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-<<<<<<< HEAD
-=======
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -89,9 +85,6 @@ public class LoadAction extends RestBaseAction {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
             resp.msg = e.getClass() + ": " + e.getMessage();
-<<<<<<< HEAD
-            LOG.warn(e);
-=======
             String firstStackTrace = "<null>";
             Optional<StackTraceElement> stElem = Arrays.stream(e.getStackTrace()).findFirst();
             if (stElem.isPresent()) {
@@ -99,7 +92,6 @@ public class LoadAction extends RestBaseAction {
             }
             LOG.warn("Failed to execute executeWithoutPasswordInternal: {}, The most inner stack: {}",
                     e.getMessage(), firstStackTrace);
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
 
             sendResult(request, response, resp);
         }
