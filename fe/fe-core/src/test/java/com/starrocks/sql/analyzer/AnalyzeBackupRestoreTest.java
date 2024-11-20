@@ -61,6 +61,9 @@ public class AnalyzeBackupRestoreTest {
 
         AnalyzeTestUtil.getStarRocksAssert().withView("CREATE VIEW v1 AS select 1;");
         AnalyzeTestUtil.getStarRocksAssert().withView("CREATE VIEW v2 AS select 2;");
+
+        String sqlCatalog = "CREATE EXTERNAL CATALOG catalog1 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(sqlCatalog);
     }
 
     @Test
@@ -98,6 +101,10 @@ public class AnalyzeBackupRestoreTest {
         analyzeSuccess("BACKUP DATABASE test SNAPSHOT snapshot_label2 TO `repo` ON " +
                 "( ALL FUNCTIONS, ALL TABLES, ALL VIEWS, ALL MATERIALIZED VIEWS ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP ALL EXTERNAL CATALOGS SNAPSHOT snapshot_label2 TO `repo` " +
+                       "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP EXTERNAL CATALOG (catalog1) SNAPSHOT snapshot_label2 TO `repo` " +
+                       "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t0 ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t1 ) " +
@@ -124,6 +131,20 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON (v1 AS newV1)" +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP ALL EXTERNAL CATALOGS DATABASE test SNAPSHOT snapshot_label2 TO `repo` " +
+                    "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP EXTERNAL CATALOG (catalog1) DATABASE test SNAPSHOT snapshot_label2 TO `repo` " +
+                    "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP ALL EXTERNAL CATALOGS SNAPSHOT test.snapshot_label2 TO `repo` " +
+                    "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP EXTERNAL CATALOG (catalog1) SNAPSHOT test.snapshot_label2 TO `repo` " +
+                    "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP ALL EXTERNAL CATALOGS SNAPSHOT snapshot_label2 TO `repo` " +
+                    " ON (`t0`) PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP EXTERNAL CATALOG (catalog1) SNAPSHOT snapshot_label2 TO `repo` " +
+                    "ON (`t0`) PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeFail("BACKUP EXTERNAL CATALOG (catalog2) SNAPSHOT snapshot_label2 TO `repo` " +
+                    "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
     }
 
     @Test
@@ -192,6 +213,13 @@ public class AnalyzeBackupRestoreTest {
                         "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
         analyzeSuccess("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " +
                         "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeSuccess("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "ALL EXTERNAL CATALOGS " +
+                       "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeSuccess("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "EXTERNAL CATALOG (catalog1) " +
+                        "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeSuccess("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "EXTERNAL CATALOG (catalog1 AS catalog2) " +
+                       "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeSuccess("RESTORE SNAPSHOT `snapshot_2` FROM `repo` PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
         analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"a\" );");
         analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
@@ -220,6 +248,18 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"timeout\"=\"a\" );");
         analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo1` ON (`t0`)" +
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"timeout\"=\"a\" );");
+        analyzeFail("RESTORE SNAPSHOT .`snapshot_2` FROM `repo` " + "ALL EXTERNAL CATALOGS " +
+                    "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeFail("RESTORE SNAPSHOT `test`.`snapshot_2` FROM `repo` " + "EXTERNAL CATALOG (catalog1) " +
+                    "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "ALL EXTERNAL CATALOGS DATABASE test " +
+                    "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "EXTERNAL CATALOG (catalog1) DATABASE test " +
+                    "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "EXTERNAL CATALOG (catalog1) " +
+                    "ON (`t0`) PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` " + "ALL EXTERNAL CATALOGS " +
+                    "ON (`t0`) PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\");");
     }
 
     @Test
@@ -236,6 +276,8 @@ public class AnalyzeBackupRestoreTest {
     public void testCancelRestore() {
         analyzeFail("CANCEL BACKUP;");
         analyzeFail("CANCEL RESTORE;");
+        analyzeSuccess("CANCEL BACKUP FOR EXTERNAL CATALOG;");
+        analyzeSuccess("CANCEL RESTORE FOR EXTERNAL CATALOG;");
     }
 
 }

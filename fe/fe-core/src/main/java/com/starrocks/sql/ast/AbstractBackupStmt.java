@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -33,12 +34,14 @@ public class AbstractBackupStmt extends DdlStmt {
         MV,
         VIEW,
         FUNCTION,
+        EXTERNAL_CATALOG,
     }
 
     protected LabelName labelName;
     protected String repoName;
     protected List<TableRef> tblRefs;
     protected List<FunctionRef> fnRefs;
+    protected List<CatalogRef> externalCatalogRefs;
 
     protected Set<BackupObjectType> allMarker;
 
@@ -53,7 +56,7 @@ public class AbstractBackupStmt extends DdlStmt {
     protected long timeoutMs;
 
     public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRef> tableRefs,
-                              List<FunctionRef> fnRefs, Set<BackupObjectType> allMarker,
+                              List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
                               boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.labelName = labelName;
@@ -65,6 +68,10 @@ public class AbstractBackupStmt extends DdlStmt {
         this.fnRefs = fnRefs;
         if (this.fnRefs == null) {
             this.fnRefs = Lists.newArrayList();
+        }
+        this.externalCatalogRefs = externalCatalogRefs;
+        if (this.externalCatalogRefs == null) {
+            this.externalCatalogRefs = Lists.newArrayList();
         }
         this.allMarker = allMarker;
         if (this.allMarker == null) {
@@ -100,6 +107,10 @@ public class AbstractBackupStmt extends DdlStmt {
         return fnRefs;
     }
 
+    public List<CatalogRef> getExternalCatalogRefs() {
+        return externalCatalogRefs;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -124,12 +135,24 @@ public class AbstractBackupStmt extends DdlStmt {
         return allMarker.contains(BackupObjectType.VIEW);
     }
 
+    public boolean allExternalCatalog() {
+        return allMarker.contains(BackupObjectType.EXTERNAL_CATALOG);
+    }
+
+    public void setAllExternalCatalog() {
+        allMarker.add(BackupObjectType.EXTERNAL_CATALOG);
+    }
+
     public long getTimeoutMs() {
         return timeoutMs;
     }
 
     public String getOriginDbName() {
         return this.originDbName;
+    }
+
+    public boolean containsExternalCatalog() {
+        return allExternalCatalog() || !externalCatalogRefs.isEmpty();
     }
 }
 

@@ -32,15 +32,17 @@ public class BackupStmt extends AbstractBackupStmt {
     private BackupType type = BackupType.FULL;
 
     public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
-                      Set<BackupObjectType> allMarker, boolean withOnClause, String originDbName,
-                      Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, fnRefs, allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
+                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                      boolean withOnClause, String originDbName, Map<String, String> properties) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
     }
 
     public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
-                      Set<BackupObjectType> allMarker, boolean withOnClause, String originDbName,
-                      Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, fnRefs, allMarker, withOnClause, originDbName, properties, pos);
+                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                      boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public long getTimeoutMs() {
