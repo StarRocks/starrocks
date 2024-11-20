@@ -255,10 +255,11 @@ public class MVRecommendParams {
         sv.setAutoMVUseHllCountDistinct(useHllCountDistinct);
         sv.setAutoMVEnableComplexDerivedDimensions(enableComplexDerivedDimensions);
         sv.setAutoMVEnableComplexDerivedMetrics(enableComplexDerivedMetrics);
-        sv.setAutomvEnableSemiAntiJoin(disableSemiAntiJoin);
+        sv.setAutomvEnableSemiAntiJoin(!disableSemiAntiJoin);
         sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(pruneRollupUnableAggregateWithConjuncts);
         sv.setAutoMVPushDownAggBelowSemiAntiJoin(pushDownAggBelowSemiAntiJoin);
         sv.setAutoMVMaxOrderByColumns(maxOrderByColumns);
+        sv.setAutoMVUseCardinalityEstimation(false);
         GlobalVariable.setAutoMVPreferRangePartition(preferRangePartition);
         GlobalVariable.setAutoMVStringTimeFormats(stringTimeFormats);
         GlobalVariable.setAutoMVColocateMVDimensionsLimit(colocateMVDimensionsLimit);

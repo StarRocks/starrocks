@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.pn;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -36,6 +37,7 @@ import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -170,6 +172,19 @@ public class OpTest {
                 "CAST((CAST(`test_db`.`t`.c6 AS int) % CAST(`test_db`.`t`.c7 AS int)) AS varchar)) " +
                 "END)");
 
+    }
+
+    @Test
+    public void testCaseWhenNoCaseHasElse2() {
+        List<ScalarOperator> whenThens = Arrays.asList(
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefs.get(0), ConstantOperator.createVarchar("A")),
+                ConstantOperator.createNull(Type.VARCHAR)
+        );
+        ScalarOperator elseClause = columnRefs.get(1);
+        CaseWhenOperator caseWhen =
+                new CaseWhenOperator(Type.VARCHAR, null, elseClause, whenThens);
+
+        testHelper(caseWhen, "(CASE `test_db`.`t`.c0 WHEN \"A\" THEN NULL ELSE `test_db`.`t`.c1 END)");
     }
 
     @Test

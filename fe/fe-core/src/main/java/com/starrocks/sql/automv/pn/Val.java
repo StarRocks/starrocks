@@ -23,9 +23,9 @@ import java.util.Objects;
 
 // Val means typed constant
 public final class Val extends Op implements Comparable {
-    public static final Val FALSE_VAL = Op.val(ConstantOperator.FALSE);
-    public static final Val NULL_VAL = Op.val(ConstantOperator.NULL);
-    public static final Val TRUE_VAL = Op.val(ConstantOperator.TRUE);
+    public static final Val FALSE_VAL = new Val(ConstantOperator.FALSE);
+    public static final Val NULL_VAL = new Val(ConstantOperator.NULL);
+    public static final Val TRUE_VAL = new Val(ConstantOperator.TRUE);
     private final ConstantOperator value;
 
     public Val(ConstantOperator value) {

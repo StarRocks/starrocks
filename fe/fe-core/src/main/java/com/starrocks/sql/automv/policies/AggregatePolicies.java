@@ -30,14 +30,12 @@ import java.util.function.Predicate;
 
 public class AggregatePolicies {
     public static final ImmutableSet<String> ROLLUP_UNABLE_AGGREGATIONS = ImmutableSet.<String>builder()
-            .add(FunctionSet.ANY_VALUE)
             .add(FunctionSet.CORR)
             .add(FunctionSet.COVAR_POP)
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.DICT_MERGE)
             .add(FunctionSet.EXCHANGE_BYTES)
             .add(FunctionSet.EXCHANGE_SPEED)
-            .add(FunctionSet.GROUP_CONCAT)
             .add(FunctionSet.HISTOGRAM)
             .add(FunctionSet.INTERSECT_COUNT)
             .add(FunctionSet.MAX_BY)
@@ -87,6 +85,8 @@ public class AggregatePolicies {
             .add(FunctionSet.MIN)
             .add(FunctionSet.PERCENTILE_UNION)
             .add(FunctionSet.SUM)
+            .add(FunctionSet.ANY_VALUE)
+            .add(FunctionSet.GROUP_CONCAT)
             .build();
 
     public static boolean isRollupAble(GenericColumn metric) {
