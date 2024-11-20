@@ -149,7 +149,7 @@ public class AnalyzerUtils {
             ImmutableSet.of("hour", "day", "month", "year");
     // The partition format supported by time_slice
     public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
-            ImmutableSet.of("hour", "day", "month", "year");
+            ImmutableSet.of("minute", "hour", "day", "month", "year");
     // The partition format supported by mv date_trunc
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("hour", "day", "week", "month", "year");
@@ -1426,6 +1426,11 @@ public class AnalyzerUtils {
                 // The start date here is passed by BE through function calculation,
                 // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
+                    case "minute":
+                        beginTime = beginTime.withSecond(0).withNano(0);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
+                        endTime = beginTime.plusMinutes(interval);
+                        break;
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
                         partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
@@ -1760,14 +1765,14 @@ public class AnalyzerUtils {
     private static void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
                                                       NodePosition pos, String partitionColumnName, String fmt) {
         // For materialized views currently columnDefs == null
-        if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
+        if (columnDefs != null && ("hour".equalsIgnoreCase(fmt) || "minute".equalsIgnoreCase(fmt))) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
             if (partitionDef == null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
             }
             if (partitionDef.getType() != Type.DATETIME) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
-                        "PARTITION BY", "The hour parameter only supports datetime type"), pos);
+                        "PARTITION BY", "The hour/minute parameter only supports datetime type"), pos);
             }
         }
     }
