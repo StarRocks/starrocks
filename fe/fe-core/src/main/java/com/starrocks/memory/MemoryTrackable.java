@@ -22,6 +22,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public interface MemoryTrackable {
+    // The default implementation of estimateSize only calculate the shadow size of the object.
+    // The shadow size is the same for all instances of the specified class,
+    // so using CLASS_SIZE to cache the class's instance shadow size.
+    // the key is class name, the value is size
     Map<String, Long> CLASS_SIZE = new ConcurrentHashMap<>();
 
     default long estimateSize() {
