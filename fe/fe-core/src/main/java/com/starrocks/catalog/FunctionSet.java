@@ -219,6 +219,9 @@ public class FunctionSet {
     public static final String GET_JSON_DOUBLE = "get_json_double";
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
+    public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String JSON_EXISTS = "json_exists";
+    public static final String JSON_LENGTH = "json_length";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
