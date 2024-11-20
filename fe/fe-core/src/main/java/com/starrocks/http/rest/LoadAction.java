@@ -59,11 +59,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-<<<<<<< HEAD
-=======
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -85,10 +81,6 @@ public class LoadAction extends RestBaseAction {
         } catch (DdlException e) {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
-<<<<<<< HEAD
-            resp.msg = e.getClass().toString() + ": " + e.getMessage();
-            LOG.warn(e);
-=======
             resp.msg = e.getClass() + ": " + e.getMessage();
             String firstStackTrace = "<null>";
             Optional<StackTraceElement> stElem = Arrays.stream(e.getStackTrace()).findFirst();
@@ -97,15 +89,11 @@ public class LoadAction extends RestBaseAction {
             }
             LOG.warn("Failed to execute executeWithoutPasswordInternal: {}, The most inner stack: {}",
                     e.getMessage(), firstStackTrace);
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
 
             sendResult(request, response, resp);
         }
     }
 
-<<<<<<< HEAD
-    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
-=======
     // Basically a complete copy of the private interface HttpUtil.isExpectHeaderValid.
     private static boolean isExpectHeaderValid(final HttpRequest message) {
         /*
@@ -116,10 +104,7 @@ public class LoadAction extends RestBaseAction {
         return message.protocolVersion().compareTo(HttpVersion.HTTP_1_1) >= 0;
     }
 
-    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
-            AccessDeniedException {
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
-
+    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
         // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
         // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
         if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
