@@ -83,6 +83,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private String semanticTableName = null;
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -375,6 +376,14 @@ public class IcebergTable extends Table {
     @Override
     public boolean isTemporal() {
         return true;
+    }
+
+    public void setSemanticTableName(String v) {
+        semanticTableName = v;
+    }
+
+    public String getSemanticTableName() {
+        return semanticTableName;
     }
 
     @Override

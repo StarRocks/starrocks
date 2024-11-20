@@ -133,7 +133,6 @@ public class HiveTableTest {
 
         Assert.assertTrue(table instanceof HiveTable);
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("hive_tbl", hiveTable.getName());
         Assert.assertEquals("hive_db", hiveTable.getDbName());
         Assert.assertEquals("hive_table", hiveTable.getName());
         Assert.assertEquals(hdfsPath, hiveTable.getTableLocation());

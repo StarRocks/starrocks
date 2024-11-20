@@ -77,7 +77,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.getDefaultPhysicalPartition()
                 .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
-                .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
+                        .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }
 
@@ -229,11 +229,11 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
 
         Database database = new Database(1, "test_db");
-        Table table = HiveTable.builder().setTableName("test_table").build();
+        Table table = HiveTable.builder().setTableName("test_table").setHiveTableName("test_table").build();
         StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(Type.INT, Type.INT),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         new MockUp<ExternalFullStatisticsCollectJob>() {
             @Mock
@@ -257,7 +257,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col3"),
                 Lists.newArrayList(Type.INT, Type.STRING),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
         statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
         externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");

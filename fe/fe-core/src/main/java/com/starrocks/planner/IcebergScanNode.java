@@ -213,7 +213,8 @@ public class IcebergScanNode extends ScanNode {
         output.append(prefix).append("TABLE: ")
                 .append(icebergTable.getDbName())
                 .append(".")
-                .append(icebergTable.getName())
+                .append(icebergTable.getSemanticTableName() == null ? icebergTable.getName() :
+                        icebergTable.getSemanticTableName())
                 .append("\n");
 
         if (null != sortColumn) {
