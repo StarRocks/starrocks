@@ -519,9 +519,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        long snapshotId = -1;
+        if (nativeTable.currentSnapshot() != null) {
+            snapshotId = nativeTable.currentSnapshot().snapshotId();
+        }
         List<Partition> ans = icebergCatalog.getPartitions(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
-                nativeTable.currentSnapshot().snapshotId(), null,
-                partitionNames);
+                snapshotId, null, partitionNames);
         return new ArrayList<>(ans);
     }
 

@@ -149,7 +149,10 @@ public interface IcebergCatalog extends MemoryTrackable {
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(icebergTable, org.apache.iceberg.MetadataTableType.PARTITIONS);
-        TableScan tableScan = partitionsTable.newScan().useSnapshot(snapshotId);
+        TableScan tableScan = partitionsTable.newScan();
+        if (snapshotId != -1) {
+            tableScan = tableScan.useSnapshot(snapshotId);
+        }
         if (executorService != null) {
             tableScan = tableScan.planWith(executorService);
         }
