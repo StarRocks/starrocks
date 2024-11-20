@@ -5,6 +5,8 @@ coredump_log()
     echo "[`date`] [coredump] $@" >&2
 }
 
+STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
+
 # Define constant for 1TB in bytes
 TB_IN_BYTES=$((1024 * 1024 * 1024 * 1024))
 
