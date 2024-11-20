@@ -62,11 +62,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-<<<<<<< HEAD
-=======
 import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
->>>>>>> bf78f6e38d ([BugFix] fix 100-continue compatibility issue for HTTP/1.0 (#53008))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
