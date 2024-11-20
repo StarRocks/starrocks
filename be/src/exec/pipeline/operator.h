@@ -148,7 +148,7 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* mem_tracker() const { return _mem_tracker; }
+    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
@@ -327,11 +327,7 @@ private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
-    // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
-    // DO NOT use this MemTracker manually.
-    // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
-    // the same MemTracker.
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::vector<ExprContext*> _runtime_in_filters;
 };
 

@@ -15,6 +15,7 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "common/logging.h"
@@ -23,6 +24,7 @@
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/failpoint/fail_point.h"
@@ -68,7 +70,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-    _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
+    _mem_tracker = std::make_shared<MemTracker>();
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -120,24 +122,6 @@ void Operator::close(RuntimeState* state) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
-    }
-
-    if (!_is_subordinate) {
-        _common_metrics
-                ->add_counter("OperatorPeakMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->peak_consumption());
-        _common_metrics
-                ->add_counter("OperatorAllocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->allocation());
-        _common_metrics
-                ->add_counter("OperatorDeallocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->deallocation());
     }
 
     // Pipeline do not need the built in total time counter
