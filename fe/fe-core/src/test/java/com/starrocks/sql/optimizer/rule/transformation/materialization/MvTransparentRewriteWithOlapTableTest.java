@@ -930,6 +930,10 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " ) " +
                             " AS select * from t1;",
                     () -> {
+                        {
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
+                        }
                         cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION ('%s') with sync mode",
                                 "beijing"));
                         MaterializedView mv1 = getMv("test", "mv0");
@@ -937,8 +941,8 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                         Assert.assertEquals("[p1, p2]", mvNames.toString());
                         // transparent mv
                         {
-                            String plan = getFragmentPlan("select * from mv0", "MV");
-                            System.out.println(plan);
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
                         }
                     });
         });
@@ -947,11 +951,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
     @Test
     public void testTransparentMVWithListPartitions2() {
         starRocksAssert.withTable(t3, () -> {
-            String insertSql = "insert into t3 partition(p1) values(1, 1, '2024-01-01', 'beijing')," +
+            String insertSql = "insert into t3 values(1, 1, '2024-01-01', 'beijing')," +
                     "(1, 1, '2022-01-01', 'hangzhou');";
             cluster.runSql("test", insertSql);
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (province) " +
+                            " PARTITION BY (province, dt) " +
                             " DISTRIBUTED BY HASH(province) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
@@ -960,21 +964,20 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             " AS select * from t3;",
                     () -> {
                         {
-                            String plan = getFragmentPlan("select * from mv0", "MV");
-                            System.out.println(plan);
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
                         }
-
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION ('%s') with sync mode",
-                                "beijing"));
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
+                                        "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2]", mvNames.toString());
+                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
                         }
                     });
         });
-
-
     }
 }
