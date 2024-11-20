@@ -696,9 +696,8 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
-                            QeProcessorImpl.INSTANCE
-                                    .monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                                            context.getSessionVariable().getProfileTimeout() * 1000L);
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
