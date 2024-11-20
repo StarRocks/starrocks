@@ -200,3 +200,9 @@ insert into ss values('2002-01-08', 1, 2);
 select sleep(3);
 function: wait_alter_table_not_pending()
 select * from ss;
+
+
+-- name: test_time_slice_with_minute_granularity
+create table tt(k datetime) partition by time_slice(k, interval 10 minute);
+insert into tt values(now());
+select count(*) from tt;
