@@ -52,7 +52,7 @@ public class HudiTableFactory extends ExternalTableFactory {
         builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
                 .setHiveDbName(catalogTable.getDbName())
-                .setHiveTableName(catalogTable.getTableName())
+                .setHiveTableName(catalogTable.getName())
                 .setPartitionColNames(catalogTable.getPartitionColumnNames())
                 .setDataColNames(catalogTable.getDataColumnNames())
                 .setHudiProperties(catalogTable.getProperties())

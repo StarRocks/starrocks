@@ -29,12 +29,6 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     public PartitionKey createEmptyKey() {
         return new DeltaLakePartitionKey();
     }
-
-    @Override
-    public String getDbName() {
-        return ((DeltaLakeTable) table).getDbName();
-    }
-
     @Override
     public boolean isSupportPCTRefresh() {
         return false;

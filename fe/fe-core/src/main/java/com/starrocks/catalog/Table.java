@@ -178,11 +178,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
      * NOTICE: The columns of baseIndex is placed before the SHADOW_NAME_PREFIX columns
-     *
+     * <p>
      * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
      * subclasses.
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
-     *
+     * <p>
      * If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent
      * read-write operations between these tasks with a relatively low probability.
      * Therefore, we choose to use a CopyOnWriteArrayList.
@@ -260,6 +260,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
+    public String getResourceName() {
+        throw new UnsupportedOperationException("getResourceName not supported");
+    }
+
     public String getName() {
         return name;
     }
@@ -270,6 +274,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getTableIdentifier() {
         return name;
+    }
+
+    public String getDbName() {
+        throw new UnsupportedOperationException("getDbName not supported");
     }
 
     public void setType(TableType type) {
@@ -392,6 +400,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.KUDU;
     }
 
+    public boolean isHMSTable() {
+        return type == TableType.HIVE || type ==TableType.HUDI || type == TableType.ODPS;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -467,8 +479,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public String getTableLocation() {
-        String msg = "The getTableLocation() method needs to be implemented.";
-        throw new NotImplementedException(msg);
+        throw new NotImplementedException("getTableLocation not supported");
     }
 
     public Map<String, Column> getNameToColumn() {
@@ -679,7 +690,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     /**
      * Delete this table permanently. Implementations can perform necessary cleanup work.
      *
-     * @param dbId ID of the database to which the table belongs
+     * @param dbId   ID of the database to which the table belongs
      * @param replay is this a log replay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -689,6 +700,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     /**
      * Delete thie table from {@link CatalogRecycleBin}
+     *
      * @param replay is this a log relay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -736,6 +748,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public List<String> getPartitionColumnNames() {
+        return Lists.newArrayList();
+    }
+
+    public List<String> getDataColumnNames() {
         return Lists.newArrayList();
     }
 

@@ -104,7 +104,7 @@ public class CachingHiveMetastoreTest {
         com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals("tbl1", hiveTable.getName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());

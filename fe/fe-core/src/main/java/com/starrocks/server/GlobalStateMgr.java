@@ -60,7 +60,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
@@ -2456,8 +2455,8 @@ public class GlobalStateMgr {
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Preconditions.checkState(table instanceof HiveMetaStoreTable);
-            catalogName = ((HiveMetaStoreTable) table).getCatalogName();
+            Preconditions.checkState(table.isHMSTable());
+            catalogName = table.getCatalogName();
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);

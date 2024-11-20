@@ -36,7 +36,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
@@ -813,8 +812,8 @@ public class MaterializedViewAnalyzer {
                             slotRef.toSql());
                 } else if (table.isNativeTableOrMaterializedView()) {
                     checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
-                } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
-                    checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
+                } else if (table.isHMSTable()) {
+                    checkPartitionColumnWithBaseHMSTable(slotRef, table);
                 } else if (table.isIcebergTable()) {
                     checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
                 } else if (table.isJDBCTable()) {
@@ -852,7 +851,7 @@ public class MaterializedViewAnalyzer {
                     }
                     if (refBaseTable.getPartitionColumns().size() != partitionRefTableExprs.size()) {
                         throw new SemanticException(String.format("Materialized view partition columns size(%s)" +
-                                " must be same with ref base table(%d)", partitionRefTableExprs.size(),
+                                        " must be same with ref base table(%d)", partitionRefTableExprs.size(),
                                 refBaseTable.getPartitionColumns().size()), partitionRefTableExpr.getPos());
                     }
                 }
@@ -915,7 +914,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");
@@ -976,7 +975,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, Table table) {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
         }
 
@@ -1085,10 +1084,9 @@ public class MaterializedViewAnalyzer {
                                 baseTableInfo.getDbName(), table.getName()));
                         break;
                     }
-                } else if (table.isHiveTable() || table.isHudiTable()) {
-                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                    if (hiveMetaStoreTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                            hiveMetaStoreTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                } else if (table.isHMSTable()) {
+                    if (table.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            table.getDbName().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
@@ -1211,7 +1209,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), mvName.getTbl());
+                    .getTable(db.getFullName(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }

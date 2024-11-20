@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class OdpsTable extends Table implements HiveMetaStoreTable {
+public class OdpsTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -79,7 +79,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public String getTableName() {
+    public String getName() {
         return tableName;
     }
 

@@ -51,7 +51,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -527,7 +526,9 @@ public class AnalyzerUtils {
             return super.visitTableFunction(node, context);
         }
 
-        /** treat {@link NormalizedTableFunctionRelation} as JoinRelation **/
+        /**
+         * treat {@link NormalizedTableFunctionRelation} as JoinRelation
+         **/
         @Override
         public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
             return super.visitJoin(node, context);
@@ -810,10 +811,9 @@ public class AnalyzerUtils {
                 return null;
             }
             // For external tables, their db/table names are case-insensitive, need to get real names of them.
-            if (table.isHiveTable() || table.isHudiTable()) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
-                        hiveMetaStoreTable.getTableName());
+            if (table.isHMSTable()) {
+                TableName tableName = new TableName(table.getCatalogName(), table.getDbName(),
+                        table.getName());
                 tables.put(tableName, table);
             } else if (table.isIcebergTable()) {
                 IcebergTable icebergTable = (IcebergTable) table;
@@ -881,10 +881,12 @@ public class AnalyzerUtils {
         class TableIndexId {
             long tableId;
             long baseIndexId;
+
             public TableIndexId(long tableId, long indexId) {
                 this.tableId = tableId;
                 this.baseIndexId = indexId;
             }
+
             @Override
             public boolean equals(Object o) {
                 if (this == o) {
@@ -1627,6 +1629,7 @@ public class AnalyzerUtils {
     /**
      * Check if the function is a non-deterministic function with strict mode, eg current_date/current_timestamp also
      * is treated as non-deterministic function too.
+     *
      * @param node the node to check
      * @return true if node contains non-deterministic functions, false otherwise.
      */
@@ -1660,8 +1663,9 @@ public class AnalyzerUtils {
     /**
      * Check the partition expr is legal and extract partition columns
      * TODO: support date_trunc('week', dt) for normal olap table.
-     * @param expr partition expr
-     * @param columnDefs partition column defs
+     *
+     * @param expr                      partition expr
+     * @param columnDefs                partition column defs
      * @param supportedDateTruncFormats date trunc supported formats which are a bit different bewtween mv and olap table
      * @return partition column names
      */

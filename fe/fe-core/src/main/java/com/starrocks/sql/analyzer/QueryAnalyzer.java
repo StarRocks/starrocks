@@ -661,9 +661,9 @@ public class QueryAnalyzer {
                 if (table.isHiveTable()) {
                     HiveTable hiveTable = (HiveTable) table;
                     session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                            hiveTable.getTableName());
+                            hiveTable.getName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getName());
                     hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
                     hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                     Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().

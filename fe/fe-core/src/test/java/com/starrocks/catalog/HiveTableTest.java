@@ -135,7 +135,7 @@ public class HiveTableTest {
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("hive_tbl", hiveTable.getName());
         Assert.assertEquals("hive_db", hiveTable.getDbName());
-        Assert.assertEquals("hive_table", hiveTable.getTableName());
+        Assert.assertEquals("hive_table", hiveTable.getName());
         Assert.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));

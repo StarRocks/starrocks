@@ -196,7 +196,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
             for (HiveTable table : tables) {
                 try {
                     LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
-                            "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
+                            "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
                     if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {

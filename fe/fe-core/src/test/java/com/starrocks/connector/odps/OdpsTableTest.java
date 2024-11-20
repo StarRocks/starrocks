@@ -56,8 +56,8 @@ public class OdpsTableTest {
     @Test
     public void testGetTableName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
-        when(odpsTable.getTableName()).thenReturn("tableName");
-        assertEquals("tableName", odpsTable.getTableName());
+        when(odpsTable.getName()).thenReturn("tableName");
+        assertEquals("tableName", odpsTable.getName());
     }
 
     @Test

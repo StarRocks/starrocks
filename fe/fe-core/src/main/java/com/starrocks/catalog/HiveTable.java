@@ -76,7 +76,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-public class HiveTable extends Table implements HiveMetaStoreTable {
+public class HiveTable extends Table {
     public enum HiveTableType {
         VIRTUAL_VIEW,
         EXTERNAL_TABLE,
@@ -176,12 +176,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "hive") : catalogName;
     }
 
+    @Override
     public String getDbName() {
         return hiveDbName;
     }
 
     @Override
-    public String getTableName() {
+    public String getName() {
         return hiveTableName;
     }
 
@@ -210,6 +211,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+    @Override
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -219,6 +221,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames.size() == 0;
     }
 
+    @Override
     public String getTableLocation() {
         return this.tableLocation;
     }

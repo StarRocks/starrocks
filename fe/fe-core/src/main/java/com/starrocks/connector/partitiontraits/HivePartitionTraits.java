@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
@@ -27,18 +26,8 @@ import java.util.Optional;
 public class HivePartitionTraits extends DefaultTraits {
 
     @Override
-    public String getDbName() {
-        return ((HiveMetaStoreTable) table).getDbName();
-    }
-
-    @Override
     public boolean isSupportPCTRefresh() {
         return true;
-    }
-
-    @Override
-    public String getTableName() {
-        return ((HiveMetaStoreTable) table).getTableName();
     }
 
     @Override

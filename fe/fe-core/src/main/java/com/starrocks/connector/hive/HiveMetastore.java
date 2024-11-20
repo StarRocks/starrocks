@@ -17,7 +17,6 @@ package com.starrocks.connector.hive;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -158,7 +157,7 @@ public class HiveMetastore implements IHiveMetastore {
     public boolean partitionExists(Table table, List<String> partitionValues) {
         HiveTable hiveTable = (HiveTable) table;
         String dbName = hiveTable.getDbName();
-        String tableName = hiveTable.getTableName();
+        String tableName = hiveTable.getName();
         if (metastoreType == MetastoreType.GLUE && hiveTable.hasBooleanTypePartitionColumn()) {
             List<String> allPartitionNames = client.getPartitionKeys(dbName, tableName);
             String hivePartitionName = toHivePartitionName(hiveTable.getPartitionColumnNames(), partitionValues);
@@ -298,11 +297,10 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        String dbName = hmsTbl.getDbName();
-        String tblName = hmsTbl.getTableName();
-        List<String> dataColumns = hmsTbl.getDataColumnNames();
-        Map<String, Partition> partitions = getPartitionsByNames(hmsTbl.getDbName(), hmsTbl.getTableName(), partitionNames);
+        String dbName = table.getDbName();
+        String tblName = table.getName();
+        List<String> dataColumns = table.getDataColumnNames();
+        Map<String, Partition> partitions = getPartitionsByNames(table.getDbName(), table.getName(), partitionNames);
 
         Map<String, HiveCommonStats> partitionCommonStats = partitions.entrySet().stream()
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> toHiveCommonStats(entry.getValue().getParameters())));

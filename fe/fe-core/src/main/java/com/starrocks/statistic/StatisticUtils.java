@@ -27,7 +27,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -331,7 +330,7 @@ public class StatisticUtils {
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
@@ -476,12 +475,11 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
-        if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+        if (table.isHMSTable()) {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(table.getCatalogName(),
+                    table.getDbName(), table.getName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(table.getCatalogName(),
+                    table.getDbName(), table.getName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),

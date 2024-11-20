@@ -127,7 +127,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
-        return "LogicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+        return "LogicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -146,7 +146,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-        return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
+        return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -347,7 +347,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
-        return "PhysicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+        return "PhysicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
@@ -366,7 +366,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
 
     @Override
     public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-        return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
+        return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getName() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +

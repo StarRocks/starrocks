@@ -103,7 +103,7 @@ public class HudiTableTest {
         HudiTable oTable = tableBuilder.build();
 
         Assert.assertEquals("db0", oTable.getDbName());
-        Assert.assertEquals("table0", oTable.getTableName());
+        Assert.assertEquals("table0", oTable.getName());
         Assert.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
         Assert.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
         Assert.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +

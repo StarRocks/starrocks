@@ -23,7 +23,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.PartitionKey;
@@ -189,9 +188,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit, TableVersionRange version) {
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        String hiveDb = hmsTable.getDbName();
-        String tblName = hmsTable.getTableName();
+        String hiveDb = table.getDbName();
+        String tblName = table.getName();
 
         readLock();
         try {
@@ -213,11 +211,10 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table table, GetRemoteFilesParams params) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = params.getPartitionKeys().size();
         readLock();
         try {
-            return MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).remoteFileInfos.subList(0, size);
+            return MOCK_TABLE_MAP.get(table.getDbName()).get(table.getName()).remoteFileInfos.subList(0, size);
         } finally {
             readUnlock();
         }
@@ -225,12 +222,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(com.starrocks.catalog.Table table, GetRemoteFilesParams params) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = params.getPartitionKeys().size();
         readLock();
         try {
             List<RemoteFileInfo> remoteFileInfos =
-                    MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).remoteFileInfos.subList(0, size);
+                    MOCK_TABLE_MAP.get(table.getDbName()).get(table.getName()).remoteFileInfos.subList(0, size);
             if (params.getPartitionAttachments() != null) {
                 for (int i = 0; i < size; i++) {
                     remoteFileInfos.get(i).setAttachment(params.getPartitionAttachments().get(i));
@@ -244,13 +240,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(com.starrocks.catalog.Table table, List<String> partitionNames) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         readLock();
         try {
             Map<String, PartitionInfo> partitionInfoMap =
-                    MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).partitionInfoMap;
-            if (hmsTbl.isUnPartitioned()) {
-                return Lists.newArrayList(partitionInfoMap.get(hmsTbl.getTableName()));
+                    MOCK_TABLE_MAP.get(table.getDbName()).get(table.getName()).partitionInfoMap;
+            if (table.isUnPartitioned()) {
+                return Lists.newArrayList(partitionInfoMap.get(table.getName()));
             } else {
                 return partitionNames.stream().map(partitionInfoMap::get).collect(Collectors.toList());
             }
@@ -1765,7 +1760,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             this.columnStatsMap = columnStatsMap;
             this.remoteFileInfos = remoteFileInfos;
             if (partitionNames.isEmpty()) {
-                this.partitionInfoMap.put(table.getTableName(), new Partition(
+                this.partitionInfoMap.put(table.getName(), new Partition(
                         ImmutableMap.of(Partition.TRANSIENT_LAST_DDL_TIME,
                                 String.valueOf(System.currentTimeMillis() / 1000)), RemoteFileInputFormat.PARQUET, null,
                         "MockedPartitionFullPath",

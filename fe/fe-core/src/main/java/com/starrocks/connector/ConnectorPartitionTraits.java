@@ -97,7 +97,8 @@ public abstract class ConnectorPartitionTraits {
 
     /**
      * Build the partition traits for the table, if the current thread has a ConnectContext, use the cache if possible.
-     * @param ctx the connect context
+     *
+     * @param ctx   the connect context
      * @param table the table to build partition traits
      * @return the partition traits
      */
@@ -114,6 +115,7 @@ public abstract class ConnectorPartitionTraits {
 
     /**
      * Build the partition traits for the table, if the current thread has a ConnectContext, use the cache if possible.
+     *
      * @param table the table to build partition traits
      * @return the partition traits
      */
@@ -151,7 +153,9 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
-    public abstract String getDbName();
+    public String getDbName() {
+        return table.getDbName();
+    }
 
     /**
      * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
@@ -162,6 +166,7 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
             throws AnalysisException;
+
     /**
      * Get all partitions' name
      */
@@ -211,7 +216,8 @@ public abstract class ConnectorPartitionTraits {
      * For external table, we get partition update time from other system, there may be a time
      * inconsistency between the two systems, so we add extraSeconds to make sure partition update
      * time is later than check time
-     * @param checkTime the time to check
+     *
+     * @param checkTime    the time to check
      * @param extraSeconds partition updated time would add extraSeconds to check whether it is after checkTime
      */
     public abstract Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds);
