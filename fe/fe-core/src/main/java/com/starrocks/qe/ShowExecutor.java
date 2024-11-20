@@ -2159,7 +2159,15 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
+<<<<<<< HEAD
             Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+            String catalogName = statement.getTableName().getCatalog();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, statement.getDbName());
+>>>>>>> c38a6775f4 ([BugFix] Fix show keys from support external catalog (#52977))
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
             if (table == null) {
