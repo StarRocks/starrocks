@@ -858,8 +858,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(execPlan != null);
+            Assert.assertNull(execPlan);
         }
 
         // run 5
@@ -875,15 +874,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            PlanTestBase.assertContains(plan, "TABLE: part_tbl1\n" +
-                    "     PARTITION PREDICATES: 4: par_date IS NOT NULL, 4: par_date >= '2020-01-01', 4: par_date < " +
-                    "'2020-01-05'\n" +
-                    "     partitions=4/4");
-            PlanTestBase.assertContains(plan, "TABLE: part_tbl2\n" +
-                    "     PARTITION PREDICATES: 8: par_date IS NOT NULL, 8: par_date >= '2020-01-01', 8: par_date < " +
-                    "'2020-01-05'\n" +
-                    "     partitions=4/4");
+            Assert.assertNull(execPlan);
         }
 
         starRocksAssert.dropMaterializedView("hive_partition_prune_non_ref_tables2");

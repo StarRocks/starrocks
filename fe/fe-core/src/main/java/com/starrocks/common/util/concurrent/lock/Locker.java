@@ -499,11 +499,7 @@ public class Locker {
     }
 
     /**
-<<<<<<< HEAD
      * Try lock database and table with intensive db lock.
-=======
-     * Try to lock a database and a table id with intensive db lock.
->>>>>>> 596f2ff7f1 ([Enhancement] Enhance Lock Manager Memory and CPU resource consumption (#52705))
      *
      * @return try if try lock success, false otherwise.
      */
