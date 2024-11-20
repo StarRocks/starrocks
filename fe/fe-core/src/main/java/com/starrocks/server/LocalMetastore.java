@@ -1578,7 +1578,68 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                  int numSubPartition, long warehouseId) throws DdlException {
         try {
             table.setAutomaticBucketing(true);
+<<<<<<< HEAD
             addSubPartitions(db, table, partition, numSubPartition, null, warehouseId);
+=======
+
+            OlapTable olapTable;
+            OlapTable copiedTable;
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                olapTable = checkTable(db, table.getId());
+
+                if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+                    throw new DdlException("Only support adding physical partition to random distributed table");
+                }
+
+                copiedTable = getShadowCopyTable(olapTable);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
+
+            Preconditions.checkNotNull(olapTable);
+            Preconditions.checkNotNull(copiedTable);
+
+            List<PhysicalPartition> subPartitions = new ArrayList<>();
+            // create physical partition
+            for (int i = 0; i < numSubPartition; i++) {
+                PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition, warehouseId);
+                subPartitions.add(subPartition);
+            }
+
+            // build partitions
+            buildPartitions(db, copiedTable, subPartitions, warehouseId);
+
+            // check again
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+                throw new DdlException("db " + db.getFullName()
+                        + "(" + db.getId() + ") has been dropped");
+            }
+            try {
+                olapTable = checkTable(db, table.getId());
+                // check if meta changed
+                checkIfMetaChange(olapTable, copiedTable, table.getName());
+
+                if (olapTable.getPartition(partition.getId()) == null) {
+                    throw new DdlException("Partition[" + partition.getName() + "]' has been dropped.");
+                }
+
+                for (PhysicalPartition subPartition : subPartitions) {
+                    // add sub partition
+                    partition.addSubPartition(subPartition);
+                    olapTable.addPhysicalPartition(subPartition);
+                }
+
+                olapTable.setShardGroupChanged(true);
+
+                // add partition log
+                addSubPartitionLog(db, olapTable, partition, subPartitions);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+            }
+>>>>>>> 981c85f2bb ([BugFix] Fix add sub partition when partition is dropped (#53033))
         } finally {
             table.setAutomaticBucketing(false);
         }
@@ -1647,8 +1708,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
+<<<<<<< HEAD
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+=======
+            OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay add sub partition failed, table is null, info: {}", info);
+                return;
+            }
+>>>>>>> 981c85f2bb ([BugFix] Fix add sub partition when partition is dropped (#53033))
             Partition partition = olapTable.getPartition(info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay add sub partition failed, partition is null, info: {}", info);
+                return;
+            }
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
             olapTable.addPhysicalPartition(physicalPartition);
