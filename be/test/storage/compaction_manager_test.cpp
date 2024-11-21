@@ -265,6 +265,48 @@ TEST_F(CompactionManagerTest, test_remove_disable_compaction) {
     }
 }
 
+TEST_F(CompactionManagerTest, test_force_cumulative_compaction) {
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    for (int i = 0; i < 10; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet_meta->TEST_set_table_id(3);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidate.type = CUMULATIVE_COMPACTION;
+        candidates.push_back(candidate);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(candidates.begin(), candidates.end(), g);
+
+    _engine->compaction_manager()->update_candidates(candidates);
+
+    _engine->compaction_manager()->disable_table_compaction(3, UnixSeconds() + 5);
+
+    {
+        int64_t valid_condidates = 0;
+        while (true) {
+            CompactionCandidate candidate;
+            auto valid = _engine->compaction_manager()->pick_candidate(&candidate);
+            if (!valid) {
+                break;
+            }
+            ++valid_condidates;
+            ASSERT_EQ(true, candidate.force_cumulative);
+        }
+        ASSERT_EQ(10, valid_condidates);
+    }
+}
+
 class MockCompactionTask : public CompactionTask {
 public:
     MockCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}

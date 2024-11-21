@@ -148,6 +148,7 @@ private:
     void _dispatch_worker();
     bool _check_compaction_disabled(const CompactionCandidate& candidate);
     bool _check_precondition(const CompactionCandidate& candidate);
+    void _set_force_cumulative(CompactionCandidate* candidate);
     void _schedule();
     void _notify();
     // wait until current running tasks are below max_concurrent_num
