@@ -22,6 +22,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -92,6 +93,16 @@ public class WarehouseAnalyzer {
 
         @Override
         public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            String whName = statement.getWarehouseName();
+            if (Strings.isNullOrEmpty(whName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_WAREHOUSE_NAME);
+            }
+
             return null;
         }
     }

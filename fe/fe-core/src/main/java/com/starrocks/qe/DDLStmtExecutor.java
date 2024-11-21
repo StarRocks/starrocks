@@ -137,6 +137,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1171,6 +1172,15 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
                 warehouseMgr.dropWarehouse(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.alterWarehouse(stmt);
             });
             return null;
         }

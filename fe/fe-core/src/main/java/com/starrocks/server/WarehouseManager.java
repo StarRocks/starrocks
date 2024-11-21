@@ -33,6 +33,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -320,6 +321,10 @@ public class WarehouseManager implements Writable {
     }
 
     public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
         throw new DdlException("Multi-Warehouse is not implemented");
     }
 
