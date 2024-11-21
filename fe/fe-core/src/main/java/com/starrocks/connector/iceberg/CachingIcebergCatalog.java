@@ -257,9 +257,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
+
+        partitionCache.invalidate(baseIcebergTableName);
+        partitionCache.getUnchecked(updatedIcebergTableName);
         synchronized (this) {
             tables.put(updatedIcebergTableName, updatedTable);
-            partitionCache.invalidate(baseIcebergTableName);
         }
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
