@@ -17,6 +17,9 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 #include <cstdint>
@@ -216,6 +219,171 @@ inline void avx2_select_if_common_implement(uint8_t*& selector, T*& dst, const T
         }
     }
 }
+
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+
+template <typename T, bool left_const = false, bool right_const = false>
+inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    const T* dst_end = dst + size;
+    constexpr int data_size = sizeof(T);
+    constexpr int neon_width = 16; // NEON寄存器宽度为128位(16字节)
+
+    // 每次处理16个字节的数据
+    while (dst + 16 < dst_end) {
+        // 加载16个选择器掩码
+        uint8x16_t loaded_mask = vld1q_u8(selector);
+        // vceqq_u8: 比较两个NEON寄存器中的每个元素,如果相等则返回0xFF,否则返回0x00
+        loaded_mask = vceqq_u8(loaded_mask, vdupq_n_u8(0));
+        // vmvnq_u8: 对NEON寄存器中的每个元素取反,所以原来不为0的为0xFF,为0的为0x00
+        loaded_mask = vmvnq_u8(loaded_mask);
+
+        if constexpr (data_size == 1) { // int8/uint8/bool
+            // 加载向量a
+            uint8x16_t vec_a;
+            if constexpr (!left_const) {
+                vec_a = vld1q_u8(reinterpret_cast<const uint8_t*>(a));
+            } else {
+                vec_a = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(a));
+            }
+
+            // 加载向量b
+            uint8x16_t vec_b;
+            if constexpr (!right_const) {
+                vec_b = vld1q_u8(reinterpret_cast<const uint8_t*>(b));
+            } else {
+                vec_b = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(b));
+            }
+
+            // 根据掩码选择结果
+            uint8x16_t result = vbslq_u8(loaded_mask, vec_a, vec_b);
+
+            // 存储结果
+            vst1q_u8(reinterpret_cast<uint8_t*>(dst), result);
+
+        } else if constexpr (data_size == 2) { // int16
+            // 处理2组数据,每组处理8个int16
+            for (int i = 0; i < 2; i++) {
+                // 加载向量a
+                uint16x8_t vec_a;
+                if constexpr (!left_const) {
+                    // vld1q_u16: 从内存加载8个连续的16位数据到NEON寄存器
+                    vec_a = vld1q_u16(reinterpret_cast<const uint16_t*>(a) + i * 8);
+                } else {
+                    // vdupq_n_u16: 将一个16位值复制到寄存器的所有元素位置
+                    vec_a = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(a));
+                }
+
+                // 加载向量b
+                uint16x8_t vec_b;
+                if constexpr (!right_const) {
+                    vec_b = vld1q_u16(reinterpret_cast<const uint16_t*>(b) + i * 8);
+                } else {
+                    vec_b = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(b));
+                }
+
+                // 通过查找表的方式将前8个uint8掩码转换为uint16掩码,也就是每个uint8复制一份
+                uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
+                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
+
+                // 根据掩码选择结果
+                uint16x8_t result = vbslq_u16(vreinterpretq_u16_u8(mask), vec_a, vec_b);
+
+                // 存储结果
+                vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, result);
+                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 8);
+            }
+        } else if constexpr (data_size == 4) { // int32/float
+            // 处理4组数据,每组处理4个int32
+            for (int i = 0; i < 4; i++) {
+                // 加载向量a
+                uint32x4_t vec_a;
+                if constexpr (!left_const) {
+                    vec_a = vld1q_u32(reinterpret_cast<const uint32_t*>(a) + i * 4);
+                } else {
+                    vec_a = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(a));
+                }
+
+                // 加载向量b
+                uint32x4_t vec_b;
+                if constexpr (!right_const) {
+                    vec_b = vld1q_u32(reinterpret_cast<const uint32_t*>(b) + i * 4);
+                } else {
+                    vec_b = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(b));
+                }
+
+                // 提取当前4个uint8掩码并转换为uint32掩码
+                // 按照data_size为2的实现
+                uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
+                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
+
+                // 根据掩码选择结果
+                uint32x4_t result = vbslq_u32(vreinterpretq_u32_u8(mask), vec_a, vec_b);
+
+                // 存储结果
+                vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, result);
+                // 更新掩码,每次偏移4个
+                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 4);
+            }
+        } else if constexpr (data_size == 8) { // int64/double
+            // 处理8组数据,每组处理2个int64
+            for (int i = 0; i < 8; i++) {
+                // 加载向量a
+                uint64x2_t vec_a;
+                if constexpr (!left_const) {
+                    vec_a = vld1q_u64(reinterpret_cast<const uint64_t*>(a) + i * 2);
+                } else {
+                    vec_a = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(a));
+                }
+
+                // 加载向量b
+                uint64x2_t vec_b;
+                if constexpr (!right_const) {
+                    vec_b = vld1q_u64(reinterpret_cast<const uint64_t*>(b) + i * 2);
+                } else {
+                    vec_b = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(b));
+                }
+
+                // 提取当前2个uint8掩码并转换为uint64掩码
+                // 按照data_size为4的实现
+                uint8x16_t index = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
+                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
+
+                // 根据掩码选择结果
+                uint64x2_t result = vbslq_u64(vreinterpretq_u64_u8(mask), vec_a, vec_b);
+
+                // 存储结果
+                vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, result);
+
+                // 更新掩码,每次偏移2个
+                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 2);
+            }
+        }
+
+        // 更新指针
+        dst += 16;
+        selector += 16;
+        if (!left_const) {
+            a += 16;
+        }
+        if (!right_const) {
+            b += 16;
+        }
+    }
+
+    // 处理剩余的数据
+    while (dst < dst_end) {
+        *dst = *selector ? *a : *b;
+        dst++;
+        selector++;
+        if (!left_const) {
+            a++;
+        }
+        if (!right_const) {
+            b++;
+        }
+    }
+}
+
 #endif
 
 // SIMD selector
