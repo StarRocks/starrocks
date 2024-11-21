@@ -93,6 +93,12 @@ void CompactionManager::_schedule() {
             auto st = _compaction_pool->submit_func([compaction_candidate, task_id] {
                 auto compaction_task = compaction_candidate.tablet->create_compaction_task();
                 if (compaction_task != nullptr) {
+                    if (compaction_task->compaction_type() == CompactionType::BASE_COMPACTION &&
+                        compaction_candidate.force_cumulative) {
+                        LOG(INFO) << "skip base compaction task " << task_id << " for tablet "
+                                  << compaction_candidate.tablet->tablet_id() << " because force_cumulative is true";
+                        return;
+                    }
                     compaction_task->set_task_id(task_id);
                     compaction_task->start();
                 }
@@ -222,6 +228,15 @@ bool CompactionManager::_check_compaction_disabled(const CompactionCandidate& ca
     return false;
 }
 
+void CompactionManager::_set_force_cumulative(CompactionCandidate* candidate) {
+    // In the pick_candidate stage, the task is for cumulative compaction. However, during the execution stage,
+    // it might turn into base compaction. Therefore, if base compaction is disabled,
+    // such tasks will be forced to execute as cumulative compaction only.
+    candidate->force_cumulative = _table_to_disable_deadline_map.find(candidate->tablet->tablet_meta()->table_id()) !=
+                                          _table_to_disable_deadline_map.end() &&
+                                  candidate->type == CompactionType::CUMULATIVE_COMPACTION;
+}
+
 bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
     if (!candidate.tablet) {
         LOG(WARNING) << "candidate with null tablet";
@@ -306,6 +321,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
         }
         if (_check_precondition(*iter)) {
             *candidate = *iter;
+            _set_force_cumulative(candidate);
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
             if (candidate->type == CompactionType::BASE_COMPACTION) {
