@@ -480,6 +480,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -5060,6 +5061,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.modifyPropertiesClause() != null) {
+            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
+            properties = clause.getProperties();
+        }
+        return new AlterWarehouseStmt(whName, properties, createPos(context));
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
