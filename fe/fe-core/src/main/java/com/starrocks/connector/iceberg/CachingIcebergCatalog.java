@@ -91,7 +91,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Map<String, Partition> load(IcebergTableName key) throws Exception {
                         // use default executor service.
-                        return delegate.loadPartitions(key.dbName, key.tableName, key.snapshotId, null);
+                        return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
                     }
                 }, executorService));
         this.dataFileCache = enableCache ?
@@ -198,8 +198,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Map<String, Partition> loadPartitions(String dbName, String tableName, long snapshotId,
-                                                 ExecutorService executorService) {
+    public Map<String, Partition> getPartitions(String dbName, String tableName, long snapshotId,
+                                                ExecutorService executorService) {
         IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
         return partitionCache.getUnchecked(key);
     }

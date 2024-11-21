@@ -145,7 +145,7 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     // --------------- partition APIs ---------------
-    private Map<String, Partition> loadPartitions(Table icebergTable, long snapshotId, ExecutorService executorService) {
+    private Map<String, Partition> getPartitions(Table icebergTable, long snapshotId, ExecutorService executorService) {
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(icebergTable, org.apache.iceberg.MetadataTableType.PARTITIONS);
@@ -238,15 +238,15 @@ public interface IcebergCatalog extends MemoryTrackable {
         return partitionMap;
     }
 
-    default Map<String, Partition> loadPartitions(String dbName, String tableName, long snapshotId,
-                                                  ExecutorService executorService) {
+    default Map<String, Partition> getPartitions(String dbName, String tableName, long snapshotId,
+                                                 ExecutorService executorService) {
         Table icebergTable = getTable(dbName, tableName);
-        return loadPartitions(icebergTable, snapshotId, executorService);
+        return getPartitions(icebergTable, snapshotId, executorService);
     }
 
     default List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         Table icebergTable = getTable(dbName, tableName);
-        Map<String, Partition> partitionMap = loadPartitions(icebergTable, snapshotId, executorService);
+        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
         if (icebergTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
@@ -254,11 +254,11 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
     }
 
-    default List<Partition> getPartitions(String dbName, String tableName, long snapshotId,
-                                          ExecutorService executorService,
-                                          List<String> partitionNames) {
+    default List<Partition> getPartitionsByNames(String dbName, String tableName, long snapshotId,
+                                                 ExecutorService executorService,
+                                                 List<String> partitionNames) {
         Table icebergTable = getTable(dbName, tableName);
-        Map<String, Partition> partitionMap = loadPartitions(icebergTable, snapshotId, executorService);
+        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
         if (icebergTable.spec().isUnpartitioned()) {
             return List.of(partitionMap.get(EMPTY_PARTITION_NAME));
         } else {
