@@ -1511,4 +1511,8 @@ CONF_mInt32(batch_write_rpc_request_retry_interval_ms, "500");
 CONF_mInt32(batch_write_rpc_reqeust_timeout_ms, "10000");
 CONF_mInt32(batch_write_poll_load_status_interval_ms, "200");
 CONF_mBool(batch_write_trace_log_enable, "false");
+
+// ignore union type tag in avro kafka routine load
+CONF_mBool(avro_ignore_union_type_tag, "false");
+
 } // namespace starrocks::config

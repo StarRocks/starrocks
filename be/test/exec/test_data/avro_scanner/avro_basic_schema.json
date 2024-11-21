@@ -3,6 +3,7 @@
     "name": "basic",
     "fields" : [
         {"name": "booleantype", "type" : "boolean"},
+        {"name": "inttype", "type": "int"},
         {"name": "longtype", "type": "long"},
         {"name": "doubletype", "type": "double"},
         {"name": "stringtype", "type": "string"},
