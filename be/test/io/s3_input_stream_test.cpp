@@ -26,6 +26,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
@@ -79,7 +80,7 @@ void S3InputStreamTest::TearDownTestCase() {
 }
 
 void init_s3client() {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
     const char* ak = config::object_storage_access_key_id.empty() ? getenv("STARROCKS_UT_S3_AK")
