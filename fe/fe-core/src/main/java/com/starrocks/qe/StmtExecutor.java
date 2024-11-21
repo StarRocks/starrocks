@@ -688,6 +688,7 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
+<<<<<<< HEAD
                         } else {
                             // Release all resources after the query finish as soon as possible, as query profile is
                             // asynchronous which can be delayed a long time.
@@ -710,6 +711,22 @@ public class StmtExecutor {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
                                             ProfilingExecPlan.buildFrom(execPlan), profile, null));
                                 }
+=======
+                        } else if (context instanceof ArrowFlightSqlConnectContext) {
+                            isAsync = true;
+                            tryProcessProfileAsync(execPlan, i);
+                        } else if (context.isProfileEnabled()) {
+                            isAsync = tryProcessProfileAsync(execPlan, i);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                if (coord != null && coord.isShortCircuit()) {
+                                    throw new UserException(
+                                            "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                    "you can set it off by using  set enable_short_circuit=false");
+                                }
+                                handleExplainStmt(ExplainAnalyzer.analyze(
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
+>>>>>>> bce5d05c0 ([Enhancement] Disable arrow flight sql server by default (#52991))
                             }
                         }
 
@@ -721,11 +738,8 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
-                            int timeout = context.getSessionVariable().getQueryTimeoutS();
-                            QeProcessorImpl.INSTANCE
-                                    .monitorQuery(context.getExecutionId(),
-                                            System.currentTimeMillis() + timeout * 1000L +
-                                                    context.getSessionVariable().getProfileTimeout() * 1000L);
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                    System.currentTimeMillis() + context.getSessionVariable().getProfileTimeout() * 1000L);
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -1346,7 +1360,7 @@ public class StmtExecutor {
                 sendFields(colNames, outputExprs);
             }
         }
-        
+
         if (batch != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
