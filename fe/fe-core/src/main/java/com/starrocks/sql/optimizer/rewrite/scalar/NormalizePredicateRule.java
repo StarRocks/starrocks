@@ -186,7 +186,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         parent.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
 
         // this tree can be optimized
-        if (compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
+        if (compoundTreeUniqueLeaves != null &&
+                compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
             ScalarOperator newTree = Utils.createCompound(parent.getCompoundType(),
                     compoundTreeUniqueLeaves.stream().map(
                             node -> {
