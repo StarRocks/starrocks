@@ -51,7 +51,7 @@ struct OlapTableIndexSchema {
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
     std::map<std::string, std::string> column_to_expr_value;
-    bool is_shadow;
+    bool is_shadow = false;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };

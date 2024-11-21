@@ -131,7 +131,9 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
 
         if (p_index.has_is_shadow()) {
             index->is_shadow = p_index.is_shadow();
-            _shadow_indexes++;
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
         }
 
         _indexes.emplace_back(index);
@@ -195,7 +197,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
         }
         if (t_index.__isset.is_shadow) {
             index->is_shadow = t_index.is_shadow;
-            _shadow_indexes++;
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
         }
         _indexes.emplace_back(index);
     }
