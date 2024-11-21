@@ -17,7 +17,6 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -54,9 +53,7 @@ private:
     int64_t chunk_source_mem_bytes_update_count = 0;
     int64_t arb_chunk_source_mem_bytes = 0;
     mutable int64_t debug_output_timestamp = 0;
-
     std::atomic<int64_t> open_scan_operator_count = 0;
-    std::atomic<int64_t> active_scan_operator_count = 0;
 
 public:
     ConnectorScanOperatorIOTasksMemLimiter(int64_t dop, bool shared_scan) : dop(dop), shared_scan(shared_scan) {}
@@ -126,9 +123,6 @@ public:
 
     int64_t update_open_scan_operator_count(int delta) {
         return open_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
-    }
-    int64_t update_active_scan_operator_count(int delta) {
-        return active_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
     }
 };
 
@@ -269,38 +263,32 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
         _adaptive_processor->slow_io_latency_ms = options.connector_io_tasks_slow_io_latency_ms;
     }
 
+    // As the first running scan operator, it will update the scan mem limit
     {
         auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
         ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-        L->update_open_scan_operator_count(1);
+        int64_t c = L->update_open_scan_operator_count(1);
+        if (c == 0) {
+            _adjust_scan_mem_limit(connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES,
+                                   L->get_arb_chunk_source_mem_bytes());
+        }
     }
     return Status::OK();
 }
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {
+    // As the last closing scan operator, it will update the scan mem limit.
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
     int64_t c = L->update_open_scan_operator_count(-1);
     if (c == 1) {
-        if (L->update_active_scan_operator_count(0) > 0) {
-            _adjust_scan_mem_limit(L->get_arb_chunk_source_mem_bytes(), 0);
-        }
+        _adjust_scan_mem_limit(L->get_arb_chunk_source_mem_bytes(), 0);
     }
 }
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-
-    if (_adaptive_processor->started_running == false) {
-        _adaptive_processor->started_running = true;
-        int64_t c = L->update_active_scan_operator_count(1);
-        if (c == 0) {
-            _adjust_scan_mem_limit(connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES,
-                                   L->get_arb_chunk_source_mem_bytes());
-        }
-    }
 
     // Only use one chunk source profile, so we can see metrics on scan operator level.
     // Since there is adaptive io tasks feature, chunk sources will be used unevenly,
