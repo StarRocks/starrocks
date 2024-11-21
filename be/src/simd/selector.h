@@ -356,18 +356,6 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
             b += 16;
         }
     }
-
-    while (dst < dst_end) {
-        *dst = *selector ? *a : *b;
-        dst++;
-        selector++;
-        if (!left_const) {
-            a++;
-        }
-        if (!right_const) {
-            b++;
-        }
-    }
 }
 
 #endif
