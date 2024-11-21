@@ -1467,10 +1467,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
+                    MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
+                        Database mvDb = getDb(mvId.getDbId());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), materializedView.getName(), false, null,
+                                mvDb.getFullName(), materializedView.getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 }
