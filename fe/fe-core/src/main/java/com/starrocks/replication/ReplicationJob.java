@@ -972,6 +972,10 @@ public class ReplicationJob implements GsonPostProcessable {
             return true;
         }
 
+        if (runningTasks.size() < 10) {
+            LOG.info("Unfinished tasks: {}, details: {}", runningTasks.size(), runningTasks.values());
+        }
+
         return false;
     }
 
