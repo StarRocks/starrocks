@@ -779,6 +779,9 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
+// pipeline poller timeout guard
+CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
