@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -84,6 +85,8 @@ public class PlanTestNoneDBBase {
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
+        StatisticsMetaManager manager = new StatisticsMetaManager();
+        manager.createStatisticsTablesForTest();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
