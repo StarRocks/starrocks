@@ -73,8 +73,8 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int beRpcPort; // be rpc port
     @SerializedName("brpcPort")
     private volatile int brpcPort = -1;
-    @SerializedName("beArrowPort")
-    private volatile int beArrowPort; // be arrow port
+    @SerializedName("arrowFlightPort")
+    private volatile int arrowFlightPort = -1; // be arrow port
 
     @SerializedName("cpuCores")
     private volatile int cpuCores = 0; // Cpu cores of node
@@ -161,7 +161,7 @@ public class ComputeNode implements IComputable, Writable {
         this.bePort = 0;
         this.httpPort = 0;
         this.beRpcPort = 0;
-        this.beArrowPort = 0;
+        this.arrowFlightPort = -1;
 
         this.backendState = Backend.BackendState.free.ordinal();
 
@@ -177,7 +177,7 @@ public class ComputeNode implements IComputable, Writable {
         this.bePort = -1;
         this.httpPort = -1;
         this.beRpcPort = -1;
-        this.beArrowPort = -1;
+        this.arrowFlightPort = -1;
         this.lastUpdateMs = -1L;
         this.lastStartTime = -1L;
 
@@ -252,12 +252,12 @@ public class ComputeNode implements IComputable, Writable {
         return brpcPort;
     }
 
-    public int getBeArrowPort() {
-        return beArrowPort;
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
     }
 
-    public void setBeArrowPort(int beArrowPort) {
-        this.beArrowPort = beArrowPort;
+    public void setArrowFlightPort(int arrowFlightPort) {
+        this.arrowFlightPort = arrowFlightPort;
     }
 
     public TNetworkAddress getAddress() {
@@ -585,9 +585,9 @@ public class ComputeNode implements IComputable, Writable {
                 this.starletPort = hbResponse.getStarletPort();
             }
 
-            if (this.beArrowPort != hbResponse.getBeArrowPort()) {
+            if (this.arrowFlightPort != hbResponse.getArrowFlightPort()) {
                 isChanged = true;
-                this.beArrowPort = hbResponse.getBeArrowPort();
+                this.arrowFlightPort = hbResponse.getArrowFlightPort();
             }
 
             if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {

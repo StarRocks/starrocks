@@ -394,8 +394,7 @@ CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
-// Port to start debug Arrow Flight SQL server in BE
-CONF_Int32(be_arrow_port, "9419");
+CONF_Int32(arrow_flight_port, "-1");
 
 // Used for mini Load. mini load data file will be removed after this time.
 CONF_Int64(load_data_reserve_hours, "4");
