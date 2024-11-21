@@ -450,7 +450,7 @@ public:
         }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
         if constexpr (neon_could_use_common_select_if<CppType>()) {
-            neon_select_if_common_implement(select_vec, start_dst, start_a, start_b, size);
+            neon_select_if_common_implement<CppType, false, true>(select_vec, start_dst, start_a, start_b, size);
         }
 #endif
 
