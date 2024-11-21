@@ -21,7 +21,7 @@ public class OdpsPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((OdpsTable) table).getDbName();
+        return ((OdpsTable) table).getCatalogDBName();
     }
 
     @Override

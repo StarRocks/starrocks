@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -174,10 +173,9 @@ public class HiveMetadata implements ConnectorMetadata {
         if (isResourceMappingCatalog(catalogName)) {
             Table table = GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(dbName, tableName);
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            if (hmsTable != null) {
+            if (table != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), table));
+                        table.getCatalogDBName(), table.getCatalogTableName(), table));
             }
         } else {
             HiveTable hiveTable = null;
@@ -235,10 +233,8 @@ public class HiveMetadata implements ConnectorMetadata {
 
     private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-
-        if (((HiveMetaStoreTable) table).isUnPartitioned()) {
-            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
+        if (table.isUnPartitioned()) {
+            partitions.add(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList()));
         } else {
             // convert partition keys to partition names.
             // and handle partition names in following code.
@@ -247,7 +243,7 @@ public class HiveMetadata implements ConnectorMetadata {
             List<String> partitionNames = params.getPartitionNames();
             if (params.getPartitionKeys() != null) {
                 partitionNames =
-                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(table.getPartitionColumnNames(), x))
                                 .collect(
                                         Collectors.toList());
             }
@@ -297,9 +293,8 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        if (hmsTbl.isUnPartitioned()) {
-            return Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(),
+        if (table.isUnPartitioned()) {
+            return Lists.newArrayList(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(),
                     Lists.newArrayList()));
         } else {
             ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
@@ -347,9 +342,7 @@ public class HiveMetadata implements ConnectorMetadata {
             for (ColumnRefOperator column : columnRefOperators) {
                 session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
             }
-
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
+            session.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(), table.getName())
                     .setScanRowCount(statistics.getOutputRowCount());
         }
 
@@ -464,8 +457,8 @@ public class HiveMetadata implements ConnectorMetadata {
         String partitionString = partitionColumns.get(0) + "=" + partitionDesc.getValues().get(0);
         String partitionPath = tablePath + "/" + partitionString;
         HivePartition hivePartition = HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
                 .setColumns(table.getDataColumnNames().stream()
                         .map(table::getColumn)
                         .collect(Collectors.toList()))
@@ -479,7 +472,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 .build();
         HivePartitionWithStats partitionWithStats =
                 new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
-        hmsOps.addPartitions(table.getDbName(), table.getTableName(), Lists.newArrayList(partitionWithStats));
+        hmsOps.addPartitions(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList(partitionWithStats));
     }
 
     public static boolean useMetadataCache() {
