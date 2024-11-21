@@ -248,7 +248,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
             column = FunctionHelper::get_data_column_of_nullable(column);
         }
         auto bool_column = ColumnHelper::cast_to<TYPE_BOOLEAN>(column);
-        auto data = bool_column->get_data();
+        const auto& data = bool_column->get_data();
         for (size_t i = 0; i < size; ++i) {
             if (!data[i]) {
                 throw std::runtime_error(msg);
