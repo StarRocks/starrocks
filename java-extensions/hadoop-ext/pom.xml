@@ -77,6 +77,20 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>run-shell-on-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>-c</argument>
+                                <argument>rm -rf ${basedir}/scripts/release-*</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>
