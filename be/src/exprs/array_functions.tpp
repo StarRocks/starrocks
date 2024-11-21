@@ -1038,7 +1038,7 @@ private:
         } else {
             bool_array = down_cast<ArrayColumn*>(bool_column.get());
         }
-        auto offsets = bool_array->offsets().get_data();
+        const auto& offsets = bool_array->offsets().get_data();
 
         ColumnViewer<TYPE_BOOLEAN> bool_elements(bool_array->elements_column());
 

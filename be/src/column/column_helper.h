@@ -128,8 +128,8 @@ public:
         if (offset0->size() != offset1->size()) {
             return false;
         }
-        auto data1 = offset0->get_data();
-        auto data2 = offset1->get_data();
+        const auto& data1 = offset0->get_data();
+        const auto& data2 = offset1->get_data();
         return std::equal(data1.begin(), data1.end(), data2.begin());
     }
 

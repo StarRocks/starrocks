@@ -392,7 +392,7 @@ public:
 
         if (column->has_null()) {
             const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();
-            auto null_data = null_column->get_data();
+            const auto& null_data = null_column->get_data();
             for (auto i = from; i < to; i++) {
                 auto index = data[i] >= _bit_mask.size() ? 0 : data[i];
                 filter[i - from] = (!null_data[i]) & _bit_mask[index];
