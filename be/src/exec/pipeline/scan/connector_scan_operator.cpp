@@ -24,10 +24,11 @@ namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
 ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
-                                                                                 int scan_node_number)
+                                                                                 int connector_scan_node_number)
         : query_mem_limit(query_mem_limit),
           scan_mem_limit(query_mem_limit),
-          total_chunk_source_mem_bytes(scan_node_number * connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES) {}
+          total_chunk_source_mem_bytes(connector_scan_node_number *
+                                       connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES) {}
 
 int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
     int64_t diff = new_value - old_value;
