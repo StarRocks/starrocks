@@ -168,6 +168,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetCatalogStmt;
@@ -2391,8 +2392,9 @@ public class StmtExecutor {
                                         "or set parallel_fragment_exec_instance_num to a lower value in session variable");
                     } else {
                         ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, getExecType(), timeout,
-                                String.format("please increase the '%s' session variable and retry",
-                                        SessionVariable.INSERT_TIMEOUT));
+                                String.format("please increase the '%s' session variable or the '%s' property for " +
+                                                "insert statement and retry",
+                                        SessionVariable.INSERT_TIMEOUT, LoadStmt.TIMEOUT_PROPERTY));
                     }
                 }
             }

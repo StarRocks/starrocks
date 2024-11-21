@@ -15,7 +15,7 @@ create table t1(k1 int);
 set insert_timeout = 2;
 insert into t1 select sleep(4);
 -- result:
-[REGEX].*Insert reached its timeout of 2 seconds, please increase the 'insert_timeout' session variable.*
+[REGEX].*Insert reached its timeout of 2 seconds, please increase the 'insert_timeout' session variable or the 'timeout' property for insert statement.*
 -- !result
 
 set insert_timeout = 10;
