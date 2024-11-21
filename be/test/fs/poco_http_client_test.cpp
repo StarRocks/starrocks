@@ -26,6 +26,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "fs/s3/poco_http_client_factory.h"
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
@@ -79,7 +80,7 @@ void PocoHttpClientTest::TearDownTestCase() {
 }
 
 void PocoHttpClientTest::put_object(const std::string& object_content) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
 
@@ -99,7 +100,7 @@ void PocoHttpClientTest::put_object(const std::string& object_content) {
 }
 
 TEST_F(PocoHttpClientTest, TestNormalAccess) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
     // Create a custom retry strategy
@@ -123,7 +124,7 @@ TEST_F(PocoHttpClientTest, TestNormalAccess) {
 }
 
 TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = "http://127.0.0.1";
 
     // Create a custom retry strategy
@@ -146,7 +147,7 @@ TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
 }
 
 TEST_F(PocoHttpClientTest, TestErrorAkSk) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
 
@@ -171,7 +172,7 @@ TEST_F(PocoHttpClientTest, TestErrorAkSk) {
 }
 
 TEST_F(PocoHttpClientTest, TestNotFoundKey) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
     // Create a custom retry strategy
