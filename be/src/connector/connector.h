@@ -159,7 +159,7 @@ public:
 
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
-    virtual bool always_shared_scan() const { return true; }
+    virtual bool always_shared_scan(TScanRangeParams* scan_range) const { return true; }
 
     virtual void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {}
 

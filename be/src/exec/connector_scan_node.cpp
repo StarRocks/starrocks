@@ -680,7 +680,11 @@ void ConnectorScanNode::_init_counter() {
 }
 
 bool ConnectorScanNode::always_shared_scan() const {
-    return _data_source_provider->always_shared_scan();
+    TScanRangeParams scan_range;
+    if (_connector_type == connector::HIVE && _scan_ranges.size() > 0) {
+        scan_range = _scan_ranges[0];
+    }
+    return _data_source_provider->always_shared_scan(&scan_range);
 }
 
 StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_morsel_queue(
