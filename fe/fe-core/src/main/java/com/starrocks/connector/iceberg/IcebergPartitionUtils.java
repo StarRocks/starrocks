@@ -118,7 +118,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn.getName());
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn.getName(), table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+                    partitionColumn.getName(), table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         String transform = partitionField.transform().toString();
         IcebergPartitionTransform icebergPartitionTransform = IcebergPartitionTransform.fromString(transform);
@@ -185,7 +185,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn);
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+                    partitionColumn, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {
@@ -221,7 +221,11 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn);
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
+<<<<<<< HEAD
                     partitionColumn, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+=======
+                    partitionColName, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
+>>>>>>> 89be537d51 ([Refactor] add `getCatalogDbName` and `getCatalogTableName` in `Table` (#53072))
         }
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {

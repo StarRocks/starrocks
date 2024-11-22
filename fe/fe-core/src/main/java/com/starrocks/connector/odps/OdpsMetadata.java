@@ -293,7 +293,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
         OdpsTable odpsTable = (OdpsTable) table;
         List<Partition> partitions = get(partitionCache,
-                OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
+                OdpsTableName.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()));
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
@@ -341,10 +341,10 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         try {
-            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getDbName(),
-                    odpsTable.getTableName(), params.getFieldNames());
+            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getCatalogDBName(),
+                    odpsTable.getCatalogTableName(), params.getFieldNames());
             TableReadSessionBuilder tableReadSessionBuilder =
-                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getDbName(), odpsTable.getTableName()))
+                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
                             .requiredPartitions(partitionSpecs);
