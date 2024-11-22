@@ -16,7 +16,6 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -88,14 +87,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.ManifestFile;
-import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.MetricsConfig;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
-import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
@@ -119,13 +116,11 @@ import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
-import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -522,86 +517,16 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        Map<String, Partition> partitionMap = Maps.newHashMap();
         IcebergTable icebergTable = (IcebergTable) table;
-        PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
-                createMetadataTableInstance(icebergTable.getNativeTable(), org.apache.iceberg.MetadataTableType.PARTITIONS);
-
-        if (icebergTable.isUnPartitioned()) {
-            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
-                for (FileScanTask task : tasks) {
-                    // partitionsTable Table schema :
-                    // record_count,
-                    // file_count,
-                    // total_data_file_size_in_bytes,
-                    // position_delete_record_count,
-                    // position_delete_file_count,
-                    // equality_delete_record_count,
-                    // equality_delete_file_count,
-                    // last_updated_at,
-                    // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the last updated time of the table according to the table schema
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(7, Long.class);
-                        } catch (NullPointerException e) {
-                            LOG.error("The table [{}] snapshot [{}] has been expired",
-                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), e);
-                        }
-                        Partition partition = new Partition(lastUpdated);
-                        return ImmutableList.of(partition);
-                    }
-                }
-                // for empty table, use -1 as last updated time
-                return ImmutableList.of(new Partition(-1));
-            } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
-            }
-        } else {
-            // For partition table, we need to get all partitions from PartitionsTable.
-            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
-                for (FileScanTask task : tasks) {
-                    // partitionsTable Table schema :
-                    // partition,
-                    // spec_id,
-                    // record_count,
-                    // file_count,
-                    // total_data_file_size_in_bytes,
-                    // position_delete_record_count,
-                    // position_delete_file_count,
-                    // equality_delete_record_count,
-                    // equality_delete_file_count,
-                    // last_updated_at,
-                    // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the partition data/spec id/last updated time according to the table schema
-                        StructProjection partitionData = row.get(0, StructProjection.class);
-                        int specId = row.get(1, Integer.class);
-                        PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
-                        String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
-
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(9, Long.class);
-                        } catch (NullPointerException e) {
-                            LOG.error("The table [{}.{}] snapshot [{}] has been expired",
-                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), partitionName, e);
-                        }
-                        Partition partition = new Partition(lastUpdated);
-                        partitionMap.put(partitionName, partition);
-                    }
-                }
-            } catch (IOException e) {
-                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
-            }
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        long snapshotId = -1;
+        if (nativeTable.currentSnapshot() != null) {
+            snapshotId = nativeTable.currentSnapshot().snapshotId();
         }
-        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
-        partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
-        return partitions.build();
+        List<Partition> ans =
+                icebergCatalog.getPartitionsByNames(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+                        snapshotId, null, partitionNames);
+        return new ArrayList<>(ans);
     }
 
     @Override
@@ -941,9 +866,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
         TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                    .useSnapshot(snapshotId)
-                    .metricsReporter(metricsReporter)
-                    .planWith(jobPlanningExecutor);
+                .useSnapshot(snapshotId)
+                .metricsReporter(metricsReporter)
+                .planWith(jobPlanningExecutor);
 
         if (enableCollectColumnStats) {
             scan = scan.includeColumnStats();
@@ -1015,7 +940,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         return ((StarRocksIcebergTableScan) scan).getDeleteFiles(content);
     }
-
 
     /**
      * To optimize the MetricsModes of the Iceberg tables, it's necessary to display the columns MetricsMode in the
