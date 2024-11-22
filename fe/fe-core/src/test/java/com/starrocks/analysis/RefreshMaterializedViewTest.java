@@ -1245,15 +1245,14 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                     {
                         String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('20240101', 'beijing'), ('20240101', " +
                                 "'nanjing')) FORCE;";
-                        RefreshMaterializedViewStatement statement =
-                                (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-                        Assert.assertTrue(statement.isForceRefresh());
-                        Assert.assertNull(statement.getPartitionRangeDesc());
-                        Set<PListCell> expect = ImmutableSet.of(
-                                new PListCell(ImmutableList.of(ImmutableList.of("20240101", "beijing"))),
-                                new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
-                        );
-                        Assert.assertEquals(expect, statement.getPartitionListDesc());
+                        try {
+                            RefreshMaterializedViewStatement statement =
+                                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                            Assert.fail();
+                        } catch (Exception e) {
+                           Assert.assertTrue(e.getMessage().contains("Partition column size 1 is not match with input partition"
+                                   + " value's size 2"));
+                        }
                     }
                 });
     }

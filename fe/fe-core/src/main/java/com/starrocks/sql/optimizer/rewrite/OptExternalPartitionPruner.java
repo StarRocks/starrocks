@@ -335,7 +335,7 @@ public class OptExternalPartitionPruner {
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table);
                     keys.add(partitionKey);
                     ids.add(context.getNextUniquePartitionId());
                 }

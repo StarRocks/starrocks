@@ -1316,7 +1316,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
             return null;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
         MVCompensation mvCompensation = materializationContext.getMvCompensation();
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",

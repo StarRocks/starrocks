@@ -318,7 +318,7 @@ public class AnalyzeStmtAnalyzer {
                         for (String partName : partitionNames) {
                             List<String> values = toPartitionValues(partName);
                             PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
-                                    analyzeTable.getType());
+                                    analyzeTable);
                             keys.add(partitionKey);
                         }
                     } catch (AnalysisException e) {

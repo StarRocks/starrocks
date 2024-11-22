@@ -107,6 +107,22 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
                 .collect(Collectors.toSet());
     }
 
+    public List<PartitionKey> toPartitionKeys(List<Column> columns) throws AnalysisException {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<PrimitiveType> types = columns.stream()
+                .map(Column::getType).map(Type::getPrimitiveType).collect(Collectors.toList());
+        for (List<String> item : partitionItems) {
+            Preconditions.checkArgument(item.size() == columns.size(),
+                    String.format("item size %s is not equal to columns size %s", item.size(), columns.size()));
+            List<LiteralExpr> literalExprs = Lists.newArrayList();
+            for (int i = 0; i < item.size(); i++) {
+                literalExprs.add(LiteralExpr.create(item.get(i), columns.get(i).getType()));
+            }
+            partitionKeys.add(new PartitionKey(literalExprs, types));
+        }
+        return partitionKeys;
+    }
+
     /**
      * Add a list of partition items as the partition values
      * @param items new partition items

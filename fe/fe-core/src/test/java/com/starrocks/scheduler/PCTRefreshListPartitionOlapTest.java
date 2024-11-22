@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -32,6 +33,12 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.After;
+import org.junit.AfterClass;
+>>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -41,6 +48,7 @@ import org.junit.runners.MethodSorters;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -1278,6 +1286,33 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             refreshMV("test", mv);
             starRocksAssert.dropMaterializedView("mv1");
+        });
+    }
+
+    @Test
+    public void testRefreshListPartitionMVWithMultiPartitionColumns() {
+        starRocksAssert.withTable(T3, () -> {
+            starRocksAssert.withMaterializedView("create materialized view test_mv1\n" +
+                            "partition by (dt, province) \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "properties ('partition_refresh_number' = '1')" +
+                            "as select dt, province, sum(age) from t3 group by dt, province;",
+                    (obj) -> {
+                        {
+                            String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('20240101', 'beijing'), ('20240101', " +
+                                    "'nanjing')) FORCE;";
+                            RefreshMaterializedViewStatement statement =
+                                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                            Assert.assertTrue(statement.isForceRefresh());
+                            Assert.assertNull(statement.getPartitionRangeDesc());
+                            Set<PListCell> expect = ImmutableSet.of(
+                                    new PListCell(ImmutableList.of(ImmutableList.of("20240101", "beijing"))),
+                                    new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
+                            );
+                            Assert.assertEquals(expect, statement.getPartitionListDesc());
+                        }
+                    });
         });
     }
 }
