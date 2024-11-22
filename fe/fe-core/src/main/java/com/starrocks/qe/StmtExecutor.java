@@ -2932,7 +2932,7 @@ public class StmtExecutor {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
 
-        boolean isQuery = parsedStmt instanceof QueryStatement;
+        boolean isQuery = context.isQueryStmt(parsedStmt);
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
