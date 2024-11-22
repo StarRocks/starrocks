@@ -233,7 +233,7 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
 
     // Process 16 bytes of data at a time
-    while (dst + 16 < dst_end) {
+    while (dst + neon_width < dst_end) {
         // Load 16 selector masks
         uint8x16_t loaded_mask = vld1q_u8(selector);
         // vceqq_u8: Compare each element in two NEON registers, returns 0xFF if equal, 0x00 if not
