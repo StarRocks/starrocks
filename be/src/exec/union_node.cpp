@@ -420,12 +420,18 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
+    if (limit() != -1) {
+        for (size_t i = 0; i < operators_list.size(); ++i) {
+            operators_list[i].emplace_back(
+                    std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    }
+
     auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-
     return final_operators;
 }
 
