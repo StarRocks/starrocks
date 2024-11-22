@@ -15,7 +15,7 @@
 package com.starrocks.statistic.predicate_columns;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -74,9 +74,10 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         // persist
         Database db = starRocksAssert.getDb("test");
         Table t0 = starRocksAssert.getTable("test", "t0");
+        Column v1 = t0.getColumn("v1");
+        ColumnFullId columnFullId = ColumnFullId.create(db, t0, v1);
         ColumnUsage usage1 =
-                new ColumnUsage(ColumnId.create("v1"), db.getId(), t0.getId(), TableName.fromString("t0"),
-                        ColumnUsage.UseCase.PREDICATE);
+                new ColumnUsage(columnFullId, TableName.fromString("t0"), ColumnUsage.UseCase.PREDICATE);
         usage1.setCreated(LocalDateTime.parse("2024-11-20T01:02:03"));
         usage1.setLastUsed(LocalDateTime.parse("2024-11-20T01:02:03"));
         List<ColumnUsage> usage = List.of(usage1);
@@ -85,8 +86,8 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         Mockito.verify(repo)
                 .executeDML(String.format("INSERT INTO _statistics_.predicate_columns(fe_id, db_id, table_id, " +
                         "column_id, usage, last_used ) " +
-                        "VALUES ('%s', %d, %d, " +
-                        "'v1', 'predicate', '2024-11-20 01:02:03')", feName, db.getId(), t0.getId()));
+                                "VALUES ('%s', %d, %d, 0, 'predicate', '2024-11-20 01:02:03')", feName, db.getId(),
+                        t0.getId()));
 
         // query
         instance.queryGlobalState(TableName.fromString("default_catalog.test.t0"));
@@ -108,10 +109,12 @@ class PredicateColumnsStorageTest extends PlanTestBase {
     public void testSerialization() {
         Database db = starRocksAssert.getDb("test");
         Table t1 = starRocksAssert.getTable("test", "t1");
-        ColumnUsage usage1 = new ColumnUsage(ColumnId.create("c1"), db.getId(), t1.getId(),
+        Column v4 = t1.getColumn("v4");
+        Column v5 = t1.getColumn("v5");
+        ColumnUsage usage1 = new ColumnUsage(ColumnFullId.create(db, t1, v4),
                 TableName.fromString("default_catalog.test.t1"),
                 ColumnUsage.UseCase.PREDICATE);
-        ColumnUsage usage2 = new ColumnUsage(ColumnId.create("c2"), db.getId(), t1.getId(),
+        ColumnUsage usage2 = new ColumnUsage(ColumnFullId.create(db, t1, v5),
                 TableName.fromString("default_catalog.test.t1"),
                 EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN));
 

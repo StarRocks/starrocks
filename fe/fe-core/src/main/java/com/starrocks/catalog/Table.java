@@ -477,6 +477,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return nameToColumn.get(columnId.getId());
     }
 
+    public Column getColumnByUniqueId(long uniqueId) {
+        return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().get();
+    }
+
     public boolean containColumn(String columnName) {
         return nameToColumn.containsKey(columnName);
     }

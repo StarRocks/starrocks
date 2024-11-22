@@ -19,7 +19,6 @@ import com.google.common.base.Splitter;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
@@ -36,11 +35,7 @@ import java.util.stream.Collectors;
 public class ColumnUsage {
 
     @SerializedName("columnId")
-    private ColumnId columnId;
-    @SerializedName("dbId")
-    private long dbId;
-    @SerializedName("tableId")
-    private long tableId;
+    private ColumnFullId columnId;
 
     // only exists in memory
     private TableName tableName;
@@ -54,14 +49,12 @@ public class ColumnUsage {
     @SerializedName("created")
     private LocalDateTime created;
 
-    public ColumnUsage(ColumnId columnId, long dbId, long tableId, TableName tableName, UseCase useCase) {
-        this(columnId, dbId, tableId, tableName, EnumSet.of(useCase));
+    public ColumnUsage(ColumnFullId columnId, TableName tableName, UseCase useCase) {
+        this(columnId, tableName, EnumSet.of(useCase));
     }
 
-    public ColumnUsage(ColumnId columnId, long dbId, long tableId, TableName tableName, EnumSet<UseCase> useCase) {
+    public ColumnUsage(ColumnFullId columnId, TableName tableName, EnumSet<UseCase> useCase) {
         this.columnId = columnId;
-        this.dbId = dbId;
-        this.tableId = tableId;
         this.tableName = tableName;
         this.useCase = useCase;
         this.lastUsed = TimeUtils.getSystemNow();
@@ -74,13 +67,13 @@ public class ColumnUsage {
         Optional<Database> db = dbName.flatMap(meta::mayGetDb);
         if (db.isPresent()) {
             TableName tableName = new TableName(dbName.get(), table.getName());
-            return Optional.of(
-                    new ColumnUsage(column.getColumnId(), db.get().getId(), table.getId(), tableName, useCase));
+            ColumnFullId columnFullId = ColumnFullId.create(db.get(), table, column);
+            return Optional.of(new ColumnUsage(columnFullId, tableName, useCase));
         }
         return Optional.empty();
     }
 
-    public ColumnId getColumnId() {
+    public ColumnFullId getColumnFullId() {
         return columnId;
     }
 
@@ -135,8 +128,7 @@ public class ColumnUsage {
 
     public ColumnUsage merge(ColumnUsage other) {
         Preconditions.checkArgument(other.equals(this));
-        ColumnUsage merged = new ColumnUsage(this.columnId, this.dbId, this.tableId, this.tableName,
-                EnumSet.copyOf(this.useCase));
+        ColumnUsage merged = new ColumnUsage(this.columnId, this.tableName, EnumSet.copyOf(this.useCase));
         merged.useCase.addAll(other.useCase);
         merged.lastUsed = this.lastUsed.isBefore(other.getLastUsed()) ? other.getLastUsed() : lastUsed;
         return merged;
@@ -151,13 +143,12 @@ public class ColumnUsage {
             return false;
         }
         ColumnUsage that = (ColumnUsage) o;
-        return Objects.equals(columnId, that.columnId) && Objects.equals(tableId, that.tableId) &&
-                Objects.equals(dbId, that.dbId);
+        return Objects.equals(columnId, that.columnId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnId, dbId, tableId);
+        return Objects.hash(columnId);
     }
 
     @Override

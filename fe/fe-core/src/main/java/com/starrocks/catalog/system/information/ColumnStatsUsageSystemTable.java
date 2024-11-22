@@ -16,20 +16,25 @@ package com.starrocks.catalog.system.information;
 
 import com.google.api.client.util.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.statistic.predicate_columns.ColumnFullId;
 import com.starrocks.statistic.predicate_columns.ColumnUsage;
 import com.starrocks.statistic.predicate_columns.PredicateColumnsMgr;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -95,12 +100,13 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
     }
 
     private static List<ScalarOperator> columnUsageToScalar(ColumnUsage columnUsage) {
-        TableName tableName = columnUsage.getTableName();
+        ColumnFullId columnFullId = columnUsage.getColumnFullId();
+        Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
         List<ScalarOperator> result = Lists.newArrayList();
-        result.add(ConstantOperator.createVarchar(tableName.getCatalog()));
-        result.add(ConstantOperator.createVarchar(tableName.getDb()));
-        result.add(ConstantOperator.createVarchar(tableName.getTbl()));
-        result.add(ConstantOperator.createVarchar(columnUsage.getColumnId().getId()));
+        result.add(ConstantOperator.createVarchar(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
+        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getDb()).orElse(null)));
+        result.add(ConstantOperator.createVarchar(names.map(x -> x.first.getTbl()).orElse(null)));
+        result.add(ConstantOperator.createVarchar(names.map(x -> x.second.getId()).orElse(null)));
         result.add(ConstantOperator.createVarchar(columnUsage.getUseCaseString()));
         result.add(ConstantOperator.createDatetime(columnUsage.getLastUsed()));
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));

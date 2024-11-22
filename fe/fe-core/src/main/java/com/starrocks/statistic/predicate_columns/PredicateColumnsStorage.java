@@ -74,7 +74,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
             "fe_id STRING NOT NULL," +
             "db_id BIGINT NOT NULL," +
             "table_id BIGINT NOT NULL," +
-            "column_id STRING NOT NULL," +
+            "column_id BIGINT NOT NULL," +
 
             "usage STRING NOT NULL," +
             "last_used DATETIME NOT NULL," +
@@ -99,7 +99,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private static final String SQL_COLUMN_LIST_WITH_CREATED = SQL_COLUMN_LIST + ", created";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
-    private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, '$columnId', '$usage', '$lastUsed')";
+    private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, $columnId, '$usage', '$lastUsed')";
 
     private static final String QUERY = "SELECT " + SQL_COLUMN_LIST_WITH_CREATED + " FROM " + TABLE_FULL_NAME + " " +
             "WHERE ";
@@ -183,17 +183,13 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (ColumnUsage usage : diff) {
             StringWriter sw = new StringWriter();
-            Optional<Table> table = meta.mayGetTable(usage.getTableName().getDb(), usage.getTableName().getTbl());
-            Optional<Database> db = meta.mayGetDb(usage.getTableName().getDb());
-            if (db.isEmpty() || table.isEmpty()) {
-                continue;
-            }
 
             VelocityContext context = new VelocityContext();
+            ColumnFullId fullId = usage.getColumnFullId();
             context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
-            context.put("dbId", db.get().getId());
-            context.put("tableId", table.get().getId());
-            context.put("columnId", usage.getColumnId());
+            context.put("dbId", fullId.getDbId());
+            context.put("tableId", fullId.getTableId());
+            context.put("columnId", fullId.getColumnUniqueId());
             context.put("usage", usage.getUseCaseString());
             context.put("lastUsed", DateUtils.formatDateTimeUnix(usage.getLastUsed()));
 

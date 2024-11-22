@@ -163,7 +163,7 @@ public class AnalyzeStmtAnalyzer {
                 List<ColumnUsage> predicateColumns =
                         PredicateColumnsMgr.getInstance().queryPredicateColumns(statement.getTableName());
                 for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
-                    Column realColumn = analyzeTable.getColumn(col.getColumnId());
+                    Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
                     if (realColumn != null) {
                         targetColumns.add(realColumn.getName());
                     }
