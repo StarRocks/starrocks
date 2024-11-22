@@ -92,7 +92,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_mInt32(drop_tablet_worker_count, "3");
+CONF_mInt32(drop_tablet_worker_count, "0");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
