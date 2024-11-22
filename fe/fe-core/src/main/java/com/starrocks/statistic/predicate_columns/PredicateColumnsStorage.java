@@ -17,6 +17,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
@@ -24,6 +26,7 @@ import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -32,7 +35,6 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.util.Strings;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -43,6 +45,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -65,18 +68,20 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     public static final String TABLE_NAME = "predicate_columns";
     public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
     private static final String TABLE_DDL = "CREATE TABLE " + TABLE_NAME + "( " +
-            "id BIGINT NOT NULL AUTO_INCREMENT, " +
+
+            // PRIMARY KEYS
+            // TODO: the column_id can exceed the length limitation of primary key
             "fe_id STRING NOT NULL," +
-            "table_catalog STRING NOT NULL," +
-            "table_database STRING NOT NULL," +
-            "table_name STRING NOT NULL," +
-            "column_name STRING NOT NULL," +
+            "db_id BIGINT NOT NULL," +
+            "table_id BIGINT NOT NULL," +
+            "column_id STRING NOT NULL," +
+
             "usage STRING NOT NULL," +
             "last_used DATETIME NOT NULL," +
             "created DATETIME DEFAULT CURRENT_TIMESTAMP" +
             ") " +
-            "PRIMARY KEY(id) " +
-            "DISTRIBUTED BY HASH(id) BUCKETS 8\n" +
+            "PRIMARY KEY(fe_id, db_id, table_id, column_id) " +
+            "DISTRIBUTED BY HASH(fe_id, db_id, table_id, column_id) BUCKETS 8\n" +
             "PROPERTIES('replication_num'='1')";
 
     private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, TABLE_DDL, null);
@@ -90,12 +95,11 @@ public class PredicateColumnsStorage extends FrontendDaemon {
 
     private static final int INSERT_BATCH_SIZE = 1024;
     private static final String SQL_COLUMN_LIST =
-            "fe_id, table_catalog, table_database, table_name, column_name, usage, last_used ";
+            "fe_id, db_id, table_id, column_id, usage, last_used ";
     private static final String SQL_COLUMN_LIST_WITH_CREATED = SQL_COLUMN_LIST + ", created";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
-    private static final String INSERT_VALUE = "('$feId', '$tableCatalog', '$tableDatabase', '$tableName', " +
-            "'$columnName', '$usage', '$lastUsed')";
+    private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, '$columnId', '$usage', '$lastUsed')";
 
     private static final String QUERY = "SELECT " + SQL_COLUMN_LIST_WITH_CREATED + " FROM " + TABLE_FULL_NAME + " " +
             "WHERE ";
@@ -134,15 +138,18 @@ public class PredicateColumnsStorage extends FrontendDaemon {
      * Query state from all FEs
      */
     public List<ColumnUsage> queryGlobalState(TableName tableName) {
-        StringBuilder sb = new StringBuilder(QUERY + " WHERE true");
-        if (StringUtils.isNotEmpty(tableName.getCatalog())) {
-            sb.append(" AND table_catalog = ").append(Strings.quote(tableName.getCatalog()));
+        LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Optional<Database> db = meta.mayGetDb(tableName.getDb());
+        Optional<Table> table = meta.mayGetTable(tableName.getDb(), tableName.getTbl());
+        if (db.isEmpty() || table.isEmpty()) {
+            return List.of();
         }
+        StringBuilder sb = new StringBuilder(QUERY + " WHERE true");
         if (StringUtils.isNotEmpty(tableName.getDb())) {
-            sb.append(" AND table_database = ").append(Strings.quote(tableName.getDb()));
+            sb.append(" AND db_id = ").append(db.get().getId());
         }
         if (StringUtils.isNotEmpty(tableName.getTbl())) {
-            sb.append(" AND table_name = ").append(Strings.quote(tableName.getTbl()));
+            sb.append(" AND table_id = ").append(table.get().getId());
         }
 
         String sql = sb.toString();
@@ -160,8 +167,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         LocalDateTime nextPersist = TimeUtils.getSystemNow();
         Stopwatch watch = Stopwatch.createStarted();
         List<ColumnUsage> diff =
-                columnUsageList.stream().filter(x -> !x.getCreated().isBefore(lastPersist))
-                        .collect(Collectors.toList());
+                columnUsageList.stream().filter(x -> x.needPersist(lastPersist)).collect(Collectors.toList());
         for (var batch : ListUtils.partition(diff, INSERT_BATCH_SIZE)) {
             persistDiff(batch);
         }
@@ -174,17 +180,22 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private void persistDiff(List<ColumnUsage> diff) {
         StringBuilder insert = new StringBuilder(ADD_RECORD);
         boolean first = true;
+        LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (ColumnUsage usage : diff) {
             StringWriter sw = new StringWriter();
+            Optional<Table> table = meta.mayGetTable(usage.getTableName().getDb(), usage.getTableName().getTbl());
+            Optional<Database> db = meta.mayGetDb(usage.getTableName().getDb());
+            if (db.isEmpty() || table.isEmpty()) {
+                continue;
+            }
 
             VelocityContext context = new VelocityContext();
             context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
-            context.put("tableCatalog", usage.getTableName().getCatalog());
-            context.put("tableDatabase", usage.getTableName().getDb());
-            context.put("tableName", usage.getTableName().getTbl());
-            context.put("columnName", usage.getColumnId());
+            context.put("dbId", db.get().getId());
+            context.put("tableId", table.get().getId());
+            context.put("columnId", usage.getColumnId());
             context.put("usage", usage.getUseCaseString());
-            context.put("lastUsed", Strings.quote(DateUtils.formatDateTimeUnix(usage.getLastUsed())));
+            context.put("lastUsed", DateUtils.formatDateTimeUnix(usage.getLastUsed()));
 
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_VALUE);
             if (!first) {
@@ -257,6 +268,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
         public static ColumnUsageJsonRecord fromJson(String json) {
             return GsonUtils.GSON.fromJson(json, ColumnUsageJsonRecord.class);
         }
+
     }
 
     @VisibleForTesting

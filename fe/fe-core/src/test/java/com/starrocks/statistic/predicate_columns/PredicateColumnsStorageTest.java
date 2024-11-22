@@ -16,6 +16,8 @@ package com.starrocks.statistic.predicate_columns;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -65,33 +67,33 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         instance.finishRestore();
         instance.finishRestore(lastPersist);
         Assertions.assertTrue(instance.isRestored());
-        Mockito.verify(repo).executeDQL("SELECT fe_id, table_catalog, table_database, " +
-                "table_name, column_name, usage, last_used , created FROM _statistics_.predicate_columns WHERE fe_id " +
+        Mockito.verify(repo).executeDQL("SELECT fe_id, db_id, table_id, column_id, " +
+                "usage, last_used , created FROM _statistics_.predicate_columns WHERE fe_id " +
                 "= '" + feName + "'");
 
         // persist
+        Database db = starRocksAssert.getDb("test");
+        Table t0 = starRocksAssert.getTable("test", "t0");
         ColumnUsage usage1 =
-                new ColumnUsage(ColumnId.create("v1"), TableName.fromString("t0"), ColumnUsage.UseCase.PREDICATE);
+                new ColumnUsage(ColumnId.create("v1"), db.getId(), t0.getId(), TableName.fromString("t0"),
+                        ColumnUsage.UseCase.PREDICATE);
         usage1.setCreated(LocalDateTime.parse("2024-11-20T01:02:03"));
         usage1.setLastUsed(LocalDateTime.parse("2024-11-20T01:02:03"));
         List<ColumnUsage> usage = List.of(usage1);
         instance.persist(usage);
 
-        Mockito.verify(repo).executeDML("INSERT INTO " +
-                "_statistics_.predicate_columns(fe_id, table_catalog, table_database, table_name, column_name, " +
-                "usage, last_used ) VALUES ('" + feName +
-                "', 'default_catalog', 'test', 't0', " +
-                "'v1', 'predicate', ''2024-11-20 01:02:03'')");
+        Mockito.verify(repo)
+                .executeDML(String.format("INSERT INTO _statistics_.predicate_columns(fe_id, db_id, table_id, " +
+                        "column_id, usage, last_used ) " +
+                        "VALUES ('%s', %d, %d, " +
+                        "'v1', 'predicate', '2024-11-20 01:02:03')", feName, db.getId(), t0.getId()));
 
         // query
         instance.queryGlobalState(TableName.fromString("default_catalog.test.t0"));
-        Mockito.verify(repo).executeDQL("SELECT fe_id, table_catalog, table_database, table_name, column_name, " +
-                "usage, last_used , created FROM _statistics_.predicate_columns WHERE  WHERE true " +
-                "AND table_catalog = 'default_catalog' AND table_database = 'test' AND table_name = 't0'");
-        instance.queryGlobalState(new TableName("test", "t0"));
-        Mockito.verify(repo).executeDQL("SELECT fe_id, table_catalog, table_database, table_name, column_name, " +
-                "usage, last_used , created FROM _statistics_.predicate_columns WHERE  WHERE true " +
-                "AND table_database = 'test' AND table_name = 't0'");
+        Mockito.verify(repo).executeDQL(
+                "SELECT fe_id, db_id, table_id, column_id, usage, last_used , created FROM _statistics_" +
+                        ".predicate_columns " +
+                        "WHERE fe_id = '" + feName + "'");
 
         // TODO: vacuum
         instance.vacuum(lastPersist);
@@ -104,11 +106,13 @@ class PredicateColumnsStorageTest extends PlanTestBase {
 
     @Test
     public void testSerialization() {
-        ColumnUsage usage1 = new ColumnUsage(ColumnId.create("c1"),
-                TableName.fromString("default_catalog.d1.t1"),
+        Database db = starRocksAssert.getDb("test");
+        Table t1 = starRocksAssert.getTable("test", "t1");
+        ColumnUsage usage1 = new ColumnUsage(ColumnId.create("c1"), db.getId(), t1.getId(),
+                TableName.fromString("default_catalog.test.t1"),
                 ColumnUsage.UseCase.PREDICATE);
-        ColumnUsage usage2 = new ColumnUsage(ColumnId.create("c2"),
-                TableName.fromString("default_catalog.d1.t1"),
+        ColumnUsage usage2 = new ColumnUsage(ColumnId.create("c2"), db.getId(), t1.getId(),
+                TableName.fromString("default_catalog.test.t1"),
                 EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN));
 
         String row1 = String.format("{\"data\":[%s, %s]}",

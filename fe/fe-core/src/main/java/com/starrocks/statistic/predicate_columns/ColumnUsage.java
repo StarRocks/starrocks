@@ -15,13 +15,17 @@
 package com.starrocks.statistic.predicate_columns;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -33,8 +37,12 @@ public class ColumnUsage {
 
     @SerializedName("columnId")
     private ColumnId columnId;
+    @SerializedName("dbId")
+    private long dbId;
+    @SerializedName("tableId")
+    private long tableId;
 
-    @SerializedName("tableName")
+    // only exists in memory
     private TableName tableName;
 
     @SerializedName("lastUsed")
@@ -46,12 +54,14 @@ public class ColumnUsage {
     @SerializedName("created")
     private LocalDateTime created;
 
-    public ColumnUsage(ColumnId columnId, TableName tableName, UseCase useCase) {
-        this(columnId, tableName, EnumSet.of(useCase));
+    public ColumnUsage(ColumnId columnId, long dbId, long tableId, TableName tableName, UseCase useCase) {
+        this(columnId, dbId, tableId, tableName, EnumSet.of(useCase));
     }
 
-    public ColumnUsage(ColumnId columnId, TableName tableName, EnumSet<UseCase> useCase) {
+    public ColumnUsage(ColumnId columnId, long dbId, long tableId, TableName tableName, EnumSet<UseCase> useCase) {
         this.columnId = columnId;
+        this.dbId = dbId;
+        this.tableId = tableId;
         this.tableName = tableName;
         this.useCase = useCase;
         this.lastUsed = TimeUtils.getSystemNow();
@@ -59,10 +69,13 @@ public class ColumnUsage {
     }
 
     public static Optional<ColumnUsage> build(Column column, Table table, UseCase useCase) {
-        Optional<String> db = table.mayGetDatabaseName();
+        LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Optional<String> dbName = table.mayGetDatabaseName();
+        Optional<Database> db = dbName.flatMap(meta::mayGetDb);
         if (db.isPresent()) {
-            TableName tableName = new TableName(table.getCatalogName(), db.get(), table.getName());
-            return Optional.of(new ColumnUsage(column.getColumnId(), tableName, useCase));
+            TableName tableName = new TableName(dbName.get(), table.getName());
+            return Optional.of(
+                    new ColumnUsage(column.getColumnId(), db.get().getId(), table.getId(), tableName, useCase));
         }
         return Optional.empty();
     }
@@ -87,6 +100,13 @@ public class ColumnUsage {
         return useCase.stream().map(UseCase::toString).collect(Collectors.joining(","));
     }
 
+    public static EnumSet<UseCase> fromUseCaseString(String str) {
+        return EnumSet.copyOf(Splitter.on(",").splitToList(str)
+                .stream()
+                .map(UseCase::valueOf)
+                .collect(Collectors.toList()));
+    }
+
     public void setLastUsed(LocalDateTime lastUsed) {
         this.lastUsed = lastUsed;
     }
@@ -105,14 +125,18 @@ public class ColumnUsage {
 
     // NOTE: mutable
     public void useNow(UseCase useCase) {
-        // FIXME: make it thread-safe
         this.lastUsed = LocalDateTime.now(TimeUtils.getSystemTimeZone().toZoneId());
         this.useCase.add(useCase);
     }
 
+    public boolean needPersist(LocalDateTime lastPersist) {
+        return this.lastUsed.isAfter(lastPersist);
+    }
+
     public ColumnUsage merge(ColumnUsage other) {
         Preconditions.checkArgument(other.equals(this));
-        ColumnUsage merged = new ColumnUsage(this.columnId, this.tableName, EnumSet.copyOf(this.useCase));
+        ColumnUsage merged = new ColumnUsage(this.columnId, this.dbId, this.tableId, this.tableName,
+                EnumSet.copyOf(this.useCase));
         merged.useCase.addAll(other.useCase);
         merged.lastUsed = this.lastUsed.isBefore(other.getLastUsed()) ? other.getLastUsed() : lastUsed;
         return merged;
@@ -127,12 +151,13 @@ public class ColumnUsage {
             return false;
         }
         ColumnUsage that = (ColumnUsage) o;
-        return Objects.equals(columnId, that.columnId) && Objects.equals(tableName, that.tableName);
+        return Objects.equals(columnId, that.columnId) && Objects.equals(tableId, that.tableId) &&
+                Objects.equals(dbId, that.dbId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnId, tableName);
+        return Objects.hash(columnId, dbId, tableId);
     }
 
     @Override
