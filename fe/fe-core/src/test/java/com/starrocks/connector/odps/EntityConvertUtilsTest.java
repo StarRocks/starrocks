@@ -32,7 +32,12 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Optional;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -198,5 +203,24 @@ public class EntityConvertUtilsTest {
         Column result = EntityConvertUtils.convertColumn(column);
         Column expectedColumn = new Column("test", Type.INT, true);
         assertEquals(expectedColumn, result);
+    }
+
+    @Test
+    public void testGetPartitionFilter() {
+        assertEquals(OdpsPartitionName.ALL_PARTITION,
+                EntityConvertUtils.getPartitionFilter(Collections.emptyList(), Collections.emptyList()));
+        assertThrows(IllegalArgumentException.class,
+                () -> EntityConvertUtils.getPartitionFilter(Arrays.asList("a", "b"), Arrays.asList(
+                        Optional.empty())));
+        assertEquals(OdpsPartitionName.ALL_PARTITION, EntityConvertUtils.getPartitionFilter(Arrays.asList("a", "b"),
+                Arrays.asList(Optional.empty(), Optional.empty())));
+        assertEquals("p=abc",
+                EntityConvertUtils.getPartitionFilter(Arrays.asList("p"), Arrays.asList(Optional.of("abc"))));
+        assertEquals("p=abc/q=def", EntityConvertUtils.getPartitionFilter(Arrays.asList("p", "q"),
+                Arrays.asList(Optional.of("abc"), Optional.of("def"))));
+        assertEquals("p=abc", EntityConvertUtils.getPartitionFilter(Arrays.asList("p", "q", "o"),
+                Arrays.asList(Optional.of("abc"), Optional.empty(), Optional.of("def"))));
+        assertEquals("p=abc", EntityConvertUtils.getPartitionFilter(Arrays.asList("p", "q"),
+                Arrays.asList(Optional.of("abc"), Optional.empty())));
     }
 }
