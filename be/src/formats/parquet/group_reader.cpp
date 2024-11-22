@@ -30,6 +30,7 @@
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
@@ -324,6 +325,24 @@ Status GroupReader::_create_column_readers() {
         ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
         _column_readers[column.slot_id()] = std::move(column_reader);
     }
+
+    // create for partition values
+    if (_param.partition_columns != nullptr && _param.partition_values != nullptr) {
+        for (size_t i = 0; i < _param.partition_columns->size(); i++) {
+            const auto& column = (*_param.partition_columns)[i];
+            const auto* slot_desc = column.slot_desc;
+            const auto value = (*_param.partition_values)[i];
+            _column_readers.emplace(slot_desc->id(), std::make_unique<FixedValueColumnReader>(value->get(0)));
+        }
+    }
+
+    // create for not existed column
+    if (_param.not_existed_slots != nullptr) {
+        for (size_t i = 0; i < _param.not_existed_slots->size(); i++) {
+            const auto* slot = (*_param.not_existed_slots)[i];
+            _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
+        }
+    }
     return Status::OK();
 }
 
@@ -351,7 +370,8 @@ Status GroupReader::_prepare_column_readers() const {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     for (const auto& [slot_id, column_reader] : _column_readers) {
         RETURN_IF_ERROR(column_reader->prepare());
-        if (column_reader->get_column_parquet_field()->is_complex_type()) {
+        if (column_reader->get_column_parquet_field() != nullptr &&
+            column_reader->get_column_parquet_field()->is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
             // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
             // column is a complex type, we have to parse def level to calculate nullability.

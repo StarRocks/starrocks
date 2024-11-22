@@ -22,14 +22,13 @@
 
 namespace starrocks::parquet {
 
-class PartitionColumnReader final : public ColumnReader {
+class FixedValueColumnReader final : public ColumnReader {
 public:
-    explicit PartitionColumnReader(Datum partition_value)
-            : ColumnReader(nullptr), _partition_value(std::move(partition_value)) {}
+    explicit FixedValueColumnReader(Datum fixed_value) : ColumnReader(nullptr), _fixed_value(std::move(fixed_value)) {}
 
-    ~PartitionColumnReader() override = default;
+    ~FixedValueColumnReader() override = default;
 
-    Status prepare() override { return Status::NotSupported("Not implemented"); }
+    Status prepare() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
 
@@ -49,7 +48,7 @@ public:
                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
 
 private:
-    const Datum _partition_value;
+    const Datum _fixed_value;
 };
 
 class ScalarColumnReader final : public ColumnReader {

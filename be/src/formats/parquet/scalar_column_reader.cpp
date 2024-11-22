@@ -23,12 +23,12 @@
 
 namespace starrocks::parquet {
 
-Status PartitionColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                        SparseRange<uint64_t>* row_ranges,
-                                                        CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                                        const uint64_t rg_num_rows) const {
+Status FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                         SparseRange<uint64_t>* row_ranges,
+                                                         CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                         const uint64_t rg_num_rows) const {
     DCHECK(row_ranges->empty());
-    ZoneMapDetail zone_map{_partition_value, _partition_value, false};
+    ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
     auto is_satisfy = [&](const ZoneMapDetail& detail) {
         if (pred_relation == CompoundNodeType::AND) {
             return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });

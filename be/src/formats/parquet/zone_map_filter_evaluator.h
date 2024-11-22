@@ -36,13 +36,6 @@ struct ZoneMapEvaluator {
             SparseRange<uint64_t> cur_row_ranges;
 
             const auto* column_reader = group_reader->get_column_reader(cid);
-            // if not find ColumnReader from GroupReader, try to search from PartitionColumn
-            if (column_reader == nullptr) {
-                auto it = partition_column_readers->find(cid);
-                if (it != partition_column_readers->end()) {
-                    column_reader = it->second.get();
-                }
-            }
 
             if (column_reader == nullptr) {
                 // ColumnReader not found, select all by default
@@ -81,7 +74,6 @@ struct ZoneMapEvaluator {
 
     const PredicateTree& pred_tree;
     GroupReader* group_reader;
-    std::unordered_map<SlotId, ColumnReaderPtr>* partition_column_readers;
 };
 
 } // namespace starrocks::parquet

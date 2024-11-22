@@ -90,7 +90,6 @@ private:
 
     void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
-    Status _init_partition_column_readers();
     Status _init_group_readers();
 
     // filter row group by conjuncts
@@ -130,7 +129,6 @@ private:
     uint64_t _file_size = 0;
     const DataCacheOptions _datacache_options;
 
-    std::unordered_map<SlotId, ColumnReaderPtr> _partition_column_readers{};
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;

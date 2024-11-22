@@ -105,8 +105,6 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
 
-    // should put it before _init_group_readers()
-    RETURN_IF_ERROR(_init_partition_column_readers());
     RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
@@ -329,8 +327,8 @@ bool FileReader::_filter_group_with_more_filter(const GroupReaderPtr& group_read
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (config::parquet_advance_zonemap_filter) {
-        auto res = _scanner_ctx->predicate_tree.visit(ZoneMapEvaluator<FilterLevel::ROW_GROUP>{
-                _scanner_ctx->predicate_tree, group_reader.get(), &_partition_column_readers});
+        auto res = _scanner_ctx->predicate_tree.visit(
+                ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
         if (!res.ok()) {
             LOG(WARNING) << "filter row group failed: " << res.status().message();
             return false;
@@ -437,16 +435,6 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     return false;
 }
 
-Status FileReader::_init_partition_column_readers() {
-    for (size_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        const auto& column = _scanner_ctx->partition_columns[i];
-        const auto* slot_desc = column.slot_desc;
-        const auto value = _scanner_ctx->partition_values[i];
-        _partition_column_readers.emplace(slot_desc->id(), std::make_unique<PartitionColumnReader>(value->get(0)));
-    }
-    return Status::OK();
-}
-
 Status FileReader::_init_group_readers() {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
@@ -460,6 +448,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
+    _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
+    _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
+    _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
 
