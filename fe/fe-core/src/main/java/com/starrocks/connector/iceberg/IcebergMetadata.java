@@ -526,7 +526,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             snapshotId = nativeTable.currentSnapshot().snapshotId();
         }
         List<Partition> ans =
-                icebergCatalog.getPartitionsByNames(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+                icebergCatalog.getPartitionsByNames(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
                         snapshotId, null, partitionNames);
         return new ArrayList<>(ans);
     }
