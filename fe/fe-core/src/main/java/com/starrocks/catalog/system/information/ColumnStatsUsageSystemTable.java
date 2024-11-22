@@ -21,6 +21,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.Utils;
@@ -71,7 +72,7 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
 
     @Override
     public boolean supportFeEvaluation() {
-        return true;
+        return FeConstants.runningUnitTest;
     }
 
     @Override
@@ -131,7 +132,8 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         TColumnStatsUsage thriftUsage = new TColumnStatsUsage();
         ColumnFullId columnFullId = columnUsage.getColumnFullId();
         Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
-        thriftUsage.setTable_catalog(names.map(x -> x.first.getCatalog()).orElse(null));
+        thriftUsage.setTable_catalog(
+                names.map(x -> x.first.getCatalog()).orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
         thriftUsage.setTable_database(names.map(x -> x.first.getDb()).orElse(null));
         thriftUsage.setTable_name(names.map(x -> x.first.getTbl()).orElse(null));
         thriftUsage.setColumn_name(names.map(x -> x.second.getId()).orElse(null));

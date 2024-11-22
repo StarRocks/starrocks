@@ -16,15 +16,18 @@ package com.starrocks.statistic.columns;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
-import com.google.gson.annotations.SerializedName;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -45,6 +48,7 @@ import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -63,7 +67,7 @@ import java.util.stream.Collectors;
  */
 public class PredicateColumnsStorage extends FrontendDaemon {
 
-    private static Logger LOG = LogManager.getLogger(PredicateColumnsStorage.class);
+    private static final Logger LOG = LogManager.getLogger(PredicateColumnsStorage.class);
 
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "predicate_columns";
@@ -71,7 +75,6 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     private static final String TABLE_DDL = "CREATE TABLE " + TABLE_NAME + "( " +
 
             // PRIMARY KEYS
-            // TODO: the column_id can exceed the length limitation of primary key
             "fe_id STRING NOT NULL," +
             "db_id BIGINT NOT NULL," +
             "table_id BIGINT NOT NULL," +
@@ -95,15 +98,13 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     }
 
     private static final int INSERT_BATCH_SIZE = 1024;
-    private static final String SQL_COLUMN_LIST =
-            "fe_id, db_id, table_id, column_id, usage, last_used ";
-    private static final String SQL_COLUMN_LIST_WITH_CREATED = SQL_COLUMN_LIST + ", created";
+    private static final String SQL_COLUMN_LIST = "fe_id, db_id, table_id, column_id, usage, last_used ";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
     private static final String INSERT_VALUE = "('$feId', $dbId, $tableId, $columnId, '$usage', '$lastUsed')";
 
-    private static final String QUERY = "SELECT " + SQL_COLUMN_LIST_WITH_CREATED + " FROM " + TABLE_FULL_NAME + " " +
-            "WHERE ";
+    private static final String QUERY =
+            "SELECT fe_id, db_id,  table_id,  column_id, usage, last_used, created FROM " + TABLE_FULL_NAME;
     private static final String WHERE_THIS_FE = "fe_id = '$feId'";
 
     private static final String VACUUM = "DELETE FROM " + TABLE_FULL_NAME +
@@ -140,16 +141,16 @@ public class PredicateColumnsStorage extends FrontendDaemon {
      */
     public List<ColumnUsage> queryGlobalState(TableName tableName) {
         LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        Optional<Database> db = meta.mayGetDb(tableName.getDb());
-        Optional<Table> table = meta.mayGetTable(tableName.getDb(), tableName.getTbl());
-        if (db.isEmpty() || table.isEmpty()) {
-            return List.of();
-        }
+        Optional<Database> db = StringUtils.isEmpty(tableName.getDb()) ? Optional.empty()
+                : meta.mayGetDb(tableName.getDb());
+        Optional<Table> table = StringUtils.isEmpty(tableName.getTbl()) ? Optional.empty()
+                : meta.mayGetTable(tableName.getDb(), tableName.getTbl());
+
         StringBuilder sb = new StringBuilder(QUERY + " WHERE true");
-        if (StringUtils.isNotEmpty(tableName.getDb())) {
+        if (db.isPresent()) {
             sb.append(" AND db_id = ").append(db.get().getId());
         }
-        if (StringUtils.isNotEmpty(tableName.getTbl())) {
+        if (table.isPresent()) {
             sb.append(" AND table_id = ").append(table.get().getId());
         }
 
@@ -259,11 +260,34 @@ public class PredicateColumnsStorage extends FrontendDaemon {
     @VisibleForTesting
     static class ColumnUsageJsonRecord {
 
-        @SerializedName("data")
-        public List<ColumnUsage> data;
+        List<ColumnUsage> data;
 
+        /**
+         * {
+         * "data": [field1, field2, field3]
+         * }
+         */
         public static ColumnUsageJsonRecord fromJson(String json) {
-            return GsonUtils.GSON.fromJson(json, ColumnUsageJsonRecord.class);
+            JsonElement object = JsonParser.parseString(json);
+            JsonArray data = object.getAsJsonObject().get("data").getAsJsonArray();
+            // String feId = data.get(0).getAsString();
+            long dbId = data.get(1).getAsLong();
+            long tableId = data.get(2).getAsLong();
+            long columnId = data.get(3).getAsLong();
+            String useCase = data.get(4).getAsString();
+            String lastUsed = data.get(5).getAsString();
+            String created = data.get(6).getAsString();
+            ColumnFullId fullId = new ColumnFullId(dbId, tableId, columnId);
+            Optional<Pair<TableName, ColumnId>> names = fullId.toNames();
+            TableName tableName = names.map(x -> x.first).orElse(null);
+            EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.fromUseCaseString(useCase);
+            ColumnUsage usage = new ColumnUsage(fullId, tableName, useCases);
+            usage.setLastUsed(DateUtils.parseUnixDateTime(lastUsed));
+            usage.setCreated(DateUtils.parseUnixDateTime(created));
+
+            ColumnUsageJsonRecord res = new ColumnUsageJsonRecord();
+            res.data = List.of(usage);
+            return res;
         }
 
     }
@@ -276,7 +300,9 @@ public class PredicateColumnsStorage extends FrontendDaemon {
                 ByteBuf copied = Unpooled.copiedBuffer(buffer);
                 String jsonString = copied.toString(Charset.defaultCharset());
                 try {
-                    res.addAll(ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data));
+                    List<ColumnUsage> records =
+                            ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data);
+                    res.addAll(records);
                 } catch (Exception e) {
                     throw new RuntimeException("failed to deserialize ColumnUsage record: " + jsonString, e);
                 }

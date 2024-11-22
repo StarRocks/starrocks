@@ -19,20 +19,25 @@ import com.google.common.base.Splitter;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import org.apache.commons.lang3.EnumUtils;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class ColumnUsage {
+public class ColumnUsage implements GsonPostProcessable {
 
     @SerializedName("columnId")
     private ColumnFullId columnId;
@@ -77,6 +82,10 @@ public class ColumnUsage {
         return columnId;
     }
 
+    public void setTableName(TableName tableName) {
+        this.tableName = tableName;
+    }
+
     public TableName getTableName() {
         return tableName;
     }
@@ -86,17 +95,13 @@ public class ColumnUsage {
     }
 
     public String getUseCaseString() {
-        if (useCase.size() > 1 && useCase.contains(UseCase.NORMAL)) {
-            return useCase.stream().filter(x -> x != UseCase.NORMAL).map(UseCase::toString)
-                    .collect(Collectors.joining(","));
-        }
         return useCase.stream().map(UseCase::toString).collect(Collectors.joining(","));
     }
 
     public static EnumSet<UseCase> fromUseCaseString(String str) {
         return EnumSet.copyOf(Splitter.on(",").splitToList(str)
                 .stream()
-                .map(UseCase::valueOf)
+                .map(x -> EnumUtils.getEnumIgnoreCase(UseCase.class, x))
                 .collect(Collectors.toList()));
     }
 
@@ -158,6 +163,14 @@ public class ColumnUsage {
 
     public String toJson() {
         return (GsonUtils.GSON.toJson(this));
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        Optional<Pair<TableName, ColumnId>> names = getColumnFullId().toNames();
+        if (names.isPresent()) {
+            setTableName(names.get().first);
+        }
     }
 
     public enum UseCase {

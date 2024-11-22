@@ -103,14 +103,22 @@ public class PredicateColumnsMgr {
     private void addOrUpdateColumnUsage(List<ColumnRefOperator> refs, ColumnRefFactory factory,
                                         ColumnUsage.UseCase useCase, OptExpression optExpr) {
         for (ColumnRefOperator ref : ListUtils.emptyIfNull(refs)) {
-            var tables = Utils.resolveColumnRefRecursive(ref, factory, optExpr);
-            for (var column : ListUtils.emptyIfNull(tables)) {
-                addOrUpdateColumnUsage(column.first, column.second, useCase);
+            try {
+                var tables = Utils.resolveColumnRefRecursive(ref, factory, optExpr);
+                for (var column : ListUtils.emptyIfNull(tables)) {
+                    addOrUpdateColumnUsage(column.first, column.second, useCase);
+                }
+            } catch (Exception e) {
+                LOG.warn("failed to resolve column ref {} from expr {}", ref, optExpr);
             }
         }
     }
 
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
+        // only support OLAP table right now
+        if (!table.isNativeTableOrMaterializedView()) {
+            return;
+        }
         Optional<ColumnUsage> mayUsage = ColumnUsage.build(column, table, useCase);
         if (mayUsage.isEmpty()) {
             return;
@@ -195,6 +203,9 @@ public class PredicateColumnsMgr {
 
         @Override
         public boolean test(ColumnUsage columnUsage) {
+            if (columnUsage.getTableName() == null) {
+                return true;
+            }
             if (StringUtils.isNotEmpty(tableName.getCatalog())) {
                 if (!columnUsage.getTableName().getCatalog().equalsIgnoreCase(tableName.getCatalog())) {
                     return false;
