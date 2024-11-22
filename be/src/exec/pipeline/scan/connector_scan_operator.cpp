@@ -28,7 +28,7 @@ ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator
         : query_mem_limit(query_mem_limit),
           scan_mem_limit(query_mem_limit),
           total_chunk_source_mem_bytes(connector_scan_node_number *
-                                       connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES) {}
+                                       connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES) {}
 
 int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
     int64_t diff = new_value - old_value;
@@ -213,9 +213,6 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     int try_add_io_tasks_fail_count = 0;
     int check_slow_io = 0;
     int32_t slow_io_latency_ms = config::connector_io_tasks_adjust_interval_ms;
-
-    // ------------------------
-    bool started_running = false;
 };
 
 // ==================== ConnectorScanOperator ====================
@@ -259,7 +256,6 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
     _adaptive_processor = state->obj_pool()->add(new ConnectorScanOperatorAdaptiveProcessor());
     _adaptive_processor->op_start_time = GetCurrentTimeMicros();
-    _adaptive_processor->started_running = false;
     if (options.__isset.connector_io_tasks_slow_io_latency_ms) {
         _adaptive_processor->slow_io_latency_ms = options.connector_io_tasks_slow_io_latency_ms;
     }
@@ -270,7 +266,7 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
         ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
         int64_t c = L->update_open_scan_operator_count(1);
         if (c == 0) {
-            _adjust_scan_mem_limit(connector::DataSourceProvider::MAX_DATA_SOURCE_MEM_BYTES,
+            _adjust_scan_mem_limit(connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES,
                                    L->get_arb_chunk_source_mem_bytes());
         }
     }
