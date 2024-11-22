@@ -31,6 +31,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -161,7 +162,8 @@ public class HiveMetadataTest {
     @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(
-                Lists.newArrayList("col1"), hiveMetadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty()));
+                Lists.newArrayList("col1"),
+                hiveMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
     }
 
     @Test
@@ -284,11 +286,11 @@ public class HiveMetadataTest {
     public void testShowCreateHiveTbl() {
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
         Assert.assertEquals("CREATE TABLE `table1` (\n" +
-                "  `col2` int(11) DEFAULT NULL,\n" +
-                "  `col1` int(11) DEFAULT NULL\n" +
-                ")\n" +
-                "PARTITION BY (col1)\n" +
-                "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                        "  `col2` int(11) DEFAULT NULL,\n" +
+                        "  `col1` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY (col1)\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 

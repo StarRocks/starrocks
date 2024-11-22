@@ -174,7 +174,7 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
-                connectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
@@ -211,7 +211,7 @@ public class CatalogConnectorMetadataTest {
         );
 
         catalogConnectorMetadata.clear();
-        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);

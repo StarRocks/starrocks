@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
@@ -247,9 +248,11 @@ public class IcebergScanNode extends ScanNode {
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
+            ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+            requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
-                    icebergTable.getRemoteTableName(), TableVersionRange.withEnd(snapshotId));
+                    icebergTable.getRemoteTableName(), requestContext);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {

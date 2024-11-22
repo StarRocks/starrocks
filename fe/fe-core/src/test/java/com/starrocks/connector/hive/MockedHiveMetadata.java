@@ -32,6 +32,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
@@ -127,7 +128,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
@@ -160,7 +161,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<String> partitionNames = listPartitionNames(databaseName, tableName, TableVersionRange.empty());
+        List<String> partitionNames = listPartitionNames(databaseName, tableName, ConnectorMetadatRequestContext.DEFAULT);
         List<String> ret = new ArrayList<>();
         for (String p : partitionNames) {
             if (isPartitionNameValueMatched(p, partitionValues)) {

@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -617,15 +618,16 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        return listPartitionNames(catalogName, dbName, tableName, TableVersionRange.empty());
+        return listPartitionNames(catalogName, dbName, tableName, ConnectorMetadatRequestContext.DEFAULT);
     }
 
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName, TableVersionRange versionRange) {
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName, versionRange).forEach(partitionNames::add);
+                connectorMetadata.get().listPartitionNames(dbName, tableName, requestContext).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
