@@ -22,6 +22,8 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.StringJoiner;
+
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
@@ -160,6 +162,17 @@ public class StructField {
         // Both are named struct field
         return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
                     (fieldId == otherStructField.fieldId) && Objects.equal(fieldPhysicalName, otherStructField.fieldPhysicalName);
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", StructField.class.getSimpleName() + "[", "]")
+                .add("name='" + (Strings.isNullOrEmpty(name) ? "" : name) + "'")
+                .add("type=" + type)
+                .add("position=" + position)
+                .add("fieldId=" + fieldId)
+                .add("fieldPhysicalName='" + (Strings.isNullOrEmpty(fieldPhysicalName) ? "" : fieldPhysicalName) + "'")
+                .toString();
     }
 
     @Override

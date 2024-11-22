@@ -23,6 +23,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
@@ -32,6 +33,12 @@ public class StructFieldDescTest {
         StructField field1 = new StructField("v1", Type.INT);
         StructField field2 = new StructField("v2", Type.VARCHAR);
         StructField field3 = new StructField("v3", Type.INT);
+
+        Assert.assertEquals("StructField[name='v3', type=INT, position=0, fieldId=-1, fieldPhysicalName='']",
+                field3.toString());
+        StructField unnamedField = new StructField(null, Type.VARCHAR);
+        Assert.assertEquals("StructField[name='', type=VARCHAR, position=0, fieldId=-1, fieldPhysicalName='']",
+                unnamedField.toString());
 
         StructType subStructType = new StructType(Lists.newArrayList(field2, field3));
         StructField field4 = new StructField("v4", subStructType);
