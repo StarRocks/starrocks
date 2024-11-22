@@ -319,7 +319,7 @@ public:
            << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
            << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
         if (st.ok()) {
-            LOG(INFO) << ss.str();
+            VLOG(1) << ss.str();
         } else {
             LOG(WARNING) << ss.str() << ", err=" << st.message();
         }
