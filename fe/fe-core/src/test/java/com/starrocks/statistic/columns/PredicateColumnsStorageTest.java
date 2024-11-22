@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.statistic.predicate_columns;
+package com.starrocks.statistic.columns;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -85,7 +85,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
 
         Mockito.verify(repo)
                 .executeDML(String.format("INSERT INTO _statistics_.predicate_columns(fe_id, db_id, table_id, " +
-                        "column_id, usage, last_used ) " +
+                                "column_id, usage, last_used ) " +
                                 "VALUES ('%s', %d, %d, 0, 'predicate', '2024-11-20 01:02:03')", feName, db.getId(),
                         t0.getId()));
 

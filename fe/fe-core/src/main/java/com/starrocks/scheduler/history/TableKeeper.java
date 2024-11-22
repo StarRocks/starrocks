@@ -23,7 +23,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.predicate_columns.PredicateColumnsStorage;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

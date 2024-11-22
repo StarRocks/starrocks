@@ -27,9 +27,9 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.statistic.predicate_columns.ColumnFullId;
-import com.starrocks.statistic.predicate_columns.ColumnUsage;
-import com.starrocks.statistic.predicate_columns.PredicateColumnsMgr;
+import com.starrocks.statistic.columns.ColumnFullId;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.NotImplementedException;
 
