@@ -639,8 +639,18 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             replica.setLastReportVersion(backendTabletInfo.getVersion());
 
                             // check if tablet needs migration
-                            long partitionId = tabletMeta.getPhysicalPartitionId();
-                            TStorageMedium storageMedium = storageMediumMap.get(partitionId);
+                            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+                            OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
+                            if (olapTable == null) {
+                                continue;
+                            }
+                            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                            if (physicalPartition == null) {
+                                continue;
+                            }
+
+                            TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
                             if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
                                 if (storageMedium != backendTabletInfo.getStorage_medium()) {
                                     // If storage medium is less than 1, there is no need to send migration tasks to BE.
@@ -667,7 +677,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
                                     if (transactionState == null ||
                                             transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
-                                        transactionsToClear.put(transactionId, partitionId);
+                                        transactionsToClear.put(transactionId, physicalPartitionId);
                                         LOG.debug("transaction id [{}] is not valid any more, "
                                                 + "clear it from backend [{}]", transactionId, backendId);
                                     } else if (transactionState.getTransactionStatus() ==
@@ -675,7 +685,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                         TableCommitInfo tableCommitInfo =
                                                 transactionState.getTableCommitInfo(tabletMeta.getTableId());
                                         PartitionCommitInfo partitionCommitInfo =
-                                                tableCommitInfo.getPartitionCommitInfo(partitionId);
+                                                tableCommitInfo.getPartitionCommitInfo(physicalPartitionId);
                                         if (partitionCommitInfo == null) {
                                             /*
                                              * This may happen as follows:
@@ -690,11 +700,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             LOG.info(
                                                     "failed to find partition commit info. table: {}, " +
                                                             "partition: {}, tablet: {}, txn_id: {}",
-                                                    tabletMeta.getTableId(), partitionId, tabletId,
+                                                    tabletMeta.getTableId(), physicalPartitionId, tabletId,
                                                     transactionState.getTransactionId());
                                         } else {
                                             TPartitionVersionInfo versionInfo =
-                                                    new TPartitionVersionInfo(partitionId,
+                                                    new TPartitionVersionInfo(physicalPartitionId,
                                                             partitionCommitInfo.getVersion(), 0);
                                             versionInfo.setGtid(transactionState.getGlobalTransactionId());
                                             Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
@@ -1425,7 +1435,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         return true;
     }
 
-    public static boolean migratableTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
+    public static boolean migrateTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
         if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
             return true;
         }
@@ -1504,7 +1514,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                // 3. There are some limitations for primary table, details in migratableTablet()
+                // 3. There are some limitations for primary table, details in migrateTablet()
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
@@ -1515,7 +1525,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                if (!migratableTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                if (!migrateTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
                     continue;
                 }
 
