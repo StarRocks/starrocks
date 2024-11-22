@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -39,7 +37,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.TaskRunContext;
@@ -68,6 +65,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshListPartitioner.class);
@@ -176,14 +175,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 refPartitionColumns, baseListPartitionMap);
     }
 
-    private static Expr getRefBaseTablePartitionTransformExpr(Table table,
+    private static Expr getRefBaseTablePartitionPredicateExpr(Table table,
                                                               String partitionColumn,
-                                                              SlotRef slotRef) {
+                                                              SlotRef slotRef,
+                                                              List<Expr> selectedPartitionValues) {
         if (!(table instanceof IcebergTable)) {
-            return slotRef;
+            return MvUtils.convertToInPredicate(slotRef, selectedPartitionValues);
+        } else {
+            IcebergTable icebergTable = (IcebergTable) table;
+            return getIcebergTablePartitionPredicateExpr(icebergTable, partitionColumn, slotRef, selectedPartitionValues);
         }
-        IcebergTable icebergTable = (IcebergTable) table;
-        return IcebergPartitionUtils.toTransformExpr(icebergTable, partitionColumn, slotRef);
     }
 
     private static @Nullable Expr genPartitionPredicate(Table refBaseTable,
@@ -194,8 +195,9 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Preconditions.checkArgument(refBaseTablePartitionSlotRefs.size() == refPartitionColumns.size());
         if (refPartitionColumns.size() == 1) {
             boolean isContainsNullPartition = false;
-            List<Expr> sourceTablePartitionList = Lists.newArrayList();
-            Type partitionType = refPartitionColumns.get(0).getType();
+            Column refPartitionColumn = refPartitionColumns.get(0);
+            List<Expr> selectedPartitionValues = Lists.newArrayList();
+            Type partitionType = refPartitionColumn.getType();
             for (String tablePartitionName : refBaseTablePartitionNames) {
                 PListCell cell = baseListPartitionMap.get(tablePartitionName);
                 for (List<String> values : cell.getPartitionItems()) {
@@ -207,16 +209,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         isContainsNullPartition = true;
                         continue;
                     }
-                    sourceTablePartitionList.add(partitionValue);
+                    selectedPartitionValues.add(partitionValue);
                 }
             }
-            Expr refBaseTablePartitionExpr = getRefBaseTablePartitionTransformExpr(refBaseTable,
-                    refPartitionColumns.get(0).getName(), (SlotRef) refBaseTablePartitionSlotRefs.get(0));
-            Expr inPredicate = MvUtils.convertToInPredicate(refBaseTablePartitionExpr, sourceTablePartitionList);
+            SlotRef refBaseTablePartitionSlotRef = (SlotRef) refBaseTablePartitionSlotRefs.get(0);
+            Expr inPredicate = getRefBaseTablePartitionPredicateExpr(refBaseTable, refPartitionColumn.getName(),
+                    refBaseTablePartitionSlotRef, selectedPartitionValues);
             // NOTE: If target partition values contain `null partition`, the generated predicate should
             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
             if (isContainsNullPartition) {
-                IsNullPredicate isNullPredicate = new IsNullPredicate(refBaseTablePartitionExpr, false);
+                IsNullPredicate isNullPredicate = new IsNullPredicate(refBaseTablePartitionSlotRef, false);
                 return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
             } else {
                 return inPredicate;
@@ -231,20 +233,20 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                     }
                     List<Expr> predicates = Lists.newArrayList();
                     for (int i = 0; i < refPartitionColumns.size(); i++) {
-                        Type partitionType = refPartitionColumns.get(i).getType();
+                        Column refPartitionColumn = refPartitionColumns.get(i);
+                        Type partitionType = refPartitionColumn.getType();
                         LiteralExpr partitionValue = new PartitionValue(values.get(i)).getValue(partitionType);
-                        Expr refBaseTablePartitionExpr = getRefBaseTablePartitionTransformExpr(refBaseTable,
-                                refPartitionColumns.get(i).getName(), (SlotRef) refBaseTablePartitionSlotRefs.get(i));
+                        Expr refBaseTablePartitionExpr = refBaseTablePartitionSlotRefs.get(i);
+                        Expr predicate;
                         if (partitionValue.isConstantNull()) {
                             // NOTE: If target partition values contain `null partition`, the generated predicate should
                             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
-                            IsNullPredicate isNullPredicate = new IsNullPredicate(refBaseTablePartitionExpr, false);
-                            predicates.add(isNullPredicate);
+                            predicate = new IsNullPredicate(refBaseTablePartitionExpr, false);
                         } else {
-                            BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.EQ, refBaseTablePartitionExpr,
-                                    partitionValue);
-                            predicates.add(binaryPredicate);
+                            predicate = getRefBaseTablePartitionPredicateExpr(refBaseTable, refPartitionColumn.getName(),
+                                    (SlotRef) refBaseTablePartitionExpr, Lists.newArrayList(partitionValue));
                         }
+                        predicates.add(predicate);
                     }
                     partitionPredicates.add(Expr.compoundAnd(predicates));
                 }
