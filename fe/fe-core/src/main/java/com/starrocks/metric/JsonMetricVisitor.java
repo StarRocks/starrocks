@@ -134,6 +134,11 @@ public class JsonMetricVisitor extends MetricVisitor {
     }
 
     @Override
+    public void visitHistogram(HistogramMetric histogram) {
+
+    }
+
+    @Override
     public void visitHistogram(String name, Histogram histogram) {
     }
 
