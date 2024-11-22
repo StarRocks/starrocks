@@ -97,6 +97,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
 
+    public static final SRMetaBlockID EXTERNAL_COOLDOWN_MGR = new SRMetaBlockID(33);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */

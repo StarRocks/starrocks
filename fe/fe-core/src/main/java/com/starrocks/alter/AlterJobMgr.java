@@ -562,6 +562,14 @@ public class AlterJobMgr {
                 }
             }
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
+            if (info.getExternalCoolDownSyncedTimeMs() != -1L) {
+                partitionInfo.setExternalCoolDownSyncedTimeMs(
+                        info.getPartitionId(), info.getExternalCoolDownSyncedTimeMs());
+            }
+            if (info.getExternalCoolDownConsistencyCheckTimeMs() != -1L) {
+                partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(
+                        info.getPartitionId(), info.getExternalCoolDownConsistencyCheckTimeMs());
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }

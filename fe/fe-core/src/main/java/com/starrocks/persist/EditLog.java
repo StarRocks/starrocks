@@ -81,6 +81,7 @@ import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.externalcooldown.ExternalCooldownMaintenanceJob;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
@@ -727,7 +728,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
-                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1087,6 +1089,11 @@ public class EditLog {
                     Text keyJson = (Text) journal.getData();
                     EncryptionKeyPB keyPB = GsonUtils.GSON.fromJson(keyJson.toString(), EncryptionKeyPB.class);
                     GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
+                    break;
+                }
+                case OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE: {
+                    ExternalCooldownMaintenanceJob job = (ExternalCooldownMaintenanceJob) journal.getData();
+                    GlobalStateMgr.getCurrentState().getExternalCooldownMgr().replay(job);
                     break;
                 }
                 case OperationType.OP_CREATE_WAREHOUSE: {
@@ -1860,6 +1867,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
     }
 
+    public void logModifyExternalCoolDownConfig(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG, log);
+    }
+
     public void logMVJobState(MVMaintenanceJob job) {
         logEdit(OperationType.OP_MV_JOB_STATE, job);
     }
@@ -1948,5 +1959,9 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logExternalCooldownJobState(ExternalCooldownMaintenanceJob job) {
+        logEdit(OperationType.OP_EXTERNAL_COOLDOWN_JOB_STATE, job);
     }
 }

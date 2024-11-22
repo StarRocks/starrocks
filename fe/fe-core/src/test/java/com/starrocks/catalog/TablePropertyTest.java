@@ -135,4 +135,63 @@ public class TablePropertyTest {
         Assert.assertEquals(3, newTableProperty.getPartitionTTLNumber());
         Assert.assertEquals(duration, newTableProperty.getPartitionTTL());
     }
+
+    @Test
+    public void testBuildExternalCooldownConfig() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, "3600");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        TableProperty readTableProperty = TableProperty.read(in);
+        TableProperty propertyRead = readTableProperty.buildProperty(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG);
+        Assert.assertNotNull(propertyRead);
+        Assert.assertEquals(3600L, propertyRead.getExternalCoolDownWaitSecond());
+        Assert.assertNull(propertyRead.getExternalCoolDownSchedule());
+        Assert.assertNull(propertyRead.getExternalCoolDownTarget());
+        in.close();
+    }
+
+    @Test
+    public void testBuildExternalCooldownSchedule() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE,
+                "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE");
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, "iceberg0.db.tbl");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        TableProperty readTableProperty = TableProperty.read(in);
+        TableProperty propertyRead = readTableProperty.buildProperty(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG);
+        Assert.assertNotNull(propertyRead);
+        Assert.assertEquals(0L, propertyRead.getExternalCoolDownWaitSecond());
+        Assert.assertEquals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE",
+                propertyRead.getExternalCoolDownSchedule());
+        Assert.assertEquals("iceberg0.db.tbl", propertyRead.getExternalCoolDownTarget());
+        in.close();
+
+        propertyRead.setExternalCoolDownConfig(null);
+        Assert.assertNull(propertyRead.getExternalCoolDownConfig());
+        Assert.assertEquals(0L, propertyRead.getExternalCoolDownWaitSecond());
+        Assert.assertNull(propertyRead.getExternalCoolDownSchedule());
+        Assert.assertNull(propertyRead.getExternalCoolDownTarget());
+    }
 }

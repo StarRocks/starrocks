@@ -41,6 +41,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.externalcooldown.ExternalCooldownConfig;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -48,7 +50,9 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -79,11 +83,34 @@ public class LocalMetaStoreTest {
         connectContext.setQueryId(UUIDUtil.genUUID());
         starRocksAssert = new StarRocksAssert(connectContext);
 
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+
         starRocksAssert.withDatabase("test").useDatabase("test")
                     .withTable(
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
+        starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2024-03-01 00:00:00'),('2024-03-02 00:00:00')),\n" +
+                "    PARTITION p2 values [('2024-03-02 00:00:00'),('2024-03-03 00:00:00')),\n" +
+                "    PARTITION p3 values [('2024-03-03 00:00:00'),('2024-03-04 00:00:00')),\n" +
+                "    PARTITION p4 values [('2024-03-04 00:00:00'),('2024-03-05 00:00:00')),\n" +
+                "    PARTITION p5 values [('2024-03-05 00:00:00'),('2024-03-06 00:00:00'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                "PROPERTIES(" +
+                "'replication_num' = '1',\n" +
+                "'external_cooldown_target' = 'iceberg0.partitioned_transforms_db.t0_day_dt',\n" +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE'\n," +
+                "'external_cooldown_wait_second' = '1'\n" +
+                ");");
     }
 
     @Test
@@ -311,4 +338,40 @@ public class LocalMetaStoreTest {
         }
     }
 
+    @Test
+    public void testAlterTableExternalCooldownProperties() throws Exception {
+        String icebergTable = "iceberg0.partitioned_transforms_db.t0_day";
+
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE,
+                "START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE");
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, icebergTable);
+        properties.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, "3600");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.alterTableProperties(db, table, properties);
+        ExternalCooldownConfig config = table.getCurExternalCoolDownConfig();
+        Assert.assertNotNull(config);
+        Assert.assertEquals(config.getTarget(), icebergTable);
+        Assert.assertEquals("START 01:00 END 07:59 EVERY INTERVAL 1 MINUTE", config.getSchedule());
+        Assert.assertEquals(config.getWaitSecond(), (Long) 3600L);
+
+        OlapTable table1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tbl1");
+        String sql = "ALTER TABLE test.tbl1\n" +
+                "MODIFY PARTITION (*) SET(\"external_cooldown_synced_time\" = \"2020-03-25 01:00:00\",\n" +
+                " \"external_cooldown_consistency_check_time\" = \"2020-03-25 02:00:00\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
+
+        PartitionInfo info = table1.getPartitionInfo();
+        Partition partition = table1.getPartition("p1");
+        Assert.assertNotEquals((Long) 0L, info.getExternalCoolDownSyncedTimeMs(partition.getId()));
+
+        Map<String, String> properties1 = Maps.newHashMap();
+        properties1.put(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET, icebergTable);
+        localMetastore.alterTableProperties(db, table1, properties1);
+
+        Assert.assertEquals((Long) 0L, info.getExternalCoolDownSyncedTimeMs(partition.getId()));
+    }
 }
