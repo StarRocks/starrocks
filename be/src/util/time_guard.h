@@ -42,8 +42,8 @@ private:
     const char* _file_name;
     size_t _line;
     int64_t _timeout_ms;
-    int64_t _begin_time;
     LazyMsgCallBack _callback;
+    int64_t _begin_time = 0;
 };
 
 }; // namespace starrocks
