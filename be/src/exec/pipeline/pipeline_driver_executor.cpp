@@ -342,13 +342,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     }
                 }
             } else {
-<<<<<<< HEAD
-                LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params.done;
-=======
                 VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                        << ", is_done=" << params->done;
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
+                        << ", is_done=" << params.done;
             }
             break;
         }

@@ -1737,16 +1737,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     int64_t t_write = MonotonicMillis();
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
-<<<<<<< HEAD
-    LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " txn_id: " << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows
-              << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
-              << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
-              << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
-                                     t_write - t_delvec);
-    VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
-=======
     std::string msg_part1 = strings::Substitute(
             "apply_rowset_commit finish. tablet:$0 version:$1 txn_id: $2 total del/row:$3/$4 $5% rowset:$6 #seg:$7 ",
             tablet_id, version_info.version.to_string(), rowset->txn_id(), _cur_total_dels, _cur_total_rows,
@@ -1763,7 +1753,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         VLOG(1) << msg_part1 << msg_part2 << msg_part3;
     }
     VLOG(2) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
     return apply_st;
 }
 
@@ -1993,11 +1982,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     {
         // already committed, so we can ignore timeout error here
         std::unique_lock<std::mutex> ul(_lock);
-<<<<<<< HEAD
         _wait_for_version(version, 120000, ul);
-=======
-        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul, true));
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
     }
     // Release metadata memory after rowsets have been compacted.
     Rowset::close_rowsets(input_rowsets);
@@ -2148,23 +2133,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-<<<<<<< HEAD
-    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id()
-              << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
-              << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
-              << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
-              << " #pending:" << _pending_commits.size()
-              << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
-    VLOG(1) << "update compaction commit " << _debug_string(false, true);
-=======
-    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
+    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id()
             << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
             << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
             << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
             << " #pending:" << _pending_commits.size()
             << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(2) << "update compaction commit " << _debug_string(false, true);
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
     _check_for_apply();
     *commit_version = edit_version_info_ptr->version;
     span->SetAttribute("version", commit_version->to_string());
@@ -2478,15 +2453,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     _update_total_stats(version_info.rowsets, &row_before, &row_after);
     int64_t t_write = MonotonicMillis();
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
-<<<<<<< HEAD
-    LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
-              << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
-              << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
-              << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
-    VLOG(1) << "update compaction apply " << _debug_string(true, true);
-=======
 
     std::string msg_part1 = strings::Substitute(
             "apply_compaction_commit finish tablet:$0 version:$1 total del/row:$2/$3 $4% rowset:$5 #row:$6 ", tablet_id,
@@ -2502,7 +2468,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         VLOG(1) << msg_part1 << msg_part2;
     }
     VLOG(2) << "update compaction apply " << _debug_string(true, true);
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
     if (row_before != row_after) {
         auto st = output_rowset->verify();
         string msg = strings::Substitute(

@@ -687,15 +687,9 @@ static Status append_full_row_column(const Schema& tschema,
                                      const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
     CHECK(state.write_columns.size() == read_column_ids.size());
     size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
-<<<<<<< HEAD
-    LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
-              << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
-    CHECK(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
-=======
     VLOG(1) << "partial_update_value_column_ids:" << partial_update_value_column_ids
             << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
-    RETURN_ERROR_IF_FALSE(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
->>>>>>> 16ffabe6fe ([Refactor] Refactor Starrocks LOG to reduce the log file size(part2) (#52129))
+    CHECK(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
     Columns columns(input_column_size); // all values columns
     for (size_t i = 0; i < partial_update_value_column_ids.size(); ++i) {
         columns[partial_update_value_column_ids[i] - tschema.num_key_fields()] =
