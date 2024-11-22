@@ -307,16 +307,6 @@ public class Config extends ConfigBase {
     public static boolean log_plan_cancelled_by_crash_be = true;
 
     /**
-<<<<<<< HEAD
-=======
-     * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
-     * In such cases, it is possible to disable this switch.
-     */
-    @ConfField(mutable = true)
-    public static boolean log_register_and_unregister_query_id = false;
-
-    /**
->>>>>>> 9fe4708d8d ([Refactor] Refactor Starrocks LOG to reduce the log file size(part3) (#52128))
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
