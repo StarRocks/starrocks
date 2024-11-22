@@ -96,7 +96,6 @@ public class PaimonConnector implements Connector {
             this.paimonOptions.setString(WAREHOUSE.key(), warehousePath);
         }
         initFsOption(cloudConfiguration);
-
         // cache expire time, set to 2h
         this.paimonOptions.set("cache.expiration-interval", "7200s");
         // max num of cached partitions of a Paimon catalog
