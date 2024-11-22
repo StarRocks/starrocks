@@ -1550,7 +1550,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
 
             OlapTable olaptable = (OlapTable) tbl;
-            if (ReportHandler.migratableTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
+            if (ReportHandler.migrateTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
                 newAlternativeTablets.add(schedCtx);
             }
         }
