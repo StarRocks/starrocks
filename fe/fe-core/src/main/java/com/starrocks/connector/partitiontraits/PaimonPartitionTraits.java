@@ -27,7 +27,7 @@ public class PaimonPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((PaimonTable) table).getDbName();
+        return ((PaimonTable) table).getCatalogDBName();
     }
 
     @Override

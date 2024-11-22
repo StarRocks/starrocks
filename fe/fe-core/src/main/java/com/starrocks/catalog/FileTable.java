@@ -99,6 +99,7 @@ public class FileTable extends Table {
         fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
     }
 
+    @Override
     public String getTableLocation() {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }

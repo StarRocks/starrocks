@@ -71,6 +71,7 @@ public class DeltaLakeTable extends Table {
         return true;
     }
 
+    @Override
     public String getTableLocation() {
         return tableLocation;
     }
@@ -92,11 +93,13 @@ public class DeltaLakeTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 

@@ -94,7 +94,7 @@ public class MVTraceUtils {
         List<String> partitionColumnNames = hiveTable.getPartitionColumnNames();
         List<String> selectedPartitionNames;
         if (hiveTable.isUnPartitioned()) {
-            selectedPartitionNames = Lists.newArrayList(hiveTable.getTableName());
+            selectedPartitionNames = Lists.newArrayList(hiveTable.getCatalogTableName());
         } else {
             Collection<Long> selectedPartitionIds = hdfsScanNode.getScanNodePredicates().getSelectedPartitionIds();
             List<PartitionKey> selectedPartitionKey = Lists.newArrayList();

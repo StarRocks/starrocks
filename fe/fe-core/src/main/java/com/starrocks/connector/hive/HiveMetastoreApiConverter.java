@@ -194,8 +194,8 @@ public class HiveMetastoreApiConverter {
 
     public static Table toMetastoreApiTable(HiveTable table) {
         Table apiTable = new Table();
-        apiTable.setDbName(table.getDbName());
-        apiTable.setTableName(table.getTableName());
+        apiTable.setDbName(table.getCatalogDBName());
+        apiTable.setTableName(table.getCatalogTableName());
         apiTable.setTableType(table.getHiveTableType().name());
         apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
@@ -216,7 +216,7 @@ public class HiveMetastoreApiConverter {
 
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
         SerDeInfo serdeInfo = new SerDeInfo();
-        serdeInfo.setName(table.getTableName());
+        serdeInfo.setName(table.getCatalogTableName());
         HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
 

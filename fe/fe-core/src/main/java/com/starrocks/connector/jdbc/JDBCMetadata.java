@@ -252,7 +252,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         JDBCTable jdbcTable = (JDBCTable) table;
         List<Partition> partitions = partitionInfoCache.get(
-                new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName()),
+                new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName()),
                 k -> {
                     try (Connection connection = getConnection()) {
                         List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
@@ -291,7 +291,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName());
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
         if (!onlyCachedPartitions) {
             tableInstanceCache.invalidate(jdbcTableName);
         }

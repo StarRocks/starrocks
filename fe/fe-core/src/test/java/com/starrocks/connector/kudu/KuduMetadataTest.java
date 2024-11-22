@@ -99,8 +99,8 @@ public class KuduMetadataTest {
         Table table = metadata.getTable("db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Assert.assertEquals("test_kudu_catalog", kuduTable.getCatalogName());
-        Assert.assertEquals("db1", kuduTable.getDbName());
-        Assert.assertEquals("tbl1", kuduTable.getTableName());
+        Assert.assertEquals("db1", kuduTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", kuduTable.getCatalogTableName());
         Assert.assertEquals(2, kuduTable.getColumns().size());
         Assert.assertEquals(0, kuduTable.getPartitionColumnNames().size());
         Assert.assertEquals(ScalarType.INT, kuduTable.getColumns().get(0).getType());
