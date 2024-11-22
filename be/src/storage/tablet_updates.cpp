@@ -581,14 +581,11 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version
     }
     _edit_version_infos.emplace_back(std::move(edit_version_info));
     _next_rowset_id += edit_version_meta_pb.rowsetid_add();
-<<<<<<< HEAD
-=======
 
     VLOG(2) << "redo edit version log tablet:" << _tablet.tablet_id() << " version:" << edit_version_meta_pb.version()
             << " rowsets:" << JoinInts(edit_version_meta_pb.rowsets(), ",")
             << " deltas:" << JoinInts(edit_version_meta_pb.deltas(), ",")
             << " rowsetid_add:" << edit_version_meta_pb.rowsetid_add() << " gtid:" << edit_version_meta_pb.gtid();
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
 }
 
 Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
@@ -3711,38 +3708,6 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
     return nullptr;
 }
 
-<<<<<<< HEAD
-=======
-Status TabletUpdates::get_applied_rowsets_by_gtid(int64_t gtid, std::vector<RowsetSharedPtr>* rowsets,
-                                                  EditVersion* full_edit_version) {
-    int64_t begin_ms = MonotonicMillis();
-    if (_error) {
-        return Status::InternalError(
-                strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
-                                    _tablet.tablet_id(), _error_msg));
-    }
-    std::unique_lock<std::mutex> ul(_lock);
-    int64_t version = 0;
-    auto it = _gtid_to_version_map.upper_bound(gtid);
-    if (it != _gtid_to_version_map.begin()) {
-        --it;
-        version = it->second;
-    } else {
-        std::stringstream ss;
-        ss << "no rowset before gtid " << gtid;
-        if (!_gtid_to_version_map.empty()) {
-            ss << ", first gtid is " << _gtid_to_version_map.begin()->first << " version is "
-               << _gtid_to_version_map.begin()->second;
-        }
-        return Status::InvalidArgument(ss.str());
-    }
-    VLOG(2) << "get_applied_rowsets: tablet_id: " << _tablet.tablet_id() << " gtid: " << gtid
-            << " version: " << version;
-
-    return _get_applied_rowsets(version, rowsets, full_edit_version, ul, begin_ms);
-}
-
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
     int64_t begin_ms = MonotonicMillis();
@@ -3791,11 +3756,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                                  get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
                                                  end_ms - wait_ver_ms);
             }
-<<<<<<< HEAD
-=======
             VLOG(2) << "get_applied_rowsets: tablet_id: " << _tablet.tablet_id() << " version: " << version
                     << " rowsets: " << rowsets->size();
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
             return Status::OK();
         }
     }

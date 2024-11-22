@@ -331,12 +331,6 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
-<<<<<<< HEAD
-=======
-    _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(2) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
-            << " to tablet=" << full_name();
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
     _timestamped_version_tracker.add_version(rowset->version());
 
     std::vector<RowsetSharedPtr> rowsets_to_delete;
@@ -393,12 +387,6 @@ void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_
     for (auto& rs : to_add) {
         rs_metas_to_add.push_back(rs->rowset_meta());
         _rs_version_map[rs->version()] = rs;
-<<<<<<< HEAD
-=======
-        _gtid_to_version_map[rs->rowset_meta()->gtid()] = rs->version().second;
-        VLOG(2) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
-                << " to tablet=" << full_name();
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
 
         _timestamped_version_tracker.add_version(rs->version());
         ++_newly_created_rowset_num;
@@ -603,12 +591,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
-<<<<<<< HEAD
-=======
-    _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    VLOG(2) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
-            << " to tablet=" << full_name();
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
     _inc_rs_version_map[rowset->version()] = rowset;
     if (need_binlog) {
         // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
@@ -858,38 +840,6 @@ Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vect
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-Status Tablet::capture_consistent_rowsets(const int64_t gtid, std::vector<RowsetSharedPtr>* rowsets) const {
-    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-    if (_updates != nullptr) {
-        return _updates->get_applied_rowsets_by_gtid(gtid, rowsets);
-    }
-    int64_t version = 0;
-    std::stringstream ss;
-    ss << "capture_consistent_rowsets: tablet_id: " << tablet_id() << " gtid: " << gtid;
-    auto it = _gtid_to_version_map.upper_bound(gtid);
-    if (it != _gtid_to_version_map.begin()) {
-        --it;
-        version = it->second;
-        ss << " version: " << version;
-    } else {
-        ss << " no rowset before it";
-        if (!_gtid_to_version_map.empty()) {
-            ss << ", first gtid is " << _gtid_to_version_map.begin()->first << " version is "
-               << _gtid_to_version_map.begin()->second;
-        }
-        return Status::InvalidArgument(ss.str());
-    }
-    VLOG(2) << ss.str();
-    Version spec_version{0, version};
-    std::vector<Version> version_path;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, rowsets));
-    return Status::OK();
-}
-
->>>>>>> 0f041391bc ([Refactor] Refactor Starrocks LOG to reduce the log file size(part1) (#52099))
 Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& version_path,
                                                     std::vector<RowsetSharedPtr>* rowsets) const {
     DCHECK(rowsets != nullptr && rowsets->empty());
