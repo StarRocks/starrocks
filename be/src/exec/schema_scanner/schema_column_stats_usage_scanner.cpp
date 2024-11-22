@@ -23,8 +23,8 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnStatsUsageScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_CATALOG", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
-        {"TABLE_DATABASE", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), true},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
+        {"TABLE_DATABASE", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
         {"TABLE_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
         {"COLUMN_NAME", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
         {"USAGE", TypeDescriptor::create_varchar_type(1024), sizeof(StringValue), false},
@@ -66,8 +66,20 @@ Status SchemaColumnStatsUsageScanner::start(RuntimeState* state) {
 
 DatumArray SchemaColumnStatsUsageScanner::_build_row() {
     auto& usage = _column_stats.items.at(_index++);
-    return {Slice(usage.table_catalog), Slice(usage.table_name), Slice(usage.column_name),
-            Slice(usage.usage),         Slice(usage.last_used),  Slice(usage.created)};
+    Datum last_used = usage.__isset.last_used && usage.last_used > 0
+                              ? TimestampValue::create_from_unixtime(usage.last_used, _runtime_state->timezone_obj())
+                              : kNullDatum;
+    Datum created = usage.__isset.created && usage.created > 0
+                            ? TimestampValue::create_from_unixtime(usage.created, _runtime_state->timezone_obj())
+                            : kNullDatum;
+
+    return {Slice(usage.table_catalog),
+            Slice(usage.table_database),
+            Slice(usage.table_name),
+            Slice(usage.column_name),
+            Slice(usage.usage),
+            last_used,
+            created};
 }
 
 Status SchemaColumnStatsUsageScanner::_fill_chunk(ChunkPtr* chunk) {

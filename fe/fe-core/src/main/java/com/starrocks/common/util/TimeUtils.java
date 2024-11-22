@@ -182,6 +182,10 @@ public class TimeUtils {
         return Clock.systemDefaultZone().instant().getEpochSecond();
     }
 
+    public static long toEpochSeconds(LocalDateTime time) {
+        return time.atZone(getSystemTimeZone().toZoneId()).toInstant().getEpochSecond();
+    }
+
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;

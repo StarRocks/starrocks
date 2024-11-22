@@ -22,7 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -110,7 +110,7 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         res.setItems(columnStatsUsages.stream()
                 .map(ColumnStatsUsageSystemTable::columnUsageToThrift)
                 .collect(Collectors.toList()));
-        return null;
+        return res;
     }
 
     private static List<ScalarOperator> columnUsageToScalar(ColumnUsage columnUsage) {
@@ -136,8 +136,8 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         thriftUsage.setTable_name(names.map(x -> x.first.getTbl()).orElse(null));
         thriftUsage.setColumn_name(names.map(x -> x.second.getId()).orElse(null));
         thriftUsage.setUsage(columnUsage.getUseCaseString());
-        thriftUsage.setLast_used(DateUtils.formatDateTimeUnix(columnUsage.getLastUsed()));
-        thriftUsage.setCreated(DateUtils.formatDateTimeUnix(columnUsage.getCreated()));
+        thriftUsage.setLast_used(TimeUtils.toEpochSeconds(columnUsage.getLastUsed()));
+        thriftUsage.setCreated((TimeUtils.toEpochSeconds(columnUsage.getCreated())));
         return thriftUsage;
     }
 
