@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -30,6 +31,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.columns.ColumnFullId;
 import com.starrocks.statistic.columns.ColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.thrift.TColumnStatsUsage;
+import com.starrocks.thrift.TColumnStatsUsageReq;
+import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -99,6 +103,16 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
                 .collect(Collectors.toList());
     }
 
+    public static TColumnStatsUsageRes query(TColumnStatsUsageReq req) {
+        TableName tableName = new TableName(req.getTable_catalog(), req.getTable_database(), req.getTable_name());
+        List<ColumnUsage> columnStatsUsages = PredicateColumnsMgr.getInstance().query(tableName);
+        TColumnStatsUsageRes res = new TColumnStatsUsageRes();
+        res.setItems(columnStatsUsages.stream()
+                .map(ColumnStatsUsageSystemTable::columnUsageToThrift)
+                .collect(Collectors.toList()));
+        return null;
+    }
+
     private static List<ScalarOperator> columnUsageToScalar(ColumnUsage columnUsage) {
         ColumnFullId columnFullId = columnUsage.getColumnFullId();
         Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
@@ -112,4 +126,20 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));
         return result;
     }
+
+    private static TColumnStatsUsage columnUsageToThrift(ColumnUsage columnUsage) {
+        TColumnStatsUsage thriftUsage = new TColumnStatsUsage();
+        ColumnFullId columnFullId = columnUsage.getColumnFullId();
+        Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
+        thriftUsage.setTable_catalog(names.map(x -> x.first.getCatalog()).orElse(null));
+        thriftUsage.setTable_database(names.map(x -> x.first.getDb()).orElse(null));
+        thriftUsage.setTable_name(names.map(x -> x.first.getTbl()).orElse(null));
+        thriftUsage.setColumn_name(names.map(x -> x.second.getId()).orElse(null));
+        thriftUsage.setUsage(columnUsage.getUseCaseString());
+        thriftUsage.setLast_used(DateUtils.formatDateTimeUnix(columnUsage.getLastUsed()));
+        thriftUsage.setCreated(DateUtils.formatDateTimeUnix(columnUsage.getCreated()));
+        return thriftUsage;
+    }
+
+
 }
