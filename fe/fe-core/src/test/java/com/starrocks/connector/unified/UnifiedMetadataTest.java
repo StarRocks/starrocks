@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -86,12 +87,12 @@ public class UnifiedMetadataTest {
     @BeforeEach
     public void setUp() {
         this.unifiedMetadata = new UnifiedMetadata(ImmutableMap.of(
-            HIVE, hiveMetadata,
-            ICEBERG, icebergMetadata,
-            HUDI, hudiMetadata,
-            DELTALAKE, deltaLakeMetadata,
-            PAIMON, paimonMetadata,
-            KUDU, kuduMetadata
+                HIVE, hiveMetadata,
+                ICEBERG, icebergMetadata,
+                HUDI, hudiMetadata,
+                DELTALAKE, deltaLakeMetadata,
+                PAIMON, paimonMetadata,
+                KUDU, kuduMetadata
         )
         );
         this.getRemoteFilesParams = GetRemoteFilesParams.newBuilder().setPartitionKeys(ImmutableList.of())
@@ -164,7 +165,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hiveMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                hiveMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -206,7 +207,8 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof HiveTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        List<String> partitionNames =
+                unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -245,7 +247,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                icebergMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                icebergMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -299,7 +301,8 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof IcebergTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        List<String> partitionNames =
+                unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -334,7 +337,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                hudiMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                hudiMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -376,7 +379,8 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof HudiTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        List<String> partitionNames =
+                unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -414,7 +418,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                deltaLakeMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                deltaLakeMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -456,7 +460,8 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof DeltaLakeTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        List<String> partitionNames =
+                unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
@@ -488,7 +493,7 @@ public class UnifiedMetadataTest {
             }
 
             {
-                kuduMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+                kuduMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
                 result = ImmutableList.of("test_part1", "test_part2");
                 times = 1;
             }
@@ -514,7 +519,8 @@ public class UnifiedMetadataTest {
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
         assertTrue(table instanceof KuduTable);
-        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", TableVersionRange.empty());
+        List<String> partitionNames =
+                unifiedMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);

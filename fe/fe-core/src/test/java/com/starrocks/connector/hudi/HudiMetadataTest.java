@@ -18,12 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -122,7 +122,8 @@ public class HudiMetadataTest {
     @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(
-                Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty()));
+                Lists.newArrayList("col1"),
+                hudiMetadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT));
     }
 
     @Test

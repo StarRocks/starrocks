@@ -96,12 +96,13 @@ public interface ConnectorMetadata {
     /**
      * Return all partition names of the table.
      *
-     * @param databaseName      the name of the database
-     * @param tableName         the name of the table
-     * @param tableVersionRange table version range in the query
+     * @param databaseName   the name of the database
+     * @param tableName      the name of the table
+     * @param requestContext request context
      * @return a list of partition names
      */
-    default List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange tableVersionRange) {
+    default List<String> listPartitionNames(String databaseName, String tableName,
+                                            ConnectorMetadatRequestContext requestContext) {
         return Lists.newArrayList();
     }
 
