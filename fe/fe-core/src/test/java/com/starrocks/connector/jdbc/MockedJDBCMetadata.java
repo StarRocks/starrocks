@@ -20,9 +20,9 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.TableVersionRange;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -162,7 +162,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, TableVersionRange versionRange) {
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext) {
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
