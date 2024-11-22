@@ -18,6 +18,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -81,6 +82,21 @@ public class PreparedStmtTest{
 
         ctx.putPreparedStmt("stmt2", new PrepareStmtContext(stmt2, ctx, null));
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql4, ctx));
+    }
+
+    @Test
+    public void testIsQuery() throws Exception {
+        String selectSql = "select * from demo.prepare_stmt";
+        QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
+        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+
+        String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
+        Assert.assertEquals(false, ctx.isQueryStmt(prepareStmt));
+
+        ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
+        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
     }
 
     @Test
