@@ -502,8 +502,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private List<RemoteFileInfo> getRemoteFiles(IcebergTable table, long snapshotId,
                                                 ScalarOperator predicate, long limit) {
-        String dbName = table.getRemoteDbName();
-        String tableName = table.getRemoteTableName();
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
 
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit);
@@ -526,7 +526,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             snapshotId = nativeTable.currentSnapshot().snapshotId();
         }
         List<Partition> ans =
-                icebergCatalog.getPartitionsByNames(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+                icebergCatalog.getPartitionsByNames(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
                         snapshotId, null, partitionNames);
         return new ArrayList<>(ans);
     }
@@ -536,8 +536,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         PredicateSearchKey key;
         IcebergTable icebergTable;
         icebergTable = (IcebergTable) item.getTable();
-        String dbName = icebergTable.getRemoteDbName();
-        String tableName = icebergTable.getRemoteTableName();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
         TableVersionRange versionRange = item.getVersion();
         if (versionRange.end().isEmpty()) {
             return true;
@@ -636,8 +636,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
         IcebergTable icebergTable = (IcebergTable) table;
-        String dbName = icebergTable.getRemoteDbName();
-        String tableName = icebergTable.getRemoteTableName();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
         if (version.end().isEmpty()) {
             return new ArrayList<>();
         }
@@ -719,8 +719,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
 
-        String dbName = icebergTable.getRemoteDbName();
-        String tableName = icebergTable.getRemoteTableName();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Types.StructType schema = nativeTbl.schema().asStruct();
@@ -810,8 +810,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             return baseSource;
         } else {
             // build remote file info source for table with equality delete files.
-            String dbName = icebergTable.getRemoteDbName();
-            String tableName = icebergTable.getRemoteTableName();
+            String dbName = icebergTable.getCatalogDBName();
+            String tableName = icebergTable.getCatalogTableName();
             IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
                     dbName, tableName, snapshotId.get(), param.getPredicate(), param.getMORParams());
 
@@ -856,8 +856,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                              Long snapshotId,
                                                              ConnectContext connectContext,
                                                              boolean enableCollectColumnStats) {
-        String dbName = icebergTable.getRemoteDbName();
-        String tableName = icebergTable.getRemoteTableName();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         traceIcebergMetricsConfig(nativeTbl);
@@ -920,8 +920,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                           ScalarOperator predicate, FileContent content) {
-        String dbName = icebergTable.getRemoteDbName();
-        String tableName = icebergTable.getRemoteTableName();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
         org.apache.iceberg.Table table = icebergTable.getNativeTable();
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
@@ -1011,7 +1011,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         PredicateSearchKey key = PredicateSearchKey.of(
-                icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), snapshotId, predicate);
+                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId, predicate);
 
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
@@ -1019,7 +1019,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             List<FileScanTask> icebergScanTasks = splitTasks.get(key);
             if (icebergScanTasks == null) {
                 throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
-                        icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), predicate);
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), predicate);
             }
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
                 return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
@@ -1071,8 +1071,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             refreshTableWithResource(table);
         } else {
             IcebergTable icebergTable = (IcebergTable) table;
-            String dbName = icebergTable.getRemoteDbName();
-            String tableName = icebergTable.getRemoteTableName();
+            String dbName = icebergTable.getCatalogDBName();
+            String tableName = icebergTable.getCatalogTableName();
             tables.remove(TableIdentifier.of(dbName, tableName));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);

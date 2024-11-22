@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
@@ -32,7 +31,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-
 
 public class PaimonTable extends Table {
     private String catalogName;
@@ -66,11 +64,13 @@ public class PaimonTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return databaseName;
     }
 
-    public String getTableName() {
+    @Override
+    public String getCatalogTableName() {
         return tableName;
     }
 

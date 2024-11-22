@@ -104,7 +104,7 @@ public class OdpsMetadataTest extends MockedBase {
         OdpsTable table = (OdpsTable) odpsMetadata.getTable("project", "tableName");
         Assert.assertTrue(table.isOdpsTable());
         Assert.assertEquals("tableName", table.getName());
-        Assert.assertEquals("project", table.getDbName());
+        Assert.assertEquals("project", table.getCatalogDBName());
         Assert.assertFalse(table.isUnPartitioned());
         Assert.assertEquals("c1", table.getColumn("c1").getName());
     }

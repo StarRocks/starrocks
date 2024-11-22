@@ -41,7 +41,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((IcebergTable) table).getRemoteDbName();
+        return ((IcebergTable) table).getCatalogDBName();
     }
 
     @Override
@@ -51,7 +51,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return ((IcebergTable) table).getRemoteTableName();
+        return ((IcebergTable) table).getCatalogTableName();
     }
 
     @Override

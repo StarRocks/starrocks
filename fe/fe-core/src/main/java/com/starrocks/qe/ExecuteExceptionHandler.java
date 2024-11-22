@@ -76,7 +76,7 @@ public class ExecuteExceptionHandler {
                     ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .getOptionalMetadata(hiveTable.getCatalogName()).get();
                     // refresh catalog level metadata cache
-                    metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
+                    metadata.refreshTable(hiveTable.getCatalogDBName(), hiveTable, new ArrayList<>(), true);
                     // clear query level metadata cache
                     metadata.clear();
                 }

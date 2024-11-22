@@ -32,7 +32,7 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((DeltaLakeTable) table).getDbName();
+        return ((DeltaLakeTable) table).getCatalogDBName();
     }
 
     @Override

@@ -41,7 +41,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
@@ -830,7 +829,7 @@ public class MaterializedViewAnalyzer {
                 } else if (table.isNativeTableOrMaterializedView()) {
                     checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
                 } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
-                    checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
+                    checkPartitionColumnWithBaseHMSTable(slotRef, table);
                 } else if (table.isIcebergTable()) {
                     checkPartitionColumnWithBaseIcebergTable(expr, slotRef, (IcebergTable) table);
                 } else if (table.isJDBCTable()) {
@@ -868,7 +867,7 @@ public class MaterializedViewAnalyzer {
                     }
                     if (refBaseTable.getPartitionColumns().size() != partitionRefTableExprs.size()) {
                         throw new SemanticException(String.format("Materialized view partition columns size(%s)" +
-                                " must be same with ref base table(%d)", partitionRefTableExprs.size(),
+                                        " must be same with ref base table(%d)", partitionRefTableExprs.size(),
                                 refBaseTable.getPartitionColumns().size()), partitionRefTableExpr.getPos());
                     }
                 }
@@ -1021,7 +1020,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, Table table) {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
         }
 
@@ -1166,9 +1165,8 @@ public class MaterializedViewAnalyzer {
                         break;
                     }
                 } else if (table.isHiveTable() || table.isHudiTable()) {
-                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                    if (hiveMetaStoreTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                            hiveMetaStoreTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                    if (table.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                            table.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
@@ -1177,7 +1175,7 @@ public class MaterializedViewAnalyzer {
                 } else if (table.isIcebergTable()) {
                     IcebergTable icebergTable = (IcebergTable) table;
                     if (icebergTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                            icebergTable.getRemoteDbName().equals(baseTableInfo.getDbName()) &&
+                            icebergTable.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
@@ -1194,7 +1192,7 @@ public class MaterializedViewAnalyzer {
 
         boolean replacePaimonTableAlias(SlotRef slotRef, PaimonTable paimonTable, BaseTableInfo baseTableInfo) {
             if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
-                    paimonTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                    paimonTable.getCatalogDBName().equals(baseTableInfo.getDbName()) &&
                     paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                 slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), paimonTable.getName()));
@@ -1291,7 +1289,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
             }
             OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getFullName(), mvName.getTbl());
+                    .getTable(db.getFullName(), mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }
