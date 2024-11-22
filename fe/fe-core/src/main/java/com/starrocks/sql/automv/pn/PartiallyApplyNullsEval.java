@@ -126,10 +126,10 @@ public class PartiallyApplyNullsEval {
                 int nArgs = apply.getArgs().size();
                 Optional<Op> elseBranch = nArgs % 2 == 1 ? Optional.of(apply.arg(-1)) : Optional.empty();
                 int numWhens = nArgs / 2;
-                List<Op> whens = IntStream.of(0, numWhens)
+                List<Op> whens = IntStream.range(0, numWhens)
                         .mapToObj(i -> apply.arg(i * 2))
                         .collect(Collectors.toList());
-                List<Op> thens = IntStream.of(0, numWhens)
+                List<Op> thens = IntStream.range(0, numWhens)
                         .mapToObj(i -> apply.arg(i * 2 + 1))
                         .collect(Collectors.toList());
                 for (int i = 0; i < numWhens; ++i) {

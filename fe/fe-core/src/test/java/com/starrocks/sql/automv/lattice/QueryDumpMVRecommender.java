@@ -15,35 +15,50 @@
 package com.starrocks.sql.automv.lattice;
 
 import com.google.api.client.util.Lists;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.google.gson.Gson;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MvId;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
+import com.starrocks.sql.automv.qe.CollectAstVisitor;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ReplayWithMVFromDumpTest;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.arrow.util.Preconditions;
 import org.apache.logging.log4j.core.config.Configurator;
+import org.bouncycastle.util.Strings;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -56,9 +71,102 @@ public class QueryDumpMVRecommender {
         this.starRocksAssert = starRocksAssert;
     }
 
-    private static String rectifyQueryDump(String dump) {
+    private static String rectifyQueryDump(StarRocksAssert starRocksAssert, String dump) {
+        dump = convertToOlapTable(starRocksAssert, dump);
         dump = dump.replaceAll("(?i)varchar\\(\\d+\\)", "string");
         return dump;
+    }
+
+    private static Optional<String> convertToOlapTable(CreateTableStmt stmt, String catalog) {
+        String engineName = stmt.getEngineName().toUpperCase();
+        Set<String> allowEngines = ImmutableSet.of("JDBC", "MYSQL", "ICEBERG");
+        if (!allowEngines.contains(engineName)) {
+            return Optional.empty();
+        }
+        PrettyPrinter printer = new PrettyPrinter();
+        printer.add("CREATE TABLE ").addBacktickQuoted(stmt.getTableName()).add(" (").newLine();
+        List<PrettyPrinter> columns = stmt.getColumnDefs().stream().map(def -> new PrettyPrinter()
+                .addBacktickQuoted(def.getName()).spaces(1)
+                .add(def.getType().toSql()).spaces(1)
+                .add(def.isAllowNull() ? "NULL" : "NOT NULL").spaces(1)
+        ).collect(Collectors.toList());
+        printer.indentEnclose(2, () -> printer.addSuperStepsWithDelNl(",", columns));
+        printer.newLine().add(") ENGINE=OLAP").newLine();
+        printer.add("PROPERTIES (").newLine();
+        List<PrettyPrinter> propertyItems = Lists.newArrayList();
+        propertyItems.add(new PrettyPrinter().addDoubleQuoted("replication_num").add(" = ").addDoubleQuoted("1"));
+        Preconditions.checkArgument(catalog != null || stmt.getProperties().containsKey("resource"));
+        String resource = catalog != null ? catalog : stmt.getProperties().get("resource");
+        propertyItems.add(new PrettyPrinter().addDoubleQuoted("resource").add(" = ").addDoubleQuoted(resource));
+        printer.indentEnclose(2, () -> printer.addSuperStepsWithDelNl(",", propertyItems));
+        printer.newLine().add(")");
+        return Optional.of(printer.getResult());
+    }
+
+    private static String convertToOlapTable(StarRocksAssert starRocksAssert, String dump) {
+        Gson gson = new Gson();
+        Map<String, Object> dumpJson = gson.<Map<String, Object>>fromJson(dump, Map.class);
+        if (!dumpJson.containsKey("table_meta")) {
+            return dump;
+        }
+        Map<String, String> tableMataMap = (Map<String, String>) dumpJson.get("table_meta");
+        String query = (String) dumpJson.get("statement");
+        List<StatementBase> stmts = SqlParser.parse(query, starRocksAssert.getCtx().getSessionVariable());
+        QueryStatement queryStatement = (QueryStatement) stmts.get(0);
+        List<TableName> tableNames = CollectAstVisitor.collectTableNames(queryStatement, starRocksAssert.getCtx());
+        Map<String, TableName> tableNamesWithCatalog = Maps.newHashMap();
+        tableNames.forEach(tableName -> {
+            if (tableName.getDb() != null && tableName.getCatalog() != null) {
+                String dbTableName = String.format("%s.%s", tableName.getDb(), tableName.getTbl());
+                tableNamesWithCatalog.put(dbTableName, tableName);
+            }
+        });
+
+        Map<String, String> dbTableNameToDbMap = tableMataMap.keySet().stream().map(dbTableName -> {
+            String[] parts = Strings.split(dbTableName, '.');
+            Preconditions.checkArgument(parts.length == 2);
+            return Pair.create(dbTableName, parts[0]);
+        }).collect(Collectors.toMap(p -> p.first, p -> p.second));
+        Set<String> dbs = new HashSet<>(dbTableNameToDbMap.values());
+        dbs.forEach(db -> {
+            try {
+                starRocksAssert.withDatabase(db);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        Map<String, String> newTableMetaMap = Maps.newHashMap();
+        List<Pair<TableName, String>> tableRefList = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : tableMataMap.entrySet()) {
+            String dbTableName = entry.getKey();
+            Preconditions.checkArgument(dbTableNameToDbMap.containsKey(dbTableName));
+            String createTblSql = LogUtil.removeLineSeparator(entry.getValue());
+            List<StatementBase> statements =
+                    SqlParser.parse(createTblSql, starRocksAssert.getCtx().getSessionVariable());
+            StatementBase statementBase = statements.get(0);
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            if (tableNamesWithCatalog.containsKey(dbTableName)) {
+                String catalog = Objects.requireNonNull(tableNamesWithCatalog.get(dbTableName).getCatalog());
+                String createTable = convertToOlapTable(createTableStmt, catalog).orElse(entry.getValue());
+                newTableMetaMap.put(entry.getKey(), createTable);
+                tableRefList.add(Pair.create(tableNamesWithCatalog.get(dbTableName), dbTableName));
+            } else if (!createTableStmt.getEngineName().equalsIgnoreCase("OLAP")) {
+                String createTable = convertToOlapTable(createTableStmt, null).orElse(entry.getValue());
+                newTableMetaMap.put(entry.getKey(), createTable);
+            } else {
+                newTableMetaMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        for (Pair<TableName, String> p : tableRefList) {
+            TableName tableName = p.first;
+            Pattern pat = Pattern.compile(String.format("(`?)%s(`?)\\.(`?)%s(`?)\\.(`?)%s(`?)",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
+            query = query.replaceAll(pat.pattern(), p.second);
+        }
+        dumpJson.put("statement", query);
+        dumpJson.put("table_meta", newTableMetaMap);
+        return gson.toJson(dumpJson);
     }
 
     public static QueryDumpMVRecommender of() throws Exception {
@@ -136,13 +244,13 @@ public class QueryDumpMVRecommender {
                 } catch (Exception ignored) {
                 }
             }
-            boolean hasExternalTables = !pieces.stream()
+            boolean hasTablesWithResource = pieces.stream()
                     .map(p -> p.second)
                     .flatMap(piece -> PlanPiece.collect(piece, TablePiece.class).stream())
                     .map(TablePiece::getTable)
                     .map(FQTable::getTable)
-                    .allMatch(Table::isNativeTableOrMaterializedView);
-            if (hasExternalTables) {
+                    .anyMatch(table -> MetaUtil.getResourceName(table).isPresent());
+            if (hasTablesWithResource) {
                 starRocksAssert.getCtx().getSessionVariable().setAutoMVRectifyTableName(true);
                 AutoMVUtil.testHelper(starRocksAssert.getCtx(), queryList, svSetter, (pieces0, mvResults0) -> {
                     rewritableMVs.replaceAll(mvResult -> {
@@ -168,7 +276,7 @@ public class QueryDumpMVRecommender {
 
     public List<MVResultWithRewriteTraceInfo> recommend(String dumpJson, Consumer<SessionVariable> svSetter)
             throws Exception {
-        dumpJson = rectifyQueryDump(dumpJson);
+        dumpJson = rectifyQueryDump(starRocksAssert, dumpJson);
         QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
         System.out.println(dumpInfo.getOriginStmt());
         return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV);
@@ -176,7 +284,7 @@ public class QueryDumpMVRecommender {
 
     public List<String> recommendNoTraceInfo(String dumpJson, Consumer<SessionVariable> svSetter)
             throws Exception {
-        dumpJson = rectifyQueryDump(dumpJson);
+        dumpJson = rectifyQueryDump(starRocksAssert, dumpJson);
         QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
         System.out.println(dumpInfo.getOriginStmt());
         return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV)

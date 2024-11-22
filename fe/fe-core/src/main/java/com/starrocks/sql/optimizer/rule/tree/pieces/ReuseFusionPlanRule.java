@@ -317,10 +317,11 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
         private CallOperator addFilterAggCall(CallOperator call, ScalarOperator filter,
                                               Map<ScalarOperator, ColumnRefOperator> filterProject) {
-            Preconditions.checkState(call.getChildren().size() <= 1);
             if (filter == null) {
                 return call;
             }
+
+            Preconditions.checkState(call.getChildren().size() <= 1);
 
             ScalarOperator child;
             Function aggFunc;

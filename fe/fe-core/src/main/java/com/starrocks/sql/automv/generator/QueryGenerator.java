@@ -20,9 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Pair;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.DerivedColumn;
 import com.starrocks.sql.automv.column.GenericColumn;
@@ -34,6 +32,7 @@ import com.starrocks.sql.automv.pieces.StarJoinPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
+import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
@@ -83,27 +82,17 @@ public class QueryGenerator {
                 return fqTable.getFQName();
             }
 
-            if (fqTable.getTable().isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) fqTable.getTable();
+            return MetaUtil.getResourceName(fqTable.getTable()).map(resource -> {
                 TableName fqName = fqTable.getFqTableName();
-                String catalogName = fqName.getCatalog();
-                if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
-                    catalogName = hiveTable.getResourceName();
-                }
                 String dbName = fqName.getDb();
                 String tblName = fqName.getTbl();
-                PrettyPrinter dbTblSql = new PrettyPrinter()
+                return new PrettyPrinter()
+                        .addBacktickQuoted(resource)
+                        .add(".")
                         .addBacktickQuoted(dbName)
                         .add(".")
-                        .addBacktickQuoted(tblName);
-                PrettyPrinter fqSql = new PrettyPrinter();
-                if (catalogName != null && !catalogName.isEmpty()) {
-                    fqSql.addBacktickQuoted(catalogName).add(".");
-                }
-                return fqSql.addSuperStep(dbTblSql).getResult();
-            } else {
-                return fqTable.getFQName();
-            }
+                        .addBacktickQuoted(tblName).getResult();
+            }).orElseGet(fqTable::getFQName);
         }
 
         @Override

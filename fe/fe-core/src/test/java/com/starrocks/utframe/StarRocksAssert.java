@@ -864,10 +864,11 @@ public class StarRocksAssert {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
             mvName = createMaterializedViewStatement.getTableName().getTbl();
-            //System.out.println(sql);
+            // System.out.println(sql);
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail(e.getMessage());
         } finally {
             // Create mv may fail.

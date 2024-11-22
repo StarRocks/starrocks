@@ -546,11 +546,11 @@ public class LatticeNode {
     }
 
     public CardRecord getCard() {
-        return Objects.requireNonNull(this.card);
+        return this.card;
     }
 
     public void setCard(CardRecord card) {
-        this.card = Objects.requireNonNull(card);
+        this.card = card;
     }
 
     public Optional<CardRecord> getOptionalCard() {

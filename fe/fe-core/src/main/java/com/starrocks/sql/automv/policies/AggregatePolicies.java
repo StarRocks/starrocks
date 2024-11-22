@@ -124,10 +124,12 @@ public class AggregatePolicies {
                 SplitDistinctMetricsFromMetricsPolicy.INSTANCE);
     }
 
-    public static AggregatePiece applyRollupOrPerfectMatch(AggregatePiece aggPiece) {
-        AggregatePolicy policy = AggregatePolicy.or(
-                RollupAblePolicy.INSTANCE,
-                RollupUnablePolicy.INSTANCE);
+    public static AggregatePiece applyRollupOrPerfectMatch(AutoMVOptions options, AggregatePiece aggPiece) {
+        AggregatePolicy policy = AggregatePolicy.seq(
+                distinctRollupPolicy(options),
+                AggregatePolicy.or(
+                        RollupAblePolicy.INSTANCE,
+                        RollupUnablePolicy.INSTANCE));
         return policy.convert(aggPiece).orElse(aggPiece);
     }
 

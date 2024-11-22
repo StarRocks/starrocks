@@ -20,6 +20,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -59,6 +60,13 @@ public class CollectAstVisitor implements AstVisitor<Void, Void> {
                 CollectAstVisitor.createCollectAstVisitor(collector);
         collectAstVisitor.visit(queryStatement, null);
         return QueryStatementPlus.of(queryStatement, collector.getFQTableMap());
+    }
+
+    public static List<TableName> collectTableNames(QueryStatement queryStatement, ConnectContext context) {
+        TableNameCollector collector = new TableNameCollector();
+        CollectAstVisitor collectAstVisitor = CollectAstVisitor.createCollectAstVisitor(collector);
+        collectAstVisitor.visit(queryStatement, null);
+        return collector.getTableNames();
     }
 
     private Void visit(Collection<? extends ParseNode> nodes, Void context) {

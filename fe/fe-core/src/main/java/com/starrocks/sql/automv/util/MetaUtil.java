@@ -18,7 +18,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -159,5 +161,18 @@ public class MetaUtil {
                 .map(mv -> MaterializedViewPlus.of(mv,
                         new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, mv.getName())))
                 .collect(Collectors.toList());
+    }
+
+    public static Optional<String> getResourceName(Table table) {
+        if (table.isHiveTable()) {
+            HiveTable hiveTable = (HiveTable) table;
+            return Optional.ofNullable(hiveTable.getResourceName());
+        } else if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            String resource = olapTable.getTableProperty().getProperties().get("resource");
+            return Optional.ofNullable(resource);
+        } else {
+            return Optional.empty();
+        }
     }
 }

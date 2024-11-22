@@ -319,7 +319,7 @@ public class AutoMVUtil {
                 .flatMap(p -> RboOptimizer.getPlanPieces(p.second, ctx).stream()
                         .map(piece -> piece.mustCast(AggregatePiece.class))
                         .map(piece -> policy.convert(piece).orElse(piece))
-                        .map(AggregatePolicies::applyRollupOrPerfectMatch)
+                        .map(piece -> AggregatePolicies.applyRollupOrPerfectMatch(options, piece))
                         .map(piece -> Pair.create(p.first, piece)))
                 .collect(Collectors.toList());
     }
@@ -352,7 +352,7 @@ public class AutoMVUtil {
                     .setOptions(options)
                     .build();
             planPiece = AggregatePolicies.defaultPolicies(options).convert(planPiece).orElse(planPiece);
-            planPiece = AggregatePolicies.applyRollupOrPerfectMatch(planPiece);
+            planPiece = AggregatePolicies.applyRollupOrPerfectMatch(options, planPiece);
             Optional<QueryGenerateResult> optResult = AggregateMVGenerator.generate(planPiece, mvGenerateContext);
             Assert.assertTrue(optResult.isPresent());
             QueryGenerateResult result = optResult.get();

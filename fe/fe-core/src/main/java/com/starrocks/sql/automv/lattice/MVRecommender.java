@@ -167,7 +167,7 @@ public class MVRecommender {
         return splitConjunctsOfRollupAbleAggPieces(pieces, minPartialRollup)
                 .orElseGet(() -> Collections.singletonList(pieces.stream()
                         .map(piece -> piece.mustCast(AggregatePiece.class))
-                        .map(AggregatePolicies::applyRollupOrPerfectMatch)
+                        .map(piece -> AggregatePolicies.applyRollupOrPerfectMatch(options, piece))
                         .collect(Collectors.toList())));
     }
 
@@ -261,7 +261,7 @@ public class MVRecommender {
 
         nonSplitAggPieces = nonSplitAggPieces.concat(piecesHasNoRollupDim).stream()
                 .map(piece -> piece.mustCast(AggregatePiece.class))
-                .map(AggregatePolicies::applyRollupOrPerfectMatch)
+                .map(piece -> AggregatePolicies.applyRollupOrPerfectMatch(options, piece))
                 .collect(TieredList.toList());
         newAggPieceGroups.add(nonSplitAggPieces);
 

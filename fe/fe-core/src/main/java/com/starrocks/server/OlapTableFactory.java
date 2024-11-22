@@ -691,7 +691,18 @@ public class OlapTableFactory implements AbstractTableFactory {
             // do not create partition for external table
             if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    if (properties != null && !properties.isEmpty()) {
+                    // In AutoMV standalone tools, when query dump contains external table and query spans
+                    // multiple catalogs, the query dump replaying that automv standalone tools depends on 
+                    // fails because query dump can not handle multiple catalogs and specifies the catalog
+                    // as resource property in table schema. AutoMV try to solve this problem by convert
+                    // a external table(such as JDBCTable, IceBergTable)except HiveTable into OlapTable
+                    // that carries the resource property to record its real catalog.
+                    // Because when AutoMV standalone tools works, the FeConstants.runningUnitTest is always
+                    // true and OlapTable with resource property only set by AutoMV standalone tools, so
+                    // follow code should be deleted mistakenly.
+                    if (FeConstants.runningUnitTest && properties != null && properties.containsKey("resource")) {
+                        table.getTableProperty().getProperties().put("resource", properties.get("resource"));
+                    } else if (properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
                         throw new DdlException("Unknown properties: " + properties);
                     }
