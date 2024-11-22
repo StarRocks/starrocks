@@ -4881,7 +4881,7 @@ public class CreateMaterializedViewTest {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assert.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("List partition only support partition by slot ref column"));
+                Assert.assertTrue(e.getMessage().contains("Partition expression with function is not supported yet"));
             }
         }
         starRocksAssert.dropTable("t3");

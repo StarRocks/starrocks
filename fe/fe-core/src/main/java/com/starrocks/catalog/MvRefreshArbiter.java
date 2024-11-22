@@ -198,10 +198,10 @@ public class MvRefreshArbiter {
                 List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
-                    Map<String, PListCell> partitionNameWithRange = getMVPartitionNameWithList(baseTable,
+                    Map<String, PListCell> mvPartitionNameWithList = getMVPartitionNameWithList(baseTable,
                             refPartitionColumns, updatedPartitionNamesList);
-                    baseTableUpdateInfo.addListPartitionKeys(partitionNameWithRange);
-                    baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
+                    baseTableUpdateInfo.addListPartitionKeys(mvPartitionNameWithList);
+                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
                 } else if (mvPartitionInfo.isRangePartition()) {
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,
                             "Range partition column size must be 1");
