@@ -23,6 +23,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -80,8 +81,10 @@ public class IcebergPartitionTraits extends DefaultTraits {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
                 .map(Snapshot::snapshotId);
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName(), TableVersionRange.withEnd(snapshotId));
+                table.getCatalogName(), getDbName(), getTableName(), requestContext);
     }
 
     @Override
@@ -124,9 +127,9 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 if (field.transform().dedupName().equalsIgnoreCase("time")) {
                     rawValue = IcebergPartitionUtils.normalizeTimePartitionName(rawValue, field,
                             icebergTable.getNativeTable().schema(), column.getType());
-                    exprValue = LiteralExpr.create(rawValue,  column.getType());
+                    exprValue = LiteralExpr.create(rawValue, column.getType());
                 } else {
-                    exprValue = LiteralExpr.create(rawValue,  column.getType());
+                    exprValue = LiteralExpr.create(rawValue, column.getType());
                 }
             }
             partitionKey.pushColumn(exprValue, column.getType().getPrimitiveType());

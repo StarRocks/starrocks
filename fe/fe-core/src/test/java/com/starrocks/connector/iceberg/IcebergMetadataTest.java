@@ -37,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -1062,7 +1063,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
-        List<String> partitionNames = metadata.listPartitionNames("db", "table", version);
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setTableVersionRange(version);
+        List<String> partitionNames = metadata.listPartitionNames("db", "table", requestContext);
         Assert.assertEquals(2, partitionNames.size());
         Assert.assertTrue(partitionNames.contains("k2=2"));
         Assert.assertTrue(partitionNames.contains("k2=3"));
