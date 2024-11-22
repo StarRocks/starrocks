@@ -213,6 +213,13 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     });
 }
 
+Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                            TColumnStatsUsageRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getColumnStatsUsage(*var_result, var_params);
+    });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

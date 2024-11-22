@@ -121,6 +121,7 @@ set(EXEC_FILES
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp

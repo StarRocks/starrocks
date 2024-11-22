@@ -1751,6 +1751,27 @@ struct TFeMemoryRes {
     1: optional list<TFeMemoryItem> items
 }
 
+struct TColumnStatsUsageReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TColumnStatsUsage {
+    1: optional string table_catalog
+    2: optional string table_database
+    3: optional string table_name
+    4: optional string column_name
+    5: optional string usage
+    6: optional string last_used
+    7: optional string created
+}
+
+struct TColumnStatsUsageRes {
+    1: optional list<TColumnStatsUsage> items;
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1984,6 +2005,9 @@ service FrontendService {
 
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
+    // information_schema.column_stats_uage
+    TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
