@@ -1,4 +1,4 @@
--- name: test_lake_sync_mv @cloud
+-- name: test_lake_rollup @cloud
 CREATE TABLE tbl1 (
     k1 date,
     k2 int,
@@ -15,7 +15,7 @@ VALUES
     ("2020-01-11",5,100),
     ("2020-01-11",4,100);
 
-CREATE MATERIALIZED VIEW sync_mv AS SELECT k1, SUM(v1) FROM tbl1 GROUP BY k1;
-function: wait_materialized_view_finish()
+ALTER TABLE tbl1 ADD ROLLUP rollup1 (k1, v1) FROM tbl1;
+function: wait_alter_table_finish("ROLLUP")
 
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
