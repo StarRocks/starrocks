@@ -10,6 +10,10 @@ show variables like '%dynamic_overwrite%';
 -- result:
 dynamic_overwrite	true
 -- !result
+
+
+
+
 -- name: test_dynamic_overwrite
 create table t(k int, v int) partition by (k);
 -- result:
@@ -44,4 +48,78 @@ select * from t;
 4	1
 2	2
 3	2
+-- !result
+
+
+
+-- name: test_dynamic_overwrite_on_other_table
+create table t(k int) partition by range(k)
+(
+    PARTITION p1 VALUES LESS THAN ("1"),
+    PARTITION p2 VALUES LESS THAN ("2")
+);
+-- result:
+-- !result
+insert into t values(0);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select * from t;
+-- result:
+0
+1
+-- !result
+insert overwrite t values(1);
+-- result:
+-- !result
+select * from t;
+-- result:
+1
+-- !result
+set dynamic_overwrite=true;
+-- result:
+-- !result
+insert overwrite t values(0);
+-- result:
+-- !result
+select * from t;
+-- result:
+0
+-- !result
+create table t1(k int)
+PARTITION BY LIST (k) (
+   PARTITION p1 VALUES IN ("1"),
+   PARTITION p2 VALUES IN ("0")
+);
+-- result:
+-- !result
+insert into t1 values(0);
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+select * from t1;
+-- result:
+1
+0
+-- !result
+insert overwrite t1 values(1);
+-- result:
+-- !result
+select * from t1;
+-- result:
+1
+-- !result
+set dynamic_overwrite=true;
+-- result:
+-- !result
+insert overwrite t1 values(0);
+-- result:
+-- !result
+select * from t1;
+-- result:
+0
 -- !result
