@@ -130,7 +130,8 @@ public class InsertAnalyzer {
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
                 checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             } else {
-                if ((insertStmt.isOverwrite() && session.getSessionVariable().isDynamicOverwrite())) {
+                if ((insertStmt.isOverwrite() && session.getSessionVariable().isDynamicOverwrite())
+                            && olapTable.supportedAutomaticPartition()) {
                     insertStmt.setIsDynamicOverwrite(true);
                 } else {
                     for (Partition partition : olapTable.getPartitions()) {
