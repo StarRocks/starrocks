@@ -20,7 +20,6 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -71,14 +70,13 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
         Statistics.Builder builder = Statistics.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        if (hmsTbl.isUnPartitioned()) {
-            HivePartitionStats tableStats = hmsOps.getTableStatistics(hmsTbl.getDbName(), hmsTbl.getTableName());
+        if (table.isUnPartitioned()) {
+            HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
         }
 
         int sampleSize = getSamplePartitionSize(session);
-        List<String> partitionColumnNames = hmsTbl.getPartitionColumnNames();
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .peek(partitionKey -> checkState(partitionKey.getKeys().size() == partitionColumnNames.size(),
                         "columns size is " + partitionColumnNames.size() +
@@ -138,9 +136,9 @@ public class HiveStatisticsProvider {
     }
 
     public long getEstimatedRowCount(Table table, List<PartitionKey> partitionKeys) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        List<Partition> partitions = hmsTbl.isUnPartitioned() ?
-                Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
+        List<Partition> partitions = table.isUnPartitioned() ?
+                Lists.newArrayList(
+                        hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList())) :
                 Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
 
         List<RemoteFileInfo> remoteFileInfos =
@@ -153,7 +151,7 @@ public class HiveStatisticsProvider {
         }
 
         List<Column> dataColumns = table.getColumns().stream()
-                .filter(column -> hmsTbl.getDataColumnNames().contains(column.getName()))
+                .filter(column -> table.getDataColumnNames().contains(column.getName()))
                 .collect(Collectors.toList());
 
         if (totalBytes <= 0) {

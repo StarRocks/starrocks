@@ -51,6 +51,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
     private final OptimizerContext optimizerContext;
     private final MaterializedView mv;
     private final Map<Table, BaseCompensation<?>> compensations;
+
     // for olap table
     public OptCompensator(OptimizerContext optimizerContext,
                           MaterializedView mv,
@@ -135,9 +136,9 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
             // refresh iceberg table's metadata
             IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
             String catalogName = cachedIcebergTable.getCatalogName();
-            String dbName = cachedIcebergTable.getRemoteDbName();
-            TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+            String dbName = cachedIcebergTable.getCatalogDBName();
+            TableName refTableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(refTableName).orElse(null);
             if (currentTable == null) {
                 return null;
             }

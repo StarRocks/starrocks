@@ -455,10 +455,10 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         IcebergTable icebergTable = (IcebergTable) table;
         readLock();
         try {
-            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(icebergTable.getRemoteDbName()).
-                    get(icebergTable.getRemoteTableName()).partitionInfoMap;
+            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(icebergTable.getCatalogDBName()).
+                    get(icebergTable.getCatalogTableName()).partitionInfoMap;
             if (icebergTable.isUnPartitioned()) {
-                return Lists.newArrayList(partitionInfoMap.get(icebergTable.getRemoteTableName()));
+                return Lists.newArrayList(partitionInfoMap.get(icebergTable.getCatalogTableName()));
             } else {
                 return partitionNames.stream().map(partitionInfoMap::get).collect(Collectors.toList());
             }
@@ -472,7 +472,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit, TableVersionRange version) {
         MockIcebergTable icebergTable = (MockIcebergTable) table;
-        String hiveDb = icebergTable.getRemoteDbName();
+        String hiveDb = icebergTable.getCatalogDBName();
         String tblName = icebergTable.getName();
 
         readLock();
@@ -546,7 +546,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
         private void initPartitionInfos(List<String> partitionNames) {
             if (partitionNames.isEmpty()) {
-                partitionInfoMap.put(icebergTable.getRemoteTableName(), new Partition(PARTITION_INIT_VERSION));
+                partitionInfoMap.put(icebergTable.getCatalogTableName(), new Partition(PARTITION_INIT_VERSION));
             } else {
                 for (String partitionName : partitionNames) {
                     partitionInfoMap.put(partitionName, new Partition(PARTITION_INIT_VERSION));

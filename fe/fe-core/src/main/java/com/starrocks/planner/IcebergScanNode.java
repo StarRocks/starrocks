@@ -101,7 +101,7 @@ public class IcebergScanNode extends ScanNode {
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws UserException {
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
-            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getRemoteTableName()));
+            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
             return;
         }
 
@@ -120,7 +120,7 @@ public class IcebergScanNode extends ScanNode {
             List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
             if (splits.isEmpty()) {
                 LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
-                        icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), icebergJobPlanningPredicate);
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
                 return;
             }
             remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
@@ -212,7 +212,7 @@ public class IcebergScanNode extends ScanNode {
         StringBuilder output = new StringBuilder();
 
         output.append(prefix).append("TABLE: ")
-                .append(icebergTable.getRemoteDbName())
+                .append(icebergTable.getCatalogDBName())
                 .append(".")
                 .append(icebergTable.getName())
                 .append("\n");
@@ -251,8 +251,8 @@ public class IcebergScanNode extends ScanNode {
             ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
             requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
-                    icebergTable.getRemoteTableName(), requestContext);
+                    icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
+                    icebergTable.getCatalogTableName(), requestContext);
 
             if (selectedPartitionCount == -1) {
                 if (scanRangeSource != null) {

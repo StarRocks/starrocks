@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -144,10 +143,8 @@ public class HudiMetadata implements ConnectorMetadata {
 
     private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-
-        if (((HiveMetaStoreTable) table).isUnPartitioned()) {
-            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
+        if ((table).isUnPartitioned()) {
+            partitions.add(hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList()));
         } else {
             // convert partition keys to partition names.
             // and handle partition names in following code.
@@ -156,7 +153,7 @@ public class HudiMetadata implements ConnectorMetadata {
             List<String> partitionNames = params.getPartitionNames();
             if (params.getPartitionKeys() != null) {
                 partitionNames =
-                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(hmsTbl.getPartitionColumnNames(), x))
+                        params.getPartitionKeys().stream().map(x -> toHivePartitionName(table.getPartitionColumnNames(), x))
                                 .collect(
                                         Collectors.toList());
             }
@@ -244,10 +241,9 @@ public class HudiMetadata implements ConnectorMetadata {
         if (isResourceMappingCatalog(catalogName)) {
             Table table = GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTable(dbName, tableName);
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            if (hmsTable != null) {
+            if (table != null) {
                 cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                        hmsTable.getDbName(), hmsTable.getTableName(), table));
+                        table.getCatalogDBName(), table.getCatalogTableName(), table));
             }
         }
     }
