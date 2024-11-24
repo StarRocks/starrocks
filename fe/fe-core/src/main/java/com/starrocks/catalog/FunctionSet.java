@@ -801,6 +801,10 @@ public class FunctionSet {
                     .add(INTERSECT_COUNT)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
+                    .add(DS_HLL_COUNT_DISTINCT)
+                    .add(DS_QUANTILE)
+                    .add(DS_FREQUENT)
+                    .add(DS_THETA)
                     .build();
 
     public static final Set<String> RANK_RALATED_FUNCTIONS =
