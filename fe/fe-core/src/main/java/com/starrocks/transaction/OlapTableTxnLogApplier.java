@@ -132,8 +132,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
                                 replica.getState())
                                 || errorReplicaIds.contains(replica.getId())) {
-                            if (isDependencyReplicasNotCommited && replica.getVersion() >= version
-                                    && replica.getState() == Replica.ReplicaState.DECOMMISSION) {
+                            if (isDependencyReplicasNotCommited && replica.getVersion() >= version) {
                                 // this means the replica is a normal replica
                                 // success version always move forward
                                 lastSucessVersion = version;
