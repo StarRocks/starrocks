@@ -24,7 +24,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -371,8 +370,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     @Override
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
 
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
@@ -480,10 +479,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         if (enableListNameCache) {
             partitionKeysCache.put(hivePartitionValue, updatedPartitionKeys);
         }
-
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
         List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
-        if (hmsTable.isUnPartitioned()) {
+        if (updatedTable.isUnPartitioned()) {
             HivePartitionName hivePartitionName = HivePartitionName.of(hiveDbName, hiveTblName, Lists.newArrayList());
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
@@ -662,8 +659,8 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
-        String dbName = updatedHiveTable.getDbName();
-        String tableName = updatedHiveTable.getTableName();
+        String dbName = updatedHiveTable.getCatalogDBName();
+        String tableName = updatedHiveTable.getCatalogTableName();
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.put(databaseTableName, updatedHiveTable);
         if (updatedHiveTable.isUnPartitioned()) {

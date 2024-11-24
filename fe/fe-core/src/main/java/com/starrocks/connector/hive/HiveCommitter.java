@@ -124,7 +124,7 @@ public class HiveCommitter {
             if (table.isUnPartitioned()) {
                 if (partitionUpdates.size() != 1) {
                     throw new StarRocksConnectorException("There are multiple updates in the unpartition table: %s.%s",
-                            table.getDbName(), table.getTableName());
+                            table.getCatalogDBName(), table.getCatalogTableName());
                 }
 
                 if (mode == PartitionUpdate.UpdateMode.APPEND) {
@@ -158,8 +158,8 @@ public class HiveCommitter {
 
     public void asyncRefreshOthersFeMetadataCache(List<PartitionUpdate> partitionUpdates) {
         String catalogName = table.getCatalogName();
-        String dbName = table.getDbName();
-        String tableName = table.getTableName();
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
         List<String> partitionNames;
         if (table.isUnPartitioned()) {
             partitionNames = new ArrayList<>();
@@ -192,8 +192,8 @@ public class HiveCommitter {
             fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, pu.getWritePath(), pu.getTargetPath(), pu.getFileNames());
         }
         updateStatisticsTasks.add(new UpdateStatisticsTask(
-                table.getDbName(),
-                table.getTableName(),
+                table.getCatalogDBName(),
+                table.getCatalogTableName(),
                 Optional.empty(),
                 updateStats,
                 true));
@@ -213,7 +213,7 @@ public class HiveCommitter {
         fileOps.renameDirectory(writePath, targetPath,
                 () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
 
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.empty(), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -267,8 +267,9 @@ public class HiveCommitter {
                     fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, writePath, targetPath, pu.getFileNames());
                 }
 
-                UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
-                        Optional.of(pu.getName()), updateStats, true);
+                UpdateStatisticsTask updateStatsTask =
+                        new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                                Optional.of(pu.getName()), updateStats, true);
                 updateStatisticsTasks.add(updateStatsTask);
             }
         }
@@ -298,7 +299,7 @@ public class HiveCommitter {
         }
 
         remoteFilesCacheToRefresh.add(targetPath);
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.of(pu.getName()), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -409,7 +410,8 @@ public class HiveCommitter {
         for (RenameDirectoryTask directoryRenameTask : renameDirTasksForAbort) {
             try {
                 if (fileOps.pathExists(directoryRenameTask.getRenameFrom())) {
-                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {});
+                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {
+                    });
                 }
             } catch (Throwable t) {
                 LOG.error("Failed to undo rename dir from {} to {}",
@@ -444,8 +446,8 @@ public class HiveCommitter {
 
     private HivePartition buildHivePartition(PartitionUpdate partitionUpdate) {
         return HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
                 .setColumns(table.getDataColumnNames().stream()
                         .map(table::getColumn)
                         .collect(Collectors.toList()))
@@ -595,7 +597,7 @@ public class HiveCommitter {
         private boolean done;
 
         public UpdateStatisticsTask(String dbName, String tableName, Optional<String> partitionName,
-                                         HivePartitionStats statistics, boolean merge) {
+                                    HivePartitionStats statistics, boolean merge) {
             this.dbName = requireNonNull(dbName, "dbName is null");
             this.tableName = requireNonNull(tableName, "tableName is null");
             this.partitionName = requireNonNull(partitionName, "partitionName is null");
@@ -627,7 +629,7 @@ public class HiveCommitter {
             if (partitionName.isPresent()) {
                 return "alter partition parameters " + tableName + " " + partitionName.get();
             } else {
-                return "alter table parameters " +  tableName;
+                return "alter table parameters " + tableName;
             }
         }
 
@@ -754,7 +756,7 @@ public class HiveCommitter {
 
     private synchronized void addSuppressedExceptions(
             List<Throwable> suppressedExceptions, Throwable t,
-             List<String> descriptions, String description) {
+            List<String> descriptions, String description) {
         descriptions.add(description);
         if (suppressedExceptions.size() < 3) {
             suppressedExceptions.add(t);

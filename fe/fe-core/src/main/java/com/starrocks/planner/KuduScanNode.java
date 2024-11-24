@@ -103,7 +103,7 @@ public class KuduScanNode extends ScanNode {
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {
             LOG.warn("There is no tokens on {}.{} and predicate: [{}]",
-                    kuduTable.getDbName(), kuduTable.getTableName(), predicate);
+                    kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName(), predicate);
             return;
         }
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();

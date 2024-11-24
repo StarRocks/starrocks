@@ -26,7 +26,7 @@ public class KuduPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((KuduTable) table).getDbName();
+        return ((KuduTable) table).getCatalogDBName();
     }
 
     @Override

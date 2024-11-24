@@ -253,7 +253,7 @@ public class KuduMetadata implements ConnectorMetadata {
 
     private String getKuduFullTableName(KuduTable table) {
         return table.getKuduTableName().orElse(
-                getKuduFullTableName(table.getDbName(), table.getTableName()));
+                getKuduFullTableName(table.getCatalogDBName(), table.getCatalogTableName()));
     }
 
     @Override
@@ -317,7 +317,7 @@ public class KuduMetadata implements ConnectorMetadata {
         long rowCount;
         if (metastore.isPresent()) {
             HivePartitionStats tableStatistics =
-                    metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
+                    metastore.get().getTableStatistics(kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
         } else {
             try {

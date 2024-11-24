@@ -127,7 +127,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn.getName());
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn.getName(), table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+                    partitionColumn.getName(), table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         String transform = partitionField.transform().toString();
         IcebergPartitionTransform icebergPartitionTransform = IcebergPartitionTransform.fromString(transform);
@@ -195,7 +195,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn);
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColumn, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+                    partitionColumn, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {
@@ -259,7 +259,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColName);
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-                    partitionColName, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+                    partitionColName, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {

@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
@@ -179,8 +178,8 @@ public class ReplayMetadataMgr extends MetadataMgr {
                                          ScalarOperator predicate) {
         Statistics.Builder resStatistics = Statistics.builder();
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         Statistics statistics = replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
         Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = statistics.getColumnStatistics();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatisticMap.entrySet()) {

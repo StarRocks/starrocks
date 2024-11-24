@@ -231,7 +231,7 @@ public class Explain {
             PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- HIVE-SCAN [")
-                    .append(((HiveTable) scan.getTable()).getTableName())
+                    .append(((HiveTable) scan.getTable()).getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -248,7 +248,7 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
-                    .append(((IcebergTable) scan.getTable()).getRemoteTableName())
+                    .append(((IcebergTable) scan.getTable()).getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -263,7 +263,7 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
-                    .append(((HudiTable) scan.getTable()).getTableName())
+                    .append(((HudiTable) scan.getTable()).getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)

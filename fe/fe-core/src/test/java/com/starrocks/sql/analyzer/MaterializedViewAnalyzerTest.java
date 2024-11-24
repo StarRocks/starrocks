@@ -181,7 +181,7 @@ public class MaterializedViewAnalyzerTest {
                 {
                     table.getCatalogName();
                     result = "test_catalog";
-                    table.getDbName();
+                    table.getCatalogDBName();
                     result = "test_db";
                     table.getTableIdentifier();
                     result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";

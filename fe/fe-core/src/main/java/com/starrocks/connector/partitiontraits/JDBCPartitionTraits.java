@@ -32,7 +32,7 @@ public class JDBCPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((JDBCTable) table).getDbName();
+        return ((JDBCTable) table).getCatalogDBName();
     }
 
     @Override

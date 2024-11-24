@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -85,7 +84,6 @@ public class IcebergTable extends Table {
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
-
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
@@ -98,7 +96,7 @@ public class IcebergTable extends Table {
         this.resourceName = resourceName;
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
-        this.comment =  comment;
+        this.comment = comment;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -108,15 +106,18 @@ public class IcebergTable extends Table {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
 
-    public String getRemoteDbName() {
+    @Override
+    public String getCatalogDBName() {
         return remoteDbName;
     }
 
-    public String getRemoteTableName() {
+    @Override
+    public String getCatalogTableName() {
         return remoteTableName;
     }
 
@@ -141,6 +142,7 @@ public class IcebergTable extends Table {
         }
         return partitionColumns;
     }
+
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {
@@ -428,7 +430,6 @@ public class IcebergTable extends Table {
             this.catalogName = catalogName;
             return this;
         }
-
 
         public Builder setComment(String comment) {
             this.comment = comment;

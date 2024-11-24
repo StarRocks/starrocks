@@ -57,7 +57,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
  * This logic should be decoupled from metastore when the related interfaces are ready.
  */
-public class HudiTable extends Table implements HiveMetaStoreTable {
+public class HudiTable extends Table {
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
     private static final String JSON_KEY_HUDI_DB = "database";
@@ -124,10 +124,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.tableType = type;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return hiveDbName;
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
@@ -141,6 +143,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
+    @Override
     public String getTableLocation() {
         return hudiProperties.get(HUDI_BASE_PATH);
     }
@@ -150,7 +153,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public String getTableName() {
+    public String getCatalogTableName() {
         return hiveTableName;
     }
 
@@ -175,6 +178,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+    @Override
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }

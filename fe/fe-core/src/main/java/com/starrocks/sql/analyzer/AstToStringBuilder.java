@@ -61,7 +61,6 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -1833,8 +1832,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hiveTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
             if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
@@ -1856,8 +1855,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.ICEBERG) {
@@ -1866,8 +1865,8 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
+            sb.append("\"database\" = \"").append(icebergTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getCatalogTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.JDBC) {
@@ -1971,7 +1970,7 @@ public class AstToStringBuilder {
         // Location
         String location = null;
         if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
+            location = (table).getTableLocation();
         } else if (table.isIcebergTable()) {
             location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {

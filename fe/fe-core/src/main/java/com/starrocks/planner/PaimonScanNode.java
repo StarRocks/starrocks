@@ -137,7 +137,7 @@ public class PaimonScanNode extends ScanNode {
 
         if (splits.isEmpty()) {
             LOG.warn("There is no paimon splits on {}.{} and predicate: [{}]",
-                    paimonTable.getDbName(), paimonTable.getTableName(), predicate);
+                    paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), predicate);
             return;
         }
 
@@ -323,7 +323,7 @@ public class PaimonScanNode extends ScanNode {
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
+                paimonTable.getCatalogName(), paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),

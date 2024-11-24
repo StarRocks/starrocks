@@ -27,7 +27,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -278,9 +277,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Map<String, Histogram> histogramStatistics;
         if (table.isNativeTableOrMaterializedView()) {
             columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table,
-                            columnNames);
+                    columnNames);
             histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table,
-                            columnNames);
+                    columnNames);
         } else {
             columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table,
                     columnNames).stream().map(ConnectorTableColumnStats::getColumnStatistic).collect(Collectors.toList());
@@ -623,7 +622,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
@@ -641,6 +639,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         return visitOperator(node, context);
     }
+
     @Override
     public Void visitLogicalOdpsScan(LogicalOdpsScanOperator node, ExpressionContext context) {
         return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
@@ -652,7 +651,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
-                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
@@ -673,7 +672,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeKuduScanNode(Operator node, ExpressionContext context, Table table,
-            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
             String catalogName = ((KuduTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
@@ -720,7 +719,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             List<PartitionKey> partitionKeys = predicates.hasPrunedPartition() ? predicates.getSelectedPartitionKeys() :
                     PartitionUtil.getPartitionKeys(table);
 
-            String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
+            String catalogName = (table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, colRefToColumnMetaMap, partitionKeys, null);
             context.setStatistics(statistics);
@@ -741,7 +740,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
         }
     }
-    
+
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                     int outputRowCount) {
@@ -944,7 +943,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 Operator child = context.getOptExpression().inputAt(0).getOp();
                 if (child instanceof LogicalScanOperator || child instanceof PhysicalScanOperator) {
                     addSubFiledStatistics(child, ImmutableMap.of(requiredColumnRefOperator,
-                                    (SubfieldOperator) mapOperator), builder);
+                            (SubfieldOperator) mapOperator), builder);
                     continue;
                 }
             }
@@ -1275,7 +1274,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<ColumnStatistic> estimateColumnStatistics = childOutputColumns.get(0).stream().map(columnRefOperator ->
                 context.getChildStatistics(0).getColumnStatistic(columnRefOperator)).collect(Collectors.toList());
 
-
         boolean isFromIcebergEqualityDeleteRewrite;
         if (node.isLogical()) {
             isFromIcebergEqualityDeleteRewrite = ((LogicalUnionOperator) node).isFromIcebergEqualityDeleteRewrite();
@@ -1503,7 +1501,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     //  use a damping method to moderately decrease the impact of subsequent predicates to account for correlated columns.
     //  This damping only occurs on sorted predicates of the same table, otherwise we assume independence.
     //  complex predicate(such as t1.a + t2.b = t3.c) also assume independence.
-    //  For example, given AND predicates (t1.a = t2.a AND t1.b = t2.b AND t2.b = t3.a) with the given selectivity(Represented as S for simple):
+    //  For example, given AND predicates (t1.a = t2.a AND t1.b = t2.b AND t2.b = t3.a) with the given selectivity(Represented
+    //  as S for simple):
     //  t1.a = t2.a has selectivity(S1) 0.3
     //  t1.b = t2.b has selectivity(S2) 0.5
     //  t2.b = t3.a has selectivity(S3) 0.1

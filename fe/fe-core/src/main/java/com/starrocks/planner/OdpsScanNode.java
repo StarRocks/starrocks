@@ -95,7 +95,7 @@ public class OdpsScanNode extends ScanNode {
         OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
         if (splitsInfo.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",
-                    table.getDbName(), table.getTableName(), predicate);
+                    table.getCatalogDBName(), table.getCatalogTableName(), predicate);
             return;
         }
         Map<String, String> commonSplitInfo = new HashMap<>();
@@ -155,7 +155,7 @@ public class OdpsScanNode extends ScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(prefix).append("TABLE: ").append(table.getDbName()).append(".").append(table.getTableName())
+        output.append(prefix).append("TABLE: ").append(table.getCatalogDBName()).append(".").append(table.getCatalogTableName())
                 .append("\n");
         return output.toString();
     }
@@ -177,7 +177,7 @@ public class OdpsScanNode extends ScanNode {
         tHdfsScanNode.setSql_predicates(explainString);
 
         if (table != null) {
-            tHdfsScanNode.setTable_name(table.getTableName());
+            tHdfsScanNode.setTable_name(table.getCatalogTableName());
         }
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

@@ -63,8 +63,8 @@ public class HiveAlterTableExecutor extends ConnectorAlterTableExecutor {
         String partitionString = partitionColumns.get(0) + "=" + partitionDesc.getValues().get(0);
         String partitionPath = tablePath + "/" + partitionString;
         HivePartition hivePartition = HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
                 .setColumns(table.getDataColumnNames().stream()
                         .map(table::getColumn)
                         .collect(Collectors.toList()))
@@ -78,6 +78,6 @@ public class HiveAlterTableExecutor extends ConnectorAlterTableExecutor {
                 .build();
         HivePartitionWithStats partitionWithStats =
                 new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
-        hmsOps.addPartitions(table.getDbName(), table.getTableName(), Lists.newArrayList(partitionWithStats));
+        hmsOps.addPartitions(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList(partitionWithStats));
     }
 }

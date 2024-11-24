@@ -59,7 +59,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
@@ -658,7 +657,6 @@ public class GlobalStateMgr {
         this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
         this.portConnectivityChecker = new PortConnectivityChecker();
-
 
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr(
@@ -1526,7 +1524,6 @@ public class GlobalStateMgr {
             checkpointWorkerStarted = true;
             LOG.info("global state mgr checkpoint worker thread started. thread id is {}", checkpointThreadId);
         }
-
 
         portConnectivityChecker.start();
         tabletStatMgr.start();
@@ -2570,8 +2567,8 @@ public class GlobalStateMgr {
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Preconditions.checkState(table instanceof HiveMetaStoreTable);
-            catalogName = ((HiveMetaStoreTable) table).getCatalogName();
+            Preconditions.checkState(table.isHMSTable());
+            catalogName = (table).getCatalogName();
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
