@@ -16,11 +16,13 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -29,24 +31,17 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StarRocksIcebergTableScan;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
-import org.apache.iceberg.TableScan;
-import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,17 +53,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+    private static final int MEMORY_META_SAMPLES = 10;
+    private static final int MEMORY_FILE_SAMPLES = 100;
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final Cache<IcebergTableName, Table> tables;
-    private final Cache<IcebergTableName, List<String>> partitionNames;
     private final Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -77,6 +72,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
+
+    private final LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
 
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
@@ -88,8 +85,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.tables = newCacheBuilder(icebergProperties.getIcebergTableCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
-        this.partitionNames = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
+                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
+                CacheLoader.asyncReloading(new CacheLoader<>() {
+                    @Override
+                    public Map<String, Partition> load(IcebergTableName key) throws Exception {
+                        // use default executor service.
+                        return delegate.getPartitions(key.dbName, key.tableName, key.snapshotId, null);
+                    }
+                }, executorService));
         this.dataFileCache = enableCache ?
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
@@ -194,56 +198,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
-        IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName, snapshotId);
-        if (partitionNames.asMap().containsKey(icebergTableName)) {
-            return partitionNames.getIfPresent(icebergTableName);
-        } else {
-            org.apache.iceberg.Table icebergTable = delegate.getTable(dbName, tableName);
-            List<String> partitionNames = Lists.newArrayList();
-
-            if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-                return partitionNames;
-            }
-
-            if (snapshotId == -1) {
-                if (icebergTable.currentSnapshot() == null) {
-                    return partitionNames;
-                } else {
-                    snapshotId = icebergTable.currentSnapshot().snapshotId();
-                }
-            }
-
-            partitionNames = listPartitionNamesWithSnapshotId(icebergTable, dbName, tableName, snapshotId, executorService);
-            this.partitionNames.put(icebergTableName, partitionNames);
-            return partitionNames;
-        }
-    }
-
-    private List<String> listPartitionNamesWithSnapshotId(
-            Table table, String dbName, String tableName, long snapshotId, ExecutorService executorService) {
-        Set<String> partitionNames = Sets.newHashSet();
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, PlanMode.LOCAL);
-        scanContext.setOnlyReadCache(true);
-        TableScan tableScan = getTableScan(table, scanContext)
-                .planWith(executorService)
-                .useSnapshot(snapshotId);
-
-        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
-                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
-
-            while (fileScanTaskIterator.hasNext()) {
-                FileScanTask scanTask = fileScanTaskIterator.next();
-                StructLike partition = scanTask.file().partition();
-                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
-            }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
-                    dbName, tableName), e);
-        }
-
-        return new ArrayList<>(partitionNames);
+    public Map<String, Partition> getPartitions(String dbName, String tableName, long snapshotId,
+                                                ExecutorService executorService) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
+        return partitionCache.getUnchecked(key);
     }
 
     @Override
@@ -255,7 +213,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
-            partitionNames.invalidate(icebergTableName);
+            partitionCache.invalidate(icebergTableName);
         } else {
             BaseTable currentTable = (BaseTable) tables.getIfPresent(icebergTableName);
             BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
@@ -300,14 +258,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
-        List<String> updatedPartitionNames = updatedTable.spec().isPartitioned() ?
-                listPartitionNamesWithSnapshotId(updatedTable, dbName, tableName, updatedSnapshotId, executorService) :
-                new ArrayList<>();
-
+        partitionCache.invalidate(baseIcebergTableName);
+        partitionCache.getUnchecked(updatedIcebergTableName);
         synchronized (this) {
-            partitionNames.put(updatedIcebergTableName, updatedPartitionNames);
             tables.put(updatedIcebergTableName, updatedTable);
-            partitionNames.invalidate(baseIcebergTableName);
         }
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
@@ -344,7 +298,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         Config.background_refresh_metadata_time_secs_since_last_access_secs) {
                     return;
                 }
-                
+
                 refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
@@ -354,18 +308,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
-        partitionNames.invalidate(icebergTableName);
+        partitionCache.invalidate(icebergTableName);
     }
 
     public void invalidateCache(IcebergTableName icebergTableName) {
         tables.invalidate(icebergTableName);
-        partitionNames.invalidate(icebergTableName);
+        partitionCache.invalidate(icebergTableName);
     }
 
     @Override
     public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
-        scanContext.setLocalParallelism(icebergProperties.getIcebergJobPlanningThreadNum());
-        scanContext.setLocalPlanningMaxSlotSize(icebergProperties.getLocalPlanningMaxSlotBytes());
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
@@ -428,24 +380,75 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
-    @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(databases) +
-                SizeEstimator.estimate(tables) +
-                SizeEstimator.estimate(partitionNames) +
-                SizeEstimator.estimate(dataFileCache) +
-                SizeEstimator.estimate(deleteFileCache);
+    private List<List<String>> getAllCachedPartitionNames() {
+        List<List<String>> ans = new ArrayList<>();
+        for (Map<String, Partition> kv : partitionCache.asMap().values()) {
+            ans.add(new ArrayList<>(kv.keySet()));
+        }
+        return ans;
+    }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
+                        .stream()
+                        .limit(MEMORY_META_SAMPLES)
+                        .collect(Collectors.toList()),
+                databases.size());
+
+        List<List<String>> partitionNames = getAllCachedPartitionNames();
+        List<Object> partitions = partitionNames
+                .stream()
+                .flatMap(List::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long partitionTotal = partitionNames
+                .stream()
+                .mapToLong(List::size)
+                .sum();
+        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
+
+        List<Object> dataFiles = dataFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long dataFilesTotal = dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
+
+        List<Object> deleteFiles = deleteFileCache.asMap().values()
+                .stream().flatMap(Set::stream)
+                .limit(MEMORY_FILE_SAMPLES)
+                .collect(Collectors.toList());
+        long deleteFilesTotal = deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum();
+        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
+
+        return Lists.newArrayList(dbSamples, partitionSamples, dataFileSamples, deleteFileSamples);
     }
 
     @Override
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
+        List<List<String>> partitionNames = getAllCachedPartitionNames();
         counter.put("Database", databases.size());
         counter.put("Table", tables.size());
-        counter.put("PartitionNames", partitionNames.size());
-        counter.put("ManifestOfDataFile", dataFileCache.size());
-        counter.put("ManifestOfDeleteFile", deleteFileCache.size());
+        counter.put("PartitionNames", partitionNames
+                .stream()
+                .mapToLong(List::size)
+                .sum());
+        counter.put("ManifestOfDataFile", dataFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
+        counter.put("ManifestOfDeleteFile", deleteFileCache.asMap().values()
+                .stream()
+                .mapToLong(Set::size)
+                .sum());
         return counter;
     }
 }

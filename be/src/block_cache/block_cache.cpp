@@ -19,7 +19,6 @@
 #ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
 #endif
-#include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 
@@ -123,6 +122,15 @@ Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handl
     return _kv_cache->read_object(cache_key, handle, options);
 }
 
+bool BlockCache::exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const {
+    if (size == 0) {
+        return true;
+    }
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->exist(block_key);
+}
+
 Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "remove block key: " << cache_key << " with invalid args, offset: " << offset
@@ -182,6 +190,14 @@ Status BlockCache::shutdown() {
     }
     _initialized.store(false, std::memory_order_relaxed);
     return st;
+}
+
+void BlockCache::disk_spaces(std::vector<DirSpace>* spaces) {
+    spaces->clear();
+    auto metrics = _kv_cache->cache_metrics(0);
+    for (auto& dir : metrics.disk_dir_spaces) {
+        spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
+    }
 }
 
 DataCacheEngineType BlockCache::engine_type() {

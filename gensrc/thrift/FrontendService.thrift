@@ -82,6 +82,7 @@ struct TColumnDesc {
   // Let FE control the type, which makes it easier to modify and display complex types
   26: optional string columnTypeStr
   27: optional string dataType
+  28: optional string generatedColumnExprStr
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -116,17 +117,17 @@ struct TShowVariableRequest {
     2: required Types.TVarType varType
 }
 
-// Results of a call to describeTable()
-struct TShowVariableResult {
-    1: required map<string, string> variables
-    2: optional list<TVerboseVariableRecord> verbose_variables
-}
-
 struct TVerboseVariableRecord {
     1: optional string variable_name
     2: optional string value
     3: optional string default_value
     4: optional bool is_changed
+}
+
+// Results of a call to describeTable()
+struct TShowVariableResult {
+    1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
 }
 
 // Valid table file formats
@@ -404,6 +405,8 @@ struct TMaterializedViewStatus {
 
     26: optional string extra_message
     27: optional string query_rewrite_status
+
+    28: optional string creator
 }
 
 struct TListPipesParams {
@@ -495,6 +498,7 @@ struct TTaskInfo {
     6: optional i64 expire_time
     7: optional string properties
     8: optional string catalog
+    9: optional string creator
 }
 
 struct TGetTaskInfoResult {
@@ -532,20 +536,16 @@ struct TGetLoadsParams {
     5: optional string load_type
 }
 
-struct TGetLoadsResult {
-    1: optional list<TLoadInfo> loads
-}
-
-struct TGetTrackingLoadsResult {
-    1: optional list<TTrackingLoadInfo> trackingLoads;
-}
-
 struct TTrackingLoadInfo {
     1: optional i64 job_id
     2: optional string label
     3: optional string db
     4: optional list<string> urls
     5: optional string load_type
+}
+
+struct TGetTrackingLoadsResult {
+    1: optional list<TTrackingLoadInfo> trackingLoads;
 }
 
 struct TLoadInfo {
@@ -584,8 +584,8 @@ struct TLoadInfo {
     33: optional i64 num_scan_bytes
 }
 
-struct TGetRoutineLoadJobsResult {
-    1: optional list<TRoutineLoadJobInfo> loads
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
 }
 
 struct TRoutineLoadJobInfo {
@@ -610,8 +610,8 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
 }
 
-struct TGetStreamLoadsResult {
-    1: optional list<TStreamLoadInfo> loads
+struct TGetRoutineLoadJobsResult {
+    1: optional list<TRoutineLoadJobInfo> loads
 }
 
 struct TStreamLoadInfo {
@@ -643,6 +643,10 @@ struct TStreamLoadInfo {
 
 }
 
+struct TGetStreamLoadsResult {
+    1: optional list<TStreamLoadInfo> loads
+}
+
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -666,10 +670,6 @@ struct TReportAuditStatisticsResult {
 // Service Protocol Details
 enum FrontendServiceVersion {
   V1
-}
-
-struct TBatchReportExecStatusParams {
-  1: required list<TReportExecStatusParams> params_list
 }
 
 // The results of an INSERT query, sent to the coordinator as part of
@@ -701,7 +701,7 @@ struct TReportExecStatusParams {
 
   // New errors that have not been reported to the coordinator
   // optional in V1
-  9: optional list<string> error_log
+  9: optional list<string> error_log // Decrepated
 
   // URL of files need to load
   // optional
@@ -743,6 +743,10 @@ struct TReportExecStatusParams {
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
+}
+
 struct TReportFragmentFinishParams {
     1: optional Types.TUniqueId query_id
     2: optional Types.TUniqueId fragment_instance_id
@@ -751,6 +755,12 @@ struct TReportFragmentFinishParams {
 
 struct TReportFragmentFinishResponse {
     1: optional Status.TStatus status
+}
+
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
 }
 
 struct TAuditStatistics {
@@ -767,12 +777,6 @@ struct TReportAuditStatisticsParams {
     1: optional Types.TUniqueId query_id
     2: optional Types.TUniqueId fragment_instance_id
     3: optional TAuditStatistics audit_statistics
-}
-
-struct TAuditStatisticsItem {
-    1: optional i64 scan_rows
-    2: optional i64 scan_bytes
-    3: optional i64 table_id
 }
 
 struct TFeResult {
@@ -814,6 +818,7 @@ struct TMasterOpRequest {
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
     35: optional string session_id
+    36: optional i32 connectionId
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -876,7 +881,7 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
-    
+
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
     102: optional i64 backend_id
@@ -945,7 +950,7 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
-    56: optional string payload_compression_type 
+    56: optional string payload_compression_type
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
@@ -956,6 +961,23 @@ struct TStreamLoadPutResult {
     1: required Status.TStatus status
     // valid when status is OK
     2: optional InternalService.TExecPlanFragmentParams params
+}
+
+struct TMergeCommitRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TMergeCommitResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
 }
 
 struct TKafkaRLTaskProgress {
@@ -1377,6 +1399,7 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+    5: optional bool is_temp
 }
 
 struct TCreatePartitionResult {
@@ -1418,10 +1441,6 @@ struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
 }
 
-struct TGetTablesConfigResponse {
-    1: optional list<TTableConfigInfo> tables_config_infos
-}
-
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
@@ -1437,12 +1456,12 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
-struct TGetPartitionsMetaRequest {
-    1: optional TAuthInfo auth_info
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
 }
 
-struct TGetPartitionsMetaResponse {
-    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
 }
 
 struct TPartitionMetaInfo {
@@ -1476,9 +1495,39 @@ struct TPartitionMetaInfo {
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
 }
 
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+}
+
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
     2: optional string table_name;
+}
+
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
 }
 
 struct TGetTablesInfoResponse {
@@ -1534,6 +1583,32 @@ struct TUpdateResourceUsageRequest {
 
 struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
+}
+
+struct TGetQueryStatisticsRequest {
+}
+
+struct TQueryStatisticsInfo {
+    1: optional i64 queryStartTime
+    2: optional string feIp
+    3: optional string queryId
+    4: optional string connId
+    5: optional string db
+    6: optional string user
+    7: optional i64 cpuCostNs
+    8: optional i64 scanBytes
+    9: optional i64 scanRows
+    10: optional i64 memUsageBytes
+    11: optional i64 spillBytes
+    12: optional i64 execTime
+    13: optional string wareHouseName
+    14: optional string customQueryId
+    15: optional string resourceGroupName
+}
+
+struct TGetQueryStatisticsResponse {
+    1: optional Status.TStatus status
+    2: optional list<TQueryStatisticsInfo> queryStatistics_infos;
 }
 
 struct TResourceLogicalSlot {
@@ -1592,32 +1667,6 @@ struct TWarehouseInfo {
 struct TGetWarehousesResponse {
     1: optional Status.TStatus status
     2: optional list<TWarehouseInfo> warehouse_infos;
-}
-
-struct TTableInfo {
-    1: optional string table_catalog
-    2: optional string table_schema
-    3: optional string table_name
-    4: optional string table_type
-    5: optional string engine
-    6: optional i64 version
-    7: optional string row_format
-    8: optional i64 table_rows
-    9: optional i64 avg_row_length
-    10: optional i64 data_length
-    11: optional i64 max_data_length
-    12: optional i64 index_length
-    13: optional i64 data_free
-    14: optional i64 auto_increment
-    15: optional i64 create_time
-    16: optional i64 update_time
-    17: optional i64 check_time
-    18: optional string table_collation
-    19: optional i64 checksum
-    20: optional string create_options
-    21: optional string table_comment
-    22: optional string session_id
-    23: optional i64 table_id
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1817,6 +1866,28 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1873,6 +1944,8 @@ service FrontendService {
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
+
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
     TRefreshTableResponse refreshTable(1:TRefreshTableRequest request)
@@ -1890,6 +1963,8 @@ service FrontendService {
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
+
+    TGetQueryStatisticsResponse getQueryStatistics(1: TGetQueryStatisticsRequest request)
 
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
@@ -1928,5 +2003,9 @@ service FrontendService {
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
 }
 

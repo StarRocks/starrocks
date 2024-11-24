@@ -71,6 +71,7 @@ struct DeltaWriterOptions {
     // If you need to access it after intialization, please make sure the pointer is valid.
     const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
+    std::map<string, string>* column_to_expr_value = nullptr;
 };
 
 enum State {
@@ -108,6 +109,9 @@ public:
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
     Status commit();
+
+    // Manual flush used by stale memtable flush
+    Status manual_flush();
 
     Status flush_memtable_async(bool eos = false);
 

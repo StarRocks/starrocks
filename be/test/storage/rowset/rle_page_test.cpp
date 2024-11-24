@@ -115,7 +115,7 @@ public:
             uint32_t seek_off = random() % size;
             ASSERT_TRUE(rle_page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
-            CppType ret;
+            CppType ret{};
             copy_one<Type, RlePageDecoder<Type>>(&rle_page_decoder, &ret);
             EXPECT_EQ(values[seek_off], ret);
         }

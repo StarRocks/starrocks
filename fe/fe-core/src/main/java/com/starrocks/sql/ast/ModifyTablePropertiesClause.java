@@ -38,11 +38,6 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
         this.opType = opType;
     }
 
-    public void setNeedTableStable(boolean needTableStable) {
-        this.needTableStable = needTableStable;
-    }
-
-    @Override
     @Nonnull
     public Map<String, String> getProperties() {
         return this.properties;

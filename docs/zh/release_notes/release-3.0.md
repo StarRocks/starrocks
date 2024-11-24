@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.0
@@ -20,11 +20,11 @@ displayed_sidebar: "Chinese"
 - 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
 - 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
-- 主键表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- 主键表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Database/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - 优化主键表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
 - WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
 - 优化主键表 Compaction Score 的取值逻辑，使其和其他类型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 优化 Bitmap 相关的某些操作的性能，主要包括：
   - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
   - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
@@ -153,7 +153,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](https://docs.starrocks.io/zh/docs/reference/System_variable/) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。[#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](https://docs.starrocks.io/zh/docs/sql-reference/System_variable/) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。[#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - 统一 FE 和 BE 中 STRING 转换成 INT 的处理逻辑。[#29969](https://github.com/StarRocks/starrocks/pull/29969)
 
 ### 问题修复
@@ -163,9 +163,9 @@ displayed_sidebar: "Chinese"
 - 如果 `enable_orc_late_materialization` 设置为 `true`，使用 Hive Catalog 查询 ORC 文件中 STRUCT 类型的数据时结果异常。[#27971](https://github.com/StarRocks/starrocks/pull/27971)
 - Hive Catalog 查询时，如果 WHERE 子句中使用分区列且包含 OR 条件，查询结果不正确。 [#28876](https://github.com/StarRocks/starrocks/pull/28876)
 - RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
-- 如果集群为[存算分离架构](https://docs.starrocks.io/zh/docs/3.0/deployment/deploy_shared_data/)，数据存储在 Azure Blob Storage 上，并且已经建表，则回滚到 3.0 时 FE 无法启动。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- 如果集群为存算分离架构，数据存储在 Azure Blob Storage 上，并且已经建表，则回滚到 3.0 时 FE 无法启动。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - 向用户赋予 Iceberg Catalog 下某表权限后，该用户查询该表时显示没有权限。[#29173](https://github.com/StarRocks/starrocks/pull/29173)
-- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/data-types/other-data-types/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - Refresh 物化视图，同时并发地修改物化视图的刷新策略，有概率会导致 FE 无法启动。[#29691](https://github.com/StarRocks/starrocks/pull/29691)
 - 执行 `select count(distinct(int+double)) from table_name` 会报错 `unknown error`。 [#30054](https://github.com/StarRocks/starrocks/pull/30054)
@@ -217,7 +217,7 @@ displayed_sidebar: "Chinese"
 
 - 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25904](https://github.com/StarRocks/starrocks/pull/25904)
 - 如果查询的字段不包含在物化视图的 output 列但是包含在其谓词条件中，仍可使用该物化视图进行查询改写。[#23028](https://github.com/StarRocks/starrocks/issues/23028)
-- [切换至 Trino 语法](https://docs.starrocks.io/zh/docs/reference/System_variable/) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- [切换至 Trino 语法](https://docs.starrocks.io/zh/docs/sql-reference/System_variable/) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - `Information_schema.tables_config` 表中增加了 `table_id` 字段。您可以基于 `table_id` 字段关联数据库 `Information_schema` 中的表 `tables_config` 和 `be_tablets`，来查询 tablet 所属数据库和表名称。[#24061](https://github.com/StarRocks/starrocks/pull/24061)
 
 ### 问题修复
@@ -259,7 +259,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - Union 查询在被物化视图改写后，谓词也可以下推。 [#23312](https://github.com/StarRocks/starrocks/pull/23312)
-- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/3.0/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的自动分桶策略。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。 [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### 问题修复
@@ -313,20 +313,20 @@ displayed_sidebar: "Chinese"
 
 **系统架构**
 
-- 支持存算分离架构。可以在 FE 配置文件中开启，开启后数据会持久化到远程对象存储/HDFS 中，本地盘作为缓存使用，可以更灵活的增删节点，支持表级别的缓存生命周期管理。在本地缓存命中的情况下性能可以对齐非存算分离版本。更多信息，参见[部署使用 StarRocks 存算分离集群](https://docs.starrocks.io/zh/docs/3.0/deployment/deploy_shared_data/)。
+- 支持存算分离架构。可以在 FE 配置文件中开启，开启后数据会持久化到远程对象存储/HDFS 中，本地盘作为缓存使用，可以更灵活的增删节点，支持表级别的缓存生命周期管理。在本地缓存命中的情况下性能可以对齐非存算分离版本。
 
 **存储和导入**
 
 - 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/3.0/table_design/automatic_partitioning/)，提高了分区创建的易用性和灵活性。
-- 主键表支持更丰富的 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 和 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE/) 语法，包括使用 CTE 和对多表的引用。
-- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](https://docs.starrocks.io/zh/docs/administration/query_profile/) 相同。
+- 支持导入时自动创建分区和使用分区表达式定义分区规则，提高了分区创建的易用性和灵活性。
+- 主键表支持更丰富的 [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) 和 [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) 语法，包括使用 CTE 和对多表的引用。
+- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析 Query Profile](https://docs.starrocks.io/zh/docs/administration/query_profile_overview/) 相同。
 
 **数据湖分析**
 
-- [Preview] 支持 Presto/Trino 兼容模式，可以自动改写 Presto/Trino 的 SQL。参见[系统变量](https://docs.starrocks.io/zh/docs/reference/System_variable/) 中的 `sql_dialect`。
+- [Preview] 支持 Presto/Trino 兼容模式，可以自动改写 Presto/Trino 的 SQL。参见[系统变量](https://docs.starrocks.io/zh/docs/sql-reference/System_variable/) 中的 `sql_dialect`。
 - [Preview] 支持 [JDBC Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/jdbc_catalog/)。
-- 支持使用 [SET CATALOG](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/SET_CATALOG/) 命令来手动选择 Catalog。
+- 支持使用 [SET CATALOG](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Catalog/SET_CATALOG/) 命令来手动选择 Catalog。
 
 **权限与安全**
 
@@ -360,10 +360,10 @@ displayed_sidebar: "Chinese"
 
 **存储与导入**
 
-- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD/)。
+- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/CREATE_ROUTINE_LOAD/)。
 - [主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
 - 优化主键表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
-- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 和 [SUBMIT TASK](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK/)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 和 [SUBMIT TASK](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 
 **物化视图**
 
@@ -372,7 +372,7 @@ displayed_sidebar: "Chinese"
   - 支持对 Outer Join 和 Cross Join 的改写。
   - 优化带分区时 UNION 的 SQL rewrite。
 - 完善物化视图的构建能力：支持 CTE、SELECT * 、UNION。
-- 优化 [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW/) 命令的返回信息。
+- 优化 [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW/) 命令的返回信息。
 - 提升物化视图构建时的分区创建效率。([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
 **查询**
@@ -385,7 +385,7 @@ displayed_sidebar: "Chinese"
 **数据湖分析**
 
 - 优化元数据统计信息收集。
-- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Lake Catalog 支持通过 [SHOW CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE/) 查看外表的创建信息。
+- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Lake Catalog 支持通过 [SHOW CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE/) 查看外表的创建信息。
 
 ### 问题修复
 
@@ -405,7 +405,7 @@ displayed_sidebar: "Chinese"
 ### 行为变更
 
 - RBAC 升级以后会兼容之前的用户和权限，但是 [GRANT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/GRANT/) 和 [REVOKE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/REVOKE/) 等相关语法有大幅改动。
-- SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW/)。
+- SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW/)。
 - 新增如下[保留关键字](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/keywords/)：AUTO_INCREMENT、CURRENT_ROLE、DEFERRED、ENCLOSE、ESCAPE、IMMEDIATE、PRIVILEGES、SKIP_HEADER、TRIM_SPACE、VARBINARY。
 
 ### 升级注意事项

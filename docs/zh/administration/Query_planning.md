@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 分析查询
@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;
@@ -332,9 +332,9 @@ Query hint 是一种指令或注释，显式地向查询优化器建议如何执
 
 ### 系统变量 hint
 
-在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
+在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../sql-reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
 
-相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
+相比于[系统变量的一般用法](../sql-reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -371,9 +371,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 hint
 
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../sql-reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
 
-相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
+相比于[用户自定义变量的一般用法](../sql-reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 

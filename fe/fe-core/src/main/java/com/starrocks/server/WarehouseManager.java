@@ -15,9 +15,11 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
@@ -25,7 +27,17 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.DropWarehouseLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -78,7 +90,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = nameToWh.get(warehouseName);
             if (warehouse == null) {
-                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
             return warehouse;
         }
@@ -88,7 +100,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             Warehouse warehouse = idToWh.get(warehouseId);
             if (warehouse == null) {
-                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
             }
             return warehouse;
         }
@@ -112,10 +124,16 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public boolean warehouseExists(long warehouseId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToWh.containsKey(warehouseId);
+        }
+    }
+
     public List<Long> getAllComputeNodeIds(String warehouseName) {
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
         }
 
         return getAllComputeNodeIds(warehouse.getId());
@@ -130,7 +148,7 @@ public class WarehouseManager implements Writable {
     private List<Long> getAllComputeNodeIds(long warehouseId, long workerGroupId) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
         }
 
         try {
@@ -161,7 +179,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
         Warehouse warehouse = idToWh.get(warehouseId);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", warehouseId));
         }
 
         try {
@@ -187,7 +205,7 @@ public class WarehouseManager implements Writable {
     public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
         Warehouse warehouse = nameToWh.get(warehouseName);
         if (warehouse == null) {
-            ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
         }
 
         try {
@@ -231,7 +249,8 @@ public class WarehouseManager implements Writable {
         Long computeNodeId = getComputeNodeId(warehouseId, tablet);
         if (computeNodeId == null) {
             Warehouse warehouse = idToWh.get(warehouseId);
-            ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
+                    String.format("name: %s", warehouse.getName()));
         }
         Preconditions.checkNotNull(computeNodeId);
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
@@ -259,7 +278,7 @@ public class WarehouseManager implements Writable {
 
     public Optional<Long> selectWorkerGroupByWarehouseId(long warehouseId) {
         Optional<Long> workerGroupId = selectWorkerGroupInternal(warehouseId);
-        if (workerGroupId.isEmpty())  {
+        if (workerGroupId.isEmpty()) {
             return workerGroupId;
         }
 
@@ -275,7 +294,7 @@ public class WarehouseManager implements Writable {
 
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
         Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null)  {
+        if (warehouse == null) {
             LOG.warn("failed to get warehouse by id {}", warehouseId);
             return Optional.empty();
         }
@@ -287,5 +306,48 @@ public class WarehouseManager implements Writable {
         }
 
         return Optional.of(ids.get(0));
+    }
+
+    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public Set<String> getAllWarehouseNames() {
+        return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
+    }
+
+    public void replayCreateWarehouse(Warehouse warehouse) {
+
+    }
+
+    public void replayDropWarehouse(DropWarehouseLog log) {
+
+    }
+
+    public void replayAlterWarehouse(Warehouse warehouse) {
+
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+    }
+
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
     }
 }

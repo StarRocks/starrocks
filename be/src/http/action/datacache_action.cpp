@@ -34,7 +34,6 @@ const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_APP_STAT = "app_stat";
-const static std::string ACTION_INVALIDATE_ALL = "invalidate_all";
 
 std::string cache_status_str(const DataCacheStatus& status) {
     std::string str_status;

@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Java UDFs
@@ -521,7 +522,7 @@ Run the following command to query UDFs:
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md).
 
 ## Drop a UDF
 
@@ -531,7 +532,7 @@ Run the following command to drop a UDF:
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md).
+For more information, see [DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md).
 
 ## Mapping between SQL data types and Java data types
 

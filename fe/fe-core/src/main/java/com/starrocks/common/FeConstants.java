@@ -95,10 +95,14 @@ public class FeConstants {
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
+    public static final String GENERATED_PARTITION_COLUMN_PREFIX = "__generated_partition_column_";
+
     // Max counter num of TOP K function
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final int DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM = 16;
+
+    public static final int MAX_LIST_PARTITION_NAME_LENGTH = 50;
 
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";

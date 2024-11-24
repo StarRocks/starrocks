@@ -682,7 +682,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
 
         // construct rowid_range_option
         auto rowid_range_option = std::make_shared<RowidRangeOption>();
-        Rowset rowset(_tablet_mgr.get(), _tablet_metadata, 1);
+        Rowset rowset(_tablet_mgr.get(), _tablet_metadata, 1, 0 /* compaction_segment_limit */);
         auto segment = rowset.get_segments().back();
         auto sparse_range = std::make_shared<SparseRange<rowid_t>>(1, 21);
         rowid_range_option->add(&rowset, segment.get(), sparse_range, true);
@@ -816,8 +816,8 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     config::enable_load_segment_parallel = true;
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));

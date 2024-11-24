@@ -284,11 +284,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
-        bool non_blocking_read = false;
-        if (params.__isset.non_blocking_read) {
-            non_blocking_read = params.non_blocking_read;
-        }
-        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe), non_blocking_read);
+        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe));
         src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
         break;
     }

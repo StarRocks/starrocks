@@ -21,6 +21,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -35,6 +36,7 @@ namespace starrocks::pipeline {
 FragmentContext::FragmentContext() : _data_sink(nullptr) {}
 
 FragmentContext::~FragmentContext() {
+    _close_stream_load_contexts();
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
     close_all_execution_groups();
@@ -88,7 +90,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -165,7 +167,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
 
@@ -181,16 +183,27 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
-            std::stringstream ss;
-            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
-               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
-            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
-                LOG(INFO) << ss.str();
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
             } else {
-                LOG(WARNING) << ss.str();
+                LOG(WARNING) << cancel_msg;
             }
-            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
+
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+        }
+
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                stream_load_context->body_sink->cancel(_s_status);
+            }
         }
     }
 }
@@ -213,7 +226,6 @@ Status FragmentContext::prepare_all_pipelines() {
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
     _stream_load_contexts = std::move(contexts);
-    _channel_stream_load = true;
 }
 
 void FragmentContext::cancel(const Status& status) {
@@ -230,19 +242,6 @@ void FragmentContext::cancel(const Status& status) {
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
-
-    if (_stream_load_contexts.size() > 0) {
-        for (const auto& stream_load_context : _stream_load_contexts) {
-            if (stream_load_context->body_sink) {
-                Status st;
-                stream_load_context->body_sink->cancel(st);
-            }
-            if (_channel_stream_load) {
-                _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(stream_load_context);
-            }
-        }
-        _stream_load_contexts.resize(0);
-    }
 }
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
@@ -254,7 +253,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
         return raw_ctx;
     }
 }
@@ -306,21 +305,6 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
             !it->second->runtime_state()->is_cancelled()) {
             ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                       fragment_id);
-        }
-        const auto& stream_load_contexts = it->second->_stream_load_contexts;
-
-        if (stream_load_contexts.size() > 0) {
-            for (const auto& stream_load_context : stream_load_contexts) {
-                if (stream_load_context->body_sink) {
-                    Status st;
-                    stream_load_context->body_sink->cancel(st);
-                }
-                if (it->second->_channel_stream_load) {
-                    it->second->_runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(
-                            stream_load_context);
-                }
-            }
-            it->second->_stream_load_contexts.resize(0);
         }
         _fragment_contexts.erase(it);
     }
@@ -403,6 +387,17 @@ Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
         group->submit_active_drivers();
     }
     return Status::OK();
+}
+
+void FragmentContext::_close_stream_load_contexts() {
+    for (const auto& context : _stream_load_contexts) {
+        context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
+        if (context->enable_batch_write) {
+            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+        } else {
+            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+        }
+    }
 }
 
 } // namespace starrocks::pipeline

@@ -91,12 +91,12 @@ public:
         }
     }
 
-    void random_cols(int64_t N, vector<int>* v0, vector<int>* v1) {
-        v0->resize(N);
-        v1->resize(N);
-        for (int i = 0; i < N; i++) {
-            (*v0)[i] = (int)random_number();
-            (*v1)[i] = (int)random_number();
+    void random_cols(int64_t N, vector<vector<int>>* cols) {
+        for (auto& each_col : *cols) {
+            each_col.resize(N);
+            for (int i = 0; i < N; i++) {
+                each_col[i] = (int)random_number();
+            }
         }
     }
 
@@ -137,6 +137,44 @@ public:
 private:
     DeterRandomGenerator<T, PICT_OP>* _ran_generator;
     std::vector<WeightedItem<PICT_OP>> _items;
+};
+
+class IOFailureGuard {
+public:
+    IOFailureGuard() { SyncPoint::GetInstance()->EnableProcessing(); }
+    ~IOFailureGuard() { SyncPoint::GetInstance()->DisableProcessing(); }
+};
+
+template <typename T, typename PICT_OP>
+class IOFailureGenerator {
+public:
+    IOFailureGenerator(DeterRandomGenerator<T, PICT_OP>* ran_generator, int64_t percent)
+            : _ran_generator(ran_generator), _percent(percent) {
+        TEST_ENABLE_ERROR_POINT("PosixFileSystem::appendv", Status::IOError("injected appendv error"));
+        TEST_ENABLE_ERROR_POINT("PosixFileSystem::pre_allocate", Status::IOError("injected pre_allocate error"));
+        TEST_ENABLE_ERROR_POINT("PosixFileSystem::close", Status::IOError("injected close error"));
+        TEST_ENABLE_ERROR_POINT("PosixFileSystem::flush", Status::IOError("injected flush error"));
+        TEST_ENABLE_ERROR_POINT("PosixFileSystem::sync", Status::IOError("injected sync error"));
+    }
+    ~IOFailureGenerator() {
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::appendv");
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::pre_allocate");
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::close");
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::flush");
+        TEST_DISABLE_ERROR_POINT("PosixFileSystem::sync");
+    }
+
+    std::unique_ptr<IOFailureGuard> generate() {
+        auto r = _ran_generator->random() % 100;
+        if (r < _percent) {
+            return std::make_unique<IOFailureGuard>();
+        }
+        return nullptr;
+    }
+
+private:
+    DeterRandomGenerator<T, PICT_OP>* _ran_generator;
+    int64_t _percent = 0;
 };
 
 } // namespace starrocks

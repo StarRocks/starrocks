@@ -1,0 +1,137 @@
+-- name: test_replace_temp_partition
+CREATE TABLE `test_replace_tmp_partition` (
+  `a` varchar(64) NULL COMMENT "",
+  `b` varchar(10) NOT NULL COMMENT "",
+  `c` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+PARTITION BY (`b`,`c`)
+DISTRIBUTED BY RANDOM;
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pa025_1970 VALUES IN (("a025", "1970"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pa019_9990 VALUES IN (("a019", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pa025_9990 VALUES IN (("a025", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00002_9990 VALUES IN (("t00002", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00042_9990 VALUES IN (("ta00042", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00150_9990 VALUES IN (("t00150", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00045_9990 VALUES IN (("ta00045", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00043_9990 VALUES IN (("ta00043", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pa024_9990 VALUES IN (("a024", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00040_9990 VALUES IN (("ta00040", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00028_9990 VALUES IN (("ta00028", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00027_9990 VALUES IN (("ta00027", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00154_9990 VALUES IN (("t00154", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00147_9990 VALUES IN (("t00147", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00144_9990 VALUES IN (("t00144", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00017_9990 VALUES IN (("ta00017", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00016_9990 VALUES IN (("ta00016", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pta00015_9990 VALUES IN (("ta00015", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00148_9990 VALUES IN (("t00148", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00149_9990 VALUES IN (("t00149", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD PARTITION IF NOT EXISTS pt00069_9990 VALUES IN (("t00069", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pa019_9990 VALUES IN (("a019", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pa025_9990 VALUES IN (("a025", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00002_9990 VALUES IN (("t00002", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00042_9990 VALUES IN (("ta00042", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00150_9990 VALUES IN (("t00150", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00045_9990 VALUES IN (("ta00045", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00043_9990 VALUES IN (("ta00043", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pa024_9990 VALUES IN (("a024", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00040_9990 VALUES IN (("ta00040", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00028_9990 VALUES IN (("ta00028", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00027_9990 VALUES IN (("ta00027", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00154_9990 VALUES IN (("t00154", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00147_9990 VALUES IN (("t00147", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00144_9990 VALUES IN (("t00144", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00017_9990 VALUES IN (("ta00017", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00016_9990 VALUES IN (("ta00016", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pta00015_9990 VALUES IN (("ta00015", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00148_9990 VALUES IN (("t00148", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00149_9990 VALUES IN (("t00149", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition ADD TEMPORARY PARTITION IF NOT EXISTS t_pt00069_9990 VALUES IN (("t00069", "9990"));
+-- result:
+-- !result
+ALTER TABLE test_replace_tmp_partition REPLACE PARTITION (pa019_9990,pa025_9990,pt00002_9990,pta00042_9990,pt00150_9990,pta00045_9990,pta00043_9990,pa024_9990,pta00040_9990,pta00028_9990,pta00027_9990,pt00154_9990,pt00147_9990,pt00144_9990,pta00017_9990,pta00016_9990,pta00015_9990,pt00148_9990,pt00149_9990,pt00069_9990) WITH TEMPORARY PARTITION (t_pa019_9990,t_pa025_9990,t_pt00002_9990,t_pta00042_9990,t_pt00150_9990,t_pta00045_9990,t_pta00043_9990,t_pa024_9990,t_pta00040_9990,t_pta00028_9990,t_pta00027_9990,t_pt00154_9990,t_pt00147_9990,t_pt00144_9990,t_pta00017_9990,t_pta00016_9990,t_pta00015_9990,t_pt00148_9990,t_pt00149_9990,t_pt00069_9990) PROPERTIES ("strict_range "="fasle" , "use_temp_partition_name"="false");
+-- result:
+-- !result

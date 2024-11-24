@@ -32,7 +32,7 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
     int32_t sleep_seconds = 1;
     int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
+    MasterServerClient client;
 
     while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);

@@ -18,6 +18,7 @@
 #include <functional>
 #include <ostream>
 
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "compaction_task_context.h"
 #include "runtime/mem_tracker.h"
@@ -25,11 +26,13 @@
 
 namespace starrocks {
 class TxnLogPB;
-}
+class TxnLogPB_OpCompaction;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class Rowset;
+class TabletWriter;
 
 class CompactionTask {
 public:
@@ -48,6 +51,8 @@ public:
     inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
     inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
 
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
+
 protected:
     int64_t _txn_id;
     VersionedTablet _tablet;
@@ -55,6 +60,8 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
     std::shared_ptr<const TabletSchema> _tablet_schema;
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
 };
 
 } // namespace starrocks::lake

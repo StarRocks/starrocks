@@ -806,8 +806,8 @@ public:
 
     void reset_cancel_major_compaction();
 
-    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 

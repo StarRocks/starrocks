@@ -28,7 +28,6 @@
 #include <ostream>
 #include <utility>
 
-#include "column/vectorized_fwd.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
@@ -194,6 +193,7 @@ FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileM
         if (column_stat->HasNullCount()) {
             has_null_count = true;
             null_value_counts[field_id] = column_stat->null_count();
+            value_counts[field_id] += column_stat->null_count();
         }
         if (column_stat->HasMinMax()) {
             has_min_max = true;
@@ -360,8 +360,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, parquet::decimal_precision_to_byte_count(type_desc.precision),
-                file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                parquet::ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());

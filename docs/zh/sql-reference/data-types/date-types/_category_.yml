@@ -1,0 +1,7 @@
+position: 30 # float position is supported
+label: '日期类型'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: date-types

@@ -21,14 +21,25 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class MVUtils {
     public static final String MATERIALIZED_VIEW_NAME_PREFIX = "mv_";
@@ -164,5 +175,49 @@ public class MVUtils {
             }
         }
         return false;
+    }
+
+    /**
+     * Build RewriteAliasVisitor for rewriting SlotRef's table name by output exprs.
+     * @param session connect context
+     * @param tbl input table
+     * @param tableName input table name
+     * @param outputExprs output exprs which should be consistent with table's basic schema fields
+     * @return RewriteAliasVisitor
+     */
+    public static SelectAnalyzer.RewriteAliasVisitor buildRewriteAliasVisitor(ConnectContext session,
+                                                                              Table tbl,
+                                                                              TableName tableName,
+                                                                              List<Expr> outputExprs) {
+        // sourceScope must be set null tableName for its Field in RelationFields
+        // because we hope slotRef can not be resolved in sourceScope but can be
+        // resolved in outputScope to force to replace the node using outputExprs.
+        Scope sourceScope = new Scope(RelationId.anonymous(),
+                new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                new Field(col.getName(), col.getType(), null, null))
+                        .collect(Collectors.toList())));
+        Scope outputScope = new Scope(RelationId.anonymous(),
+                new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                new Field(col.getName(), col.getType(), tableName, null))
+                        .collect(Collectors.toList())));
+        return new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
+                outputExprs, session);
+    }
+
+    /**
+     * Build SlotRefTableNameCleaner for cleaning SlotRef's table name.
+     * @param session connect context
+     * @param tbl table
+     * @param tableName table name
+     * @return SlotRefTableNameCleaner
+     */
+    public static SelectAnalyzer.SlotRefTableNameCleaner buildSlotRefTableNameCleaner(ConnectContext session,
+                                                                                      Table tbl,
+                                                                                      TableName tableName) {
+        Scope sourceScope = new Scope(RelationId.anonymous(),
+                new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                new Field(col.getName(), col.getType(), tableName, null))
+                        .collect(Collectors.toList())));
+        return new SelectAnalyzer.SlotRefTableNameCleaner(sourceScope, session);
     }
 }

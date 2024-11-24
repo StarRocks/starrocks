@@ -1,7 +1,8 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['suoyin']
 toc_max_heading_level: 4
+sidebar_position: 50
 ---
 
 # [Preview] 全文倒排索引

@@ -14,11 +14,28 @@
 
 package com.starrocks.kudu.reader;
 
-import static java.lang.String.format;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.Closer;
 import com.starrocks.jni.connector.OffHeapTable;
+import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.Schema;
+import org.apache.kudu.Type;
+import org.apache.kudu.client.CreateTableOptions;
+import org.apache.kudu.client.Insert;
+import org.apache.kudu.client.KuduClient;
+import org.apache.kudu.client.KuduClient.KuduClientBuilder;
+import org.apache.kudu.client.KuduException;
+import org.apache.kudu.client.KuduSession;
+import org.apache.kudu.client.KuduTable;
+import org.apache.kudu.client.PartialRow;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.containers.ToxiproxyContainer;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -31,24 +48,10 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
-import org.apache.kudu.ColumnSchema;
-import org.apache.kudu.Schema;
-import org.apache.kudu.Type;
-import org.apache.kudu.client.CreateTableOptions;
-import org.apache.kudu.client.Insert;
-import org.apache.kudu.client.KuduClient;
-import org.apache.kudu.client.KuduClient.KuduClientBuilder;
-import org.apache.kudu.client.KuduException;
-import org.apache.kudu.client.KuduSession;
-import org.apache.kudu.client.KuduTable;
-import org.apache.kudu.client.PartialRow;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
-import org.testcontainers.containers.ToxiproxyContainer;
 
+import static java.lang.String.format;
+
+@Disabled("Unusable ut, it required docker env")
 public class TestKuduSplitScanner {
     private TestingKuduServer testingKuduServer;
     private String masterAddress;
@@ -60,7 +63,7 @@ public class TestKuduSplitScanner {
         new ColumnSchema.ColumnSchemaBuilder("f1", Type.STRING).key(true).build()
     ));
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         testingKuduServer = new TestingKuduServer();
         masterAddress = testingKuduServer.getMasterAddress();
@@ -70,7 +73,7 @@ public class TestKuduSplitScanner {
             client.openTable(TABLE_NAME)).build().get(0).serialize()), java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    @After
+    @AfterEach
     public void setDown() {
         if (testingKuduServer != null) {
             testingKuduServer.close();
@@ -106,8 +109,8 @@ public class TestKuduSplitScanner {
         KuduSession session = null;
         try {
             CreateTableOptions createTableOptions = new CreateTableOptions()
-                .setNumReplicas(1)
-                .addHashPartitions(Collections.singletonList("f0"), 2);
+                    .setNumReplicas(1)
+                    .addHashPartitions(Collections.singletonList("f0"), 2);
             client.createTable(TABLE_NAME, SCHEMA, createTableOptions);
             session = client.newSession();
             KuduTable kuduTable = client.openTable(TABLE_NAME);
@@ -169,13 +172,15 @@ public class TestKuduSplitScanner {
                 String instanceName = "kudu-tserver-" + instance;
                 ToxiproxyContainer.ContainerProxy proxy = toxiProxy.getProxy(instanceName, KUDU_TSERVER_PORT);
                 GenericContainer<?> tableServer = new GenericContainer<>(format("%s:%s", KUDU_IMAGE, TAG))
-                    .withExposedPorts(KUDU_TSERVER_PORT)
-                    .withCommand("tserver")
-                    .withEnv("KUDU_MASTERS", format("%s:%s", masterContainerAlias, KUDU_MASTER_PORT))
-                    .withEnv("TSERVER_ARGS", format("--fs_wal_dir=/var/lib/kudu/tserver --logtostderr --use_hybrid_clock=false --rpc_bind_addresses=%s:%s --rpc_advertised_addresses=%s:%s", instanceName, KUDU_TSERVER_PORT, hostIP, proxy.getProxyPort()))
-                    .withNetwork(network)
-                    .withNetworkAliases(instanceName)
-                    .dependsOn(master);
+                        .withExposedPorts(KUDU_TSERVER_PORT)
+                        .withCommand("tserver")
+                        .withEnv("KUDU_MASTERS", format("%s:%s", masterContainerAlias, KUDU_MASTER_PORT))
+                        .withEnv("TSERVER_ARGS", format("--fs_wal_dir=/var/lib/kudu/tserver --logtostderr " +
+                            "--use_hybrid_clock=false --rpc_bind_addresses=%s:%s --rpc_advertised_addresses=%s:%s",
+                            instanceName, KUDU_TSERVER_PORT, hostIP, proxy.getProxyPort()))
+                        .withNetwork(network)
+                        .withNetworkAliases(instanceName)
+                        .dependsOn(master);
 
                 tServersBuilder.add(tableServer);
             }
@@ -190,13 +195,13 @@ public class TestKuduSplitScanner {
                 Enumeration<NetworkInterface> networkInterfaceEnumeration = NetworkInterface.getNetworkInterfaces();
                 while (networkInterfaceEnumeration.hasMoreElements()) {
                     for (InterfaceAddress interfaceAddress : networkInterfaceEnumeration.nextElement().getInterfaceAddresses()) {
-                        if (interfaceAddress.getAddress().isSiteLocalAddress() && interfaceAddress.getAddress() instanceof Inet4Address) {
+                        if (interfaceAddress.getAddress().isSiteLocalAddress() && interfaceAddress.getAddress()
+                                instanceof Inet4Address) {
                             return interfaceAddress.getAddress().getHostAddress();
                         }
                     }
                 }
-            }
-            catch (SocketException e) {
+            } catch (SocketException e) {
                 throw new RuntimeException(e);
             }
             throw new IllegalStateException("Could not find site local ipv4 address, failed to launch kudu");
@@ -213,8 +218,7 @@ public class TestKuduSplitScanner {
                 tServers.forEach(tabletServer -> closer.register(tabletServer::stop));
                 closer.register(toxiProxy::stop);
                 closer.register(network::close);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }

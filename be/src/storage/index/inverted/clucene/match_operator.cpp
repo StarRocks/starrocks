@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "match_operator.h"
+#include "storage/index/inverted/clucene/match_operator.h"
 
 #include <boost/algorithm/string/replace.hpp>
 

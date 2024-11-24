@@ -79,9 +79,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
-    if (metadata->enable_persistent_index() && (fix_size <= 128)) {
+    if (metadata->enable_persistent_index()) {
         DCHECK(_persistent_index == nullptr);
 
         switch (metadata->persistent_index_type()) {
@@ -103,13 +102,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             RETURN_IF_ERROR(StorageEngine::instance()
                                     ->get_persistent_index_store(metadata->id())
                                     ->create_dir_if_path_not_exists(path));
-            _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            _persistent_index = std::make_shared<LakeLocalPersistentIndex>(path);
             set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         case PersistentIndexTypePB::CLOUD_NATIVE: {
-            _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
+            _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
             auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
             RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));

@@ -155,7 +155,7 @@ public class DesensitizedSQLBuilder {
         private final Map<String, String> desensitizedDict;
 
         public DesensitizedSQLVisitor(boolean simple, boolean withoutTbl, Map<String, String> desensitizedDict) {
-            super(simple, withoutTbl);
+            super(simple, withoutTbl, true);
             this.desensitizedDict = desensitizedDict;
         }
 
@@ -580,7 +580,7 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 materializedView.getTableProperty().getUniqueConstraints()
-                        .forEach(e -> cols.addAll(e.getUniqueColumnNames()));
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(materializedView)));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
@@ -726,7 +726,7 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 olapTable.getTableProperty().getUniqueConstraints()
-                        .forEach(e -> cols.addAll(e.getUniqueColumnNames()));
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(olapTable)));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");

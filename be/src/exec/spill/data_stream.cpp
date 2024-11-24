@@ -63,12 +63,13 @@ Status BlockSpillOutputDataStream::_prepare_block(RuntimeState* state, size_t wr
         opts.plan_node_id = _spiller->options().plan_node_id;
         opts.name = _spiller->options().name;
         opts.block_size = write_size;
-        opts.exclusive = _spiller->options().init_partition_nums > 0 || !_spiller->options().is_unordered;
+        opts.affinity_group = _block_group->get_affinity_group();
         ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
         // update metrics
         auto block_count = GET_METRICS(block->is_remote(), _spiller->metrics(), block_count);
         COUNTER_UPDATE(block_count, 1);
-        TRACE_SPILL_LOG << fmt::format("allocate block [{}]", block->debug_string());
+        TRACE_SPILL_LOG << fmt::format("allocate block [{}], affinity group[{}]", block->debug_string(),
+                                       opts.affinity_group);
         _cur_block = std::move(block);
         _block_group->append(_cur_block);
     }
@@ -80,6 +81,7 @@ Status BlockSpillOutputDataStream::append(RuntimeState* state, const std::vector
                                           size_t write_num_rows) {
     // acquire block if current block is nullptr or full
     RETURN_IF_ERROR(_prepare_block(state, total_write_size));
+    _append_rows += write_num_rows;
     {
         auto write_io_timer = GET_METRICS(_cur_block->is_remote(), _spiller->metrics(), write_io_timer);
         SCOPED_TIMER(write_io_timer);
@@ -104,8 +106,8 @@ Status BlockSpillOutputDataStream::flush() {
         TRACE_SPILL_LOG << fmt::format("flush block[{}]", _cur_block->debug_string());
     }
 
-    // release block if not exclusive
     RETURN_IF_ERROR(_block_manager->release_block(std::move(_cur_block)));
+    DCHECK(_cur_block == nullptr);
 
     return Status::OK();
 }

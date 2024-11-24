@@ -41,6 +41,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -80,7 +81,7 @@ public class SmallFileMgrTest {
                 db.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
                 stmt1.getDbName();
@@ -176,10 +177,10 @@ public class SmallFileMgrTest {
         smallFileMgr.replayCreateFile(smallFile);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        smallFileMgr.saveSmallFilesV2(image.getDataOutputStream());
+        smallFileMgr.saveSmallFilesV2(image.getImageWriter());
 
         SmallFileMgr followerMgr = new SmallFileMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
         followerMgr.loadSmallFilesV2(reader);
         reader.close();
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # TPC-DS Benchmarking
@@ -76,6 +76,7 @@ StarRocks and Trino are deployed on machines with the same configuration. StarRo
 > **NOTE**
 >
 > - The unit of query latency in the following table is ms.
+> - All queries are warmed up 1 time and then executed 3 times to take the average value as the result.
 > - `StarRocks-3.0.5-native` indicates StarRocks native storage, `StarRocks-3.0-Hive external` indicates StarRocks queries Hive external tables through Hive Catalog, `StarRocks-3.0-Hive external-Cache` indicates StarRocks queries Hive external tables through Hive Catalog with Data Cache enabled.
 > - Aggregate pushdown is enabled for StarRocks (`SET global cbo_push_down_aggregate_mode = 0`).
 

@@ -31,6 +31,7 @@
 namespace starrocks::lake {
 
 namespace {
+
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
@@ -42,6 +43,21 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
             // because the primary index is available in cache
             // But it will be remove from index cache after apply is finished
+            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+        }
+        // Check if the alter_meta has a persistent index type change
+        if (alter_meta.has_persistent_index_type()) {
+            // Get the previous and new persistent index types
+            PersistentIndexTypePB prev_type = metadata->persistent_index_type();
+            PersistentIndexTypePB new_type = alter_meta.persistent_index_type();
+            // Apply the changes to the persistent index type
+            metadata->set_persistent_index_type(new_type);
+            LOG(INFO) << fmt::format("alter persistent index type from {} to {} for tablet id: {}",
+                                     PersistentIndexTypePB_Name(prev_type), PersistentIndexTypePB_Name(new_type),
+                                     metadata->id());
+            // Get the update manager
+            auto update_mgr = tablet_mgr->update_mgr();
+            // Try to remove the index from the index cache
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
         // update tablet meta
@@ -154,6 +170,7 @@ public:
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
         }
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id));
         _has_finalized = true;
         return Status::OK();
@@ -233,6 +250,10 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+            // Apply the compaction operation to the cloud native pk index.
+            // This ensures that the pk index is updated with the compaction changes.
+            _builder.remove_compacted_sst(op_compaction);
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
@@ -365,6 +386,7 @@ public:
     }
 
     Status finish() override {
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
@@ -406,6 +428,7 @@ private:
         auto first_input_pos = std::find_if(_metadata->mutable_rowsets()->begin(), _metadata->mutable_rowsets()->end(),
                                             Finder{input_id});
         if (UNLIKELY(first_input_pos == _metadata->mutable_rowsets()->end())) {
+            LOG(INFO) << "input rowset not found";
             return Status::InternalError(fmt::format("input rowset {} not found", input_id));
         }
 
@@ -425,10 +448,24 @@ private:
             }
         }
 
-        const auto end_input_pos = pre_input_pos + 1;
+        std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
+                                               op_compaction.input_rowsets().end());
+        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
+                                                     input_rowsets_id, _metadata.get()));
+        int64_t output_rowset_schema_id = tablet_schema->id();
 
+        auto last_input_pos = pre_input_pos;
+        RowsetMetadataPB last_input_rowset = *last_input_pos;
+        trim_partial_compaction_last_input_rowset(_metadata, op_compaction, last_input_rowset);
+
+        const auto end_input_pos = pre_input_pos + 1;
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
-            _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
+            if (iter != last_input_pos) {
+                _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
+            } else {
+                // might be a partial compaction, use real last input rowset
+                _metadata->mutable_compaction_inputs()->Add(std::move(last_input_rowset));
+            }
         }
 
         auto first_idx = static_cast<uint32_t>(first_input_pos - _metadata->mutable_rowsets()->begin());
@@ -449,11 +486,6 @@ private:
 
         // Update historical schema and rowset schema id
         if (!_metadata->rowset_to_schema().empty()) {
-            int64_t output_rowset_schema_id = _metadata->schema().id();
-            if (has_output_rowset) {
-                auto last_rowset_id = op_compaction.input_rowsets(op_compaction.input_rowsets_size() - 1);
-                output_rowset_schema_id = _metadata->rowset_to_schema().at(last_rowset_id);
-            }
             for (int i = 0; i < op_compaction.input_rowsets_size(); i++) {
                 _metadata->mutable_rowset_to_schema()->erase(op_compaction.input_rowsets(i));
             }

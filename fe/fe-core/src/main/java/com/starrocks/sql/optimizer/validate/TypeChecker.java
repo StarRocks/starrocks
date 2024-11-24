@@ -40,7 +40,6 @@ import static com.starrocks.catalog.FunctionSet.ANY_VALUE;
 import static com.starrocks.catalog.FunctionSet.APPROX_COUNT_DISTINCT;
 import static com.starrocks.catalog.FunctionSet.AVG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_INT;
-import static com.starrocks.catalog.FunctionSet.COUNT;
 import static com.starrocks.catalog.FunctionSet.HLL_RAW;
 import static com.starrocks.catalog.FunctionSet.INTERSECT_COUNT;
 import static com.starrocks.catalog.FunctionSet.MAX;
@@ -51,7 +50,6 @@ import static com.starrocks.catalog.FunctionSet.NDV;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_CONT;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_UNION;
-import static com.starrocks.catalog.FunctionSet.STDDEV;
 import static com.starrocks.catalog.FunctionSet.SUM;
 
 public class TypeChecker implements PlanValidator.Checker {
@@ -111,7 +109,12 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalAnalytic(OptExpression optExpression, Void context) {
             PhysicalWindowOperator operator = (PhysicalWindowOperator) optExpression.getOp();
-            checkFuncCall(operator.getAnalyticCall());
+            // if input is binary, which only happen with rank-pre-agg optimization
+            // in this case, The type of col -> aggCall in intermediate phase is a bit of messy, check it may
+            // lead to forbid normal plan.
+            if (!operator.isInputIsBinary()) {
+                checkFuncCall(operator.getAnalyticCall());
+            }
             visit(optExpression, context);
             return null;
         }
@@ -204,6 +207,12 @@ public class TypeChecker implements PlanValidator.Checker {
                 throw new IllegalArgumentException("percentile_approx " +
                         "requires the second parameter's type is numeric constant type");
             }
+
+            if (arguments.size() == 3 && !(arguments.get(2) instanceof ConstantOperator)) {
+                throw new IllegalArgumentException("percentile_approx " +
+                        "requires the third parameter's type is numeric constant type");
+            }
+
             ConstantOperator rate = (ConstantOperator) arg1;
             if (rate.getDouble() < 0 || rate.getDouble() > 1) {
                 throw new SemanticException("percentile_approx second parameter'value must be between 0 and 1");
@@ -216,9 +225,6 @@ public class TypeChecker implements PlanValidator.Checker {
             Type[] definedTypes = aggCall.getFunction().getArgs();
             List<Type> argTypes = arguments.stream().map(ScalarOperator::getType).collect(Collectors.toList());
             switch (functionName) {
-                case COUNT:
-                case STDDEV:
-                    break;
                 case MIN:
                 case MAX:
                 case ANY_VALUE:

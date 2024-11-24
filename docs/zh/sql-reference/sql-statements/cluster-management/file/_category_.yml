@@ -1,0 +1,6 @@
+position: 60 # float position is supported
+label: '文件'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

@@ -83,9 +83,13 @@ public class StreamLoadManagerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_ID);
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -282,11 +286,10 @@ public class StreamLoadManagerTest {
         String tableName = "test_tbl";
         String labelName = "label2";
         long timeoutMillis = 100000;
-        int channelNum = 1;
-        int channelId = 0;
+        long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false, warehouseId);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
@@ -297,11 +300,13 @@ public class StreamLoadManagerTest {
 
         TransactionState state = new TransactionState();
         task.afterCommitted(state, true);
-        Assert.assertNotEquals(-1, task.endTimeMs());
+        Assert.assertNotEquals(-1, task.commitTimeMs());
 
-        state.setCommitTime(task.endTimeMs());
-        task.replayOnCommitted(state);
-        Assert.assertEquals(task.endTimeMs(), state.getCommitTime());
+        Assert.assertTrue(task.isUnreversibleState());
+        Assert.assertFalse(task.isFinalState());
+
+        streamLoadManager.cleanSyncStreamLoadTasks();
+        Assert.assertEquals(1, streamLoadManager.getStreamLoadTaskCount());
     }
 
 }

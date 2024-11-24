@@ -19,8 +19,6 @@ import com.google.common.cache.LoadingCache;
 import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultEngine;
-import io.delta.kernel.defaults.engine.DefaultJsonHandler;
-import io.delta.kernel.defaults.engine.DefaultParquetHandler;
 import io.delta.kernel.engine.JsonHandler;
 import io.delta.kernel.engine.ParquetHandler;
 import io.delta.kernel.types.StructType;
@@ -32,13 +30,13 @@ public class DeltaLakeEngine extends DefaultEngine {
     private final Configuration hadoopConf;
     private final DeltaLakeCatalogProperties properties;
     // Cache for checkpoint metadata, key is file path and read schema, value is list of ColumnarBatch
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
     // Cache for json metadata, key is file path, value is list of JsonNode
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     protected DeltaLakeEngine(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-                              LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache,
-                              LoadingCache<String, List<JsonNode>> jsonCache) {
+                              LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                              LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.properties = properties;
@@ -49,18 +47,18 @@ public class DeltaLakeEngine extends DefaultEngine {
     @Override
     public JsonHandler getJsonHandler() {
         return properties.isEnableDeltaLakeJsonMetaCache() ? new DeltaLakeJsonHandler(hadoopConf, jsonCache) :
-                new DefaultJsonHandler(hadoopConf);
+                new TraceDefaultJsonHandler(hadoopConf);
     }
 
     @Override
     public ParquetHandler getParquetHandler() {
         return properties.isEnableDeltaLakeCheckpointMetaCache() ? new DeltaLakeParquetHandler(hadoopConf, checkpointCache) :
-                new DefaultParquetHandler(hadoopConf);
+                new TraceDefaultParquetHandler(hadoopConf);
     }
 
     public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-                                         LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache,
-                                         LoadingCache<String, List<JsonNode>> jsonCache) {
+                                         LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                                         LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         return new DeltaLakeEngine(hadoopConf, properties, checkpointCache, jsonCache);
     }
 }

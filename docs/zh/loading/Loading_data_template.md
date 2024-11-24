@@ -1,4 +1,4 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 unlisted: true
 ---

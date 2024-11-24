@@ -498,8 +498,8 @@ TEST_F(OrcChunkReaderTest, SkipRowGroups) {
 }
 
 template <int ORC_PRECISION, int ORC_SCALE, typename ValueType>
-std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
-                                                               const std::vector<ValueType>& values) {
+Buffer<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, ObjectPool* pool,
+                                                          const Buffer<ValueType>& values) {
     std::cout << "orc precision=" << ORC_PRECISION << " scale=" << ORC_SCALE << std::endl;
     if constexpr (std::is_same_v<ValueType, int64_t>) {
         static_assert(ORC_PRECISION <= 18);
@@ -579,7 +579,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal64) {
-    const std::vector<int64_t> orc_values = {
+    const Buffer<int64_t> orc_values = {
             0,
             1,
             -1,
@@ -593,7 +593,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
             999'999'999'000'000'000,
     };
 
-    auto check_results = [](const std::vector<const char*>& exp, const std::vector<DecimalV2Value>& real) {
+    auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
         ASSERT_EQ(exp.size(), real.size());
         for (int i = 0; i < exp.size(); i++) {
             EXPECT_EQ(exp[i], real[i].to_string());
@@ -602,7 +602,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
 
     ObjectPool pool;
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -619,7 +619,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",           "0.00000001",           "-0.00000001", "0.00000123",          "1230",
                 "-9.99999999", "-9999999999.99999999", "9.99999999",  "9999999999.99999999", "10",
                 "9999999990",
@@ -628,7 +628,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -645,7 +645,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "1",
                 "-1",
@@ -662,7 +662,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0",
                 "0",
@@ -679,7 +679,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0",
                 "0",
@@ -696,7 +696,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",           "0",           "0",          "0",          "0.00000123", "-0.000000009", "-9.999999999",
                 "0.000000009", "9.999999999", "0.00000001", "9.99999999",
         };
@@ -706,7 +706,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal64) {
 }
 
 TEST_F(OrcChunkReaderTest, TestDecimal128) {
-    const std::vector<int128_t> orc_values = {
+    const Buffer<int128_t> orc_values = {
             (int128_t)0,
             (int128_t)1,
             (int128_t)-1,
@@ -722,7 +722,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
             (int128_t)999'999'999'000'000'000,
     };
 
-    auto check_results = [](const std::vector<const char*>& exp, const std::vector<DecimalV2Value>& real) {
+    auto check_results = [](const Buffer<const char*>& exp, const Buffer<DecimalV2Value>& real) {
         ASSERT_EQ(exp.size(), real.size());
         for (int i = 0; i < exp.size(); i++) {
             EXPECT_EQ(exp[i], real[i].to_string());
@@ -731,7 +731,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 
     ObjectPool pool;
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0.000000001",
                 "-0.000000001",
@@ -748,7 +748,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0.00000001",
                 "-0.00000001",
@@ -765,7 +765,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0.0000001",
                 "-0.0000001",
@@ -782,7 +782,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "1",
                 "-1",
@@ -799,7 +799,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0",
                 "0",
@@ -816,7 +816,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0",
                 "0",
                 "0",
@@ -833,7 +833,7 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
         check_results(exp, real);
     }
     {
-        std::vector<const char*> exp = {
+        Buffer<const char*> exp = {
                 "0", "0", "0", "0", "0", "0", "-9.999999999", "0", "9.999999999", "0", "0.000000009",
         };
         auto real = convert_orc_to_starrocks_decimalv2<27, 26>(_runtime_state.get(), &pool, orc_values);
@@ -841,11 +841,9 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
     }
 }
 
-std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
-                                                               const std::string& reader_tz,
-                                                               const std::string& write_tz,
-                                                               const std::vector<int64_t>& values,
-                                                               const bool isInstant) {
+Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
+                                                          const std::string& reader_tz, const std::string& write_tz,
+                                                          const Buffer<int64_t>& values, const bool isInstant) {
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
@@ -917,7 +915,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
 
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format off
-    const std::vector<int64_t> orc_values = {
+    const Buffer<int64_t> orc_values = {
             // 2021.5.25 1:18:40 GMT
             // 2021.5.25 9:18:40 Asia/Shanghai
             1621905520,
@@ -935,7 +933,7 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format on
     {
         // Instant Timestamp
-        const std::vector<std::string> exp_values = {
+        const Buffer<std::string> exp_values = {
                 "2021-05-25 09:18:40",
                 "1970-01-01 08:00:00",
                 "1702-06-01 04:01:35",
@@ -952,7 +950,7 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
     {
         // Timestamp
         // Instant Timestamp
-        const std::vector<std::string> exp_values = {
+        const Buffer<std::string> exp_values = {
                 "2021-05-25 01:18:40",
                 "1970-01-01 00:00:00",
                 "1702-05-31 19:55:52",

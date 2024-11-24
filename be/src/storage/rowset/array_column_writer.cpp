@@ -16,6 +16,7 @@
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/casts.h"
+#include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/column_writer.h"
 
 namespace starrocks {
@@ -46,6 +47,8 @@ public:
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 
+    Status write_vector_index(uint64_t* index_size) override;
+
     ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
 
     uint64_t total_mem_footprint() const override;
@@ -56,6 +59,7 @@ private:
     std::unique_ptr<ScalarColumnWriter> _null_writer;
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;
     std::unique_ptr<ColumnWriter> _element_writer;
+    std::unique_ptr<VectorIndexWriter> _vector_index_writer;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnWriterOptions& opts,
@@ -68,6 +72,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
     element_options.need_zone_map = false;
     element_options.need_bloom_filter = element_column.is_bf_column();
     element_options.need_bitmap_index = element_column.has_bitmap_index();
+    element_options.need_flat = opts.need_flat;
+    element_options.is_compaction = opts.is_compaction;
     if (element_column.type() == LogicalType::TYPE_ARRAY) {
         if (element_options.need_bloom_filter) {
             return Status::NotSupported("Do not support bloom filter for array type");
@@ -122,7 +128,14 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
           _opts(opts),
           _null_writer(std::move(null_writer)),
           _array_size_writer(std::move(offset_writer)),
-          _element_writer(std::move(element_writer)) {}
+          _element_writer(std::move(element_writer)) {
+    if (_opts.need_vector_index) {
+        DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
+        auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
+        std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
+        VectorIndexWriter::create(tablet_index, index_path, is_nullable(), &_vector_index_writer);
+    }
+}
 
 Status ArrayColumnWriter::init() {
     if (is_nullable()) {
@@ -130,6 +143,9 @@ Status ArrayColumnWriter::init() {
     }
     RETURN_IF_ERROR(_array_size_writer->init());
     RETURN_IF_ERROR(_element_writer->init());
+    if (_opts.need_vector_index) {
+        RETURN_IF_ERROR(_vector_index_writer->init());
+    }
 
     return Status::OK();
 }
@@ -156,6 +172,11 @@ Status ArrayColumnWriter::append(const Column& column) {
     // 3. writer elements column recursively
     RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
 
+    // 4. write vector index
+    if (_vector_index_writer.get()) {
+        RETURN_IF_ERROR(_vector_index_writer->append(*array_column));
+    }
+
     return Status::OK();
 }
 
@@ -163,6 +184,9 @@ uint64_t ArrayColumnWriter::estimate_buffer_size() {
     size_t estimate_size = _array_size_writer->estimate_buffer_size() + _element_writer->estimate_buffer_size();
     if (is_nullable()) {
         estimate_size += _null_writer->estimate_buffer_size();
+    }
+    if (_vector_index_writer.get()) {
+        estimate_size += _vector_index_writer->estimate_buffer_size();
     }
     return estimate_size;
 }
@@ -186,6 +210,9 @@ uint64_t ArrayColumnWriter::total_mem_footprint() const {
     }
     total_mem_footprint += _array_size_writer->total_mem_footprint();
     total_mem_footprint += _element_writer->total_mem_footprint();
+    if (_vector_index_writer.get()) {
+        total_mem_footprint += _vector_index_writer->total_mem_footprint();
+    }
     return total_mem_footprint;
 }
 
@@ -204,6 +231,13 @@ Status ArrayColumnWriter::write_ordinal_index() {
     }
     RETURN_IF_ERROR(_array_size_writer->write_ordinal_index());
     RETURN_IF_ERROR(_element_writer->write_ordinal_index());
+    return Status::OK();
+}
+
+Status ArrayColumnWriter::write_vector_index(uint64_t* index_size) {
+    if (_vector_index_writer.get()) {
+        RETURN_IF_ERROR(_vector_index_writer->finish(index_size));
+    }
     return Status::OK();
 }
 

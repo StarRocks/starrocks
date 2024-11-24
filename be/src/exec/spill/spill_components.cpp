@@ -14,11 +14,14 @@
 
 #include "exec/spill/spill_components.h"
 
+#include <glog/logging.h>
+
 #include <any>
 #include <cstdint>
 #include <memory>
 #include <numeric>
 
+#include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/spill/common.h"
@@ -269,7 +272,6 @@ void PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_p
     num_partitions = BitUtil::next_power_of_two(num_partitions);
     num_partitions = std::min<size_t>(num_partitions, 1 << config::spill_max_partition_level);
     num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
-
     _level_to_partitions.clear();
     _id_to_partitions.clear();
     std::fill(_partition_set.begin(), _partition_set.end(), false);
@@ -317,21 +319,28 @@ void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_pt
     std::sort(partitions.begin(), partitions.end(),
               [](const auto& left, const auto& right) { return left->partition_id < right->partition_id; });
     _partition_set[partition->partition_id] = true;
+    _total_partition_num += 1;
 }
 
 void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partition) {
+    auto affinity_group = partition->block_group->get_affinity_group();
+    DCHECK(affinity_group != kDefaultBlockAffinityGroup);
     _id_to_partitions.erase(partition->partition_id);
     size_t level = partition->level;
     auto& partitions = _level_to_partitions[level];
     _partition_set[partition->partition_id] = false;
-    partitions.erase(std::find_if(partitions.begin(), partitions.end(),
-                                  [partition](auto& val) { return val->partition_id == partition->partition_id; }));
+    auto iter = std::find_if(partitions.begin(), partitions.end(),
+                             [partition](auto& val) { return val->partition_id == partition->partition_id; });
+    _total_partition_num -= (iter != partitions.end());
+    partitions.erase(iter);
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
         if (_min_level == level) {
             _min_level = level + 1;
         }
     }
+    WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
+                  fmt::format("release affinity group {} error", affinity_group));
 }
 
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
@@ -464,7 +473,8 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
-        auto block_group = std::make_shared<BlockGroup>();
+        BlockAffinityGroup affinity_group = _spiller->block_manager()->acquire_affinity_group();
+        auto block_group = std::make_shared<BlockGroup>(affinity_group);
         partition->block_group = block_group;
         partition->spill_writer->add_block_group(std::move(block_group));
         auto output = create_spill_output_stream(_spiller, partition->block_group.get(), _spiller->block_manager());
@@ -546,11 +556,16 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
                                    flush_ctx.right.get());
         RETURN_IF_YIELD(yield_ctx.need_yield);
         RETURN_IF(!st.is_ok_or_eof(), st);
+        DCHECK_EQ(flush_ctx.reader.get()->read_rows(), partition->num_rows);
         TRACE_SPILL_LOG << "reader:" << flush_ctx.reader.get() << " read rows:" << flush_ctx.reader->read_rows();
         DCHECK_EQ(flush_ctx.left->num_rows + flush_ctx.right->num_rows, partition->num_rows);
 
         flush_ctx.left->spill_writer->acquire_mem_table();
         flush_ctx.right->spill_writer->acquire_mem_table();
+
+        DCHECK_EQ(flush_ctx.left->spill_output_stream->append_rows(), flush_ctx.left->num_rows);
+        DCHECK_EQ(flush_ctx.left->spill_writer->block_group_num_rows(), flush_ctx.left->num_rows);
+        DCHECK_EQ(flush_ctx.right->spill_writer->block_group_num_rows(), flush_ctx.right->num_rows);
 
         _add_partition(std::move(flush_ctx.right));
         _add_partition(std::move(flush_ctx.left));
@@ -587,17 +602,25 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
         };
 
         auto defer = DeferOp([&]() {
+            RETURN_IF(yield_ctx.need_yield, (void)0);
             RETURN_IF(st = flush_partition(left_partition); !st.ok(), (void)0);
             RETURN_IF(yield_ctx.need_yield, (void)0);
             RETURN_IF(st = flush_partition(right_partition); !st.ok(), (void)0);
             RETURN_IF(yield_ctx.need_yield, (void)0);
         });
+
+        // is mem table is done we should flush them firstly
+        if (left_mem_table->is_done() || right_mem_table->is_done()) {
+            return Status::OK();
+        }
+
         TRY_CATCH_ALLOC_SCOPE_START()
         while (true) {
             {
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
                 RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
+                    DCHECK_EQ(reader->read_rows(), partition->num_rows);
                     break;
                 }
                 ASSIGN_OR_RETURN(auto chunk, reader->restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));

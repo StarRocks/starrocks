@@ -261,6 +261,10 @@ std::string Status::code_as_string() const {
         return "Capaticy limit exceeded";
     case TStatusCode::SHUTDOWN:
         return "Shut down in progress";
+    case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
+        return "Big query cpu second limit exceeded";
+    case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:
+        return "Big query scan rows limit exceeded";
     }
     return {};
 }

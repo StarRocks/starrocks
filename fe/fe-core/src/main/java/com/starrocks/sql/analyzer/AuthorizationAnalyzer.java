@@ -45,7 +45,6 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -229,7 +228,7 @@ public class AuthorizationAnalyzer {
                         funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.ALL_DATABASE_ID,
                                 PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
                     } else {
-                        Database database = GlobalStateMgr.getServingState().getDb(tokens.get(0));
+                        Database database = GlobalStateMgr.getServingState().getLocalMetastore().getDb(tokens.get(0));
                         if (database == null) {
                             throw new SemanticException("Database %s is not found", tokens.get(0));
                         }
@@ -262,7 +261,7 @@ public class AuthorizationAnalyzer {
                         FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
                                 argsDef.getArgTypes(), argsDef.isVariadic());
 
-                        Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                         long databaseID = db.getId();
                         Function function = db.getFunction(searchDesc);
 
@@ -327,7 +326,8 @@ public class AuthorizationAnalyzer {
                 } else if (ObjectType.RESOURCE.equals(objectType)
                         || ObjectType.CATALOG.equals(objectType)
                         || ObjectType.RESOURCE_GROUP.equals(objectType)
-                        || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                        || ObjectType.STORAGE_VOLUME.equals(objectType)
+                        || ObjectType.WAREHOUSE.equals(objectType)) {
                     if (tokens.size() != 1) {
                         throw new SemanticException(
                                 "Invalid grant statement with error privilege object " + tokens);
@@ -346,10 +346,10 @@ public class AuthorizationAnalyzer {
                             tableName = new TableName(tokens.get(0), tokens.get(1), tokens.get(2));
                         } else if (tokens.size() == 2) {
                             tableName = new TableName(tokens.get(0), tokens.get(1));
-                            MetaUtils.normalizationTableName(session, tableName);
+                            tableName.normalization(session);
                         } else if (tokens.size() == 1) {
                             tableName = new TableName("", tokens.get(0));
-                            MetaUtils.normalizationTableName(session, tableName);
+                            tableName.normalization(session);
                         } else {
                             throw new SemanticException(
                                     "Invalid grant statement with error privilege object " + tokens);
@@ -366,7 +366,7 @@ public class AuthorizationAnalyzer {
                             tableName = new TableName(tokens.get(0), tokens.get(1));
                         } else if (tokens.size() == 1) {
                             tableName = new TableName("", tokens.get(0));
-                            MetaUtils.normalizationTableName(session, tableName);
+                            tableName.normalization(session);
                         } else {
                             throw new SemanticException(
                                     "Invalid grant statement with error privilege object " + tokens);
@@ -406,7 +406,8 @@ public class AuthorizationAnalyzer {
                 } else if (ObjectType.RESOURCE.equals(objectType)
                         || ObjectType.CATALOG.equals(objectType)
                         || ObjectType.RESOURCE_GROUP.equals(objectType)
-                        || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                        || ObjectType.STORAGE_VOLUME.equals(objectType)
+                        || ObjectType.WAREHOUSE.equals(objectType)) {
                     for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                         if (tokens.size() != 1) {
                             throw new SemanticException(

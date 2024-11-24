@@ -354,6 +354,12 @@ public class ReplicationJob implements GsonPostProcessable {
     @SerializedName(value = "jobId")
     private final String jobId;
 
+    @SerializedName(value = "createdTimeMs")
+    private final long createdTimeMs;
+
+    @SerializedName(value = "finishedTimeMs")
+    private volatile long finishedTimeMs;
+
     @SerializedName(value = "srcToken")
     private final String srcToken;
 
@@ -392,12 +398,24 @@ public class ReplicationJob implements GsonPostProcessable {
         return jobId;
     }
 
+    public long getCreatedTimeMs() {
+        return createdTimeMs;
+    }
+
+    public long getFinishedTimeMs() {
+        return finishedTimeMs;
+    }
+
     public long getDatabaseId() {
         return databaseId;
     }
 
     public long getTableId() {
         return tableId;
+    }
+
+    public long getTransactionId() {
+        return transactionId;
     }
 
     public long getReplicationDataSize() {
@@ -414,9 +432,38 @@ public class ReplicationJob implements GsonPostProcessable {
 
     private void setState(ReplicationJobState state) {
         this.state = state;
+        if (state.equals(ReplicationJobState.COMMITTED) || state.equals(ReplicationJobState.ABORTED)) {
+            finishedTimeMs = System.currentTimeMillis();
+        }
         GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
         LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}",
                 state, databaseId, tableId, transactionId);
+    }
+
+    public boolean isExpired() {
+        return finishedTimeMs > 0 &&
+                (System.currentTimeMillis() - finishedTimeMs) > (Config.history_job_keep_max_second * 1000);
+    }
+
+    public long getRunningTaskNum() {
+        return runningTasks.size();
+    }
+
+    public long getTotalTaskNum() {
+        return taskNum;
+    }
+
+    public String getErrorMessage() {
+        if (!state.equals(ReplicationJobState.ABORTED)) {
+            return null;
+        }
+
+        TransactionState transactionState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
+                .getTransactionState(databaseId, transactionId);
+        if (transactionState == null) {
+            return "Transaction not found";
+        }
+        return transactionState.getReason();
     }
 
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
@@ -427,6 +474,8 @@ public class ReplicationJob implements GsonPostProcessable {
         } else {
             this.jobId = request.job_id;
         }
+        this.createdTimeMs = System.currentTimeMillis();
+        this.finishedTimeMs = 0;
         this.srcToken = request.src_token;
         this.databaseId = request.database_id;
         TableInfo tableInfo = initTableInfo(request);
@@ -451,6 +500,8 @@ public class ReplicationJob implements GsonPostProcessable {
         } else {
             this.jobId = jobId;
         }
+        this.createdTimeMs = System.currentTimeMillis();
+        this.finishedTimeMs = 0;
         this.srcToken = srcToken;
         this.databaseId = databaseId;
         TableInfo tableInfo = initTableInfo(table, srcTable, srcSystemInfoService);
@@ -572,15 +623,15 @@ public class ReplicationJob implements GsonPostProcessable {
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(request.database_id);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
-            Table table = db.getTable(request.table_id);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
             if (table == null) {
                 throw new MetaNotFoundException(
                         "Table " + request.table_id + " in database " + db.getFullName() + " not found");
@@ -612,7 +663,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,
@@ -686,18 +737,18 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
-            Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
-                    "Partition " + partition.getName() + " in table " + table.getName()
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
+            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
                             + " publish version not finished");
-            Preconditions.checkState(partition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + partition.getVisibleVersion()
+            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
+                    "Target visible version: " + physicalPartition.getVisibleVersion()
                             + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (partition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
                 continue;
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
+            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
                     srcSystemInfoService);
             partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }
@@ -830,8 +881,9 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
-            Database db = GlobalStateMgr.getServingState().getDb(databaseId);
-            if (db == null || db.getTable(tableId) == null) {
+            Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
+            if (db == null
+                    || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
                 abortTransaction("Table is deleted");
                 return true;
             }
@@ -866,8 +918,9 @@ public class ReplicationJob implements GsonPostProcessable {
         sendRunningTasks();
     }
 
-    private void sendReplicateSnapshotTasks() {
+    private void sendReplicateSnapshotTasks() throws Exception {
         runningTasks.clear();
+        byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
@@ -893,7 +946,7 @@ public class ReplicationJob implements GsonPostProcessable {
                                 indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
-                                flippedSrcSnapshotInfos);
+                                flippedSrcSnapshotInfos, encryptionMeta);
                         runningTasks.put(task, task);
                     }
                 }
@@ -929,11 +982,17 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private boolean isAllTaskFinished() {
+        LOG.info("Replication job state: {}, finished tasks: {}/{}, database id: {}, table id: {}, transaction id: {}",
+                state, finishedTasks.size(), taskNum, databaseId, tableId, transactionId);
+
         if (runningTasks.isEmpty() && finishedTasks.size() == taskNum) {
             return true;
         }
-        LOG.info("Replication job state: {}, finished tasks: {}/{}, database id: {}, table id: {}, transaction id: {}",
-                state, finishedTasks.size(), taskNum, databaseId, tableId, transactionId);
+
+        if (runningTasks.size() < 10) {
+            LOG.info("Unfinished tasks: {}, details: {}", runningTasks.size(), runningTasks.values());
+        }
+
         return false;
     }
 

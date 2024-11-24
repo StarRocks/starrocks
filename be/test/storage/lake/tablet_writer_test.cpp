@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -333,6 +334,25 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     // `close()` directly without calling `finish()`
     writer->close();
 }
+
+#ifdef USE_STAROS
+
+TEST_P(LakeTabletWriterTest, test_write_sdk) {
+    auto provider = std::make_shared<starrocks::lake::StarletLocationProvider>();
+    auto location = provider->root_location(12345);
+
+    Tablet tablet(_tablet_mgr.get(), next_id(), provider, _tablet_metadata);
+    auto meta_location = tablet.metadata_location(0);
+    auto column_size = tablet.get_schema()->get()->num_columns();
+    auto txn_log_location = tablet.txn_log_location(0);
+    auto txn_vlog_location = tablet.txn_vlog_location(0);
+    auto test_segment_location = tablet.segment_location("test_segment");
+    auto root_location = tablet.root_location();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), 1));
+    writer->close();
+}
+
+#endif // USE_STAROS
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
                          ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));

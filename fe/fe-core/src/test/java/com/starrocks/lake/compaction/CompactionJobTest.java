@@ -16,8 +16,8 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
+import com.starrocks.proto.CompactStat;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -33,7 +33,7 @@ public class CompactionJobTest {
     public void testGetResult() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartitionImpl(0, "", 1, 2, null);
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
 
         Assert.assertTrue(job.getAllowPartialSuccess());
@@ -78,10 +78,43 @@ public class CompactionJobTest {
     public void testBuildTabletCommitInfo() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartitionImpl(0, "", 1, 2, null);
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010, false);
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
         });
+    }
+
+    @Test
+    public void testGetExecutionProfile() {
+        Database db = new Database();
+        Table table = new Table(Table.TableType.CLOUD_NATIVE);
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+        CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
+
+        Assert.assertTrue(job.getExecutionProfile().isEmpty());
+
+        List<CompactionTask> list = new ArrayList<>();
+        list.add(new CompactionTask(100));
+        job.setTasks(list);
+        job.finish();
+        new MockUp<CompactionTask>() {
+            @Mock
+            public List<CompactStat> getCompactStats() {
+                List<CompactStat> list = new ArrayList<>();
+                CompactStat stat = new CompactStat();
+                stat.subTaskCount = 1;
+                stat.readTimeRemote = 2L;
+                stat.readBytesRemote = 3L;
+                stat.readTimeLocal = 4L;
+                stat.readBytesLocal = 5L;
+                stat.inQueueTimeSec = 6;
+                list.add(stat);
+                return list;
+            }
+        };
+
+        String s = job.getExecutionProfile();
+        Assert.assertFalse(s.isEmpty());
     }
 }

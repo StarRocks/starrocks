@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -58,6 +59,8 @@ public:
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
+    virtual workgroup::ScanSchedEntityType sched_entity_type() const { return workgroup::ScanSchedEntityType::OLAP; }
+
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -91,6 +94,8 @@ public:
     virtual bool is_running_all_io_tasks() const;
 
     virtual int64_t get_scan_table_id() const { return -1; }
+
+    void update_exec_stats(RuntimeState* state) override;
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;

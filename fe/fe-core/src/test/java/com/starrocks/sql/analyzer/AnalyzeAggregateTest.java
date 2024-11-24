@@ -102,9 +102,9 @@ public class AnalyzeAggregateTest {
         analyzeFail("select grouping(v1) from t0 group by v1",
                 "cannot use GROUPING functions without [grouping sets|rollup|cube] clause");
 
-        //grouping functions only support column.
+        //The arguments of GROUPING must be expressions referenced by GROUP BY
         analyzeFail("select v1, grouping(v1+1) from t0 group by grouping sets((v1))",
-                "grouping functions only support column.");
+                "The arguments of GROUPING must be expressions referenced by GROUP BY.");
 
         //cannot contain grouping
         analyzeFail("select v1 from t0 inner join t1 on grouping(v1)= v4", "JOIN clause cannot contain grouping");
@@ -266,8 +266,8 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx('c',0.5) from tall group by tb");
         analyzeFail("select percentile_approx(1,'c') from tall group by tb");
         analyzeFail("select percentile_approx(1,1,'c') from tall group by tb");
-        analyzeFail("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,5) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");

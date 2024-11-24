@@ -74,7 +74,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof HttpRequest) {
+        try {
+            if (!(msg instanceof HttpRequest)) {
+                return;
+            }
+
             this.request = (HttpRequest) msg;
             if (LOG.isDebugEnabled()) {
                 LOG.debug("request: url:[{}]", request.uri());
@@ -112,7 +116,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     }
                 }
             }
-        } else {
+        } finally {
             ReferenceCountUtil.release(msg);
         }
     }

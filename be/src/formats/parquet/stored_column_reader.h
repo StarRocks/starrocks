@@ -70,8 +70,7 @@ public:
 
     virtual Status get_dict_values(Column* column) = 0;
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) = 0;
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) = 0;
 
     virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
 
@@ -98,8 +97,7 @@ public:
 
     Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 

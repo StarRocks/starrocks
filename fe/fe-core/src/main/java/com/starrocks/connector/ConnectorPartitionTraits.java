@@ -44,6 +44,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -100,12 +101,12 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
-    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
-            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
         }
@@ -116,9 +117,14 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
-        return buildWithCache(ctx, table);
+        return buildWithCache(ctx, null, table);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
@@ -147,6 +153,11 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract String getDbName();
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -174,7 +185,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
@@ -194,4 +205,21 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
+
+    /**
+     * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds to make sure partition update
+     * time is later than check time
+     * @param checkTime the time to check
+     * @param extraSeconds partition updated time would add extraSeconds to check whether it is after checkTime
+     */
+    public abstract Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds);
+
+    /**
+     * Get the last update time of the table,
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds
+     */
+    public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
 }

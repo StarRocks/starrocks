@@ -14,7 +14,15 @@
 
 #include "table_function_table_sink.h"
 
+#include "common/logging.h"
+#include "connector/file_chunk_sink.h"
+#include "connector/hive_chunk_sink.h"
+#include "exec/data_sink.h"
+#include "exec/hdfs_scanner_text.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
+#include "formats/column_evaluator.h"
+#include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"

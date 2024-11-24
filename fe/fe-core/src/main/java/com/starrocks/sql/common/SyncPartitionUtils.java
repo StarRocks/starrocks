@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -716,11 +717,11 @@ public class SyncPartitionUtils {
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
 
-        Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
         if (baseDb == null) {
             return;
         }
-        Table baseTable = baseDb.getTable(tableName.getTbl());
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(baseDb.getFullName(), tableName.getTbl());
         if (baseTable == null) {
             return;
         }
@@ -749,6 +750,14 @@ public class SyncPartitionUtils {
             return;
         }
         if (StringUtils.isEmpty(tableName.getCatalog()) || InternalCatalog.isFromDefault(tableName)) {
+            return;
+        }
+        List<Expr> mvPartitionRefTableExprs = mv.getPartitionRefTableExprs();
+        if (CollectionUtils.isEmpty(mvPartitionRefTableExprs)) {
+            return;
+        }
+        // TODO: support multiple partition columns
+        if (mvPartitionRefTableExprs.size() > 1) {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);

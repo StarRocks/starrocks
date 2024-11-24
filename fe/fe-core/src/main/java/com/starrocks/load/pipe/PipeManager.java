@@ -20,6 +20,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -36,7 +37,6 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -184,7 +184,7 @@ public class PipeManager {
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
-        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
@@ -309,12 +309,12 @@ public class PipeManager {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         try {
             lock.readLock().lock();
             final int cnt = 1 + pipeMap.size();
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.PIPE_MGR, cnt);
-            writer.writeJson(pipeMap.size());
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.PIPE_MGR, cnt);
+            writer.writeInt(pipeMap.size());
             for (Pipe pipe : pipeMap.values()) {
                 writer.writeJson(pipe);
             }

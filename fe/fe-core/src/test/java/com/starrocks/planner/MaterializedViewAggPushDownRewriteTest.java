@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -36,8 +35,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase.getAggFunction;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
 public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTestBase {
     @BeforeClass
@@ -129,21 +129,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     "   group by LO_ORDERDATE having sum(%s + 1) > 10", queryAggArg, queryAggArg);
             sql(query).contains("mv0");
         });
-    }
-
-    private String getAggFunction(String funcName, String aggArg) {
-        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
-            funcName = String.format("array_agg(distinct %s)", aggArg);
-        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
-            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
-            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
-            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
-        } else {
-            funcName = String.format("%s(%s)", funcName, aggArg);
-        }
-        return funcName;
     }
 
     @Test
@@ -678,7 +663,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             {
                 String query = "select sum(LO_REVENUE) as revenue_sum\n" +
                         "   from lineorder l join supplier s on l.lo_suppkey = s.s_suppkey";
-                // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
+                // TODO: It's safe to push down count(distinct) to mv only when join keys are unique constraint in this case.
                 // TODO: support this if group by keys are equals to join keys
                 sql(query).match("mv0");
             }
@@ -1064,5 +1049,45 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 sql(query).contains("mv0");
             });
         }
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_Avg() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as revenue_sum\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs1() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as avg1, avg(LO_REVENUE) as avg2\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs2() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt,\n" +
+                " sum(lo_custkey) as sum_lo_custkey, count(lo_custkey) as count_lo_custkey\n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), avg(LO_REVENUE) as avg1, " +
+                    "avg(LO_REVENUE) as avg2, avg(lo_custkey) as avg3 from lineorder l \n" +
+                    "join dates d on l.LO_ORDERDATE = d.d_datekey group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
     }
 }

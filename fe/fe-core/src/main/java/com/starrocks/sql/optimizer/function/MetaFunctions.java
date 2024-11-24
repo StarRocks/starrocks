@@ -101,9 +101,9 @@ public class MetaFunctions {
     }
 
     public static Pair<Database, Table> inspectTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
-        Table table = db.tryGetTable(tableName.getTbl())
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(tableName.getDb(), tableName.getTbl())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -149,12 +149,12 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
         }
     }
 
@@ -167,19 +167,19 @@ public class MetaFunctions {
         Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
         if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
+            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
 
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
             for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
                         .map(Table::getName)
                         .orElse(null);
                 JsonObject obj = new JsonObject();
@@ -192,7 +192,7 @@ public class MetaFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
+            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
         }
     }
 
@@ -246,7 +246,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(connectContext.getDatabase())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
         String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);
@@ -345,8 +345,12 @@ public class MetaFunctions {
         try {
             MaterializedView mv = (MaterializedView) table;
             String plans = "";
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+            boolean defaultUseCacheValue = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(useCache.getBoolean());
             List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv);
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(defaultUseCacheValue);
             int size = planContexts.size();
             for (int i = 0; i < size; i++) {
                 MvPlanContext context = planContexts.get(i);

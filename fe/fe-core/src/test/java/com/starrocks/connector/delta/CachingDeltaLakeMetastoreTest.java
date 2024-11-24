@@ -110,8 +110,8 @@ public class CachingDeltaLakeMetastoreTest {
         Table table = cachingDeltaLakeMetastore.getTable("db1", "table1");
         Assert.assertTrue(table instanceof DeltaLakeTable);
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
-        Assert.assertEquals("db1", deltaLakeTable.getDbName());
-        Assert.assertEquals("table1", deltaLakeTable.getTableName());
+        Assert.assertEquals("db1", deltaLakeTable.getCatalogDBName());
+        Assert.assertEquals("table1", deltaLakeTable.getCatalogTableName());
         Assert.assertEquals("s3://bucket/path/to/table", deltaLakeTable.getTableLocation());
     }
 
@@ -160,5 +160,30 @@ public class CachingDeltaLakeMetastoreTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCacheMemoryUsage() {
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
+                                                        Engine deltaEngine, long createTime) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1",
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null,
+                        "s3://bucket/path/to/table", null, 0);
+            }
+        };
+
+        CachingDeltaLakeMetastore cachingDeltaLakeMetastore =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(metastore, executor, expireAfterWriteSec,
+                        refreshAfterWriteSec, 100);
+
+        cachingDeltaLakeMetastore.getDb("db1");
+        cachingDeltaLakeMetastore.getTable("db1", "table1");
+
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateSize() > 0);
+        Assert.assertFalse(cachingDeltaLakeMetastore.estimateCount().isEmpty());
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("databaseCache"));
+        Assert.assertTrue(cachingDeltaLakeMetastore.estimateCount().containsKey("tableCache"));
     }
 }

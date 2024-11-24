@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -76,7 +77,7 @@ public class OptOlapPartitionPruner {
 
         if (selectedPartitionIds == null) {
             selectedPartitionIds =
-                    table.getPartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
+                    table.getVisiblePartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
                             Collectors.toList());
             // some test cases need to perceive partitions pruned, so we can not filter empty partitions.
         } else {
@@ -408,6 +409,8 @@ public class OptOlapPartitionPruner {
                 return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
                         && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+            } else if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof SlotRef) {
+                return !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
             return false;

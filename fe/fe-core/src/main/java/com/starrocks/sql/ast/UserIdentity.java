@@ -44,12 +44,12 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -220,25 +220,9 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return sb.toString();
     }
 
-    // change user to default_cluster:user for write
-    // and change default_cluster:user to user after read
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, ClusterNamespace.getFullName(user));
-        Text.writeString(out, host);
-        out.writeBoolean(isDomain);
-    }
-
-    public static UserIdentity read(DataInput in) throws IOException {
-        UserIdentity userIdentity = new UserIdentity();
-        userIdentity.readFields(in);
-        return userIdentity;
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        user = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        host = Text.readString(in);
-        isDomain = in.readBoolean();
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

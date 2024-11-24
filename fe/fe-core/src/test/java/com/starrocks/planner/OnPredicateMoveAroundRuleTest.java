@@ -117,6 +117,19 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
         argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
         argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
 
+        // scene 6
+        templateSql = "select * from t0 %s join t1 on v1 = v4 where all_match( x-> x > 1, [v1]) or v1 < 0;";
+        expectPredicate = "(all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))) OR (4: v4 < 0)";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
+
+        // scene 7
+        templateSql = "select * from t0 join (select * from t1 where v4 = 1) t1 " +
+                "on t0.v1 = t1.v4 where all_match( x-> x > 1, [v1]) or v1 < 0;";
+        expectPredicate = "PREDICATES: 1: v1 = 1, (all_match(array_map(<slot 7> -> <slot 7> > 1, [1: v1]))) OR (1: v1 < 0)";
+        argumentsList.add(Arguments.of(String.format(templateSql, "inner"), expectPredicate));
+        argumentsList.add(Arguments.of(String.format(templateSql, "left"), expectPredicate));
+
         return argumentsList.stream();
     }
 

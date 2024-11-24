@@ -18,6 +18,8 @@
 #include <random>
 #include <utility>
 
+#include "column/bytes.h"
+#include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -33,6 +35,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
+#include "util/metrics.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -551,6 +554,10 @@ void RuntimeFilterWorker::close() {
 void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params, bool is_pipeline) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop open query_id = " << query_id;
+        return;
+    }
     RuntimeFilterWorkerEvent ev;
     ev.type = OPEN_QUERY;
     ev.query_id = query_id;
@@ -570,9 +577,33 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     _queue.put(std::move(ev));
 }
 
+bool RuntimeFilterWorker::_reach_queue_limit() {
+    if (config::runtime_filter_queue_limit > 0) {
+        if (_queue.get_size() > config::runtime_filter_queue_limit) {
+            LOG(WARNING) << "runtime filter worker queue size is too large(" << _queue.get_size()
+                         << "), queue limit = " << config::runtime_filter_queue_limit;
+            return true;
+        }
+    } else if (config::runtime_filter_queue_limit == 0) {
+        int64_t mem_usage = _metrics->total_rf_bytes();
+        auto tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+        if (tracker->limit_exceeded_precheck(mem_usage)) {
+            LOG(WARNING) << "runtime filter worker queue mem-useage is too large(" << mem_usage
+                         << "), query pool consum(" << tracker->consumption() << "), limit(" << tracker->limit() << ")";
+            return true;
+        }
+    }
+    return false;
+}
+
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms,
                                                    int64_t rpc_http_min_size) {
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop part runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
@@ -588,6 +619,11 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms, int64_t rpc_http_min_size) {
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop broadcast runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
@@ -606,6 +642,11 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
               << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
               << ", is_pipeline = " << params.is_pipeline();
 
+    if (_reach_queue_limit()) {
+        LOG(WARNING) << "runtime filter worker queue drop receive runtime filter, query_id = " << params.query_id()
+                     << ", filter_id = " << params.filter_id();
+        return;
+    }
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_PART_RF"});
@@ -896,9 +937,6 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
-
-        LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
-                << "runtime filter worker queue may be too large, size: " << _queue.get_size();
 
         _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {

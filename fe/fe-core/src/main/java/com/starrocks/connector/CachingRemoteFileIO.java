@@ -55,7 +55,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                     @Override
                     public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
                         List<RemoteFileDesc> res = loadRemoteFiles(key);
-                        key.drop();
                         return res;
                     }
                 }, executor));
@@ -116,7 +115,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         } else {
             cache.put(pathKey, loadRemoteFiles(pathKey));
         }
-        pathKey.drop();
     }
 
     public synchronized void invalidateAll() {
@@ -132,7 +130,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         } else {
             cache.invalidate(pathKey);
         }
-        pathKey.drop();
     }
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {

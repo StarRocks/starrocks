@@ -220,7 +220,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
 
     ASSERT_EQ(c1->byte_size() + sizeof(uint32_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
 
@@ -247,7 +247,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = LargeBinaryColumn::create();
     auto c2 = LargeBinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
 
     ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
 

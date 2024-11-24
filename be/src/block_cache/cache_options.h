@@ -23,6 +23,19 @@
 
 namespace starrocks {
 
+// Options to control how to create DataCache instance
+struct DataCacheOptions {
+    bool enable_datacache = false;
+    bool enable_cache_select = false;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int64_t modification_time = 0;
+    int32_t datacache_evict_probability = 100;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+};
+
 struct DirSpace {
     std::string path;
     size_t size;
@@ -39,11 +52,14 @@ struct CacheOptions {
     bool enable_checksum = false;
     bool enable_direct_io = false;
     bool enable_tiered_cache = true;
+    bool enable_datacache_persistence = false;
     std::string engine;
     size_t max_concurrent_inserts = 0;
     size_t max_flying_memory_mb = 0;
     double scheduler_threads_per_cpu = 0;
     double skip_read_factor = 0;
+    uint32_t inline_item_count_limit = 0;
+    std::string eviction_policy;
 };
 
 struct WriteCacheOptions {
@@ -63,6 +79,13 @@ struct WriteCacheOptions {
     // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
     int32_t evict_probability = 100;
 
+    // The base frequency for target cache.
+    // When using multiple segment lru, a higher frequency may cause the cache is written to warm segment directly.
+    // For the default cache options, that `lru_segment_freq_bits` is 0:
+    // * The default `frequency=0` indicates the cache will be written to cold segment.
+    // * A frequency value greater than 0 indicates writing this cache directly to the warm segment.
+    int8_t frequency = 0;
+
     struct Stats {
         int64_t write_mem_bytes = 0;
         int64_t write_disk_bytes = 0;
@@ -77,18 +100,4 @@ struct ReadCacheOptions {
         int64_t read_disk_bytes = 0;
     } stats;
 };
-
-int64_t parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit);
-
-int64_t parse_conf_datacache_disk_size(const std::string& disk_path, const std::string& disk_size_str,
-                                       int64_t disk_limit);
-
-Status parse_conf_datacache_disk_paths(const std::string& config_path, std::vector<std::string>* paths,
-                                       bool ignore_broken_disk);
-
-Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, const std::string& config_disk_size,
-                                        bool ignore_broken_disk, std::vector<DirSpace>* disk_spaces);
-
-void clean_residual_datacache(const std::string& disk_path);
-
 } // namespace starrocks

@@ -52,6 +52,10 @@ public class MvBaseTableUpdateInfo {
         return toRefreshPartitionNames;
     }
 
+    public Map<String, PCell> getNameToPartKeys() {
+        return nameToPartKeys;
+    }
+
     /**
      * Add partition names that base table needs to be refreshed
      * @param toRefreshPartitionNames the partition names that need to be refreshed
@@ -72,14 +76,7 @@ public class MvBaseTableUpdateInfo {
 
     /**
      * Add partition name that needs to be refreshed and its associated list partition key
-     * @param partitionName base table partition name
-     * @param listPartitionKey the associated list partition
      */
-    public void addListPartitionKeys(String partitionName,
-                                     PListCell listPartitionKey) {
-        nameToPartKeys.put(partitionName, listPartitionKey);
-    }
-
     public void addListPartitionKeys(Map<String, PListCell> listPartitionKeys) {
         nameToPartKeys.putAll(listPartitionKeys);
     }
@@ -103,7 +100,7 @@ public class MvBaseTableUpdateInfo {
     public Map<String, PListCell> getPartitionNameWithLists() {
         Map<String, PListCell> result = Maps.newHashMap();
         for (Map.Entry<String, PCell> e : nameToPartKeys.entrySet()) {
-            Preconditions.checkState(e.getValue() instanceof PRangeCell);
+            Preconditions.checkState(e.getValue() instanceof PListCell);
             PListCell listCell = (PListCell) e.getValue();
             result.put(e.getKey(), listCell);
         }

@@ -40,13 +40,14 @@ public:
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
-    void append_dcg(uint32_t rssid, const std::vector<std::string>& filenames,
+    void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id);
+    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                            int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
@@ -64,6 +65,8 @@ public:
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
+    void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
@@ -72,6 +75,8 @@ private:
     // collect del files which are above cloud native index's rebuild point
     void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
+    // clean sstable meta after alter type
+    void _sstable_meta_clean_after_alter_type();
 
 private:
     Tablet _tablet;
@@ -88,9 +93,13 @@ private:
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
-                   DelVector* delvec);
+                   const LakeIOOptions& lake_io_opts, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
+
+void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& metadata,
+                                               const TxnLogPB_OpCompaction& op_compaction,
+                                               RowsetMetadataPB& last_input_rowset);
 
 } // namespace lake
 } // namespace starrocks

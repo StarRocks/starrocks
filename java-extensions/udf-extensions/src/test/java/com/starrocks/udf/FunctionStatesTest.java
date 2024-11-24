@@ -14,8 +14,8 @@
 
 package com.starrocks.udf;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +42,6 @@ public class FunctionStatesTest {
             }
         }
 
-        Assert.assertEquals(states.size(), 8191);
+        Assertions.assertEquals(states.size(), 8191);
     }
 }

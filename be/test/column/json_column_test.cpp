@@ -423,6 +423,8 @@ INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
                                     std::make_tuple(R"({"a": ""})"),
                                     std::make_tuple(R"({"a": [1, 2, 3]})"),
                                     std::make_tuple(R"({"a": {"b": 1}})"),
+                                    // unsigned integer
+                                    std::make_tuple(R"({"a": 18446744073709551615})"),
 
                                     // empty key
                                     std::make_tuple(R"({"a": {"": ""}})"),
@@ -431,5 +433,33 @@ INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
 
                                  // clang-format on
                                  ));
+
+PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
+    using namespace simdjson;
+    ondemand::parser parser;
+
+    // a is simdjson::ondemand::number_type::big_integer, and should be converted to double
+    auto big_integer_str = R"({"a": 10000000000000000000000000000000000000000})"_padded;
+    ondemand::document big_integer_doc = parser.iterate(big_integer_str);
+    ondemand::object big_integer_obj = big_integer_doc.get_object();
+    auto big_integer_json = JsonValue::from_simdjson(&big_integer_obj);
+    ASSERT_TRUE(big_integer_json.ok());
+
+    // a is simdjson::ondemand::number_type::floating_point_number
+    auto double_str = R"({"a": 10000000000000000000000000000000000000000.0})"_padded;
+    ondemand::document double_doc = parser.iterate(double_str);
+    ondemand::object double_obj = double_doc.get_object();
+    auto double_json = JsonValue::from_simdjson(&double_obj);
+    ASSERT_TRUE(double_json.ok());
+
+    ASSERT_EQ(double_json.value().to_string_uncheck(), big_integer_json.value().to_string_uncheck());
+
+    // a is simdjson::ondemand::number_type::big_integer, but is overflow for double
+    padded_string double_overflow_str = strings::Substitute("{\"a\":$0}", std::string(400, '1'));
+    ondemand::document double_overflow_doc = parser.iterate(double_overflow_str);
+    ondemand::object double_overflow_obj = double_overflow_doc.get_object();
+    auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
+    ASSERT_FALSE(double_overflow_json.ok());
+}
 
 } // namespace starrocks

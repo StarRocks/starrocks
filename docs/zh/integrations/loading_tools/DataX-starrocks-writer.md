@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 DataX 导入
@@ -104,7 +104,7 @@ tar -xzvf starrockswriter.tar.gz
 | maxBatchRows  | 单次 Stream Load 导入的最大行数。导入大量数据时，StarRocks Writer 将根据 `maxBatchRows` 或 `maxBatchSize` 将数据分为多个 Stream Load 作业分批导入。 | 否       | 500000     |
 | maxBatchSize  | 单次 Stream Load 导入的最大字节数，单位为 Byte。导入大量数据时，StarRocks Writer 将根据 `maxBatchRows` 或 `maxBatchSize` 将数据分为多个 Stream Load 作业分批导入。 | 否       | 104857600  |
 | flushInterval | 上一次 Stream Load 结束至下一次开始的时间间隔，单位为 ms。   | 否       | 300000     |
-| loadProps     | Stream Load 的导入参数，详情参考 [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 | 否       | 无         |
+| loadProps     | Stream Load 的导入参数，详情参考 [STREAM LOAD](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 | 否       | 无         |
 
 > 注意
 >
@@ -179,7 +179,7 @@ python datax/bin/datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug datax/job/job.j
 
 由于 DataX 导入是基于封装的 Stream Load 实现，您可以在 `datax/log/$date/` 目录下搜索对应的导入作业日志，日志文件名字中包含导入使用的 JSON 文件名和任务启动时间（小时、分钟、秒），例如：**t_datax_job_job_json-20_52_19.196.log**。
 
-- 如果日志中有 "http://fe_ip:fe_http_port/api/db_name/tbl_name/_stream_load" 记录生成，则表示 Stream Load 作业已成功触发。作业成功触发后，您可参考 [Stream Load 返回值](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值) 查看任务情况。
+- 如果日志中有 "http://fe_ip:fe_http_port/api/db_name/tbl_name/_stream_load" 记录生成，则表示 Stream Load 作业已成功触发。作业成功触发后，您可参考 [Stream Load 返回值](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#返回值) 查看任务情况。
 - 日志中如果没有上述信息，请根据报错信息排查问题，或者在 [DataX 社区问题](https://github.com/alibaba/DataX/issues)中寻找解决方案。
 
 > 注意

@@ -59,7 +59,8 @@ static std::string make_value_type_not_matched_error_message(int field_pos, cons
                                                              const SlotDescriptor* slot) {
     std::stringstream error_msg;
     error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
-              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+              << "Type: " << slot->type().debug_string() << ", Value length: " << field.get_size()
+              << ", Value: " << field.to_string();
     return error_msg.str();
 }
 
@@ -259,7 +260,18 @@ Status CSVScanner::_init_reader() {
         if (_parse_options.skip_header) {
             for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                 CSVReader::Record dummy;
-                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                auto st = _curr_reader->next_record(&dummy);
+                if (!st.ok()) {
+                    if (st.is_end_of_file()) {
+                        auto err_msg = fmt::format(
+                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                                _parse_options.skip_header, i);
+
+                        return Status::EndOfFile(err_msg);
+                    } else {
+                        return st;
+                    }
+                }
             }
         }
         return Status::OK();
@@ -293,6 +305,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 // if timeout happens at the beginning of reading src_chunk, we return the error state
                 // else we will _materialize the lines read before timeout
                 if (src_chunk->num_rows() == 0) {
+                    _reusable_empty_chunk.swap(src_chunk);
                     return status;
                 }
             } else {
@@ -542,6 +555,11 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 }
 
 ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        return std::move(_reusable_empty_chunk);
+    }
+
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
 
     auto chunk = std::make_shared<Chunk>();

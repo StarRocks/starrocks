@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # SQL query
@@ -12,7 +12,7 @@ To solve this problem, increase the value of the `memory_limitation_per_thread_f
 
 ## Does StarRocks support caching query results?
 
-StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/query_cache.md).
+StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/caching/query_cache.md).
 
 ## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
@@ -125,7 +125,7 @@ No, use functions to change "2021-10" to "2021-10-01" and then use "2021-10-01" 
 
 ## Where can I query the size of a StarRocks database or table?
 
-You can use the [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW_DATA.md) command.
+You can use the [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) command.
 
 `SHOW DATA;` displays the data size and replicas of all tables in the current database.
 

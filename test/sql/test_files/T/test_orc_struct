@@ -1,0 +1,15 @@
+-- name: test_orc_struct
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/orc_format/struct_mix.snappy.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+select count(*) from files("path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*", "format" = "orc");
+
+create table t1 as select col_int, col_struct, col_struct.c_date from files("path" = "oss://${oss_bucket}/test_files/orc_format/${uuid0}/*", "format" = "orc");
+desc t1;
+select count(*) from t1;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

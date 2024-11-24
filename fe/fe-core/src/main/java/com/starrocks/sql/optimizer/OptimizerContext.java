@@ -19,9 +19,9 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -55,19 +56,21 @@ public class OptimizerContext {
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
-    private final List<MaterializationContext> candidateMvs;
 
     private Set<OlapTable>  queryTables;
 
     private long updateTableId = -1;
-    private boolean enableLeftRightJoinEquivalenceDerive = true;
+
     private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
+    // The context for join predicate pushdown rule
+    private JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
+            new JoinPredicatePushdown.JoinPredicatePushDownContext();
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
-    private QueryMaterializationContext queryMaterializationContext;
+    private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
 
     private boolean isShortCircuit = false;
     private boolean inMemoPhase = false;
@@ -82,6 +85,8 @@ public class OptimizerContext {
     // collect all LogicalOlapScanOperators in the query before any optimization
     private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
 
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -89,12 +94,10 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
-        this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();
-        this.queryMaterializationContext = new QueryMaterializationContext();
     }
 
     @VisibleForTesting
@@ -119,7 +122,6 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
-        this.candidateMvs = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -178,20 +180,17 @@ public class OptimizerContext {
         return optimizerConfig;
     }
 
+    /**
+     * Get all valid candidate materialized views for the query:
+     * - The materialized view is valid to rewrite by rule(SPJG)
+     * - The materialized view's refresh-ness is valid to rewrite.
+     */
     public List<MaterializationContext> getCandidateMvs() {
-        return candidateMvs;
+        return queryMaterializationContext.getValidCandidateMVs();
     }
 
-    public void addCandidateMvs(MaterializationContext candidateMv) {
-        this.candidateMvs.add(candidateMv);
-    }
-
-    public void setEnableLeftRightJoinEquivalenceDerive(boolean enableLeftRightJoinEquivalenceDerive) {
-        this.enableLeftRightJoinEquivalenceDerive = enableLeftRightJoinEquivalenceDerive;
-    }
-
-    public boolean isEnableLeftRightJoinEquivalenceDerive() {
-        return enableLeftRightJoinEquivalenceDerive;
+    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
+        return joinPredicatePushDownContext;
     }
 
     public void setUpdateTableId(long updateTableId) {
@@ -312,5 +311,13 @@ public class OptimizerContext {
 
     public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
         return allLogicalOlapScanOperators;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
     }
 }

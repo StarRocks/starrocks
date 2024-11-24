@@ -8,7 +8,6 @@ insert into files (
 )
 select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- result:
-[]
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink1/${uuid0}/*",
@@ -33,7 +32,6 @@ insert into files (
 )
 select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- result:
-[]
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink2/${uuid0}/*",

@@ -138,7 +138,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestDirectory = "test_lake_scan_node";
+    constexpr static const char* const kTestDirectory = "test_lake_data_source_test";
 
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;

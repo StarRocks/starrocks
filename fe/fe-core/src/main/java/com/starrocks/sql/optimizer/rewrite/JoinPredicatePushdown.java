@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -36,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -59,19 +61,59 @@ public class JoinPredicatePushdown {
 
     private List<ScalarOperator> leftPushDown;
     private List<ScalarOperator> rightPushDown;
-    private boolean enableLeftRightOuterJoinEquivalenceDerive = true;
+
+    /**
+     * Whether to do complete equivalence derive in
+     * {@link com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown}, eg: outer join to inner join,
+     * or derive equivalence derive for outer joins.
+     * NOTE: It's useful for normal queries but it will disturb some rewrite rule(eg: mv rewrite, table prune), so add
+     * a config to control it.
+     */
+    public static class JoinPredicatePushDownContext {
+        public boolean enableLeftRightJoinEquivalenceDerive = true;
+        public boolean enableJoinPredicatePushDown = true;
+
+        /**
+         * Prepare the join push down parameters.
+         * @param context: change the join push down parameters based on the context
+         * @param sessionVariable: the input session variable
+         * @param mvRewriteStrategy: the input mv rewrite strategy
+         */
+        public void prepare(OptimizerContext context,
+                            SessionVariable sessionVariable,
+                            MvRewriteStrategy mvRewriteStrategy) {
+            if (!sessionVariable.isEnableRboTablePrune() && !mvRewriteStrategy.mvStrategy.isMultiStages()) {
+                return;
+            }
+            JoinPredicatePushDownContext joinPredicatePushDownContext = context.getJoinPushDownParams();
+            joinPredicatePushDownContext.enableLeftRightJoinEquivalenceDerive = false;
+            if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
+                joinPredicatePushDownContext.enableJoinPredicatePushDown = false;
+            }
+        }
+
+        /**
+         * Reset the join push down parameters.
+         */
+        public void reset() {
+            this.enableLeftRightJoinEquivalenceDerive = true;
+            this.enableJoinPredicatePushDown = true;
+        }
+    }
+
+    // Join push down parameters to control the push down strategies.
+    private final JoinPredicatePushDownContext joinPredicatePushDownContext;
 
     private final OptimizerContext optimizerContext;
 
     public JoinPredicatePushdown(
             OptExpression joinOptExpression, boolean isOnPredicate, boolean directToChild,
-            ColumnRefFactory columnRefFactory, boolean enableLeftRightOuterJoinEquivalenceDerive,
-            OptimizerContext optimizerContext) {
+            ColumnRefFactory columnRefFactory, OptimizerContext optimizerContext) {
         this.joinOptExpression = joinOptExpression;
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
-        this.enableLeftRightOuterJoinEquivalenceDerive = enableLeftRightOuterJoinEquivalenceDerive;
+        this.joinPredicatePushDownContext = optimizerContext.getJoinPushDownParams();
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
         this.optimizerContext = optimizerContext;
@@ -264,7 +306,7 @@ public class JoinPredicatePushdown {
     }
 
     public void pushDownPredicateDirectly(OptExpression root, List<ScalarOperator> leftPushDown,
-                                                 List<ScalarOperator> rightPushDown) {
+                                          List<ScalarOperator> rightPushDown) {
         if (CollectionUtils.isNotEmpty(leftPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(leftPushDown);
             Operator leftOp = root.inputAt(0).getOp().cast();
@@ -389,8 +431,8 @@ public class JoinPredicatePushdown {
             } else {
                 ScalarOperator predicate = rangePredicateDerive(predicateToPush);
                 JoinOperator joinType = join.getJoinType();
-                if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin() ||
-                        enableLeftRightOuterJoinEquivalenceDerive) {
+                if (joinPredicatePushDownContext.enableLeftRightJoinEquivalenceDerive ||
+                        (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin())) {
                     getPushdownPredicatesFromEquivalenceDerive(
                             Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
                 }

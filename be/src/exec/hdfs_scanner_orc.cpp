@@ -322,15 +322,20 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path,
-                                                      _scanner_params.conjunct_ctxs, _scanner_params.materialize_slots,
-                                                      &_need_skip_rowids);
+    const auto iceberg_delete_builder =
+            std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, _runtime_state, _scanner_params);
 
-    for (const auto& tdelete_file : _scanner_params.deletes) {
-        RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
-                                                         _scanner_params.mor_params.equality_slots, _runtime_state,
-                                                         _mor_processor));
+    for (const auto& delete_file : _scanner_params.deletes) {
+        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
+        } else {
+            const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                               delete_file->file_content);
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
+        }
     }
+
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
     return Status::OK();
 }
@@ -369,7 +374,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
 Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes) {
     bool tiny_stripe_read = true;
     for (const DiskRange& disk_range : stripes) {
-        if (disk_range.length > config::orc_tiny_stripe_threshold_size) {
+        if (disk_range.length() > config::orc_tiny_stripe_threshold_size) {
             tiny_stripe_read = false;
             break;
         }
@@ -377,8 +382,12 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
     // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
     if (tiny_stripe_read) {
         std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
-        DiskRangeHelper::mergeAdjacentDiskRanges(io_ranges, stripes, config::io_coalesce_read_max_distance_size,
-                                                 config::orc_tiny_stripe_threshold_size);
+        std::vector<DiskRange> merged_disk_ranges{};
+        DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
+                                                    config::orc_tiny_stripe_threshold_size, merged_disk_ranges);
+        for (const auto& disk_range : merged_disk_ranges) {
+            io_ranges.emplace_back(disk_range.offset(), disk_range.length());
+        }
         for (const auto& it : io_ranges) {
             _app_stats.orc_total_tiny_stripe_size += it.size;
         }
@@ -401,7 +410,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
+        auto col_name = Utils::format_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
@@ -442,8 +451,8 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-        ctx->split_start = info.offset;
-        ctx->split_end = info.offset + info.length;
+        ctx->split_start = info.offset();
+        ctx->split_end = info.offset() + info.length();
         _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx.merge_split_tasks();
@@ -532,6 +541,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.scanner_conjunct_ctxs) {
+            conjuncts.push_back(it->root());
+        }
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
@@ -560,9 +573,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
     }
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
-
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     return Status::OK();
 }

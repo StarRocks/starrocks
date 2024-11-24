@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # MAP
@@ -104,7 +104,7 @@ select map() as empty_map; -- Return {}.
 
 ## Load MAP data into StarRocks
 
-You can load map data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+You can load map data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 Note that StarRocks will remove duplicate keys of each map when loading MAP data.
 
@@ -122,7 +122,7 @@ Note that StarRocks will remove duplicate keys of each map when loading MAP data
 
 ### Load MAP data from ORC and Parquet files
 
-The MAP data type in StarRocks corresponds to the map structure in ORC or Parquet format. No additional specification is needed. You can load MAP data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+The MAP data type in StarRocks corresponds to the map structure in ORC or Parquet format. No additional specification is needed. You can load MAP data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ## Access MAP data
 

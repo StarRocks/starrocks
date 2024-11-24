@@ -146,7 +146,6 @@ void LoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {
 }
 
 const std::string ERROR_FILE_NAME = "error_log";
-const std::string REJECTED_RECORD_FILE_NAME = "rejected_record";
 
 Status LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
     std::stringstream ss;

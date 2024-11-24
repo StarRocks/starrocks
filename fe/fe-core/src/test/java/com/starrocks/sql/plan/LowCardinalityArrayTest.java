@@ -175,6 +175,17 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     }
 
     @Test
+    public void testWithCTE() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql = "with cte as (select * from supplier_nullable, unnest(S_ADDRESS)) " +
+                "select * from cte union all select * from cte";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "41: DictDefine(39: S_ADDRESS, [<place-holder>])");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
     public void testArrayPredicate3() throws Exception {
         String sql = "select S_ADDRESS from supplier_nullable where S_ADDRESS = ['a', 'b']";
         String plan = getVerboseExplain(sql);
@@ -260,16 +271,13 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    23: DictDefine(22: a2, [<place-holder>])\n" +
-                "    24: DictDefine(21: a1, [<place-holder>])\n" +
-                "    25: DictDefine(21: a1, [<place-holder>])\n" +
-                "    26: DictDefine(22: a2, [<place-holder>])\n" +
-                "    27: DictDefine(21: a1, [<place-holder>])\n" +
-                "    28: DictDefine(22: a2, [<place-holder>])\n" +
-                "\n" +
-                "  5:Decode\n" +
-                "  |  <dict id 23> : <string id 6>"));
+        Assert.assertTrue(plan, plan.contains(" Global Dict Exprs:\n" +
+                "    25: DictDefine(24: a2, [<place-holder>])\n" +
+                "    26: DictDefine(23: a1, [<place-holder>])\n" +
+                "    27: DictDefine(23: a1, [<place-holder>])\n" +
+                "    28: DictDefine(24: a2, [<place-holder>])\n" +
+                "    29: DictDefine(23: a1, [<place-holder>])\n" +
+                "    30: DictDefine(24: a2, [<place-holder>])"));
     }
 
     @Test
@@ -292,15 +300,21 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: S_ADDRESS, [<place-holder>])\n" +
+        Assert.assertTrue(plan, plan.contains("Global Dict Exprs:\n" +
+                "    20: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
+                "    21: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
+                "    22: DictDefine(19: S_ADDRESS, [<place-holder>])\n" +
                 "\n" +
-                "  6:Project\n" +
+                "  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  11 <-> DictDecode(18: S_ADDRESS, [<place-holder>], array_min(18: S_ADDRESS))\n" +
-                "  |  12 <-> DictDecode(19: expr, [<place-holder>])\n" +
-                "  |  13 <-> DictDecode(18: S_ADDRESS, [<place-holder>], array_max(18: S_ADDRESS))\n" +
-                "  |  14 <-> [17: array_length, INT, true]\n" +
+                "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
+                "  |  18 <-> array_length[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  20 <-> array_distinct(array_slice(19: S_ADDRESS, 2, 4))[0]\n" +
+                "  |  21 <-> array_max[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  22 <-> array_min[([19: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1"));
     }
 
@@ -317,38 +331,56 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    24: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
-                "    25: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
-                "    26: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
+        Assert.assertTrue(plan, plan.contains(" Global Dict Exprs:\n" +
+                "    32: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    27: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    28: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    29: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    30: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    31: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
                 "\n" +
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
-                "  |  23 <-> [23: S_ADDRESS, ARRAY<INT>, true]\n" +
-                "  |  24 <-> reverse(array_distinct(reverse(23: S_ADDRESS)))[2]\n" +
-                "  |  25 <-> array_distinct(array_slice(23: S_ADDRESS, 2, 4))[0]\n" +
-                "  |  26 <-> array_slice(23: S_ADDRESS, 1, 2)[0]\n" +
+                "  |  26 <-> [26: S_ADDRESS, ARRAY<INT>, true]\n" +
+                "  |  27 <-> array_max[([35: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  28 <-> 35: reverse[2]\n" +
+                "  |  29 <-> array_min[([26: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  30 <-> array_distinct(array_slice(26: S_ADDRESS, 2, 4))[0]\n" +
+                "  |  31 <-> array_slice(26: S_ADDRESS, 1, 2)[0]\n" +
+                "  |  32 <-> array_max[([26: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  common expressions:\n" +
+                "  |  33 <-> reverse[([26: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  34 <-> array_distinct[([33: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
+                "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
+                "  |  35 <-> reverse[([34: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
+                "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1"));
 
-        assertContains(plan, "  Global Dict Exprs:\n" +
-                "    24: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
-                "    25: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
-                "    26: DictDefine(23: S_ADDRESS, [<place-holder>])\n" +
+        assertContains(plan, " Global Dict Exprs:\n" +
+                "    32: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    27: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    28: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    29: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    30: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    31: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
                 "\n" +
                 "  6:Project\n" +
                 "  |  output columns:\n" +
-                "  |  11 <-> DictDecode(23: S_ADDRESS, [<place-holder>], array_min(23: S_ADDRESS))\n" +
-                "  |  12 <-> DictDecode(25: expr, [<place-holder>])\n" +
-                "  |  13 <-> DictDecode(26: expr, [hex(<place-holder>)])\n" +
-                "  |  14 <-> DictDecode(23: S_ADDRESS, [upper(<place-holder>)], array_max(23: S_ADDRESS))\n" +
-                "  |  15 <-> DictDecode(23: S_ADDRESS, [<place-holder>], array_distinct(array_filter(23: S_ADDRESS, " +
+                "  |  11 <-> DictDecode(29: array_min, [<place-holder>])\n" +
+                "  |  12 <-> DictDecode(30: expr, [<place-holder>])\n" +
+                "  |  13 <-> DictDecode(31: expr, [hex(<place-holder>)])\n" +
+                "  |  14 <-> DictDecode(32: array_max, [upper(<place-holder>)])\n" +
+                "  |  15 <-> DictDecode(26: S_ADDRESS, [<place-holder>], array_distinct(array_filter(26: S_ADDRESS, " +
                 "[TRUE,FALSE])))\n" +
-                "  |  16 <-> DictDecode(23: S_ADDRESS, [<place-holder>], reverse(array_distinct(reverse(23: " +
+                "  |  16 <-> DictDecode(26: S_ADDRESS, [<place-holder>], reverse(array_distinct(reverse(26: " +
                 "S_ADDRESS))))\n" +
-                "  |  17 <-> DictDecode(23: S_ADDRESS, [<place-holder>], array_max(reverse(array_distinct(reverse(23:" +
-                " S_ADDRESS)))))\n" +
-                "  |  18 <-> DictDecode(24: expr, [<place-holder>])\n" +
+                "  |  17 <-> DictDecode(27: array_max, [<place-holder>])\n" +
+                "  |  18 <-> DictDecode(28: expr, [<place-holder>])\n" +
                 "  |  cardinality: 1");
     }
 
@@ -373,67 +405,79 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a' ) as yyy";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  Global Dict Exprs:\n" +
-                "    43: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    44: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
+        assertContains(plan, " Global Dict Exprs:\n" +
+                "    48: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    47: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
                 "\n" +
                 "  10:Decode\n" +
-                "  |  <dict id 43> : <string id 23>\n" +
-                "  |  <dict id 44> : <string id 24>\n" +
+                "  |  <dict id 47> : <string id 23>\n" +
+                "  |  <dict id 48> : <string id 24>\n" +
                 "  |  cardinality: 1");
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    34: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    35: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    36: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    37: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    38: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    39: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    40: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    41: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    42: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    43: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    44: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    45: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    46: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    47: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    48: DictDefine(33: S_ADDRESS, [<place-holder>])"));
-        assertContains(plan, "  6:Project\n" +
+        Assert.assertTrue(plan, plan.contains(" Global Dict Exprs:\n" +
+                "    36: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    37: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    38: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    39: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    40: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    41: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    42: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    43: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    44: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    45: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    46: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    47: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    48: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    49: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    50: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    51: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    52: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    53: DictDefine(35: S_ADDRESS, [<place-holder>])"));
+        assertContains(plan, " 6:Project\n" +
                 "  |  output columns:\n" +
-                "  |  33 <-> [33: S_ADDRESS, ARRAY<INT>, true]\n" +
-                "  |  36 <-> DictDefine(46: expr, [<place-holder>])\n" +
-                "  |  37 <-> DictDefine(47: expr, [<place-holder>])\n" +
-                "  |  39 <-> DictDefine(48: expr, [<place-holder>])\n" +
-                "  |  40 <-> DictDefine(34: expr, [<place-holder>])\n" +
-                "  |  42 <-> DictDefine(45: expr, [<place-holder>])\n" +
+                "  |  39 <-> DictDefine(51: array_min, [<place-holder>])\n" +
+                "  |  40 <-> DictDefine(52: expr, [<place-holder>])\n" +
+                "  |  41 <-> DictDefine(53: expr, [<place-holder>])\n" +
+                "  |  42 <-> DictDefine(36: array_max, [<place-holder>])\n" +
+                "  |  43 <-> DictDefine(37: expr, [<place-holder>])\n" +
+                "  |  44 <-> DictDefine(38: expr, [<place-holder>])\n" +
+                "  |  45 <-> DictDefine(49: array_max, [<place-holder>])\n" +
+                "  |  46 <-> DictDefine(50: expr, [<place-holder>])\n" +
                 "  |  cardinality: 1");
-        assertContains(plan, "  Global Dict Exprs:\n" +
-                "    48: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    34: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    45: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    46: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "    47: DictDefine(33: S_ADDRESS, [<place-holder>])\n" +
-                "\n" +
-                "  1:Project\n" +
+        assertContains(plan, " Global Dict Exprs:\n" +
+                "    49: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    50: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    51: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    52: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    36: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    53: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    37: DictDefine(35: S_ADDRESS, [<place-holder>])\n" +
+                "    38: DictDefine(35: S_ADDRESS, [<place-holder>])");
+        assertContains(plan, " 1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  4 <-> [4: S_NATIONKEY, INT, false]\n" +
-                "  |  33 <-> [33: S_ADDRESS, ARRAY<INT>, true]\n" +
-                "  |  34 <-> 51: reverse[1]\n" +
-                "  |  45 <-> 51: reverse[2]\n" +
-                "  |  46 <-> array_distinct(array_slice(33: S_ADDRESS, 2, 4))[0]\n" +
-                "  |  47 <-> array_slice(33: S_ADDRESS, 1, 2)[0]\n" +
-                "  |  48 <-> array_distinct(array_filter(33: S_ADDRESS, [TRUE,FALSE]))[3]\n" +
+                "  |  36 <-> array_max[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  37 <-> array_distinct(array_filter(35: S_ADDRESS, [TRUE,FALSE]))[3]\n" +
+                "  |  38 <-> 56: reverse[1]\n" +
+                "  |  49 <-> array_max[([56: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  50 <-> 56: reverse[2]\n" +
+                "  |  51 <-> array_min[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: INT; args " +
+                "nullable: true; result nullable: true]\n" +
+                "  |  52 <-> array_distinct(array_slice(35: S_ADDRESS, 2, 4))[0]\n" +
+                "  |  53 <-> array_slice(35: S_ADDRESS, 1, 2)[0]\n" +
                 "  |  common expressions:\n" +
-                "  |  49 <-> reverse[([33: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; " +
+                "  |  54 <-> reverse[([35: S_ADDRESS, ARRAY<INT>, true]); args: INVALID_TYPE; result: ARRAY<INT>; " +
                 "args nullable: true; result nullable: true]\n" +
-                "  |  50 <-> array_distinct[([49: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
+                "  |  55 <-> array_distinct[([54: reverse, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
                 "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
-                "  |  51 <-> reverse[([50: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
+                "  |  56 <-> reverse[([55: array_distinct, ARRAY<INT>, true]); args: INVALID_TYPE; result: " +
                 "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
-        assertContains(plan, "  0:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     table: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: DictDecode(33: S_ADDRESS, [<place-holder> = 'a'], 33: S_ADDRESS[0])");
+                "     Predicates: DictDecode(35: S_ADDRESS, [<place-holder> = 'a'], 35: S_ADDRESS[0])");
     }
 
     @Test
@@ -451,19 +495,20 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from supplier_nullable xx join[shuffle] table_int t on S_NATIONKEY = id_int " +
                 "where S_ADDRESS[0] = 'a' ) as yyy";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    26: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    27: DictDefine(25: S_ADDRESS, [<place-holder>])\n" +
-                "    28: DictDefine(25: S_ADDRESS, [<place-holder>])"));
+        Assert.assertTrue(plan, plan.contains(" Global Dict Exprs:\n" +
+                "    27: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    28: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    29: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    30: DictDefine(26: S_ADDRESS, [<place-holder>])\n" +
+                "    31: DictDefine(26: S_ADDRESS, [<place-holder>])"));
 
-        assertContains(plan, "  6:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  output columns:\n" +
-                "  |  16 <-> DictDecode(25: S_ADDRESS, [upper(<place-holder>)], array_min(25: S_ADDRESS))\n" +
-                "  |  17 <-> DictDecode(26: expr, [ltrim(<place-holder>)])\n" +
-                "  |  18 <-> DictDecode(27: expr, [if(CAST(<place-holder> AS BOOLEAN), 'a', 'b')])\n" +
-                "  |  19 <-> DictDecode(25: S_ADDRESS, [lower(<place-holder>)], array_max(25: S_ADDRESS))\n" +
-                "  |  20 <-> DictDecode(28: expr, [concat(<place-holder>)])\n" +
-                "  |  cardinality: 1");
+                "  |  16 <-> DictDecode(31: array_min, [upper(<place-holder>)])\n" +
+                "  |  17 <-> DictDecode(27: expr, [ltrim(<place-holder>)])\n" +
+                "  |  18 <-> DictDecode(28: expr, [if(CAST(<place-holder> AS BOOLEAN), 'a', 'b')])\n" +
+                "  |  19 <-> DictDecode(29: array_max, [lower(<place-holder>)])\n" +
+                "  |  20 <-> DictDecode(30: expr, [concat(<place-holder>)])");
     }
 
     @Test
@@ -656,31 +701,25 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    23: DictDefine(22: a2, [<place-holder>])\n" +
-                "    24: DictDefine(21: a1, [<place-holder>])\n" +
-                "    25: DictDefine(21: a1, [<place-holder>])\n" +
-                "    26: DictDefine(22: a2, [<place-holder>])\n" +
-                "    27: DictDefine(21: a1, [<place-holder>])\n" +
-                "    28: DictDefine(22: a2, [<place-holder>])\n" +
-                "\n" +
-                "  5:Decode\n" +
-                "  |  <dict id 23> : <string id 6>"));
+        Assert.assertTrue(plan, plan.contains(" Global Dict Exprs:\n" +
+                "    25: DictDefine(24: a2, [<place-holder>])\n" +
+                "    26: DictDefine(23: a1, [<place-holder>])\n" +
+                "    27: DictDefine(23: a1, [<place-holder>])\n" +
+                "    28: DictDefine(24: a2, [<place-holder>])\n" +
+                "    29: DictDefine(23: a1, [<place-holder>])\n" +
+                "    30: DictDefine(24: a2, [<place-holder>])"));
 
         sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  Global Dict Exprs:\n" +
-                "    23: DictDefine(22: a2, [<place-holder>])\n" +
-                "    24: DictDefine(21: a1, [<place-holder>])\n" +
-                "    25: DictDefine(21: a1, [<place-holder>])\n" +
-                "    26: DictDefine(22: a2, [<place-holder>])\n" +
-                "    27: DictDefine(21: a1, [<place-holder>])\n" +
-                "    28: DictDefine(22: a2, [<place-holder>])\n" +
-                "\n" +
-                "  5:Decode\n" +
-                "  |  <dict id 23> : <string id 6>"));
+        Assert.assertTrue(plan, plan.contains("Global Dict Exprs:\n" +
+                "    25: DictDefine(24: a2, [<place-holder>])\n" +
+                "    26: DictDefine(23: a1, [<place-holder>])\n" +
+                "    27: DictDefine(23: a1, [<place-holder>])\n" +
+                "    28: DictDefine(24: a2, [<place-holder>])\n" +
+                "    29: DictDefine(23: a1, [<place-holder>])\n" +
+                "    30: DictDefine(24: a2, [<place-holder>])"));
     }
 
     @Test

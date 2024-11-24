@@ -30,6 +30,7 @@ import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
@@ -131,7 +132,7 @@ public class PipeManagerTest {
 
     @After
     public void after() {
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
     }
@@ -228,7 +229,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -237,11 +238,11 @@ public class PipeManagerTest {
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().save(image1.getDataOutputStream());
+        pm.getRepo().save(image1.getImageWriter());
 
         // restore from image
         PipeManager pm1 = new PipeManager();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
         pm1.getRepo().load(reader);
         reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
@@ -255,11 +256,11 @@ public class PipeManagerTest {
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().save(image2.getDataOutputStream());
+        pm.getRepo().save(image2.getImageWriter());
 
         // restore and check
         PipeManager pm2 = new PipeManager();
-        reader = new SRMetaBlockReader(image2.getDataInputStream());
+        reader = new SRMetaBlockReaderV2(image2.getJsonReader());
         pm2.getRepo().load(reader);
         reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
@@ -812,7 +813,7 @@ public class PipeManagerTest {
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
-        Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
 
         // drop
         sql = "drop pipe p_crud";
@@ -834,7 +835,7 @@ public class PipeManagerTest {
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assert.assertEquals(0, pm.getPipesUnlock().size());
     }
@@ -956,18 +957,18 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
-        createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
-        Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+        Assert.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
-        Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+        Assert.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
     }
 
     @Test
@@ -1029,7 +1030,7 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -1037,7 +1038,7 @@ public class PipeManagerTest {
                 "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(sql);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        pm.getRepo().save(image1.getDataOutputStream());
+        pm.getRepo().save(image1.getImageWriter());
 
         // loading file and crash
         String name = "p_crash";
@@ -1051,7 +1052,7 @@ public class PipeManagerTest {
         {
             PipeManager pm1 = new PipeManager();
             FileListRepo repo = pipe.getPipeSource().getFileListRepo();
-            SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
             pm1.getRepo().load(reader);
             reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
@@ -1078,7 +1079,7 @@ public class PipeManagerTest {
             };
 
             PipeManager pm1 = new PipeManager();
-            SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
             pm1.getRepo().load(reader);
             reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());

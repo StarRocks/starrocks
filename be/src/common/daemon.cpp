@@ -38,9 +38,9 @@
 
 #include "block_cache/block_cache.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -71,49 +71,6 @@
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
-
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-std::atomic<bool> k_starrocks_exit = false;
-
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
-
-class ReleaseColumnPool {
-public:
-    explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
-
-    template <typename Pool>
-    void operator()() {
-        _freed_bytes += Pool::singleton()->release_free_columns(_ratio);
-    }
-
-    size_t freed_bytes() const { return _freed_bytes; }
-
-private:
-    double _ratio;
-    size_t _freed_bytes = 0;
-};
-
-void gc_memory(void* arg_this) {
-    using namespace starrocks;
-    const static float kFreeRatio = 0.5;
-
-    auto* daemon = static_cast<Daemon*>(arg_this);
-    while (!daemon->stopped()) {
-        nap_sleep(config::memory_maintenance_sleep_time_s, [daemon] { return daemon->stopped(); });
-
-        ReleaseColumnPool releaser(kFreeRatio);
-        ForEach<ColumnPoolList>(releaser);
-        LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-    }
-}
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -189,7 +146,9 @@ void calculate_metrics(void* arg_this) {
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
 #ifdef USE_STAROS
-            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+            if (!config::datacache_unified_instance_enable) {
+                datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+            }
 #endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
@@ -198,18 +157,92 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
-                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
-                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
+                "metadata({}), compaction({}), schema_change({}), "
+                "page_cache({}), update({}), chunk_allocator({}), passthrough({}), clone({}), consistency({}), "
                 "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
-                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
-                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
+                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
+                mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
                 mem_metrics->jit_cache_mem_bytes.value());
 
         nap_sleep(15, [daemon] { return daemon->stopped(); });
+    }
+}
+
+struct JemallocStats {
+    int64_t allocated = 0;
+    int64_t active = 0;
+    int64_t metadata = 0;
+    int64_t resident = 0;
+    int64_t mapped = 0;
+    int64_t retained = 0;
+};
+
+static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+
+    int64_t value = 0;
+    sz = sizeof(value);
+    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+        stats->allocated = value;
+    }
+    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+        stats->active = value;
+    }
+    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+        stats->metadata = value;
+    }
+    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+        stats->resident = value;
+    }
+    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+        stats->mapped = value;
+    }
+    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+        stats->retained = value;
+    }
+}
+
+// Tracker the memory usage of jemalloc
+void jemalloc_tracker_daemon(void* arg_this) {
+    auto* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        JemallocStats stats;
+        retrieve_jemalloc_stats(&stats);
+
+        // metadata
+        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+            int64_t delta = stats.metadata - tracker->consumption();
+            tracker->consume(delta);
+        }
+
+        // fragmentation
+        if (GlobalEnv::GetInstance()->jemalloc_fragmentation_traker()) {
+            if (stats.resident > 0 && stats.allocated > 0 && stats.metadata > 0) {
+                int64_t fragmentation = stats.resident - stats.allocated - stats.metadata;
+                fragmentation *= config::jemalloc_fragmentation_ratio;
+
+                // In case that released a lot of memory but not get purged, we would not consider it as fragmentation
+                bool released_a_lot = stats.allocated < (stats.resident * 0.5);
+                if (released_a_lot) {
+                    fragmentation = 0;
+                }
+
+                if (fragmentation >= 0) {
+                    auto tracker = GlobalEnv::GetInstance()->jemalloc_fragmentation_traker();
+                    int64_t delta = fragmentation - tracker->consumption();
+                    tracker->consume(delta);
+                }
+            }
+        }
+
+        nap_sleep(1, [daemon] { return daemon->stopped(); });
     }
 }
 
@@ -243,7 +276,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
     } else {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     }
-    k_starrocks_exit.store(true);
+    set_process_exit();
 }
 
 int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
@@ -307,16 +340,18 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     TimezoneUtils::init_time_zones();
 
-    std::thread gc_thread(gc_memory, this);
-    Thread::set_thread_name(gc_thread, "gc_daemon");
-    _daemon_threads.emplace_back(std::move(gc_thread));
-
     init_starrocks_metrics(paths);
 
     if (config::enable_metric_calculator) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
+    }
+
+    if (config::enable_jemalloc_memory_tracker) {
+        std::thread jemalloc_tracker_thread(jemalloc_tracker_daemon, this);
+        Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
+        _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 
     init_signals();

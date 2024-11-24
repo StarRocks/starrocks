@@ -57,7 +57,7 @@ public class ShowStreamLoadTest {
         // create database
         String createDbStmtStr = "create database test_db;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         // create table
         String createTableStmtStr = "CREATE TABLE test_db.test_tbl (c0 int, c1 string, c2 int, c3 bigint) " +
                 "DUPLICATE KEY (c0) DISTRIBUTED BY HASH (c0) BUCKETS 3 properties(\"replication_num\"=\"1\") ;;";

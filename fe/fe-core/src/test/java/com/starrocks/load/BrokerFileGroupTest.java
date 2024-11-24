@@ -15,6 +15,7 @@
 
 package com.starrocks.load;
 
+import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
@@ -31,11 +32,14 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.UserException;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -154,6 +158,13 @@ public class BrokerFileGroupTest {
             }
         };
 
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+        };
+
         BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
         fileGroup.parse(db, desc);
         Assert.assertEquals(Lists.newArrayList("k1", "k2"), fileGroup.getFileFieldNames());
@@ -169,7 +180,7 @@ public class BrokerFileGroupTest {
         properties.put("csv.row_delimiter", "\\x02");
 
         TableFunctionTable table = new TableFunctionTable(properties);
-        BrokerFileGroup fileGroup = new BrokerFileGroup(table);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(table, Sets.newHashSet());
         Assert.assertEquals("\1", fileGroup.getColumnSeparator());
         Assert.assertEquals("\2", fileGroup.getRowDelimiter());
     }

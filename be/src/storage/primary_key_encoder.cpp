@@ -46,6 +46,7 @@
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.hpp"
 
@@ -676,8 +677,13 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
+        bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
         for (int j = 0; j < ncol; j++) {
             auto& column = *(dest->get_column_by_index(j));
+            if (skip_decode) {
+                column.append_default();
+                continue;
+            }
             switch (schema.field(j)->type()->type()) {
             case TYPE_BOOLEAN: {
                 auto& tc = down_cast<UInt8Column&>(column);

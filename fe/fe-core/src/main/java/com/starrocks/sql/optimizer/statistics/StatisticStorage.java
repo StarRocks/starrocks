@@ -23,12 +23,13 @@ import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public interface StatisticStorage {
-    // partitionId: TableStatistic
-    default Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
-        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
+    // partitionId: RowCount
+    default Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
     default void refreshTableStatistic(Table table) {
@@ -37,9 +38,26 @@ public interface StatisticStorage {
     default void refreshTableStatisticSync(Table table) {
     }
 
+    /**
+     * Overwrite the statistics of `targetPartition` with `sourcePartition`
+     */
+    default void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
+    }
+
+    default void updatePartitionStatistics(long tableId, long partition, long rows) {
+    }
+
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
+
+    /**
+     * Return partition-level column statistics, it may not exist
+     */
+    default Map<Long, List<ColumnStatistic>> getColumnStatisticsOfPartitionLevel(Table table, List<Long> partitions,
+                                                                                 List<String> columns) {
+        return null;
+    }
 
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);

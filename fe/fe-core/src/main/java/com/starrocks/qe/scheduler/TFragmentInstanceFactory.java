@@ -36,9 +36,11 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryQueueOptions;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class TFragmentInstanceFactory {
@@ -87,6 +89,18 @@ public class TFragmentInstanceFactory {
         toThriftFromCommonParams(result, instance.getExecFragment(), descTable, totalTableSinkDop);
         toThriftForUniqueParams(result, instance, accTabletSinkDop);
 
+        return result;
+    }
+
+    public TExecPlanFragmentParams createIncrementalScanRanges(FragmentInstance instance) {
+        TExecPlanFragmentParams result = new TExecPlanFragmentParams();
+        result.setProtocol_version(InternalServiceVersion.V1);
+        result.setParams(new TPlanFragmentExecParams());
+        result.params.setQuery_id(jobSpec.getQueryId());
+        result.params.setFragment_instance_id(instance.getInstanceId());
+        result.params.setPer_node_scan_ranges(instance.getNode2ScanRanges());
+        result.params.setNode_to_per_driver_seq_scan_ranges(instance.getNode2DriverSeqToScanRanges());
+        result.params.setPer_exch_num_senders(new HashMap<>());
         return result;
     }
 
@@ -164,6 +178,10 @@ public class TFragmentInstanceFactory {
                 result.setPred_tree_params(new TPredicateTreeParams());
                 result.pred_tree_params.setEnable_or(sessionVariable.isEnablePushdownOrPredicate());
                 result.pred_tree_params.setEnable_show_in_profile(sessionVariable.isEnableShowPredicateTreeInProfile());
+
+                if (CollectionUtils.isNotEmpty(fragment.getCollectExecStatsIds())) {
+                    result.setExec_stats_node_ids(fragment.getCollectExecStatsIds());
+                }
             }
         }
     }

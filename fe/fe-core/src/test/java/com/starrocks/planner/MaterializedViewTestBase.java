@@ -239,6 +239,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
             return this;
         }
+
+        public String getExecPlan() {
+            return this.rewritePlan;
+        }
     }
 
     protected MVRewriteChecker sql(String query) {
@@ -288,8 +292,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -326,9 +330,22 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
-        Map<Table, Column> result = mv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
         Assert.assertTrue(result.size() == 1);
-        Map.Entry<Table, Column> e = result.entrySet().iterator().next();
-        return Pair.create(e.getKey(), e.getValue());
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
+    }
+
+    public String getQueryPlan(String query) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        return null;
     }
 }
+

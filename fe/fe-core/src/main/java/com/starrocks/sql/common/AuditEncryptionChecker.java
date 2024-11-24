@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 import java.util.List;
 import java.util.Map;
@@ -87,7 +88,9 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
         if (tableFunctionAsTargetTable) {
             return true;
         }
-        return false;
+
+        QueryStatement queryStatement = statement.getQueryStatement();
+        return queryStatement != null && visitQueryStatement(queryStatement, context);
     }
 
     @Override
@@ -169,6 +172,11 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     public Boolean visitExportStatement(ExportStmt statement, Void context) {
         BrokerDesc brokerDesc = statement.getBrokerDesc();
         return brokerDesc != null;
+    }
+
+    @Override
+    public Boolean visitCreatePipeStatement(CreatePipeStmt statement, Void context) {
+        return visitInsertStatement(statement.getInsertStmt(), context);
     }
 
     @Override

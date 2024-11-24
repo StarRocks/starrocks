@@ -387,8 +387,8 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                                         "     PREAGGREGATION: ON\n" +
                                         "     partitions=3/4", // case 1
                                 "     TABLE: lineitem_par\n" +
-                                        "     PARTITION PREDICATES: (41: l_shipdate < '1998-01-02') OR " +
-                                        "(41: l_shipdate IS NULL), 41: l_shipdate >= '1998-01-01'\n" +
+                                        "     PARTITION PREDICATES: 41: l_shipdate >= '1998-01-01', " +
+                                        "(41: l_shipdate < '1998-01-02') OR (41: l_shipdate IS NULL)\n" +
                                         "     NON-PARTITION PREDICATES: 40: l_suppkey > 1\n" +
                                         "     MIN/MAX PREDICATES: 40: l_suppkey > 1\n" +
                                         "     partitions=1/6",

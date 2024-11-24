@@ -14,11 +14,17 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -41,9 +47,12 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.TableProperty.QueryRewriteConsistencyMode.CHECKED;
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class MaterializationContext {
@@ -89,7 +98,7 @@ public class MaterializationContext {
     // during one query, so it's safe to cache it and be used for each optimizer rule.
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
-    private MVCompensation mvMVCompensation = null;
+    private MVCompensation mvCompensation = null;
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
@@ -223,6 +232,12 @@ public class MaterializationContext {
         final List<Table> mvTables = getBaseTables();
         final OperatorType queryOp = queryExpression.getOp().getOpType();
 
+        // if a query has been applied this mv, return false directly.
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
+        if (scanOperators.stream().anyMatch(op -> op.isOpAppliedMV(mv.getId()))) {
+            return false;
+        }
+
         if (!checkOperatorCompatible(queryOp)) {
             return false;
         }
@@ -351,6 +366,43 @@ public class MaterializationContext {
         }
 
         /**
+         * If mv is partitioned by time, prefer the one with the larger time granularity.
+         * eg: mv partitioned by date_trunc('day', ts) is preferred over mv partitioned by date_trunc('hour', ts)
+         */
+        private int orderingTimeGranularity(MaterializationContext materializationContext) {
+            if (materializationContext.getMvExpression().getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+                MaterializedView mv = materializationContext.getMv();
+                PartitionInfo partitionInfo = mv.getPartitionInfo();
+                if (!partitionInfo.isRangePartition()) {
+                    return LOWEST_ORDERING;
+                }
+                Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+                if (mvPartitionExprOpt.isEmpty()) {
+                    return LOWEST_ORDERING;
+                }
+                Expr mvPartitionExpr = mvPartitionExprOpt.get();
+                if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
+                    return LOWEST_ORDERING;
+                }
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
+                if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                    return LOWEST_ORDERING;
+                }
+                StringLiteral timeUnit = (StringLiteral) mvPartitionExpr.getChild(0);
+                if (timeUnit == null) {
+                    return LOWEST_ORDERING;
+                }
+                Integer priority = DATE_TRUNC_SUPPORTED_TIME_MAP.get(timeUnit.getStringValue());
+                if (priority == null) {
+                    return LOWEST_ORDERING;
+                }
+                return -priority;
+            } else {
+                return LOWEST_ORDERING;
+            }
+        }
+
+        /**
          * Prefer exact-intersecting than partial-intersecting
          */
         private static int orderingIntersectTables(MaterializationContext mvContext) {
@@ -374,6 +426,7 @@ public class MaterializationContext {
                         .comparing(this::orderingAggregation)
                         .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
+                        .thenComparing(this::orderingTimeGranularity)
                         .compare(o1, o2);
             } else if (o1Type == o2Type && o1Type == OperatorType.LOGICAL_JOIN) {
                 return Comparator.comparing(RewriteOrdering::orderingIntersectTables)
@@ -425,16 +478,36 @@ public class MaterializationContext {
      * </p>
      */
     public MVCompensation getOrInitMVCompensation(OptExpression queryExpression) {
-        if (mvMVCompensation == null) {
+        if (mvCompensation == null) {
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
-            this.mvMVCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
-            logMVRewrite(mv.getName(), "Init mv compensation: {}", mvMVCompensation);
+            this.mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
+            logMVRewrite(mv.getName(), "MV compensation: {}", mvCompensation);
         }
-        return this.mvMVCompensation;
+        return this.mvCompensation;
     }
 
     public MVCompensation getMvCompensation() {
-        return mvMVCompensation;
+        Preconditions.checkArgument(mvCompensation != null,
+                "MV compensation should be initialized before used");
+        return mvCompensation;
+    }
+
+    /**
+     * Check the mv context can be used for rewrite:
+     * - if mv compensation's state is no rewrite, return false
+     * - if mv compensation's state is unkwown & check mode is checked, return false
+     * - otherwise return true.
+     */
+    public boolean isNoRewrite() {
+        Preconditions.checkArgument(mvCompensation != null,
+                "MV compensation should be initialized before used");
+        if (mvCompensation.getState().isNoRewrite()) {
+            return true;
+        }
+        if (mvUpdateInfo.getQueryRewriteConsistencyMode() == CHECKED && mvCompensation.getState().isUnknown()) {
+            return true;
+        }
+        return false;
     }
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {

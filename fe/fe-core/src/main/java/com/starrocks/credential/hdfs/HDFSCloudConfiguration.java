@@ -41,7 +41,7 @@ public class HDFSCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.HDFS);
-        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         hdfsCloudCredential.toThrift(properties);
     }
 

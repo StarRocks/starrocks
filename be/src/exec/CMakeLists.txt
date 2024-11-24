@@ -101,7 +101,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
-    mor_processor.cpp
+    cache_select_scanner.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -112,6 +112,7 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
+    arrow_flight_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
@@ -283,6 +284,8 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

@@ -43,6 +43,8 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
     public static final MergeLimitDirectRule JDBC_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_JDBC_SCAN);
+    public static final MergeLimitDirectRule ICEBERG_METADATA_SCAN = new MergeLimitDirectRule(
+            OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
     public static final MergeLimitDirectRule WINDOW = new MergeLimitDirectRule(OperatorType.LOGICAL_WINDOW);
     public static final MergeLimitDirectRule INTERSECT = new MergeLimitDirectRule(OperatorType.LOGICAL_INTERSECT);
     public static final MergeLimitDirectRule EXCEPT = new MergeLimitDirectRule(OperatorType.LOGICAL_EXCEPT);
@@ -52,6 +54,8 @@ public class MergeLimitDirectRule extends TransformationRule {
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
     public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
+    public static final MergeLimitDirectRule CTE_CONSUMER =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_CTE_CONSUME);
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)

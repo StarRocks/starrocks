@@ -144,6 +144,11 @@ enum TAlterJobType {
     DECOMMISSION_BACKEND = 2
 }
 
+struct TAlterMaterializedViewParam {
+    1: required string column_name
+    2: optional string origin_column_name
+    3: optional Exprs.TExpr mv_expr
+}
 
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
@@ -167,12 +172,6 @@ struct TAlterTabletReqV2 {
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
-}
-
-struct TAlterMaterializedViewParam {
-    1: required string column_name
-    2: optional string origin_column_name
-    3: optional Exprs.TExpr mv_expr
 }
 
 struct TClusterInfo {
@@ -249,6 +248,10 @@ struct TCheckConsistencyReq {
 struct TCompactionReq {
     1: optional list<Types.TTableId> tablet_ids
     2: optional bool is_base_compaction
+}
+
+struct TCompactionControlReq {
+    1: optional map<Types.TTableId, i64> table_to_disable_deadline
 }
 
 struct TUpdateSchemaReq {
@@ -401,6 +404,7 @@ struct TRemoteSnapshotRequest {
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+     14: optional binary encryption_meta
  }
 
 enum TTabletMetaType {
@@ -413,7 +417,10 @@ enum TTabletMetaType {
     BINLOG_CONFIG,
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE
+    STORAGE_TYPE,
+    MUTABLE_BUCKET_NUM,
+    ENABLE_LOAD_PROFILE,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES
 }
 
 struct TTabletMetaInfo {
@@ -428,6 +435,7 @@ struct TTabletMetaInfo {
     9: optional TTabletSchema tablet_schema;
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
+    11: optional TPersistentIndexType persistent_index_type;
 }
 
 struct TUpdateTabletMetaInfoReq {
@@ -477,6 +485,7 @@ struct TAgentTaskRequest {
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
+    32: optional TCompactionControlReq compaction_control_req
 }
 
 struct TAgentResult {

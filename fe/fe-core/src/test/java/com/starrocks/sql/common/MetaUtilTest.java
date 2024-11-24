@@ -72,8 +72,8 @@ public class MetaUtilTest {
 
     @Test
     public void testIsPartitionExist() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = database.getTable("t0");
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
         List<Partition> partitionList = new ArrayList<>(table.getPartitions());
         Assert.assertFalse(MetaUtils.isPartitionExist(GlobalStateMgr.getCurrentState(),
                 -1, -1, -1));

@@ -54,7 +54,7 @@ public class PartitionStatistics {
 
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.compactionVersion = null;
+        this.compactionVersion = new PartitionVersion(0 /* version */, System.currentTimeMillis() /* createTime */);
         this.nextCompactionTime = 0;
         this.punishFactor = 1;
     }
@@ -115,8 +115,13 @@ public class PartitionStatistics {
     }
 
     public void setCompactionScore(@Nullable Quantiles compactionScore) {
-        adjustPunishFactor(compactionScore);
         this.compactionScore = compactionScore;
+    }
+
+    // should only called by compaction
+    public void setCompactionScoreAndAdjustPunishFactor(@Nullable Quantiles compactionScore) {
+        adjustPunishFactor(compactionScore);
+        setCompactionScore(compactionScore);
     }
 
     @Nullable
@@ -136,6 +141,10 @@ public class PartitionStatistics {
 
     public void resetPriority() {
         this.setPriority(CompactionPriority.DEFAULT);
+    }
+
+    public PartitionStatisticsSnapshot getSnapshot() {
+        return new PartitionStatisticsSnapshot(this);
     }
 
     @Override

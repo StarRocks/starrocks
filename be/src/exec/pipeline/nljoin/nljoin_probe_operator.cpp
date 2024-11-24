@@ -548,7 +548,7 @@ void NLJoinProbeOperator::_permute_left_join(const ChunkPtr& chunk, size_t probe
 
 // Permute build side for right join
 Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
-    const std::vector<uint8_t>& build_match_flag = _cross_join_context->get_shared_build_match_flag();
+    const Filter& build_match_flag = _cross_join_context->get_shared_build_match_flag();
     if (!SIMD::contain_zero(build_match_flag)) {
         return Status::OK();
     }
@@ -695,6 +695,23 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
     _reset_build_chunk_index();
 
     return Status::OK();
+}
+
+void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
 }
 
 void NLJoinProbeOperatorFactory::_init_row_desc() {

@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -90,14 +91,14 @@ public class LakePublishBatchTest {
 
     @Test
     public void testNormal() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 
         int num = 0;
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -159,12 +160,12 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishTransactionState() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
 
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -192,11 +193,11 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishDbDroped() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -225,7 +226,7 @@ public class LakePublishBatchTest {
         globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transTablets,
                 Lists.newArrayList(), null);
 
-        new MockUp<GlobalStateMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
             public Database getDb(long dbId) {
                 return null;
@@ -248,11 +249,11 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishTableDropped() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -304,14 +305,14 @@ public class LakePublishBatchTest {
 
     @Test
     public void testTransformBatchToSingle() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
-        Table table = db.getTable(TABLE);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 
         int num = 0;
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);

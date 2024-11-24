@@ -32,7 +32,9 @@ if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
-from lib import sr_sql_lib
+from lib import sr_sql_lib, ColorEnum
+from lib.sr_sql_lib import self_print
+
 
 DEFAULT_TIMEOUT = 600
 
@@ -94,7 +96,8 @@ if __name__ == "__main__":
         "skip_reruns",
         "config=",
         "keep_alive",
-        "run_info="
+        "run_info=",
+        "log_filtered"
     ]
 
     case_dir = None
@@ -106,6 +109,8 @@ if __name__ == "__main__":
     attr = ""
 
     cluster = "native"
+
+    log_filtered = False
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], args, detail_args)
@@ -164,6 +169,9 @@ if __name__ == "__main__":
         if opt == "--run_info":
             run_info = arg
 
+        if opt == "--log_filtered":
+            log_filtered = True
+
     # merge cluster info to attr
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
@@ -185,11 +193,12 @@ if __name__ == "__main__":
     os.environ["config_path"] = config
     os.environ["keep_alive"] = str(keep_alive)
     os.environ['run_info'] = run_info
+    os.environ['log_filtered'] = str(log_filtered)
 
     argv = [
         "nosetests",
         "test_sql_cases.py",
-        "-vv",
+        "-v",
         "-s",
         "--nologcapture",
     ]
@@ -224,7 +233,7 @@ if __name__ == "__main__":
     if collect:
         argv += ["--collect-only"]
 
-    print("Test cmd: %s" % " ".join(argv))
+    self_print("Test cmd: %s" % " ".join(argv), ColorEnum.GREEN)
 
     nose.run(argv=argv)
 

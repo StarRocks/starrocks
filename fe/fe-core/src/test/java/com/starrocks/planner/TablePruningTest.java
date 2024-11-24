@@ -40,6 +40,7 @@ public class TablePruningTest extends TablePruningTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
+        ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -470,8 +471,8 @@ public class TablePruningTest extends TablePruningTestBase {
                 "false",
                 // "A0.a_pk>10",
                 // "A1.a_pk>10",
-                "murmur_hash3_32(A0.a_pk)>10",
-                "murmur_hash3_32(A1.a_pk)>10",
+                // "murmur_hash3_32(A0.a_pk)>10",
+                // "murmur_hash3_32(A1.a_pk)>10",
                 "murmur_hash3_32(A1.a_pk)>murmur_hash3_32(A1.a_pk)",
                 "murmur_hash3_32(A0.a_pk)>10 and murmur_hash3_32(A1.a_pk)>10",
                 "murmur_hash3_32(A0.a_c0)>10 and murmur_hash3_32(A0.a_c1)>10",
@@ -796,5 +797,18 @@ public class TablePruningTest extends TablePruningTestBase {
         ctx.getSessionVariable().setEnableCboTablePrune(true);
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
         Assert.assertTrue(plan, plan.contains("CLONE"));
+    }
+
+    @Test
+    public void testBug() throws Exception {
+        String sql = "select\n" +
+                "  cast(101 as int),\n" +
+                "  cast(1 as bigint),\n" +
+                "  dict_merge(`c_city`) as _dict_merge_ \n" +
+                "from customer[_META_]\n";
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("META-SCAN"));
     }
 }

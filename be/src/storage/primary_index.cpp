@@ -1184,14 +1184,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
-    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+    if (tablet->get_enable_persistent_index()) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
         DCHECK(_persistent_index == nullptr);
-        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        _persistent_index = std::make_shared<PersistentIndex>(tablet->schema_hash_path());
         return _persistent_index->load_from_tablet(tablet);
     }
 
@@ -1428,7 +1427,9 @@ Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, cons
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         return _insert_into_persistent_index(rssid, rowids, pks);
     } else {
-        return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        auto st = _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1446,7 +1447,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     if (_persistent_index != nullptr) {
         return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
-        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1456,7 +1459,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     if (_persistent_index != nullptr) {
         return _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
-        return _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        auto st = _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1482,7 +1487,9 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
     if (_persistent_index != nullptr) {
         return _replace_persistent_index_by_indexes(rssid, rowid_start, replace_indexes, pks);
     } else {
-        return _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        auto st = _pkey_to_rssid_rowid->replace(rssid, rowid_start, replace_indexes, 0, replace_indexes.size(), pks);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1492,7 +1499,9 @@ Status PrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::ve
     if (_persistent_index != nullptr) {
         return _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
-        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1502,7 +1511,9 @@ Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Col
     if (_persistent_index != nullptr) {
         return _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
     } else {
-        return _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1512,7 +1523,9 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         return _erase_persistent_index(key_col, deletes);
     } else {
-        return _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        auto st = _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
+        _calc_memory_usage();
+        return st;
     }
 }
 
@@ -1555,8 +1568,14 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
 }
 
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->major_compaction(data_dir, tablet_id, mutex);
+    // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
+    std::shared_ptr<PersistentIndex> pindex;
+    {
+        std::lock_guard<std::mutex> lg(_lock);
+        pindex = _persistent_index;
+    }
+    if (pindex != nullptr) {
+        return pindex->major_compaction(data_dir, tablet_id, mutex);
     } else {
         return Status::OK();
     }
@@ -1574,13 +1593,11 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
-
-    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+    if (tablet->get_enable_persistent_index()) {
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }
-        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        _persistent_index = std::make_shared<PersistentIndex>(tablet->schema_hash_path());
         RETURN_IF_ERROR(_persistent_index->reset(tablet, version, index_meta));
     } else {
         if (_pkey_to_rssid_rowid != nullptr) {
@@ -1603,7 +1620,7 @@ void PrimaryIndex::reset_cancel_major_compaction() {
 Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     if (_persistent_index != nullptr) {
         RETURN_IF_ERROR(_persistent_index->pk_dump(dump, dump_pb));
-    } else {
+    } else if (_pkey_to_rssid_rowid != nullptr) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename("memory primary index");
         RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));

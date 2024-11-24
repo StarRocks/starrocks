@@ -86,14 +86,14 @@ public class RefreshMaterializedViewStatementTest {
     @Test
     public void testRefreshMaterializedView() throws Exception {
 
-        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
         starRocksAssert.withMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +
                 " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
         cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
-        Table table = db.getTable("table_name_tmp_1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_name_tmp_1");
         Assert.assertNotNull(table);
-        Table t2 = db.getTable("mv1");
+        Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
         Assert.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
         cluster.runSql("test", "refresh materialized view mv1 with sync mode");
@@ -106,7 +106,8 @@ public class RefreshMaterializedViewStatementTest {
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
         if (partitionInfoMap.containsKey("table_name_tmp_1")) {
             MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
-            Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+            Assert.assertEquals(table.getPartition("table_name_tmp_1").getDefaultPhysicalPartition()
+                    .getVisibleVersion(), partitionInfo.getVersion());
         }
     }
 }

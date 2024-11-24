@@ -301,9 +301,6 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                             "properties ('partition_ttl_number' = '1')" +
                             "as select dt, province, sum(age) from t3 group by dt, province;",
                     () -> {
-                        // TODO: support list partition partial refresh
-                        // refreshMaterializedViewWithPartition(DB_NAME, mvName, "beijing", "beijing");
-
                         String query = "select dt, province, sum(age) from t3 group by dt, province;";
                         {
                             String plan = getFragmentPlan(query);
@@ -314,17 +311,14 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                                     "     rollup: mv1");
                         }
                         {
-                            String sql = "insert into t3 partition(p2) values(1, 1, '2021-12-02', 'beijing');";
+                            String sql = "insert into t3 partition(p2) values(1, 1, '2024-01-01', 'guangdong');";
                             executeInsertSql(connectContext, sql);
-                            // mv is only partially refreshed, needs it to union rewrite
+                            // mv is ttl outdated, use base table instead
                             String plan = getFragmentPlan(query);
-                            PlanTestBase.assertContains(plan, "UNION");
-                            PlanTestBase.assertContains(plan, "     TABLE: mv1\n" +
+                            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                                    "     TABLE: t3\n" +
                                     "     PREAGGREGATION: ON\n" +
-                                    "     partitions=1/1");
-                            PlanTestBase.assertContains(plan, "     TABLE: t3\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=2/4");
+                                    "     partitions=4/4");
                         }
                     });
         });

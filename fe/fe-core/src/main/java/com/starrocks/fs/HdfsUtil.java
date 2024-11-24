@@ -83,13 +83,13 @@ public class HdfsUtil {
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
-    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws UserException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
             FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
             return Lists.newArrayList(fakeFile);
         }
-        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), true);
+        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), skipDir);
     }
 
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)

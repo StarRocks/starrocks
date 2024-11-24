@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -94,7 +94,7 @@ public class CPBiRel {
         Set<String> referencedColumnNames =
                 foreignKeyConstraint.getColumnNameRefPairs(baseTable).stream().map(p -> p.second).collect(Collectors.toSet());
         return referencedTable.getUniqueConstraints().stream()
-                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumnNames()).equals(referencedColumnNames));
+                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumnNames(referencedTable)).equals(referencedColumnNames));
     }
 
     public static List<CPBiRel> extractCPBiRels(OptExpression lhs, OptExpression rhs,
@@ -136,10 +136,10 @@ public class CPBiRel {
 
         if (lhsTable.getId() == rhsTable.getId() && lhsTable.hasUniqueConstraints()) {
             lhsTable.getUniqueConstraints().stream().filter(uk ->
-                            lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames()) &&
-                                    rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames())
+                            lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable)) &&
+                                    rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable))
                     ).map(uk ->
-                            uk.getUniqueColumnNames().stream().map(colName ->
+                            uk.getUniqueColumnNames(lhsTable).stream().map(colName ->
                                     Pair.create(
                                             lhsColumnName2ColRef.get(colName),
                                             rhsColumnName2ColRef.get(colName))

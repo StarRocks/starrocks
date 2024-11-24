@@ -53,6 +53,7 @@
 #include "util/bthreads/semaphore.h"
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
+#include "cpu_util.h"
 #include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
@@ -124,6 +125,8 @@ public:
     ThreadPoolBuilder& set_max_threads(int max_threads);
     ThreadPoolBuilder& set_max_queue_size(int max_queue_size);
     ThreadPoolBuilder& set_idle_timeout(const MonoDelta& idle_timeout);
+    ThreadPoolBuilder& set_cpuids(const CpuUtil::CpuIds& cpuids);
+    ThreadPoolBuilder& set_borrowed_cpuids(const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
 
     // Instantiate a new ThreadPool with the existing builder arguments.
     Status build(std::unique_ptr<ThreadPool>* pool) const;
@@ -135,6 +138,8 @@ private:
     int _max_threads;
     int _max_queue_size;
     MonoDelta _idle_timeout;
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
 
     ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
     const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
@@ -211,6 +216,9 @@ public:
     // dynamic update max threads num
     Status update_max_threads(int max_threads);
 
+    // dynamic update min threads num
+    Status update_min_threads(int max_threads);
+
     // Allocates a new token for use in token-based task submission. All tokens
     // must be destroyed before their ThreadPool is destroyed.
     //
@@ -255,6 +263,8 @@ public:
 
     int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
 
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids);
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -292,7 +302,7 @@ private:
     void release_token(ThreadPoolToken* t);
 
     const std::string _name;
-    const int _min_threads;
+    std::atomic<int> _min_threads;
     std::atomic<int> _max_threads;
     const int _max_queue_size;
     const MonoDelta _idle_timeout;
@@ -378,6 +388,9 @@ private:
 
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
+
+    CpuUtil::CpuIds _cpuids;
+    std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
 
     // Total number of tasks that have finished
     CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};

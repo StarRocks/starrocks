@@ -59,5 +59,4 @@ public class ElasticsearchConnector
         this.esRestClient = new EsRestClient(esConfig.getNodes(), esConfig.getUserName(),
                 esConfig.getPassword(), esConfig.isEnableSsl());
     }
-
 }

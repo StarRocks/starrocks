@@ -68,7 +68,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -697,6 +697,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
     create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
     create_data_file("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat");
     create_data_file("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
+    create_data_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -776,6 +777,13 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
                 }
             ]
         },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst"
+                }
+            ]
+        },
         "prev_garbage_version": 3
         }
         )DEL")));
@@ -796,6 +804,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
         EXPECT_FALSE(file_exist("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
         EXPECT_FALSE(file_exist("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"));
         EXPECT_FALSE(file_exist("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
+        EXPECT_FALSE(file_exist("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686154.sst"));
     }
     {
         DeleteTabletRequest request;
@@ -1243,6 +1252,8 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
 
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
+    create_data_file("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -1263,17 +1274,28 @@ TEST_P(LakeVacuumTest, test_datafile_gc) {
                 ],
                 "data_size": 4096
             }
-        ]
+        ],
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"
+                }
+            ]
+        }
         }
         )DEL")));
 
     ASSERT_OK(datafile_gc(kTestDir, join_path(kTestDir, "audit.log"), 0, false));
     EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_TRUE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 
     ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
     EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     EXPECT_FALSE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000011111_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
+    EXPECT_TRUE(file_exist("0000000000022222_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst"));
 }
 
 TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
@@ -1400,7 +1422,8 @@ TEST(LakeVacuumTest2, test_delete_files_retry) {
 TEST(LakeVacuumTest2, test_delete_files_retry2) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry2.txt"));
+    std::string testFile("test_vacuum_delete_files_retry2.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1419,19 +1442,21 @@ TEST(LakeVacuumTest2, test_delete_files_retry2) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future2 = delete_files_callable({"test_vacuum_delete_files_retry2.txt"});
+    auto future2 = delete_files_callable({testFile});
     ASSERT_TRUE(future2.valid());
     ASSERT_FALSE(future2.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry2.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 
 TEST(LakeVacuumTest2, test_delete_files_retry3) {
     WritableFileOptions options;
     options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry3.txt"));
+    std::string testFile("test_vacuum_delete_files_retry3.txt");
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, testFile));
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
@@ -1450,12 +1475,13 @@ TEST(LakeVacuumTest2, test_delete_files_retry3) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file(testFile);
     });
 
-    auto future = delete_files_callable({"test_vacuum_delete_files_retry3.txt"});
+    auto future = delete_files_callable({testFile});
     ASSERT_TRUE(future.valid());
     ASSERT_FALSE(future.get().ok());
-    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry3.txt"));
+    ASSERT_TRUE(fs::path_exist(testFile));
     EXPECT_EQ(0, attempts);
 }
 

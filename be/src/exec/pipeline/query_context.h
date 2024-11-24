@@ -31,6 +31,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
+#include "util/hash.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 #include "util/time.h"
@@ -163,11 +164,9 @@ public:
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr);
+                          RuntimeState* state = nullptr, int scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
-
-    MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
     Status init_spill_manager(const TQueryOptions& query_options);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
@@ -192,7 +191,54 @@ public:
         _delta_scan_bytes += scan_bytes;
     }
 
+    void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
+    bool need_record_exec_stats(int32_t plan_node_id) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        return it != _node_exec_stats.end();
+    }
+
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+    void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->push_rows += push_rows;
+        }
+    }
+
+    void update_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows += pull_rows;
+        }
+    }
+
+    void update_pred_filter_stats(int32_t plan_node_id, int64_t pred_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pred_filter_rows += pred_filter_rows;
+        }
+    }
+
+    void update_index_filter_stats(int32_t plan_node_id, int64_t index_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->index_filter_rows += index_filter_rows;
+        }
+    }
+
+    void update_rf_filter_stats(int32_t plan_node_id, int64_t rf_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->rf_filter_rows += rf_filter_rows;
+        }
+    }
+
+    void force_set_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows.exchange(pull_rows);
+        }
+    }
 
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
@@ -261,8 +307,6 @@ private:
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-    std::mutex _operator_mem_trackers_lock;
-    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
@@ -287,12 +331,24 @@ private:
         std::atomic<int64_t> delta_scan_rows_num = 0;
         std::atomic<int64_t> delta_scan_bytes = 0;
     };
+
+    std::once_flag _node_exec_stats_init_flag;
+    struct NodeExecStats {
+        std::atomic_int64_t push_rows;
+        std::atomic_int64_t pull_rows;
+        std::atomic_int64_t pred_filter_rows;
+        std::atomic_int64_t index_filter_rows;
+        std::atomic_int64_t rf_filter_rows;
+    };
+
     // @TODO(silverbullet233):
     // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive

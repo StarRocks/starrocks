@@ -30,8 +30,6 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
-#include "gutil/casts.h"
-#include "runtime/descriptor_helper.h"
 #include "testutil/assert.h"
 
 namespace starrocks::formats {
@@ -58,8 +56,10 @@ protected:
         }
         slot_descs.push_back({""});
 
-        ctx->tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
-        parquet::Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc =
+                parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = _create_scan_range(_file_path, file_size);
         ctx->timezone = "Asia/Shanghai";
@@ -90,7 +90,7 @@ protected:
         auto ctx = _create_scan_context(type_descs);
         ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size, 0);
+        auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
 
         auto st = file_reader->init(ctx);
         if (!st.ok()) {

@@ -131,14 +131,12 @@ public:
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
-    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_us / 1000; }
     int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
     const std::string& user() const { return _user; }
-    const std::vector<std::string>& error_log() const { return _error_log; }
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -170,25 +168,6 @@ public:
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
-
-    // Appends error to the _error_log if there is space
-    bool log_error(std::string_view error);
-
-    // If !status.ok(), appends the error to the _error_log
-    void log_error(const Status& status);
-
-    // Returns true if the error log has not reached _max_errors.
-    bool log_has_space() {
-        std::lock_guard<std::mutex> l(_error_log_lock);
-        return _error_log.size() < _query_options.max_errors;
-    }
-
-    // Returns the error log lines as a string joined with '\n'.
-    std::string error_log();
-
-    // Append all _error_log[_unreported_error_idx+] to new_errors and set
-    // _unreported_error_idx to _errors_log.size()
-    void get_unreported_errors(std::vector<std::string>* new_errors);
 
     bool is_cancelled() const { return _is_cancelled.load(std::memory_order_acquire); }
     void set_is_cancelled(bool v) { _is_cancelled.store(v, std::memory_order_release); }
@@ -548,9 +527,6 @@ private:
 
     // Lock protecting _error_log and _unreported_error_idx
     std::mutex _error_log_lock;
-
-    // Logs error messages.
-    std::vector<std::string> _error_log;
 
     std::mutex _rejected_record_lock;
     std::string _rejected_record_file_path;

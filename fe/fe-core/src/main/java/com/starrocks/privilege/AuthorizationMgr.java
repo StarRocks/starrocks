@@ -28,7 +28,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
+import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -50,7 +52,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -147,7 +148,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
-                    ObjectType.STORAGE_VOLUME);
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
                         provider.getAvailablePrivType(objectType));
@@ -194,9 +196,11 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    List.of(PrivilegeType.NODE),
+                    List.of(PrivilegeType.NODE, PrivilegeType.CREATE_WAREHOUSE),
                     null,
                     false);
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, ObjectType.WAREHOUSE,
+                    provider.getAvailablePrivType(ObjectType.WAREHOUSE));
             rolePrivilegeCollection.disableMutable();
 
             // 4. user_admin
@@ -269,7 +273,8 @@ public class AuthorizationMgr {
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
-                || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);
@@ -752,9 +757,6 @@ public class AuthorizationMgr {
             short pluginVersion) throws PrivilegeException {
         userWriteLock();
         try {
-            if (!user.equals(UserIdentity.ROOT)) {
-                provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
-            }
             userToPrivilegeCollection.put(user, privilegeCollection);
             invalidateUserInCache(user);
             LOG.info("replayed update user {}", user);
@@ -1238,9 +1240,6 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
-                }
 
                 if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                     RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(roleId);
@@ -1305,10 +1304,6 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                // Actually privilege collection is useless here, but we still record it for further usage
-                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
-                }
                 roleIdToPrivilegeCollection.remove(roleId);
                 roleNameToId.remove(privilegeCollection.getName());
                 LOG.info("replayed drop role {}", roleId);
@@ -1688,86 +1683,77 @@ public class AuthorizationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            // 1 json for myself
-            AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
-            ret.globalStateMgr = globalStateMgr;
-            ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
-            ret.initBuiltinRolesAndUsers();
+        // 1 json for myself
+        AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
+        ret.globalStateMgr = globalStateMgr;
+        ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
+        ret.initBuiltinRolesAndUsers();
 
-            // 1 json for num user
-            int numUser = reader.readJson(int.class);
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++i) {
-                // 2 json for each user(kv)
-                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserPrivilegeCollectionV2 collection = reader.readJson(UserPrivilegeCollectionV2.class);
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserPrivilegeCollectionV2.class,
+                (MapEntryConsumer<UserIdentity, UserPrivilegeCollectionV2>) (userIdentity, collection) -> {
+                    if (userIdentity.equals(UserIdentity.ROOT)) {
+                        try {
+                            UserPrivilegeCollectionV2 rootUserPrivCollection =
+                                    ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                            collection.grantRoles(rootUserPrivCollection.getAllRoles());
+                            collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
+                            collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
+                        } catch (PrivilegeException e) {
+                            throw new IOException("failed to load users in AuthorizationManager!", e);
+                        }
+                    }
 
-                if (userIdentity.equals(UserIdentity.ROOT)) {
-                    UserPrivilegeCollectionV2 rootUserPrivCollection =
-                            ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
-                    collection.grantRoles(rootUserPrivCollection.getAllRoles());
-                    collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
-                    collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
-                }
+                    ret.userToPrivilegeCollection.put(userIdentity, collection);
+                });
 
-                ret.userToPrivilegeCollection.put(userIdentity, collection);
-            }
-            // 1 json for num roles
-            int numRole = reader.readJson(int.class);
-            LOG.info("loading {} roles", numRole);
-            for (int i = 0; i != numRole; ++i) {
-                // 2 json for each role(kv)
-                Long roleId = reader.readJson(Long.class);
-                RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+        LOG.info("loading roles");
+        reader.readMap(Long.class, RolePrivilegeCollectionV2.class,
+                (MapEntryConsumer<Long, RolePrivilegeCollectionV2>) (roleId, collection) -> {
+                    // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
+                    // The reason why need to replay from the image here
+                    // is because the associated information of the role-id is stored in the image.
+                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
+                                ret.roleIdToPrivilegeCollection.get(roleId);
+                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                    }
+                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
+                });
 
-                // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
-                // The reason why need to replay from the image here
-                // is because the associated information of the role-id is stored in the image.
-                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
-                            ret.roleIdToPrivilegeCollection.get(roleId);
-                    collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                }
-                ret.roleIdToPrivilegeCollection.put(roleId, collection);
-            }
+        LOG.info("loaded {} users, {} roles",
+                ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
 
-            LOG.info("loaded {} users, {} roles",
-                    ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
+        // mark data is loaded
+        isLoaded = true;
+        roleNameToId = ret.roleNameToId;
+        pluginId = ret.pluginId;
+        pluginVersion = ret.pluginVersion;
+        userToPrivilegeCollection = ret.userToPrivilegeCollection;
+        roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
 
-            // mark data is loaded
-            isLoaded = true;
-            roleNameToId = ret.roleNameToId;
-            pluginId = ret.pluginId;
-            pluginVersion = ret.pluginVersion;
-            userToPrivilegeCollection = ret.userToPrivilegeCollection;
-            roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
-
-            // Initialize the Authorizer class in advance during the loading phase
-            // to prevent loading errors and lack of permissions.
-            Authorizer.getInstance();
-        } catch (PrivilegeException e) {
-            throw new IOException("failed to load AuthorizationManager!", e);
-        }
+        // Initialize the Authorizer class in advance during the loading phase
+        // to prevent loading errors and lack of permissions.
+        Authorizer.getInstance();
     }
 
-    public void saveV2(DataOutputStream dos) throws IOException {
+    public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHORIZATION_MGR, cnt);
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.AUTHORIZATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
-            writer.writeJson(userToPrivilegeCollection.size());
+            writer.writeInt(userToPrivilegeCollection.size());
             for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
             // 1 json for num roles
-            writer.writeJson(roleIdToPrivilegeCollection.size());
+            writer.writeInt(roleIdToPrivilegeCollection.size());
             for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
                 RolePrivilegeCollectionV2 value = entry.getValue();
                 // Avoid newly added PEntryObject type corrupt forward compatibility,
@@ -1780,7 +1766,7 @@ public class AuthorizationMgr {
                     clone.typeToPrivilegeEntryList = new HashMap<>();
                     value = clone;
                 }
-                writer.writeJson(entry.getKey());
+                writer.writeLong(entry.getKey());
                 writer.writeJson(value);
             }
             writer.close();

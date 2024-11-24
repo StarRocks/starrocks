@@ -21,15 +21,11 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.MockedMetadataMgr;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TExplainLevel;
-import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -126,20 +122,6 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
         cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
-    protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
-        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
-
-        for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
-        }
-    }
-
-    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-    }
-
     @Test
     public void testJDBCProtocolType() {
         JDBCTable table = new JDBCTable();
@@ -187,8 +169,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
 
     @NotNull
     private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(materializedViewName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), materializedViewName));
         refreshMVRange(materializedView.getName(), start, end, false);
         return materializedView;
     }
@@ -249,8 +232,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                 "\"partition_refresh_number\" = \"1\"" +
                 ") " +
                 "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl5;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
 
         // full refresh
         {
@@ -263,8 +247,10 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
 
         // partial range refresh 1
         {
-            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
-                    Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            Map<String, Long> partitionVersionMap = new HashMap<>();
+            for (Partition p : materializedView.getPartitions()) {
+                partitionVersionMap.put(p.getName(), p.getDefaultPhysicalPartition().getVisibleVersion());
+            }
             starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
                     " partition start('2023-08-02') end('2023-09-01')" +
                     "force with sync mode");
@@ -273,13 +259,16 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                             .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
-                    materializedView.getPartition("p202308_202309").getVisibleVersion());
+                    materializedView.getPartition("p202308_202309")
+                            .getDefaultPhysicalPartition().getVisibleVersion());
         }
 
         // partial range refresh 2
         {
-            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
-                    Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            Map<String, Long> partitionVersionMap = new HashMap<>();
+            for (Partition p : materializedView.getPartitions()) {
+                partitionVersionMap.put(p.getName(), p.getDefaultPhysicalPartition().getVisibleVersion());
+            }
             starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
                     " partition start('2023-07-01') end('2023-08-01')" +
                     "force with sync mode");
@@ -288,7 +277,8 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                             .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
-                    materializedView.getPartition("p202308_202309").getVisibleVersion());
+                    materializedView.getPartition("p202308_202309").getDefaultPhysicalPartition()
+                            .getVisibleVersion());
         }
 
         starRocksAssert.dropMaterializedView(mvName);
@@ -312,8 +302,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                 "'partition_ttl_number'='2'" +
                 ") " +
                 "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
@@ -360,11 +351,13 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
         mockedJDBCMetadata.initPartitions();
 
         // get base table partitions
-        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", TableVersionRange.empty());
+        List<String> baseParNames =
+                mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(4, baseParNames.size());
 
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv6"));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "jdbc_parttbl_mv6"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
         // check corner case: the first partition of base table is 0000 to 20230801
         // p20230801 of mv should not be created
@@ -393,8 +386,9 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                 " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
                 " inner join jdbc0.partitioned_db0.part_tbl2 t2 on t1.d=t2.d " +
                 " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d ;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
 
         // initial create
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");

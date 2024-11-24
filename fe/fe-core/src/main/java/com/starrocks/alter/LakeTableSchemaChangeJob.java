@@ -49,8 +49,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -74,7 +72,6 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -86,15 +83,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class LakeTableSchemaChangeJob extends AlterJobV2 {
+public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private static final Logger LOG = LogManager.getLogger(LakeTableSchemaChangeJob.class);
 
     // physical partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
@@ -130,9 +125,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @SerializedName(value = "indexes")
     private List<Index> indexes = null;
 
-    // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
-    @SerializedName(value = "watershedTxnId")
-    protected long watershedTxnId = -1;
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -152,6 +144,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
     private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
     private AtomicBoolean isCancelling = new AtomicBoolean(false);
+
+    // for deserialization
+    public LakeTableSchemaChangeJob() {
+        super(JobType.SCHEMA_CHANGE);
+    }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
@@ -235,12 +232,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @VisibleForTesting
     public long getWatershedTxnId() {
         return watershedTxnId;
-    }
-
-    @VisibleForTesting
-    public static void sendAgentTask(AgentBatchTask batchTask) {
-        AgentTaskQueue.addBatchTask(batchTask);
-        AgentTaskExecutor.submit(batchTask);
     }
 
     @VisibleForTesting
@@ -339,12 +330,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
-            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkState(partition != null);
-                TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null);
+                TStorageMedium storageMedium = table.getPartitionInfo()
+                        .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
 
-                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
@@ -382,7 +374,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setNodeId(computeNode.getId())
                                 .setDbId(dbId)
                                 .setTableId(tableId)
-                                .setPartitionId(partitionId)
+                                .setPartitionId(physicalPartitionId)
                                 .setIndexId(shadowIdxId)
                                 .setTabletId(shadowTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
@@ -526,7 +518,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (!getOrCreateSchemaChangeBatchTask().isFinished()) {
             LOG.info("schema change tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = getOrCreateSchemaChangeBatchTask().getUnfinishedTasks(2000);
-            AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny().orElse(null);
+            AgentTask task = tasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny().orElse(null);
             if (task != null) {
                 throw new AlterCancelException(
                         "schema change task failed after try three times: " + task.getErrorMsg());
@@ -692,9 +684,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -728,18 +721,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
             partition.setNextVersion(commitVersion + 1);
         }
-    }
-
-    @NotNull
-    OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
-        if (db == null) {
-            throw new AlterCancelException("Database does not exist");
-        }
-        OlapTable table = db.getTable(tableId);
-        if (table == null) {
-            throw new AlterCancelException("Table does not exist. tableId=" + tableId);
-        }
-        return table;
     }
 
     @Override
@@ -986,13 +967,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         writeEditLog(this);
+        LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;
     }
 
     AgentBatchTask getOrCreateSchemaChangeBatchTask() {
-        if (schemaChangeBatchTask ==
-                null) { // This would happen after FE restarted and this object was deserialized from Json.
+        if (schemaChangeBatchTask == null) { // This would happen after FE restarted and this object was deserialized from Json.
             schemaChangeBatchTask = new AgentBatchTask();
         }
         return schemaChangeBatchTask;
@@ -1036,96 +1017,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
-    private boolean tableExists() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db != null && db.getTable(tableId) != null;
-        }
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
-    }
-
-    @Nullable
-    ReadLockedDatabase getReadLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        return db != null ? new ReadLockedDatabase(db) : null;
-    }
-
-    @Nullable
-    WriteLockedDatabase getWriteLockedDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        return db != null ? new WriteLockedDatabase(db) : null;
-    }
-
-    // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
-    @VisibleForTesting
-    public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-        GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
-    }
-
-    private abstract static class LockedDatabase implements AutoCloseable {
-        private final Database db;
-        protected Locker locker;
-
-        LockedDatabase(@NotNull Database db) {
-            this.locker = new Locker();
-            lock(db);
-            this.db = db;
-        }
-
-        abstract void lock(Database db);
-
-        abstract void unlock(Database db);
-
-        @Nullable
-        OlapTable getTable(long tableId) {
-            return (OlapTable) db.getTable(tableId);
-        }
-
-        @Override
-        public void close() {
-            unlock(db);
-        }
-    }
-
-    private static class ReadLockedDatabase extends LockedDatabase {
-        ReadLockedDatabase(@NotNull Database db) {
-            super(db);
-        }
-
-        @Override
-        void lock(Database db) {
-            locker.lockDatabase(db, LockType.READ);
-        }
-
-        @Override
-        void unlock(Database db) {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-    }
-
-    private static class WriteLockedDatabase extends LockedDatabase {
-        WriteLockedDatabase(@NotNull Database db) {
-            super(db);
-        }
-
-        @Override
-        void lock(Database db) {
-            locker.lockDatabase(db, LockType.WRITE);
-        }
-
-        @Override
-        void unlock(Database db) {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
-    }
-
-    @Override
-    public Optional<Long> getTransactionId() {
-        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 }

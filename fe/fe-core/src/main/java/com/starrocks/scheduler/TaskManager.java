@@ -26,10 +26,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -52,9 +54,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
@@ -573,31 +574,23 @@ public class TaskManager implements MemoryTrackable {
 
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int size = reader.readInt();
-        while (size-- > 0) {
-            Task task = reader.readJson(Task.class);
-            replayCreateTask(task);
-        }
+        reader.readCollection(Task.class, this::replayCreateTask);
 
-        size = reader.readInt();
-        while (size-- > 0) {
-            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
-            replayCreateTaskRun(status);
-        }
+        reader.readCollection(TaskRunStatus.class, this::replayCreateTaskRun);
     }
 
-    public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void saveTasksV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
         List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
         LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
-        writer.writeJson(nameToTaskMap.size());
+        writer.writeInt(nameToTaskMap.size());
         for (Task task : nameToTaskMap.values()) {
             writer.writeJson(task);
         }
 
-        writer.writeJson(runStatusList.size());
+        writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
             writer.writeJson(status);
         }
@@ -865,14 +858,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns() {
-        if (!taskRunManager.tryTaskRunLock()) {
-            return;
-        }
-        try {
-            taskRunManager.getTaskRunHistory().vacuum();
-        } finally {
-            taskRunManager.taskRunUnlock();
-        }
+        taskRunManager.getTaskRunHistory().vacuum();
     }
 
     @Override
@@ -881,8 +867,12 @@ public class TaskManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(idToTaskMap.values());
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> taskSamples = idToTaskMap.values()
+                .stream()
+                .limit(1)
+                .collect(Collectors.toList());
+        return Lists.newArrayList(Pair.create(taskSamples, (long) idToTaskMap.size()));
     }
 
     public boolean containTask(String taskName) {

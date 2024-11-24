@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
@@ -27,7 +27,7 @@ StarRocks supports two communication protocols that can be used to submit load j
 
 ## Data types
 
-StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../../sql-reference/data-types/data-type-list.md).
+StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../../sql-reference/data-types/README.md).
 
 ## Strict mode
 
@@ -67,11 +67,11 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 :::tip
 
-You can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+You can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), or add this property to an existing table using [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
 
 :::
 
-StarRocks provides four loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
+StarRocks provides four loading methods that support asynchronous loading: [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md), [Routine Load](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md), and [Spark Load](../../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 The process of asynchronous loading is as follows:
 

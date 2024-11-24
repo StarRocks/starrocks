@@ -158,7 +158,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
             try {
                 Optional<Table> registeredTableOpt = MvUtils.getTableWithIdentifier(registeredTableInfo);
                 if (registeredTableOpt.isEmpty()) {
-                    LOG.warn("Table {}.{}.{} not exist",  registeredTableInfo.getCatalogName(),
+                    LOG.warn("Table {}.{}.{} not exist", registeredTableInfo.getCatalogName(),
                             registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
                     continue;
                 }
@@ -184,22 +184,23 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
         List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
-                .map(gsm::getDb)
+                .map(dbId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId))
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
         for (Database db : databases) {
-            List<HiveTable> tables = db.getTables().stream()
+            List<HiveTable> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
                     .filter(tbl -> tbl.getType() == Table.TableType.HIVE)
                     .map(tbl -> (HiveTable) tbl)
                     .collect(Collectors.toList());
             for (HiveTable table : tables) {
                 try {
                     LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
-                            "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
+                                    "in the background", db.getFullName(), table.getName(), table.getCatalogDBName(),
+                            table.getCatalogTableName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
-                    if (db.getTable(table.getId()) != null) {
+                    if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }

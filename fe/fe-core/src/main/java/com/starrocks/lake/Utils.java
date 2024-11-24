@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
@@ -81,13 +82,16 @@ public class Utils {
 
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
-                for (Tablet tablet : index.getTablets()) {
-                    ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
-                    if (computeNode == null) {
-                        throw new NoAliveBackendException("no alive backend");
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
+                                warehouseId, (LakeTablet) tablet);
+                        if (computeNode == null) {
+                            throw new NoAliveBackendException("no alive backend");
+                        }
+                        groupMap.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
                     }
-                    groupMap.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
                 }
             }
         }
@@ -109,11 +113,23 @@ public class Utils {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
         }
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
-                throw new NoAliveBackendException("No alive node for handle publish version request");
+                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
         }
@@ -172,11 +188,23 @@ public class Utils {
                                               long warehouseId)
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish log version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
         for (Tablet tablet : tablets) {
-            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
-                throw new NoAliveBackendException("No alive node for handle publish version request");
+                LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
             }
             nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
         }

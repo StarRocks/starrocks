@@ -35,6 +35,7 @@ import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -112,8 +113,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 if (null == future) {
                     return;
                 }
-                PExecShortCircuitResult shortCircuitResult = future.get(
-                        context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
+                PExecShortCircuitResult shortCircuitResult = future.get(context.getExecTimeout(), TimeUnit.SECONDS);
                 watch.stop();
                 long t = watch.elapsed().toMillis();
                 MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);
@@ -135,7 +135,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 RowBatch rowBatch = new RowBatch();
                 rowBatch.setEos(i.incrementAndGet() == be2ShortCircuitRequests.keys().size());
                 if (serialResult != null && serialResult.length > 0) {
-                    TDeserializer deserializer = new TDeserializer();
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
                     TResultBatch resultBatch = new TResultBatch();
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
@@ -143,7 +143,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 rowBatchQueue.offer(rowBatch);
 
                 if (shortCircuitResult.profile != null) {
-                    TDeserializer deserializer = new TDeserializer();
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
                     TRuntimeProfileTree runtimeProfileTree = new TRuntimeProfileTree();
                     deserializer.deserialize(runtimeProfileTree, shortCircuitResult.profile);
                     RuntimeProfile beProfile = new RuntimeProfile(beAddress.toString());

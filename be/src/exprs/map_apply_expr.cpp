@@ -22,7 +22,6 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
@@ -112,8 +111,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             cur_chunk->append_column(input_columns[i], _arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first map's offsets
+        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         std::vector<SlotId> slot_ids;
-        _children[0]->get_slot_ids(&slot_ids);
+        lambda_func->get_captured_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);

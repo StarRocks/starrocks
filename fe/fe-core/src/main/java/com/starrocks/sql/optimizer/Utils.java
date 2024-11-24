@@ -374,6 +374,16 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasPrunableJoin(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOp = expression.getOp().cast();
+            JoinOperator joinType = joinOp.getJoinType();
+            return joinType.isInnerJoin() || joinType.isCrossJoin() ||
+                    joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
+        }
+        return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -626,7 +636,8 @@ public class Utils {
                 }
             }
         } catch (Throwable e) {
-            LOG.warn("Failed to eliminate null: {}", DebugUtil.getStackTrace(e));
+            LOG.warn("[query_id={}] Failed to eliminate null: {}",
+                    DebugUtil.getSessionQueryId(), DebugUtil.getStackTrace(e));
             return false;
         }
         return false;
@@ -800,7 +811,8 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 
@@ -835,59 +847,24 @@ public class Utils {
     }
 
     /**
-     * Check if the operator has applied the rule
-     * @param op input operator to be checked
-     * @param ruleMask specific rule mask
-     * @return true if the operator has applied the rule, false otherwise
-     */
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return false;
-        }
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    /**
-     * Set the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void setOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
-    }
-
-    /**
-     * Reset the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void resetOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
-        }
-        op.resetOpRuleMask(ruleMask);
-    }
-
-    /**
      * Check if the optExpression has applied the rule in recursively
      * @param optExpression input optExpression to be checked
      * @param ruleMask specific rule mask
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
         if (optExpression == null) {
             return false;
         }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+        if (pred.test(optExpression.getOp())) {
             return true;
         }
         for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
+            if (isOptHasAppliedRule(child, pred)) {
                 return true;
             }
         }

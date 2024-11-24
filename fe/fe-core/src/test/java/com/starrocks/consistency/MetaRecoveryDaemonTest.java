@@ -70,21 +70,23 @@ public class MetaRecoveryDaemonTest {
         Thread.sleep(2000L);
 
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) database.getTable("tbl_recover");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "tbl_recover");
         Partition partition = table.getPartition("tbl_recover");
-        MaterializedIndex index = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+        MaterializedIndex index = partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
         for (Tablet tablet : index.getTablets()) {
             for (Replica replica : tablet.getAllReplicas()) {
                 Assert.assertEquals(2L, replica.getVersion());
             }
         }
 
-        Assert.assertEquals(2L, partition.getVisibleVersion());
-        Assert.assertEquals(3L, partition.getNextVersion());
+        Assert.assertEquals(2L, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(3L, partition.getDefaultPhysicalPartition().getNextVersion());
 
         // set partition version to a lower value
-        partition.setVisibleVersion(1L, System.currentTimeMillis());
-        partition.setNextVersion(2L);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(1L, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setNextVersion(2L);
 
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.getBackendStatus().lastSuccessReportTabletsTime = TimeUtils
@@ -95,7 +97,8 @@ public class MetaRecoveryDaemonTest {
         TransactionState transactionState = new TransactionState(database.getId(), Lists.newArrayList(table.getId()),
                 11111, "xxxx", null, TransactionState.LoadJobSourceType.FRONTEND, null, 2222, 100000);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
-        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partition.getId(), 4, -1L);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partition.getDefaultPhysicalPartition().getId(),
+                4, -1L);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         transactionState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -105,7 +108,7 @@ public class MetaRecoveryDaemonTest {
         // recover will fail, because there is a committed txn on that partition
         MetaRecoveryDaemon recovery = new MetaRecoveryDaemon();
         recovery.recover();
-        Assert.assertEquals(1L, partition.getVisibleVersion());
+        Assert.assertEquals(1L, partition.getDefaultPhysicalPartition().getVisibleVersion());
         BaseProcResult baseProcResult = new BaseProcResult();
         recovery.fetchProcNodeResult(baseProcResult);
         Assert.assertEquals(1, baseProcResult.getRows().size());
@@ -113,33 +116,35 @@ public class MetaRecoveryDaemonTest {
         // change the txn state to visible, recover will succeed
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
         recovery.recover();
-        Assert.assertEquals(2L, partition.getVisibleVersion());
-        Assert.assertEquals(3L, partition.getNextVersion());
+        Assert.assertEquals(2L, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(3L, partition.getDefaultPhysicalPartition().getNextVersion());
         baseProcResult = new BaseProcResult();
         recovery.fetchProcNodeResult(baseProcResult);
         Assert.assertEquals(0, baseProcResult.getRows().size());
 
         // change replica version
-        LocalTablet localTablet = (LocalTablet) partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+        LocalTablet localTablet = (LocalTablet) partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
                 .get(0).getTablets().get(0);
         long version = 3;
         for (Replica replica : localTablet.getAllReplicas()) {
             replica.updateForRestore(++version, 10, 10);
         }
-        LocalTablet localTablet2 = (LocalTablet) partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+        LocalTablet localTablet2 = (LocalTablet) partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
                 .get(0).getTablets().get(0);
         for (Replica replica : localTablet2.getAllReplicas()) {
             replica.updateForRestore(4, 10, 10);
         }
 
         // set partition version to a lower value
-        partition.setVisibleVersion(1L, System.currentTimeMillis());
-        partition.setNextVersion(2L);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(1L, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setNextVersion(2L);
 
         // recover will fail, because there is no common version on tablets.
         recovery.recover();
-        Assert.assertEquals(1L, partition.getVisibleVersion());
-        Assert.assertEquals(2L, partition.getNextVersion());
+        Assert.assertEquals(1L, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2L, partition.getDefaultPhysicalPartition().getNextVersion());
         baseProcResult = new BaseProcResult();
         recovery.fetchProcNodeResult(baseProcResult);
         Assert.assertEquals(1, baseProcResult.getRows().size());
@@ -157,8 +162,8 @@ public class MetaRecoveryDaemonTest {
 
         // recover will succeed
         recovery.recover();
-        Assert.assertEquals(2L, partition.getVisibleVersion());
-        Assert.assertEquals(3L, partition.getNextVersion());
+        Assert.assertEquals(2L, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(3L, partition.getDefaultPhysicalPartition().getNextVersion());
         baseProcResult = new BaseProcResult();
         recovery.fetchProcNodeResult(baseProcResult);
         Assert.assertEquals(0, baseProcResult.getRows().size());

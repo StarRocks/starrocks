@@ -37,9 +37,10 @@ extern "C" JNIEnv* getJNIEnv(void);
     jmethodID _value_of_##TYPE;     \
     jmethodID _val_##TYPE;
 
-#define DECLARE_NEW_BOX(TYPE, CLAZZ) \
-    jobject new##CLAZZ(TYPE value);  \
-    TYPE val##TYPE(jobject obj);
+#define DECLARE_NEW_BOX(PRIM_CLAZZ, TYPE, CLAZZ) \
+    jobject new##CLAZZ(TYPE value);              \
+    TYPE val##TYPE(jobject obj);                 \
+    jclass TYPE##_class() { return _class_##PRIM_CLAZZ; }
 
 namespace starrocks {
 class DirectByteBuffer;
@@ -59,6 +60,7 @@ public:
     // Arrays.toString()
     std::string array_to_string(jobject object);
     // Object::toString()
+    bool equals(jobject obj1, jobject obj2);
     std::string to_string(jobject obj);
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
@@ -117,19 +119,18 @@ public:
     jobject list_get(jobject obj, int idx);
     int list_size(jobject obj);
 
-    DECLARE_NEW_BOX(uint8_t, Boolean)
-    DECLARE_NEW_BOX(int8_t, Byte)
-    DECLARE_NEW_BOX(int16_t, Short)
-    DECLARE_NEW_BOX(int32_t, Integer)
-    DECLARE_NEW_BOX(int64_t, Long)
-    DECLARE_NEW_BOX(float, Float)
-    DECLARE_NEW_BOX(double, Double)
+    DECLARE_NEW_BOX(boolean, uint8_t, Boolean)
+    DECLARE_NEW_BOX(byte, int8_t, Byte)
+    DECLARE_NEW_BOX(short, int16_t, Short)
+    DECLARE_NEW_BOX(int, int32_t, Integer)
+    DECLARE_NEW_BOX(long, int64_t, Long)
+    DECLARE_NEW_BOX(float, float, Float)
+    DECLARE_NEW_BOX(double, double, Double)
 
     jobject newString(const char* data, size_t size);
 
-    Slice sliceVal(jstring jstr);
-    size_t string_length(jstring jstr);
     Slice sliceVal(jstring jstr, std::string* buffer);
+    jclass string_clazz() { return _string_class; }
     // replace '.' as '/'
     // eg: java.lang.Integer -> java/lang/Integer
     static std::string to_jni_class_name(const std::string& name);

@@ -106,7 +106,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testOlapTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -153,7 +153,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testLakeTable() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newLakeTable(
                 TB_LAKE_TABLE_ID, TB_LAKE_TABLE_NAME, PARTITION_SIZE));
 
@@ -200,7 +200,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testPages() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(testDbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
         db.registerTableUnlocked(newOlapTable(
                 TB_OLAP_TABLE_ID, TB_OLAP_TABLE_NAME, PARTITION_SIZE));
 
@@ -314,8 +314,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static OlapTable newOlapTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 
@@ -368,9 +368,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));
@@ -388,8 +390,8 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
     private static LakeTable newLakeTable(Long tableId, String tableName, int partitionSize) throws Exception {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, true,
+        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, AggregateType.SUM, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
         List<Column> columns = Lists.newArrayList(c1, c2);
 
@@ -458,9 +460,11 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
             DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
             long partitionId = BASE_PARTITION_ID + i;
-            Partition partition = new Partition(partitionId, "testPartition_" + i, baseIndex, distributionInfo);
-            partition.setVisibleVersion(testStartVersion, System.currentTimeMillis());
-            partition.setNextVersion(testStartVersion + 1);
+            long physicalPartitionId = partitionId + partitionSize;
+            Partition partition = new Partition(partitionId, physicalPartitionId,
+                    "testPartition_" + i, baseIndex, distributionInfo);
+            partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+            partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
             PartitionKey rangeLower = PartitionKey.createPartitionKey(
                     Lists.newArrayList(new PartitionValue(String.valueOf(i * 10))), Lists.newArrayList(c1));
@@ -477,13 +481,12 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static RestBaseResultV2<PagedResult<PartitionView>> parseResponseBody(String body) {
         try {
-            System.out.println("resp: " + body);
             return GsonUtils.GSON.fromJson(
                     body,
                     new TypeToken<RestBaseResultV2<PagedResult<PartitionView>>>() {
                     }.getType());
         } catch (Exception e) {
-            fail("invalid resp body: " + body);
+            fail(e.getMessage() + ", resp: " + body);
             throw new IllegalStateException(e);
         }
     }

@@ -615,6 +615,45 @@ public class SelectAnalyzer {
         }
     }
 
+    /**
+     * SlotRefTableNameCleaner is used to clean the table name of SlotRef which may be introduced by relation
+     * alias.In some scenes(eg: synchronized materialized view), the source scope is always defined(the single table),
+     * it's safe to remove the alias table name to avoid ambiguous semantics in the analyzer stage.
+     * Note: This cleaner will change the input expr directly instead of cloning a new expr.
+     */
+    public static class SlotRefTableNameCleaner implements AstVisitor<Expr, Void> {
+        private final Scope sourceScope;
+        private final ConnectContext session;
+
+        public SlotRefTableNameCleaner(Scope sourceScope, ConnectContext session) {
+            this.sourceScope = sourceScope;
+            this.session = session;
+        }
+
+        @Override
+        public Expr visit(ParseNode expr) {
+            return visit(expr, null);
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
+                    !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
+                return slotRef;
+            }
+            slotRef.setTblName(null);
+            return slotRef;
+        }
+    }
+
     private static class NotFullGroupByRewriter implements AstVisitor<Expr, Void> {
         private final Map<Expr, Expr> columnsNotInGroupBy;
 

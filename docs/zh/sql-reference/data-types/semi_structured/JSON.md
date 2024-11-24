@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # JSON
@@ -53,7 +53,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
   - 如果需要将 JSON 文件中根节点的 JSON 对象导入并存储为 JSON 类型，可设置 `jsonpaths` 为 `$`。
   - 如果需要将 JSON 文件中一个 JSON 对象的值 (value) 导入并存储为 JSON 类型，可设置 `jsonpaths` 为 `$.a`（a 代表 key）。更多 JSON 路径表达式，参见 [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path)。
   
-- 方式三：通过 Broker Load 的方式导入 Parquet 文件并存储为 JSON 类型。导入方式，请参见 [Broker Load](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+- 方式三：通过 Broker Load 的方式导入 Parquet 文件并存储为 JSON 类型。导入方式，请参见 [Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 导入时支持数据类型转换如下：
 

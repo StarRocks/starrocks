@@ -219,7 +219,7 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     export GLOG_logtostderr=1
 else
     # redirect stdout/stderr to ${LOG_FILE}
-    exec &>> ${LOG_FILE}
+    exec >> ${LOG_FILE} 2>&1
 fi
 
 echo "start time: $(date), server uptime: $(uptime)"

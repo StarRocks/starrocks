@@ -37,6 +37,7 @@ import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -47,15 +48,16 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
-public abstract class DeltaLakeMetastore implements IMetastore {
+public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
+    private static final int MEMORY_META_SAMPLES = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
     protected final DeltaLakeCatalogProperties properties;
 
-    private final LoadingCache<Pair<String, StructType>, List<ColumnarBatch>> checkpointCache;
-    private final LoadingCache<String, List<JsonNode>> jsonCache;
+    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
                               DeltaLakeCatalogProperties properties) {
@@ -63,42 +65,53 @@ public abstract class DeltaLakeMetastore implements IMetastore {
         this.delegate = metastore;
         this.hdfsConfiguration = hdfsConfiguration;
         this.properties = properties;
+        long checkpointCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                properties.getDeltaLakeCheckpointMetaCacheMemoryUsageRatio());
+        long jsonCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                properties.getDeltaLakeJsonMetaCacheMemoryUsageRatio());
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .maximumSize(properties.getDeltaLakeCheckpointMetaCacheMaxNum())
+                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<ColumnarBatch> load(@NotNull Pair<String, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first, pair.second, hdfsConfiguration);
+                    public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
                     }
                 });
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .maximumSize(properties.getDeltaLakeJsonMetaCacheMaxNum())
+                .weigher((key, value) ->
+                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
                     @Override
-                    public List<JsonNode> load(@NotNull String filePath) throws IOException {
-                        return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                    public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
+                        return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
                     }
                 });
     }
 
+    @Override
     public List<String> getAllDatabaseNames() {
         return delegate.getAllDatabaseNames();
     }
 
+    @Override
     public List<String> getAllTableNames(String dbName) {
         return delegate.getAllTableNames(dbName);
     }
 
+    @Override
     public Database getDb(String dbName) {
         return delegate.getDb(dbName);
     }
 
+    @Override
     public DeltaLakeTable getTable(String dbName, String tableName) {
         MetastoreTable metastoreTable = getMetastoreTable(dbName, tableName);
         if (metastoreTable == null) {
@@ -113,6 +126,7 @@ public abstract class DeltaLakeMetastore implements IMetastore {
         return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
     }
 
+    @Override
     public List<String> getPartitionKeys(String dbName, String tableName) {
         DeltaLakeTable deltaLakeTable = getTable(dbName, tableName);
         if (deltaLakeTable == null) {
@@ -151,6 +165,7 @@ public abstract class DeltaLakeMetastore implements IMetastore {
         return partitionKeys;
     }
 
+    @Override
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
     }
@@ -158,5 +173,26 @@ public abstract class DeltaLakeMetastore implements IMetastore {
     public void invalidateAll() {
         checkpointCache.invalidateAll();
         jsonCache.invalidateAll();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> jsonSamples = jsonCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        List<Object> checkpointSamples = checkpointCache.asMap().values()
+                .stream()
+                .limit(MEMORY_META_SAMPLES)
+                .collect(Collectors.toList());
+
+        return Lists.newArrayList(Pair.create(jsonSamples, jsonCache.size()),
+                Pair.create(checkpointSamples, checkpointCache.size()));
     }
 }

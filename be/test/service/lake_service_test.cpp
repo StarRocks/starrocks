@@ -46,7 +46,7 @@ public:
     LakeServiceTest()
             : _tablet_id(next_id()),
               _partition_id(next_id()),
-              _location_provider(new lake::FixedLocationProvider(kRootLocation)),
+              _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
               _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
@@ -58,7 +58,6 @@ public:
     ~LakeServiceTest() override {
         CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
-        delete _location_provider;
     }
 
     void create_tablet() {
@@ -102,9 +101,9 @@ protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
     int64_t _tablet_id;
     int64_t _partition_id;
-    lake::LocationProvider* _location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
     lake::TabletManager* _tablet_mgr;
-    lake::LocationProvider* _backup_location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
     LakeServiceImpl _lake_service;
 };
 
@@ -1296,6 +1295,25 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
             }
         }
     }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
+    // Publish EMPTY_TXN_LOG
+    {
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(-1);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+    ASSERT_EQ(2, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {

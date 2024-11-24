@@ -72,6 +72,8 @@ public class SortInfo {
     // sortTupleDesc_.
     private List<Expr> sortTupleSlotExprs_;
 
+    private TupleDescriptor preAggTupleDesc_;
+
     public SortInfo(List<Expr> partitionExprs, long partitionLimit, List<Expr> orderingExprs, List<Boolean> isAscOrder,
                     List<Boolean> nullsFirstParams) {
         Preconditions.checkArgument(orderingExprs.size() == isAscOrder.size());
@@ -156,6 +158,14 @@ public class SortInfo {
 
     public void substituteOrderingExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
         orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
+    }
+
+    public void setPreAggTupleDesc_(TupleDescriptor preAggTupleDesc_) {
+        this.preAggTupleDesc_ = preAggTupleDesc_;
+    }
+
+    public TupleDescriptor getPreAggTupleDesc_() {
+        return preAggTupleDesc_;
     }
 
     @Override

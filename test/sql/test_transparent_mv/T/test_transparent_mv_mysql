@@ -1,4 +1,4 @@
--- name: test_transparent_mv_mysql
+-- name: test_transparent_mv_mysql @slow
 -- create mysql table
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database mv_mysql_db_${uuid0};'
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use mv_mysql_db_${uuid0}; CREATE TABLE t1 (num int, dt date) PARTITION BY range columns(dt) (PARTITION p20200614 VALUES LESS THAN ("2020-06-15"),PARTITION p20200617 VALUES LESS THAN ("2020-06-18"),PARTITION p20200620 VALUES LESS THAN ("2020-06-21"),PARTITION p20200623 VALUES LESS THAN ("2020-06-24"),PARTITION p20200701 VALUES LESS THAN ("2020-07-02"),PARTITION p20200704 VALUES LESS THAN ("2020-07-05"),PARTITION p20200707 VALUES LESS THAN ("2020-07-08"),PARTITION p20200710 VALUES LESS THAN ("2020-07-11"),PARTITION p20200715 VALUES LESS THAN ("2020-07-16"),PARTITION p20200718 VALUES LESS THAN ("2020-07-19"),PARTITION p20200721 VALUES LESS THAN ("2020-07-22"),PARTITION p20200724 VALUES LESS THAN ("2020-07-31"));'

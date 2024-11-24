@@ -211,13 +211,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
+        auto* column = down_cast<ResultColumnType*>(to);
         // In fact, for StarRocks real query, we don't need this check.
         // But for robust, we add this check.
         if (this->data(state).count == 0) {
+            column->append_default();
             return;
         }
 
-        auto* column = down_cast<ResultColumnType*>(to);
         ResultType result;
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);

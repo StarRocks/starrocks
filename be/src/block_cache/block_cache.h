@@ -59,6 +59,8 @@ public:
     // function, the corresponding pointer will never be freed by the cache system.
     Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
 
+    bool exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const;
+
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 
@@ -90,7 +92,11 @@ public:
 
     bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
 
+    void disk_spaces(std::vector<DirSpace>* spaces);
+
     DataCacheEngineType engine_type();
+
+    std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
 
     static const size_t MAX_BLOCK_SIZE;
 
@@ -101,8 +107,9 @@ private:
     void _refresh_quota();
 
     size_t _block_size = 0;
-    std::unique_ptr<KvCache> _kv_cache;
+    std::shared_ptr<KvCache> _kv_cache;
     std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
+    std::vector<std::string> _disk_paths;
     std::atomic<bool> _initialized = false;
     std::atomic<size_t> _mem_quota = 0;
     std::atomic<size_t> _disk_quota = 0;

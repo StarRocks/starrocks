@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -156,6 +157,12 @@ public class ReorderJoinRule extends Rule {
             if (copyIntoMemo) {
                 context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
             } else {
+                joinExpr.deriveLogicalPropertyItself();
+                ExpressionContext expressionContext = new ExpressionContext(joinExpr);
+                StatisticsCalculator statisticsCalculator =
+                        new StatisticsCalculator(expressionContext, context.getColumnRefFactory(), context);
+                statisticsCalculator.estimatorStats();
+                joinExpr.setStatistics(expressionContext.getStatistics());
                 return Optional.of(joinExpr);
             }
         }
@@ -183,8 +190,16 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
-                Optional<OptExpression> newChild =
-                        enumerate(joinReorderFactory.create(context), context, child, multiJoinNode, false);
+
+                List<JoinOrder> orderAlgorithms = joinReorderFactory.create(context, multiJoinNode);
+                Optional<OptExpression> newChild = Optional.empty();
+                for (JoinOrder orderAlgorithm : orderAlgorithms) {
+                    newChild = enumerate(orderAlgorithm, context, child, multiJoinNode, false);
+                    if (newChild.isEmpty()) {
+                        break;
+                    }
+                }
+
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));
@@ -336,6 +351,14 @@ public class ReorderJoinRule extends Rule {
             LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
             newProperty.setOutputColumns(newCols);
 
+            if (!Optional.ofNullable(optExpression.getStatistics()).isPresent()) {
+                ExpressionContext expressionContext = new ExpressionContext(optExpression);
+                StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
+                statisticsCalculator.estimatorStats();
+                optExpression.setStatistics(expressionContext.getStatistics());
+            }
+            Preconditions.checkState(optExpression.getStatistics() != null);
             Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
             Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
                     iterator = newStats.getColumnStatistics().entrySet().iterator();

@@ -14,7 +14,9 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
@@ -27,6 +29,7 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
@@ -94,8 +97,8 @@ public class MVRefreshTestBase {
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
@@ -103,8 +106,8 @@ public class MVRefreshTestBase {
     }
 
     protected Table getTable(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(tableName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -178,5 +181,30 @@ public class MVRefreshTestBase {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
+    }
+
+    protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
+        initAndExecuteTaskRun(taskRun);
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+        return mvTaskRunContext.getExecPlan();
+    }
+
+    protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+    }
+
+    protected static void createAndRefreshMv(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(stmt instanceof CreateMaterializedViewStatement);
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        Assert.assertTrue(mvTableName != null);
+        String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? "test" : mvTableName.getDb();
+        String mvName = mvTableName.getTbl();
+        starRocksAssert.withMaterializedView(sql);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 }

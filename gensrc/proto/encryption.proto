@@ -25,6 +25,7 @@ enum EncryptionAlgorithmPB {
     AES_128 = 1;
 }
 
+// NOTE: if add field to EncryptionKeyPB, EncryptionKeyPBAdapter must be modified accordingly
 message EncryptionKeyPB {
     optional int64 id = 1; // not required, e.g. DEK may not have an id
     optional int64 parent_id = 2; // not required, e.g. root key may not have parent
@@ -33,6 +34,7 @@ message EncryptionKeyPB {
     optional EncryptionAlgorithmPB algorithm = 5;
     optional bytes encrypted_key = 6; // encrypted key raw bytes
     optional bytes plain_key = 7; // only used for plain master key
+    optional string key_desc = 8; // generic description of where the key is stored or its id
 }
 
 // EncryptionMeta stores all key hierarchy info used to encrypt this file, e.g.

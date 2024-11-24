@@ -26,6 +26,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import io.delta.kernel.internal.util.ColumnMapping;
 import io.delta.kernel.types.DataType;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
@@ -430,7 +431,7 @@ public class ColumnTypeConverter {
         }
     }
 
-    public static Type fromDeltaLakeType(DataType dataType) {
+    public static Type fromDeltaLakeType(DataType dataType, String columnMappingMode) {
         if (dataType == null) {
             return Type.NULL;
         }
@@ -475,11 +476,11 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.VARBINARY;
                 break;
             case ARRAY:
-                return convertToArrayTypeForDeltaLake((io.delta.kernel.types.ArrayType) dataType);
+                return convertToArrayTypeForDeltaLake((io.delta.kernel.types.ArrayType) dataType, columnMappingMode);
             case MAP:
-                return convertToMapTypeForDeltaLake((io.delta.kernel.types.MapType) dataType);
+                return convertToMapTypeForDeltaLake((io.delta.kernel.types.MapType) dataType, columnMappingMode);
             case STRUCT:
-                return convertToStructTypeForDeltaLake(((io.delta.kernel.types.StructType) dataType));
+                return convertToStructTypeForDeltaLake(((io.delta.kernel.types.StructType) dataType), columnMappingMode);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
@@ -723,38 +724,53 @@ public class ColumnTypeConverter {
         return new MapType(keyType, valueType);
     }
 
-    private static Type convertToArrayTypeForDeltaLake(io.delta.kernel.types.ArrayType arrayType) {
-        Type itemType = fromDeltaLakeType(arrayType.getElementType());
+    private static Type convertToArrayTypeForDeltaLake(io.delta.kernel.types.ArrayType arrayType,
+                                                       String columnMappingMode) {
+        Type itemType = fromDeltaLakeType(arrayType.getElementType(), columnMappingMode);
         if (itemType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
         return new ArrayType(itemType);
     }
 
-    private static Type convertToMapTypeForDeltaLake(io.delta.kernel.types.MapType mapType) {
-        Type keyType = fromDeltaLakeType(mapType.getKeyType());
+    private static Type convertToMapTypeForDeltaLake(io.delta.kernel.types.MapType mapType,
+                                                     String columnMappingMode) {
+        Type keyType = fromDeltaLakeType(mapType.getKeyType(), columnMappingMode);
         // do not support complex type as key in map type
         if (keyType.isComplexType() || keyType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
-        Type valueType = fromDeltaLakeType(mapType.getValueType());
+        Type valueType = fromDeltaLakeType(mapType.getValueType(), columnMappingMode);
         if (valueType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
         return new MapType(keyType, valueType);
     }
 
-    private static Type convertToStructTypeForDeltaLake(io.delta.kernel.types.StructType structType) {
+    private static Type convertToStructTypeForDeltaLake(io.delta.kernel.types.StructType structType,
+                                                        String columnMappingMode) {
         List<io.delta.kernel.types.StructField> fields = structType.fields();
-        Preconditions.checkArgument(fields.size() > 0);
+        Preconditions.checkArgument(!fields.isEmpty());
         ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+
         for (io.delta.kernel.types.StructField field : fields) {
             String fieldName = field.getName();
-            Type fieldType = fromDeltaLakeType(field.getDataType());
+            Type fieldType = fromDeltaLakeType(field.getDataType(), columnMappingMode);
             if (fieldType.isUnknown()) {
                 return Type.UNKNOWN_TYPE;
             }
-            structFields.add(new StructField(fieldName, fieldType));
+            int fieldId = -1;
+            String fieldPhysicalName = "";
+            if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                    field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+                fieldId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
+            }
+
+            if (columnMappingMode.equals(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                    field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+                fieldPhysicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+            }
+            structFields.add(new StructField(fieldName, fieldId, fieldPhysicalName, fieldType, ""));
         }
         return new StructType(structFields);
     }

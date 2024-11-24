@@ -205,6 +205,7 @@ struct DecimalBinaryFunction {
         }
     }
 
+#ifdef STARROCKS_JIT_ENABLE
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Module& module, llvm::Value* l, llvm::Value* r,
                                     int l_scale, int r_scale) {
@@ -217,6 +218,7 @@ struct DecimalBinaryFunction {
 
         return nullptr;
     }
+#endif
 
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {

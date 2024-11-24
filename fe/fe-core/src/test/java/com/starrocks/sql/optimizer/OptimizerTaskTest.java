@@ -96,6 +96,7 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
         ctx.getSessionVariable().setEnableReplicationJoin(false);
         ctx.getSessionVariable().setJoinImplementationMode("auto");
+        ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
@@ -446,21 +447,25 @@ public class OptimizerTaskTest {
                 result = new ArrayList<>(scanColumnMap.values());
                 minTimes = 0;
             }
+
             {
                 olapTable2.getBaseSchema();
                 result = new ArrayList<>(scanColumnMap.values());
                 minTimes = 0;
             }
+
             {
                 olapTable3.getBaseSchema();
                 result = new ArrayList<>(scanColumnMap.values());
                 minTimes = 0;
             }
+
             {
                 olapTable4.getBaseSchema();
                 result = new ArrayList<>(scanColumnMap.values());
                 minTimes = 0;
             }
+
             {
                 olapTable5.getBaseSchema();
                 result = new ArrayList<>(scanColumnMap.values());
@@ -1945,11 +1950,11 @@ public class OptimizerTaskTest {
 
         MaterializedIndex m1 = new MaterializedIndex();
         m1.setRowCount(100000000);
-        Partition p1 = new Partition(0, "p1", m1, hashDistributionInfo1);
+        Partition p1 = new Partition(0, 10, "p1", m1, hashDistributionInfo1);
 
         MaterializedIndex m2 = new MaterializedIndex();
         m2.setRowCount(20000000);
-        Partition p2 = new Partition(1, "p2", m2, hashDistributionInfo2);
+        Partition p2 = new Partition(1, 11, "p2", m2, hashDistributionInfo2);
         new Expectations() {
             {
                 olapTable1.getId();
@@ -2053,11 +2058,11 @@ public class OptimizerTaskTest {
 
         MaterializedIndex m1 = new MaterializedIndex();
         m1.setRowCount(100000000);
-        Partition p1 = new Partition(0, "p1", m1, hashDistributionInfo1);
+        Partition p1 = new Partition(0, 10, "p1", m1, hashDistributionInfo1);
 
         MaterializedIndex m2 = new MaterializedIndex();
         m2.setRowCount(20000000);
-        Partition p2 = new Partition(1, "p2", m2, hashDistributionInfo2);
+        Partition p2 = new Partition(1, 11, "p2", m2, hashDistributionInfo2);
 
         new Expectations() {
             {
@@ -2065,7 +2070,7 @@ public class OptimizerTaskTest {
                 result = 0;
                 minTimes = 0;
 
-                olapTable1.getPartitions();
+                olapTable1.getVisiblePartitions();
                 result = Lists.newArrayList(p1);
                 minTimes = 0;
 
@@ -2091,7 +2096,7 @@ public class OptimizerTaskTest {
                 result = 1;
                 minTimes = 0;
 
-                olapTable2.getPartitions();
+                olapTable2.getVisiblePartitions();
                 result = Lists.newArrayList(p2);
                 minTimes = 0;
 
@@ -2170,11 +2175,11 @@ public class OptimizerTaskTest {
 
         MaterializedIndex m1 = new MaterializedIndex();
         m1.setRowCount(1000000);
-        Partition p1 = new Partition(0, "p1", m1, hashDistributionInfo1);
+        Partition p1 = new Partition(0, 10, "p1", m1, hashDistributionInfo1);
 
         MaterializedIndex m2 = new MaterializedIndex();
         m2.setRowCount(2000000);
-        Partition p2 = new Partition(1, "p2", m2, hashDistributionInfo2);
+        Partition p2 = new Partition(1, 11, "p2", m2, hashDistributionInfo2);
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(column2.getColumnId(), column2);
@@ -2287,7 +2292,7 @@ public class OptimizerTaskTest {
                 result = 0;
                 minTimes = 0;
 
-                olapTable1.getPartitions();
+                olapTable1.getVisiblePartitions();
                 result = Lists.newArrayList(p1);
                 minTimes = 0;
 
@@ -2309,7 +2314,7 @@ public class OptimizerTaskTest {
                 result = 1;
                 minTimes = 0;
 
-                olapTable2.getPartitions();
+                olapTable2.getVisiblePartitions();
                 result = Lists.newArrayList(p2);
                 minTimes = 0;
 

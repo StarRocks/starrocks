@@ -45,7 +45,10 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
     auto ori_sort_idxes = schema->sort_key_idxes();
     std::unordered_set<ColumnId> scids(ori_sort_idxes.begin(), ori_sort_idxes.end());
     for (int i = 0; i < cids.size(); i++) {
-        DCHECK_LT(cids[i], schema->_fields.size());
+        if (cids[i] >= schema->_fields.size()) {
+            _fields.resize(_fields.size() - 1);
+            continue;
+        }
         _fields[i] = schema->_fields[cids[i]];
         if (scids.find(cids[i]) != scids.end()) {
             _sort_key_idxes.emplace_back(i);

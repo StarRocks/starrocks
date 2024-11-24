@@ -46,7 +46,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
@@ -91,7 +91,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
@@ -102,7 +102,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         long maxPartitionVersionTime = -1;
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
@@ -114,6 +114,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            List<String> skipUpdateReplicas = Lists.newArrayList();
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
@@ -150,7 +151,8 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                                 // not update their last failed version.
                                 // if B is published successfully in next turn, then B is normal and C will be set
                                 // abnormal so that quorum is maintained and loading will go on.
-                                LOG.warn("skip update replica[{}.{}] to visible version", tablet.getId(), replica.getBackendId());
+                                String combinedId = String.format("%d_%d", tablet.getId(), replica.getBackendId());
+                                skipUpdateReplicas.add(combinedId);
                                 newVersion = replica.getVersion();
                                 if (version > lastFailedVersion) {
                                     lastFailedVersion = version;
@@ -177,6 +179,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     } // end for replicas
+                    if (!skipUpdateReplicas.isEmpty()) {
+                        LOG.warn("skip update replicas to visible version(tabletId_BackendId): {}", skipUpdateReplicas);
+                    }
 
                     if (hasFailedVersion && replicationNum == 1) {
                         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tablet.getId(), replicas);

@@ -70,6 +70,16 @@ public:
 
     bool allow_partial_success() const;
 
+    void set_last_check_time(int64_t now) {
+        std::lock_guard l(_mtx);
+        _last_check_time = now;
+    }
+
+    int64_t last_check_time() const {
+        std::lock_guard l(_mtx);
+        return _last_check_time;
+    }
+
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
@@ -80,6 +90,9 @@ private:
     ::google::protobuf::Closure* _done;
     Status _status;
     int64_t _timeout_deadline_ms;
+    // compaction's last check time in second, initialized when first put into task queue,
+    // used to help check whether it's valid periodically, task's in queue time is considered
+    int64_t _last_check_time;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
@@ -93,6 +106,7 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    std::string profile; // detailed execution info, such as io stats
 };
 
 class CompactionScheduler {
@@ -208,6 +222,8 @@ public:
     // update at runtime
     void update_compact_threads(int32_t new_val);
 
+    void stop();
+
 private:
     friend class CompactionTaskCallback;
 
@@ -320,6 +336,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
                                                                std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    context->enqueue_time_sec = ::time(nullptr);
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -327,7 +344,9 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
         int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
+    int64_t now = ::time(nullptr);
     for (auto& context : contexts) {
+        context->enqueue_time_sec = now;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }

@@ -73,7 +73,7 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
                 if (fieldData == null) {
                     appendData(i, null);
                 } else {
-                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData);
+                    ColumnValue fieldValue = new IcebergMetadataColumnValue(fieldData, timezone);
                     appendData(i, fieldValue);
                 }
             }
@@ -147,6 +147,9 @@ public class IcebergFilesTableScanner extends AbstractIcebergMetadataScanner {
     }
 
     private Map<Integer, String> getIntegerStringMap(Map<Integer, ByteBuffer> value) {
+        if (value == null) {
+            return null;
+        }
         return value.entrySet().stream()
                 .filter(entry -> idToTypeMapping.containsKey(entry.getKey()))
                 .collect(toImmutableMap(

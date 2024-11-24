@@ -140,9 +140,6 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "clone") {
             start_mem_tracker = GlobalEnv::GetInstance()->clone_mem_tracker();
             cur_level = 2;
-        } else if (iter->second == "column_pool") {
-            start_mem_tracker = GlobalEnv::GetInstance()->column_pool_mem_tracker();
-            cur_level = 2;
         } else if (iter->second == "page_cache") {
             start_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
             cur_level = 2;
@@ -151,6 +148,9 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
             cur_level = 2;
         } else if (iter->second == "chunk_allocator") {
             start_mem_tracker = GlobalEnv::GetInstance()->chunk_allocator_mem_tracker();
+            cur_level = 2;
+        } else if (iter->second == "passthrough") {
+            start_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
             cur_level = 2;
         } else if (iter->second == "consistency") {
             start_mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();

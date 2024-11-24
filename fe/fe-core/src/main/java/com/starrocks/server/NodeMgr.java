@@ -52,6 +52,9 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -61,6 +64,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
@@ -70,6 +74,8 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetQueryStatisticsRequest;
+import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -78,7 +84,6 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -158,6 +163,13 @@ public class NodeMgr {
         this.systemInfo = new SystemInfoService();
 
         this.brokerMgr = new BrokerMgr();
+    }
+
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
     }
 
     public void initialize(String[] args) throws Exception {
@@ -659,7 +671,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.bdbje_reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group) {
             return;
         }
 
@@ -696,25 +708,31 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        long localImageVersion = 0;
         String dirStr = this.imageDir + subDir;
-        Storage storage = new Storage(dirStr);
-        localImageVersion = storage.getImageJournalId();
+        ImageLoader imageLoader = new ImageLoader(dirStr);
+        long localImageVersion = imageLoader.getImageJournalId();
 
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
-        StorageInfo info = getStorageInfo(infoUrl);
-        long version = info.getImageJournalId();
-        if (version > localImageVersion) {
-            String url = "http://" + accessibleHostPort + "/image?version=" + version + "&subdir=" + subDir;
-            LOG.info("start to download image.{} from {}", version, url);
-            String filename = Storage.IMAGE + "." + version;
-            File dir = new File(dirStr);
-            MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
-            MetaHelper.complete(filename, dir);
+        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
+        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
+        if (remoteImageVersion > localImageVersion) {
+            String url = "http://" + accessibleHostPort + "/image?"
+                    + "version=" + remoteImageVersion
+                    + "&subdir=" + subDir
+                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+                    remoteStorageInfo.getImageFormatVersion(), url);
+            File dir;
+            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
+                dir = new File(dirStr);
+            } else {
+                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
+            }
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    dirStr, localImageVersion, version, helperNode);
+                    dirStr, localImageVersion, remoteImageVersion, helperNode);
         }
     }
 
@@ -838,8 +856,17 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
-                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+                dropFrontendHook(fe);
             }
+        }
+    }
+
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
         }
     }
 
@@ -1004,6 +1031,10 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
+    public Frontend getSelfFe() {
+        return frontends.get(nodeName);
+    }
+
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1080,12 +1111,43 @@ public class NodeMgr {
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        List<QueryStatisticsInfo> statisticsItems = Lists.newArrayList();
+        TGetQueryStatisticsRequest request = new TGetQueryStatisticsRequest();
+
+        List<Frontend> allFrontends = getAllFrontends();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.getQueryStatistics(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetQueryStatistics_infos()) {
+                    response.getQueryStatistics_infos().stream()
+                            .map(QueryStatisticsInfo::fromThrift)
+                            .forEach(statisticsItems::add);
+                }
+            } catch (Exception e) {
+                LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
+
+        return statisticsItems;
+    }
+
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         setFrontendConfig(stmt.getConfig().getMap());
 
         List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
+        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {
@@ -1133,8 +1195,21 @@ public class NodeMgr {
         return frontends;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
+    public void resetFrontends() {
+        frontends.clear();
+        Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        frontends.put(self.getNodeName(), self);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
+    }
+
+    public void replayResetFrontends(Frontend frontend) {
+        frontends.clear();
+        frontends.put(frontend.getNodeName(), frontend);
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.NODE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

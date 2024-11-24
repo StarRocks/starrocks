@@ -23,13 +23,11 @@
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/memory/mem_hook_allocator.h"
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
-
-class ManagedFunctionStates;
-using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates>;
 
 struct FunctionTypes {
     TypeDescriptor result_type;
@@ -41,10 +39,16 @@ class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
 
+template <typename T>
+class ManagedFunctionStates;
+
+template <typename T>
+using ManagedFunctionStatesPtr = std::unique_ptr<ManagedFunctionStates<T>>;
+
 // Component used to do analytic processing
 // it contains common data struct and algorithm of analysis
 class Analytor final : public pipeline::ContextWithDependency {
-    friend class ManagedFunctionStates;
+    friend class ManagedFunctionStates<Analytor>;
 
     // [start, end)
     struct FrameRange {
@@ -267,7 +271,7 @@ private:
     std::vector<bool> _is_lead_lag_functions;
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
-    std::vector<ManagedFunctionStatesPtr> _managed_fn_states;
+    std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
     std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
@@ -335,21 +339,25 @@ private:
     Segment _peer_group;
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
+    std::unique_ptr<Allocator> _allocator = std::make_unique<MemHookAllocator>();
+
+    bool _is_merge_funcs;
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.
+template <typename T>
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, Analytor* agg_node)
-            : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, T* context)
+            : _ctxs(ctxs), _agg_states(agg_states), _context(context) {
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
     ~ManagedFunctionStates() {
-        for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
-            _agg_node->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
+        for (int i = 0; i < _context->_agg_functions.size(); i++) {
+            _context->_agg_functions[i]->destroy((*_ctxs)[i], _agg_states + _context->_agg_states_offsets[i]);
         }
     }
 
@@ -359,7 +367,7 @@ public:
 private:
     std::vector<FunctionContext*>* _ctxs;
     AggDataPtr _agg_states;
-    Analytor* _agg_node;
+    T* _context;
 };
 
 class AnalytorFactory;

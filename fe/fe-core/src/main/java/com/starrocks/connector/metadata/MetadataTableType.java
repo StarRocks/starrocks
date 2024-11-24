@@ -21,7 +21,8 @@ public enum MetadataTableType {
     METADATA_LOG_ENTRIES("metadata_log_entries"),
     SNAPSHOTS("snapshots"),
     MANIFESTS("manifests"),
-    FILES("files");
+    FILES("files"),
+    PARTITIONS("partitions");
 
     public final String typeString;
 

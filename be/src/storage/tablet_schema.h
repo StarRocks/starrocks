@@ -43,6 +43,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_index.h"
@@ -159,6 +160,9 @@ public:
         ext->default_value = std::move(value);
     }
 
+    bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
@@ -240,6 +244,7 @@ private:
     uint8_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;
+    AggStateDesc* _agg_state_desc = nullptr;
 };
 
 bool operator==(const TabletColumn& a, const TabletColumn& b);
@@ -283,6 +288,7 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
+    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }

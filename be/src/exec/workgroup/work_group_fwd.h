@@ -27,6 +27,8 @@ using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
 class ScanTaskQueue;
 
+enum class ScanSchedEntityType : uint8_t { OLAP, CONNECTOR };
+
 template <typename Q>
 class WorkGroupSchedEntity;
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -40,5 +42,7 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 
 struct ScanTask;
 struct ScanTaskGroup;
+
+class PipelineExecutorSet;
 
 } // namespace starrocks::workgroup

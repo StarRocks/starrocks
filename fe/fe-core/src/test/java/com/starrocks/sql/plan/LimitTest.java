@@ -787,8 +787,8 @@ public class LimitTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
         // We need to let some tablets have data, some tablets don't data
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        MaterializedIndex index = t0.getPartitions().stream().findFirst().get().getBaseIndex();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        MaterializedIndex index = t0.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition().getBaseIndex();
         LocalTablet tablets = (LocalTablet) index.getTablets().get(0);
         Replica replica = tablets.getSingleReplica();
         new Expectations(replica) {

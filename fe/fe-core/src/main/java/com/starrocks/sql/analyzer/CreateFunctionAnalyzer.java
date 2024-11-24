@@ -26,7 +26,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -81,13 +80,9 @@ public class CreateFunctionAnalyzer {
         functionName.analyze(context.getDatabase());
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
-        try {
-            // check argument
-            argsDef.analyze();
-            returnType.analyze();
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e);
-        }
+        // check argument
+        argsDef.analyze();
+        returnType.analyze();
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {

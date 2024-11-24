@@ -21,6 +21,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileOperations;
@@ -31,6 +32,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -186,7 +188,7 @@ public class HiveStatisticsProviderTest {
 
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
-        fileOps.getRemoteFiles(Lists.newArrayList(partitions.values()), RemoteFileOperations.Options.DEFAULT);
+        fileOps.getRemoteFiles(hiveTable, Lists.newArrayList(partitions.values()), GetRemoteFilesParams.newBuilder().build());
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
@@ -198,7 +200,7 @@ public class HiveStatisticsProviderTest {
     @Test
     public void testSamplePartitoins() {
         List<String> partitionNames = Lists.newArrayList("k=1", "k=2", "k=3", "k=4", "k=5");
-        List<String> sampledPartitions = HiveStatisticsProvider.getPartitionsSample(partitionNames, 3);
+        List<String> sampledPartitions = StatisticUtils.getRandomPartitionsSample(partitionNames, 3);
         Assert.assertEquals(3, sampledPartitions.size());
         Assert.assertTrue(sampledPartitions.contains("k=1"));
         Assert.assertTrue(sampledPartitions.contains("k=5"));

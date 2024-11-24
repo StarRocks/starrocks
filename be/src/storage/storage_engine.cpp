@@ -136,12 +136,22 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 #ifdef USE_STAROS
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
 #endif
+#ifndef BE_TEST
+    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
+    MetadataCache::create_cache(lru_cache_limit);
+    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
+                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+#endif
 }
 
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
     _tablet_manager.reset();
+
+    // _store can be still referenced by any tablet, make sure it is destroyed after `_tablet_manager`
+    _store_map.clear();
 #ifdef BE_TEST
     if (_s_instance == this) {
         _s_instance = _p_instance;
@@ -256,22 +266,16 @@ Status StorageEngine::_open(const EngineOptions& options) {
 }
 
 Status StorageEngine::_init_store_map() {
-    std::vector<std::pair<bool, DataDir*>> tmp_stores;
-    ScopedCleanup release_guard([&] {
-        for (const auto& item : tmp_stores) {
-            if (item.first) {
-                delete item.second;
-            }
-        }
-    });
+    std::map<std::string, std::unique_ptr<DataDir>> tmp_stores;
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
-        ScopedCleanup store_release_guard([&]() { delete store; });
-        tmp_stores.emplace_back(true, store);
-        store_release_guard.cancel();
+        auto store_ptr =
+                std::make_unique<DataDir>(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        DataDir* store = store_ptr.get();
+        tmp_stores.emplace(path.path, std::move(store_ptr));
+        // store_ptr will be invalid ever since
         threads.emplace_back([store, &error_msg_lock, &error_msg]() {
             auto st = store->init();
             if (!st.ok()) {
@@ -293,12 +297,7 @@ Status StorageEngine::_init_store_map() {
         return Status::InternalError(strings::Substitute("init path failed, error=$0", error_msg));
     }
 
-    for (auto& store : tmp_stores) {
-        _store_map.emplace(store.second->path(), store.second);
-        store.first = false;
-    }
-
-    release_guard.cancel();
+    _store_map.swap(tmp_stores);
     return Status::OK();
 }
 
@@ -345,12 +344,12 @@ std::vector<DataDir*> StorageEngine::get_stores() {
     std::lock_guard<std::mutex> l(_store_lock);
     if (include_unused) {
         for (auto& it : _store_map) {
-            stores.push_back(it.second);
+            stores.push_back(it.second.get());
         }
     } else {
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
-                stores.push_back(it.second);
+                stores.push_back(it.second.get());
             }
         }
     }
@@ -489,7 +488,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
             if (it.second->get_state() == DiskState::ONLINE) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
                     if (!it.second->capacity_limit_reached(0)) {
-                        stores.push_back(it.second);
+                        stores.push_back(it.second.get());
                     }
                 }
             }
@@ -530,14 +529,14 @@ DataDir* StorageEngine::get_store(const std::string& path) {
     if (it == std::end(_store_map)) {
         return nullptr;
     }
-    return it->second;
+    return it->second.get();
 }
 
 DataDir* StorageEngine::get_store(int64_t path_hash) {
     std::lock_guard<std::mutex> l(_store_lock);
     for (auto& it : _store_map) {
         if (it.second->path_hash() == path_hash) {
-            return it.second;
+            return it.second.get();
         }
     }
     return nullptr;
@@ -662,15 +661,6 @@ void StorageEngine::stop() {
     JOIN_THREAD(_clear_expired_replcation_snapshots_thread)
 #undef JOIN_THREADS
 #undef JOIN_THREAD
-
-    {
-        std::lock_guard<std::mutex> l(_store_lock);
-        for (auto& store_pair : _store_map) {
-            delete store_pair.second;
-            store_pair.second = nullptr;
-        }
-        _store_map.clear();
-    }
 
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
@@ -1012,7 +1002,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
     StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
-    if (!res.ok()) {
+    if (!res.ok() && !res.is_already_exist()) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
@@ -1406,7 +1396,7 @@ void StorageEngine::increase_update_compaction_thread(const int num_threads_per_
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
     for (auto& tmp_store : _store_map) {
-        data_dirs.push_back(tmp_store.second);
+        data_dirs.push_back(tmp_store.second.get());
     }
     const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
     const int32_t cur_threads_per_disk = _update_compaction_threads.size() / data_dir_num;

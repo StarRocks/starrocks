@@ -342,6 +342,8 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+    private List<String> createdPartitionNames = Lists.newArrayList();
+
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
@@ -843,6 +845,25 @@ public class TransactionState implements Writable {
         return sb.toString();
     }
 
+    public String getBrief() {
+        StringBuilder sb = new StringBuilder("TransactionState. ");
+        sb.append("txn_id: ").append(transactionId);
+        sb.append(", db id: ").append(dbId);
+        sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
+        sb.append(", error replicas num: ").append(errorReplicas.size());
+        sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
+        if (commitTime > prepareTime) {
+            sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
+        }
+        if (finishTime > commitTime && commitTime > 0) {
+            sb.append(", publish total cost: ").append(finishTime - commitTime).append("ms");
+        }
+        if (finishTime > prepareTime) {
+            sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
+        }
+        return sb.toString();
+    }
+
     public LoadJobSourceType getSourceType() {
         return sourceType;
     }
@@ -909,7 +930,7 @@ public class TransactionState implements Writable {
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
-            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
+            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPhysicalPartitionId(),
                     commitInfo.getVersion(), 0);
             if (commitInfo.isDoubleWrite()) {
                 version.setIs_double_write(true);
@@ -952,7 +973,7 @@ public class TransactionState implements Writable {
 
     public boolean checkCanFinish() {
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             // consider txn finished if db is dropped
             return true;
@@ -1050,7 +1071,12 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
+    public List<String> getCreatedPartitionNames() {
+        return createdPartitionNames;
+    }
+
     public void clearAutomaticPartitionSnapshot() {
+        createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }

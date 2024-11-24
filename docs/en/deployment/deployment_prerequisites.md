@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Deployment prerequisites
@@ -17,10 +17,6 @@ You can run the following command in your terminal to check if the CPUs on your 
 ```Bash
 cat /proc/cpuinfo | grep avx2
 ```
-
-> **NOTE**
->
-> ARM architecture does not support SIMD instruction sets, and therefore is less competitive than x86 architecture in some scenarios. Therefore, we only recommend deploying StarRocks on ARM architecture in a development environment.
 
 ### Memory
 

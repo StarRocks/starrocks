@@ -39,47 +39,59 @@ import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
+    private static final int MEMORY_TASK_RUN_SAMPLES = 10;
 
     // Thread-Safe history map:
     // QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
-    private final Map<String, TaskRunStatus> historyTaskRunMap =
-            Collections.synchronizedMap(Maps.newLinkedHashMap());
+    private final Map<String, TaskRunStatus> historyTaskRunMap = Maps.newLinkedHashMap();
     // TaskName -> TaskRunStatus
-    private final Map<String, TaskRunStatus> taskName2Status =
-            Collections.synchronizedMap(Maps.newLinkedHashMap());
+    private final Map<String, TaskRunStatus> taskName2Status = Maps.newLinkedHashMap();
 
     private final TaskRunHistoryTable historyTable = new TaskRunHistoryTable();
 
-    public void addHistory(TaskRunStatus status) {
+    public synchronized void addHistory(TaskRunStatus status) {
         historyTaskRunMap.put(status.getQueryId(), status);
         taskName2Status.put(status.getTaskName(), status);
     }
 
-    public TaskRunStatus getTaskByName(String taskName) {
+    public synchronized TaskRunStatus getTaskByName(String taskName) {
         return taskName2Status.get(taskName);
     }
 
-    public TaskRunStatus getTask(String queryId) {
+    public synchronized TaskRunStatus getTask(String queryId) {
         if (queryId == null) {
             return null;
         }
         return historyTaskRunMap.get(queryId);
     }
 
-    public void removeTaskByQueryId(String queryId) {
+    public synchronized void removeTaskByQueryId(String queryId) {
         if (queryId == null) {
             return;
         }
         TaskRunStatus task = historyTaskRunMap.remove(queryId);
-        taskName2Status.remove(task.getTaskName());
+        if (task != null) {
+            taskName2Status.remove(task.getTaskName());
+        }
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
-    public List<TaskRunStatus> getInMemoryHistory() {
+    public synchronized List<TaskRunStatus> getInMemoryHistory() {
         List<TaskRunStatus> historyRunStatus = new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
         return historyRunStatus;
+    }
+
+    public synchronized long getTaskRunCount() {
+        return historyTaskRunMap.size();
+    }
+
+    public synchronized List<Object> getSamplesForMemoryTracker() {
+        return historyTaskRunMap.values()
+                .stream()
+                .limit(MEMORY_TASK_RUN_SAMPLES)
+                .collect(Collectors.toList());
     }
 
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
@@ -210,10 +222,6 @@ public class TaskRunHistory {
         // Now remove outside of iteration
         idsToRemove.forEach(this::removeTaskByQueryId);
         LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                "size before GC:{}, size after GC:{}.", beforeSize, historyTaskRunMap.size());
-    }
-
-    public long getTaskRunCount() {
-        return historyTaskRunMap.size();
+                "size before GC:{}, size after GC:{}.", beforeSize, getTaskRunCount());
     }
 }

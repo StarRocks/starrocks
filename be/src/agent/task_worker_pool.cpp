@@ -185,8 +185,8 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
-        LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
-                  << ", task_count_in_queue=" << task_count;
+        VLOG(1) << "Submit task success. type=" << type_str << ", signature=" << signature
+                << ", task_count_in_queue=" << task_count;
     } else {
         LOG(INFO) << "Submit task failed, already exists type=" << type_str << ", signature=" << signature;
     }
@@ -523,8 +523,8 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         const auto& publish_version_task = *priority_tasks.top();
-        LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
-                  << " priority queue size: " << priority_tasks.size();
+        VLOG(1) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
+                << " priority queue size: " << priority_tasks.size();
         bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
         if (enable_sync_publish) {
             wait_time = 0;
@@ -554,9 +554,9 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                     remove_task_info(finish_task_request.task_type, finish_task_request.signature);
                 }
                 int64_t t2 = MonotonicMillis();
-                LOG(INFO) << "batch flush " << finish_task_requests.size()
-                          << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
-                          << "ms finish_task_rpc:" << t2 - t1 << "ms";
+                VLOG(1) << "batch flush " << finish_task_requests.size()
+                        << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
+                        << "ms finish_task_rpc:" << t2 - t1 << "ms";
                 finish_task_requests.clear();
                 affected_dirs.clear();
                 batch_publish_latency = 0;
@@ -573,8 +573,8 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 StorageEngine::instance()->wake_finish_publish_vesion_thread();
                 affected_dirs.clear();
                 batch_publish_latency = 0;
-                LOG(INFO) << "batch submit " << finish_task_size << " finish publish version task "
-                          << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
+                VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "
+                        << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
             }
         }
     }
@@ -713,7 +713,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
         } else {
-            LOG(INFO) << "Report tablets successfully, report version: " << report_version;
+            VLOG(1) << "Report tablets successfully, report version: " << report_version;
         }
 
         // wait for notifying until timeout
@@ -741,7 +741,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
-        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
         request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
@@ -753,7 +753,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
-            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+            ExecEnv::GetInstance()->workgroup_manager()->apply(result.workgroup_ops);
         }
         nap_sleep(config::report_workgroup_interval_seconds,
                   [worker_pool_this] { return worker_pool_this->_stopped.load(); });

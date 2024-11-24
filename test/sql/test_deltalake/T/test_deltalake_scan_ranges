@@ -1,0 +1,99 @@
+-- name: testDeltaLakeScanRanges
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+set enable_connector_incremental_scan_ranges = true;
+set connector_incremental_scan_ranges_size = 1;
+
+create table string_col_dict_encode as select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode;
+create table delta_lake_data_type as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type;
+create table delta_lake_par_col_boolean as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_boolean;
+create table delta_lake_par_col_date as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date;
+create table delta_lake_par_col_string as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_string;
+create table t_timestamp_ntz as select * from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz;
+create table delta_test_column_mapping as select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
+create table delta_lake_par_col_timestamp as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp ;
+create table t_partition_timestamp_ntz as select * from delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz;
+create table delta_lake_par_col_double as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double;
+create table delta_lake_par_null as select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null;
+
+-- only partition column Predicate with runtime filter
+select * from string_col_dict_encode where c3='a' order by c1;
+
+-- test struct column is null
+
+select * from delta_lake_data_type where col_struct is null;
+
+-- test struct column is not null
+select col_struct from delta_lake_data_type where col_struct is not null order by col_tinyint;
+
+-- test partition prune with boolean type
+select * from delta_lake_par_col_boolean where col_boolean = true;
+select * from delta_lake_par_col_boolean where col_boolean = false;
+
+-- test predicate with date type
+select * from delta_lake_par_col_date where col_date = '2024-04-24' order by col_smallint;
+select * from delta_lake_par_col_date where col_date > '2024-04-24' order by col_smallint;
+select * from delta_lake_par_col_date where col_date >= '2024-04-24' and col_date < '2024-04-26' order by col_smallint;
+select * from delta_lake_par_col_date where col_date = '2024-04-24' or col_date = '2024-04-26' order by col_smallint;
+select * from delta_lake_par_col_date where col_date != '2024-04-24' order by col_smallint;
+select count(1) from delta_lake_par_col_date where col_date is NULL;
+select count(1) from delta_lake_par_col_date where col_date is NOT NULL;
+select * from delta_lake_par_col_date where col_date in ('2024-04-24', '2024-04-25') order by col_smallint;
+select * from delta_lake_par_col_date where col_date not in ('2024-04-24', '2024-04-25', '2024-04-26') order by col_smallint;
+
+-- test predicate with string type
+select * from delta_lake_par_col_string where col_string = 'value1' order by col_smallint;
+select * from delta_lake_par_col_string where col_string != 'value1' order by col_smallint;
+select * from delta_lake_par_col_string where col_string in ('value1','value2') order by col_smallint;
+select * from delta_lake_par_col_string where col_string not in ('value1','value2') order by col_smallint;
+
+-- test complex type
+select col_tinyint,col_array,col_map,col_struct from delta_lake_data_type where col_tinyint < 6 order by col_tinyint;
+
+-- test timestamp
+select col_timestamp from delta_lake_data_type where col_timestamp = '2024-04-24 12:00:00';
+select col_timestamp from delta_lake_data_type where col_timestamp >= '2024-04-24 12:00:00' and col_timestamp < '2024-04-27 12:00:00';
+
+-- test timestamp_ntz
+select * from t_timestamp_ntz order by col_int;
+select * from t_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+select * from t_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+select * from t_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+select * from t_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+
+-- -- test column mapping
+select * from delta_test_column_mapping;
+
+-- test timestamp as partition type
+select * from delta_lake_par_col_timestamp order by col_smallint;
+select * from delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
+select * from delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+
+-- test timestamp_ntz as partition type
+select * from t_partition_timestamp_ntz order by col_int;
+select * from t_partition_timestamp_ntz where col_timestamp_ntz is null order by col_int;
+select * from t_partition_timestamp_ntz where col_timestamp_ntz is not null order by col_int;
+select * from t_partition_timestamp_ntz where col_timestamp_ntz = '2024-01-02 01:02:03' order by col_int;
+select * from t_partition_timestamp_ntz where col_timestamp_ntz >= '2024-01-02 01:02:01' and col_timestamp_ntz < '2024-01-04 01:02:04' order by col_int;
+
+-- -- test double as partition type
+-- select * from delta_lake_par_col_double order by col_smallint;
+
+-- test null partition
+select * from delta_lake_par_null order by col_smallint;
+select * from delta_lake_par_null where col_timestamp is null order by col_smallint;
+select * from delta_lake_par_null where col_timestamp is not null order by col_smallint;
+
+-- test predicate with struct subfield
+select col_struct from delta_lake_data_type where col_struct.age=30 order by col_tinyint;
+select col_struct from delta_lake_data_type where col_struct.sex='male' order by col_tinyint;
+select col_struct from delta_lake_data_type where col_struct.age<30 order by col_tinyint;
+
+drop catalog delta_test_${uuid0}

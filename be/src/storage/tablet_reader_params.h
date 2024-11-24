@@ -38,6 +38,8 @@ using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 struct OlapScanRange;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 // Params for TabletReader
@@ -60,7 +62,7 @@ struct TabletReaderParams {
     bool use_page_cache = false;
 
     // Options only applies to cloud-native table r/w IO
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .fill_metadata_cache = true};
 
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
@@ -93,6 +95,10 @@ struct TabletReaderParams {
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
 
 public:
     std::string to_string() const;

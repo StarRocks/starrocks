@@ -332,7 +332,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     }
 
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, column_id, new_rows > 0, rowids_by_rssid,
-                                                                   &read_column,
+                                                                   &read_column, &_column_to_expr_value,
                                                                    &_auto_increment_partial_update_states[segment_id]));
 
     TRY_CATCH_BAD_ALLOC(_auto_increment_partial_update_states[segment_id].write_column->append_selective(
@@ -378,6 +378,10 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     CHECK_MEM_LIMIT("RowsetUpdateState::_prepare_partial_update_states");
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
+    const auto& txn_meta = params.op_write.txn_meta();
+    for (auto& entry : txn_meta.column_to_expr_value()) {
+        _column_to_expr_value.insert({entry.first, entry.second});
+    }
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
     // column list that need to read from source segment
     std::vector<std::unique_ptr<Column>> read_columns;
@@ -401,8 +405,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     plan_read_by_rssid(_partial_update_states[segment_id].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     size_t total_rows = _partial_update_states[segment_id].src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, read_column_ids, num_default > 0,
-                                                                   rowids_by_rssid, &read_columns));
+    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+            params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         TRY_CATCH_BAD_ALLOC(_partial_update_states[segment_id].write_columns[col_idx]->append_selective(
                 *read_columns[col_idx], idxes.data(), 0, idxes.size()));
@@ -467,6 +471,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const auto& dest_path = params.op_write.rewrite_segments(segment_id);
     DCHECK(src_path != dest_path);
 
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
+    if (segment_encryption_metas_size > 0) {
+        if (segment_id >= segment_encryption_metas_size) {
+            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
+                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
+                                     segment_encryption_metas_size);
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
+        }
+        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    }
+
     bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -474,11 +491,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
+                    src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                     unmodified_column_ids,
                     has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                    params.op_write, params.tablet));
+                    params.tablet));
         } else {
             skip_because_file_exist = true;
         }
@@ -490,8 +507,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         // if rewrite fail, let segment gc to clean dest segment file
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    params.tablet->segment_location(src_path), &file_info, params.tablet_schema, unmodified_column_ids,
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                    src, &file_info, params.tablet_schema, unmodified_column_ids,
                     _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
         } else {
             skip_because_file_exist = true;
@@ -595,8 +612,8 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, read_column_ids, num_default > 0,
-                                                                       rowids_by_rssid, &read_columns));
+        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+                params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =
@@ -675,7 +692,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
-                params, column_id, new_rows > 0, rowids_by_rssid, &auto_increment_read_column,
+                params, column_id, new_rows > 0, rowids_by_rssid, &auto_increment_read_column, &_column_to_expr_value,
                 &_auto_increment_partial_update_states[segment_id]));
 
         std::unique_ptr<Column> new_write_column =
@@ -742,10 +759,13 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     RandomAccessFileOptions opts;
-    auto& meta = params.op_write.del_encryption_metas(del_id);
-    if (!meta.empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
-        opts.encryption_info = std::move(info);
+    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
+        // When upgrade from old version, `del_encryption_metas` could be empty.
+        auto& meta = params.op_write.del_encryption_metas(del_id);
+        if (!meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
+            opts.encryption_info = std::move(info);
+        }
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());

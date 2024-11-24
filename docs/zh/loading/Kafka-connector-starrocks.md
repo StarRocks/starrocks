@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Kafka connector 导入数据
@@ -15,6 +15,13 @@ StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka�
 - 需要更精细化的控制导入的批次大小，并行度等参数，以求达到导入速率和资源使用之间的平衡。
 
 ## 环境准备
+
+### 版本要求
+
+| Connector | Kafka | StarRocks | Java |
+|-----------|-------|-----------| ---- |
+| 1.0.4     | 3.4   | 2.5 及以上   | 8    |
+| 1.0.3     | 3.4   | 2.5 及以上   | 8    |
 
 ### 准备 Kafka 环境
 
@@ -208,14 +215,24 @@ MySQL [example_db]> select * from test_tbl;
 | value.converter.schema.registry.url | 否       |                                                              | value converter 对应的 schema registry 地址。                |
 | tasks.max                           | 否       | 1                                                            | Kafka connector 要创建的 task 线程数量上限，通常与 Kafka Connect 集群中的 worker 节点上的 CPU 核数量相同。如果需要增加导入性能的时候可以调整该参数。 |
 | bufferflush.maxbytes                | 否       | 94371840(90M)                                                | 数据攒批的大小，达到该阈值后将数据通过 Stream Load 批量写入 StarRocks。取值范围：[64MB, 10GB]。 Stream Load SDK buffer可能会启动多个 Stream Load 来缓冲数据，因此这里的阈值是指总数据量大小。 |
-| bufferflush.intervalms              | 否       | 300000                                                       | 数据攒批发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。 |
+| bufferflush.intervalms              | 否       | 1000                                                       | 数据攒批发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。 |
 | connect.timeoutms                   | 否       | 1000                                                         | 连接 http-url 的超时时间。取值范围：[100, 60000]。           |
-| sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
-| sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-适用参数)和 [JSON 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-适用参数)。 |
+| sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
+| sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#csv-适用参数)和 [JSON 适用参数](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#json-适用参数)。 |
 | sink.properties.partial_update      | 否      | `FALSE` | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
 | sink.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 
-## 使用限制
+## 使用说明
+
+### Flush 策略
+
+Kafka connector 会先在内存中缓存数据，然后通过 Stream Load 将其一次性落盘至 StarRocks。落盘将在以下任何条件满足时触发：
+
+- 缓存的数据的字节达到限制 `bufferflush.maxbytes`。
+- 自上次落盘以来经过的时间达到 connector 限制 `bufferflush.intervalms`。
+- 达到了 Task 偏移量的提交间隔，由 Kafka Connect 配置项 [`offset.flush.interval.ms`](https://docs.confluent.io/platform/current/connect/references/allconfigs.html) 控制, 默认值是 `60000`。
+
+### 使用限制
 
 - 不支持将 Kafka topic 里的一条消息展开成多条导入到 StarRocks。
 - StarRocks 提供的 Kafka connector 的 Sink 保证 at-least-once 语义。

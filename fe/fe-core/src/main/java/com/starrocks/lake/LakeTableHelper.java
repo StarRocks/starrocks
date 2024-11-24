@@ -20,6 +20,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.alter.LakeTableRollupBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -77,6 +78,11 @@ public class LakeTableHelper {
     static AlterJobV2Builder alterTable(OlapTable table) {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
         return new LakeTableAlterJobV2Builder(table);
+    }
+
+    static AlterJobV2Builder rollUp(OlapTable table) {
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+        return new LakeTableRollupBuilder(table);
     }
 
     static boolean removeShardRootDirectory(ShardInfo shardInfo) {
@@ -154,12 +160,13 @@ public class LakeTableHelper {
         return ret;
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(partition, warehouseId).orElse(null);
+    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
+            throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
-        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), physicalPartition.getId());
     }
 
     /**
@@ -171,8 +178,8 @@ public class LakeTableHelper {
      *
      * @return true if the directory is a shared directory, false otherwise
      */
-    public static boolean isSharedDirectory(String path, long partitionId) {
-        return !path.endsWith(String.format("/%d", partitionId));
+    public static boolean isSharedDirectory(String path, long physicalPartitionId) {
+        return !path.endsWith(String.format("/%d", physicalPartitionId));
     }
 
     /**

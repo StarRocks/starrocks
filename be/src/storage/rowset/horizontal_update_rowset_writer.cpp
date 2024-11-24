@@ -14,6 +14,7 @@
 
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 
+#include "fs/key_cache.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
@@ -41,7 +42,13 @@ HorizontalUpdateRowsetWriter::~HorizontalUpdateRowsetWriter() {
 StatusOr<std::unique_ptr<SegmentWriter>> HorizontalUpdateRowsetWriter::_create_update_file_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path = Rowset::segment_upt_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_uptfile);
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        _writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, path));
     const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_uptfile, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
@@ -58,11 +65,16 @@ Status HorizontalUpdateRowsetWriter::add_chunk(const Chunk& chunk) {
         RETURN_IF_ERROR(_update_file_writer->finalize(&segment_size, &index_size, &footer_position));
         {
             std::lock_guard<std::mutex> l(_lock);
-            _num_rows_upt += _update_file_writer->num_rows_written();
+            DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+            _updatefile_encryption_metas.emplace_back(_writer_options.encryption_meta);
             _num_uptfile++;
-            _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
         }
         ASSIGN_OR_RETURN(_update_file_writer, _create_update_file_writer());
+    }
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _num_rows_upt += chunk.num_rows();
+        _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
 
     return _update_file_writer->append_chunk(chunk);
@@ -84,11 +96,14 @@ Status HorizontalUpdateRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* 
         seg_info->set_update_id(_num_uptfile);
         seg_info->set_update_data_size(segment_size);
         seg_info->set_update_path((*segment_writer)->segment_path());
+        seg_info->set_update_encryption_meta((*segment_writer)->encryption_meta());
         seg_info->set_update_row_size(static_cast<int64_t>(chunk.bytes_usage()));
     }
     {
         std::lock_guard<std::mutex> l(_lock);
         _num_rows_upt += chunk.num_rows();
+        DCHECK(_updatefile_encryption_metas.size() == _num_uptfile);
+        _updatefile_encryption_metas.emplace_back(_writer_options.encryption_meta);
         _num_uptfile++;
         _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
@@ -105,7 +120,6 @@ Status HorizontalUpdateRowsetWriter::flush() {
         RETURN_IF_ERROR(_update_file_writer->finalize(&segment_size, &index_size, &footer_position));
         {
             std::lock_guard<std::mutex> l(_lock);
-            _num_rows_upt += _update_file_writer->num_rows_written();
             _num_uptfile++;
         }
         _update_file_writer.reset();

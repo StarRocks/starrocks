@@ -1459,12 +1459,16 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Test
     public void testShowResourceGroupUsage() throws Exception {
+        TWorkGroup defaultGroup =
+                new TWorkGroup().setId(ResourceGroup.DEFAULT_WG_ID).setName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+        TWorkGroup defaultMvGroup =
+                new TWorkGroup().setId(ResourceGroup.DEFAULT_MV_WG_ID).setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
         TWorkGroup group0 = new TWorkGroup().setId(10L).setName("wg0");
         TWorkGroup group1 = new TWorkGroup().setId(11L).setName("wg1");
         TWorkGroup group2 = new TWorkGroup().setId(12L).setName("wg2");
         TWorkGroup group3 = new TWorkGroup().setId(13L).setName("wg3");
         TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
-        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
+        List<TWorkGroup> groups = ImmutableList.of(defaultGroup, defaultMvGroup, group0, group1, group2, group3, nonGroup);
         groups.forEach(this::mockResourceGroup);
 
         List<Backend> backends = ImmutableList.of(
@@ -1505,8 +1509,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
             assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
-                    "default_wg|0|be0-host|3.112|39|38\n" +
-                    "default_mv_wg|1|be1-host|4.11|49|48\n" +
+                    "default_wg|2|be0-host|3.112|39|38\n" +
+                    "default_mv_wg|3|be1-host|4.11|49|48\n" +
                     "wg0|10|be0-host|0.112|9|8\n" +
                     "wg0|10|be1-host|1.11|19|18\n" +
                     "wg1|11|be0-host|0.1|0|0\n" +
@@ -1648,10 +1652,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     private static void changeLeader(Frontend fe) {
-        LeaderInfo leaderInfo = new LeaderInfo();
-        leaderInfo.setIp(fe.getHost());
-        leaderInfo.setHttpPort(80);
-        leaderInfo.setRpcPort(fe.getRpcPort());
+        LeaderInfo leaderInfo = new LeaderInfo(fe.getHost(), 80, fe.getRpcPort());
         GlobalStateMgr.getCurrentState().getNodeMgr().setLeader(leaderInfo);
     }
 
@@ -1659,7 +1660,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         FrontendHbResponse hbResponse;
         if (isAlive) {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), fe.getQueryPort(), fe.getRpcPort(),
-                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion());
+                    fe.getReplayedJournalId(), fe.getLastUpdateTime(), startTimeMs, fe.getFeVersion(), 0.5f);
         } else {
             hbResponse = new FrontendHbResponse(fe.getNodeName(), "mock-dead-frontend");
         }

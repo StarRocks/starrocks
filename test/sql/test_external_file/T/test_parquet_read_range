@@ -84,6 +84,10 @@ select * from repeated_value where c0 = 1;
 -- test lazy decode
 select * from read_range_test where c0 in (1, 4000);
 
+-- test conjunct rewrite
+select count(*) from read_range_test where c2 = '1';
+select count(*) from read_range_test where c2 = '1' or c2 is null;
+
 -- test runtime in filter string type
 select count(*) from read_range_test a join[broadcast] read_range_big_page_test b on a.c2 = b.c2 where b.c0 < 5;
 

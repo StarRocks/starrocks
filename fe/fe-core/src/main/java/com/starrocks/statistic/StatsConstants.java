@@ -15,6 +15,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
 import java.util.Map;
@@ -30,6 +31,22 @@ public class StatsConstants {
     public static final int STATISTIC_EXTERNAL_VERSION = 5;
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
     public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
+    public static final int STATISTIC_EXTERNAL_QUERY_V2_VERSION = 8;
+    public static final int STATISTIC_PARTITION_VERSION = 11;
+
+    public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
+            ImmutableSet.<Integer>builder()
+                    .add(STATISTIC_DATA_VERSION)
+                    .add(STATISTIC_DICT_VERSION)
+                    .add(STATISTIC_HISTOGRAM_VERSION)
+                    .add(STATISTIC_TABLE_VERSION)
+                    .add(STATISTIC_BATCH_VERSION)
+                    .add(STATISTIC_EXTERNAL_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_VERSION)
+                    .add(STATISTIC_EXTERNAL_HISTOGRAM_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_V2_VERSION)
+                    .add(STATISTIC_PARTITION_VERSION)
+                    .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";
@@ -57,6 +74,8 @@ public class StatsConstants {
     public static final String LOW_WEIGHT_SAMPLE_RATIO = "low_weight_sample_ratio";
 
     public static final String MAX_SAMPLE_TABLET_NUM = "max_sample_tablet_num";
+
+    public static final String STATISTIC_SAMPLE_COLLECT_PARTITIONS = "statistic_sample_collect_partitions";
 
     // Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";

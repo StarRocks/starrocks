@@ -70,6 +70,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -80,6 +81,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
@@ -89,6 +91,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -113,9 +116,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -176,12 +177,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
-        Table table = db.getTable(tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (table == null) {
             throw new DdlException("Table does not exist. name: " + tableName);
         }
@@ -190,7 +191,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -212,7 +213,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -276,7 +277,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
             partitions.add(partition);
             short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-            partitionReplicaNum.put(partition.getId(), replicationNum);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                partitionReplicaNum.put(physicalPartition.getId(), replicationNum);
+            }
         }
 
         // check conditions
@@ -623,7 +626,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         // check materialized index.
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexIdToSchema = table.getIndexIdToSchema();
-        Partition partition = partitions.get(0);
+        PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexId() == index.getId()) {
                 continue;
@@ -720,7 +723,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             return infos;
         }
@@ -814,11 +817,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return;
         }
@@ -830,29 +833,6 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static DeleteMgr read(DataInput in) throws IOException {
-        String json;
-        try {
-            json = Text.readString(in);
-
-            // In older versions of fe, the information in the deleteHandler is not cleaned up,
-            // and if there are many delete statements, it will cause an int overflow
-            // and report an IllegalArgumentException.
-            //
-            // dbToDeleteInfos is only used to record history delete info,
-            // discarding it doesn't make much of a difference
-        } catch (IllegalArgumentException e) {
-            LOG.warn("read delete handler json string failed, ignore", e);
-            return new DeleteMgr();
-        }
-        return GsonUtils.GSON.fromJson(json, DeleteMgr.class);
-    }
-
-    public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
     }
 
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
@@ -899,27 +879,21 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DELETE_MGR, numJson);
 
-        writer.writeJson(dbToDeleteInfos.size());
+        writer.writeInt(dbToDeleteInfos.size());
         for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
-            writer.writeJson(deleteInfoEntry.getKey());
+            writer.writeLong(deleteInfoEntry.getKey());
             writer.writeJson(deleteInfoEntry.getValue());
         }
         writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int analyzeJobSize = reader.readInt();
-        for (int i = 0; i < analyzeJobSize; ++i) {
-            long dbId = reader.readJson(long.class);
-            List<MultiDeleteInfo> multiDeleteInfos =
-                    (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
-                    }.getType());
-            dbToDeleteInfos.put(dbId, multiDeleteInfos);
-        }
+        reader.readMap(Long.class, new TypeToken<List<MultiDeleteInfo>>() {}.getType(),
+                dbToDeleteInfos::put);
     }
 
     @Override
@@ -932,4 +906,14 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 "DeleteJob", (long) idToDeleteJob.size());
     }
 
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        List<Object> samples = dbToDeleteInfos.values()
+                .stream()
+                .filter(infos -> !infos.isEmpty())
+                .map(infos -> infos.stream().findAny().get())
+                .collect(Collectors.toList());
+        long size = dbToDeleteInfos.values().stream().mapToInt(List::size).sum();
+        return Lists.newArrayList(Pair.create(samples, size));
+    }
 }

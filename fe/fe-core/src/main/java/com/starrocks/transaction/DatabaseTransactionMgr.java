@@ -111,6 +111,7 @@ import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 public class DatabaseTransactionMgr {
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
+    private static final int MEMORY_TXN_SAMPLES = 10;
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
     private final GlobalStateMgr globalStateMgr;
@@ -269,7 +270,7 @@ public class DatabaseTransactionMgr {
         Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (null == db) {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
@@ -362,10 +363,11 @@ public class DatabaseTransactionMgr {
                 // after state transform
                 transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
             }
+            if (writeEditLog) {
+                persistTxnStateInTxnLevelLock(transactionState);
+            }
 
-            persistTxnStateInTxnLevelLock(transactionState);
-
-            LOG.info("transaction:[{}] successfully prepare", transactionState);
+            LOG.debug("transaction:[{}] successfully prepare", transactionState);
         } finally {
             transactionState.writeUnlock();
         }
@@ -389,7 +391,7 @@ public class DatabaseTransactionMgr {
     public VisibleStateWaiter commitPreparedTransaction(long transactionId) throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (null == db) {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
@@ -419,7 +421,7 @@ public class DatabaseTransactionMgr {
             txnSpan.addEvent("commit_start");
 
             for (Long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
+                Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
                 if (table == null) {
                     // this can happen when tableId == -1 (tablet being dropping)
                     // or table really not exist.
@@ -551,12 +553,12 @@ public class DatabaseTransactionMgr {
 
         LOG.info("transaction:[{}] successfully rollback", transactionState);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return;
         }
         for (Long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 continue;
             }
@@ -632,8 +634,7 @@ public class DatabaseTransactionMgr {
         return labelToTxnIds.get(label);
     }
 
-    @VisibleForTesting
-    protected int getRunningTxnNums() {
+    public int getRunningTxnNums() {
         return runningTxnNums;
     }
 
@@ -875,20 +876,20 @@ public class DatabaseTransactionMgr {
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
-        Database db = globalStateMgr.getDb(txn.getDbId());
+        Database db = globalStateMgr.getLocalMetastore().getDb(txn.getDbId());
         if (db == null) {
             return true;
         }
 
         List<Long> tableIdList = txn.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
-                OlapTable table = (OlapTable) db.getTable(tableId);
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
                 // table maybe dropped between commit and publish, ignore it
                 // it will be processed in finishTransaction
                 if (table == null) {
@@ -896,8 +897,8 @@ public class DatabaseTransactionMgr {
                 }
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                    long partitionId = partitionCommitInfo.getPartitionId();
-                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                    PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
                     // partition maybe dropped between commit and publish version, ignore it
                     if (partition == null) {
                         continue;
@@ -912,8 +913,8 @@ public class DatabaseTransactionMgr {
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
-                    int quorumNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
-                    int replicaNum = partitionInfo.getReplicationNum(partitionId);
+                    int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
+                    int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int successHealthyReplicaNum = 0;
@@ -970,7 +971,7 @@ public class DatabaseTransactionMgr {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         }
         return true;
     }
@@ -986,7 +987,7 @@ public class DatabaseTransactionMgr {
             errorReplicaIds.addAll(originalErrorReplicas);
         }
 
-        Database db = globalStateMgr.getDb(transactionState.getDbId());
+        Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             transactionState.writeLock();
             try {
@@ -1010,7 +1011,7 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             transactionState.writeLock();
             try {
@@ -1018,7 +1019,8 @@ public class DatabaseTransactionMgr {
                 Set<Long> droppedTableIds = Sets.newHashSet();
                 for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
                     long tableId = tableCommitInfo.getTableId();
-                    OlapTable table = (OlapTable) db.getTable(tableId);
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
                     // table maybe dropped between commit and publish, ignore this error
                     if (table == null) {
                         droppedTableIds.add(tableId);
@@ -1036,13 +1038,13 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
                     for (PartitionCommitInfo partitionCommitInfo : idToPartitionCommitInfo.values()) {
-                        long partitionId = partitionCommitInfo.getPartitionId();
-                        PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                        long physicalPartitionId = partitionCommitInfo.getPhysicalPartitionId();
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                         // partition maybe dropped between commit and publish version, ignore this error
-                        if (partition == null) {
-                            droppedPartitionIds.add(partitionId);
+                        if (physicalPartition == null) {
+                            droppedPartitionIds.add(physicalPartitionId);
                             LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    partitionId,
+                                    physicalPartitionId,
                                     transactionState);
                             continue;
                         }
@@ -1050,19 +1052,19 @@ public class DatabaseTransactionMgr {
                         if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !transactionState.isVersionOverwrite() &&
                                 !partitionCommitInfo.isDoubleWrite() &&
-                                partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                                physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
                             if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                                 LOG.debug("transactionId {} partition {} commitInfo version {} is not equal with " +
                                                 "partition visible version {} plus one, need wait",
                                         transactionId,
-                                        partitionId,
+                                        physicalPartitionId,
                                         partitionCommitInfo.getVersion(),
-                                        partition.getVisibleVersion());
+                                        physicalPartition.getVisibleVersion());
                             }
                             String errMsg =
                                     String.format("wait for publishing partition %d version %d. self version: %d. table %d",
-                                            partitionId, partition.getVisibleVersion() + 1,
+                                            physicalPartitionId, physicalPartition.getVisibleVersion() + 1,
                                             partitionCommitInfo.getVersion(), tableId);
                             transactionState.setErrorMsg(errMsg);
                             return;
@@ -1072,10 +1074,10 @@ public class DatabaseTransactionMgr {
                             continue;
                         }
 
-                        int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
+                        int quorumReplicaNum = partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, partition);
+                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1103,7 +1105,7 @@ public class DatabaseTransactionMgr {
                                         }
                                         // this means the replica is a healthy replica,
                                         // it is healthy in the past and does not have error in current load
-                                        if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                        if (replica.checkVersionCatchUp(physicalPartition.getVisibleVersion(), true)) {
                                             // during rollup, the rollup replica's last failed version < 0,
                                             // it may be treated as a normal replica.
 
@@ -1125,7 +1127,7 @@ public class DatabaseTransactionMgr {
                                             // then we will detect this and set C's last failed version to 10 and last success version to 11
                                             // this logic has to be replayed in checkpoint thread
                                             replica.updateVersionInfo(replica.getVersion(),
-                                                    partition.getVisibleVersion(),
+                                                    physicalPartition.getVisibleVersion(),
                                                     partitionCommitInfo.getVersion());
                                             LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
                                                             "in error replica list and its version not equal to partition " +
@@ -1151,8 +1153,8 @@ public class DatabaseTransactionMgr {
                                     String errMsg = String.format(
                                             "publish on tablet %d failed. succeed replica num %d less than quorum %d."
                                                     + " table: %d, partition: %d, publish version: %d",
-                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, partitionId,
-                                            partition.getVisibleVersion() + 1);
+                                            tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId, physicalPartitionId,
+                                            physicalPartition.getVisibleVersion() + 1);
                                     transactionState.setErrorMsg(errMsg);
                                     hasError = true;
                                 }
@@ -1207,7 +1209,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1236,7 +1238,7 @@ public class DatabaseTransactionMgr {
         while (tableCommitInfoIterator.hasNext()) {
             TableCommitInfo tableCommitInfo = tableCommitInfoIterator.next();
             long tableId = tableCommitInfo.getTableId();
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             // table maybe dropped between commit and publish, ignore this error
             if (table == null) {
                 transactionState.removeTable(tableId);
@@ -1251,7 +1253,7 @@ public class DatabaseTransactionMgr {
                     .values().iterator();
             while (partitionCommitInfoIterator.hasNext()) {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
-                long partitionId = partitionCommitInfo.getPartitionId();
+                long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
@@ -1265,13 +1267,13 @@ public class DatabaseTransactionMgr {
                     ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long newVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
                     long versionDiff = newVersion - partition.getVisibleVersion();
                     partitionCommitInfo.setVersion(newVersion);
                     partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
-                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());
+                        long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPhysicalPartitionId());
                         partitionCommitInfo.setVersionEpoch(newVersionEpoch);
                     }
                 } else if (transactionState.isVersionOverwrite()) {
@@ -1506,7 +1508,7 @@ public class DatabaseTransactionMgr {
                 List<Comparable> tableInfo = new ArrayList<>();
                 tableInfo.add(entry.getKey());
                 tableInfo.add(Joiner.on(", ").join(entry.getValue().getIdToPartitionCommitInfo().values().stream().map(
-                        PartitionCommitInfo::getPartitionId).collect(Collectors.toList())));
+                        PartitionCommitInfo::getPhysicalPartitionId).collect(Collectors.toList())));
                 tableInfos.add(tableInfo);
             }
         } finally {
@@ -1620,7 +1622,7 @@ public class DatabaseTransactionMgr {
         List<List<String>> infos = new ArrayList<List<String>>();
         readLock();
         try {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
             if (db == null) {
                 throw new AnalysisException("Database[" + dbId + "] does not exist");
             }
@@ -1663,7 +1665,7 @@ public class DatabaseTransactionMgr {
     private void updateCatalogAfterCommitted(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
-            Table table = db.getTable(tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId);
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyCommitLog(transactionState, tableCommitInfo);
         }
@@ -1671,7 +1673,7 @@ public class DatabaseTransactionMgr {
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            Table table = db.getTable(tableCommitInfo.getTableId());
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
             // table may be dropped by force after transaction committed
             // so that it will be a visible edit log after drop table
             if (table == null) {
@@ -1690,7 +1692,8 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = db.getTable(transactionStateBatch.getTableId());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), transactionStateBatch.getTableId());
         if (table == null) {
             return true;
         }
@@ -1769,25 +1772,35 @@ public class DatabaseTransactionMgr {
     }
 
     public void replayUpsertTransactionState(TransactionState transactionState) {
+        boolean isCheckpoint = GlobalStateMgr.isCheckpointThread();
         writeLock();
         try {
             if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
-                LOG.info("remove unknown transaction: {}", transactionState);
+                LOG.debug("remove unknown transaction: {}", transactionState);
                 return;
             }
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
-            Database db = globalStateMgr.getDb(transactionState.getDbId());
+            Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
             if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                LOG.info("replay a committed transaction {}", transactionState);
+                if (!isCheckpoint) {
+                    LOG.info("replay a committed transaction {}", transactionState.getBrief());
+                }
+                LOG.debug("replay a committed transaction {}", transactionState);
                 updateCatalogAfterCommitted(transactionState, db);
             } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-                LOG.info("replay a visible transaction {}", transactionState);
+                if (!isCheckpoint) {
+                    LOG.info("replay a visible transaction {}", transactionState.getBrief());
+                }
+                LOG.debug("replay a visible transaction {}", transactionState);
                 updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState, true);
             if (transactionState.isExpired(System.currentTimeMillis())) {
-                LOG.info("remove expired transaction: {}", transactionState);
+                if (!isCheckpoint) {
+                    LOG.info("remove expired transaction: {}", transactionState.getBrief());
+                }
+                LOG.debug("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
         } finally {
@@ -1798,8 +1811,8 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
         writeLock();
         try {
-            LOG.info("replay a transaction state batch{}", transactionStateBatch);
-            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
+            LOG.debug("replay a transaction state batch{}", transactionStateBatch);
+            Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
             unprotectSetTransactionStateBatch(transactionStateBatch, true);
@@ -1838,7 +1851,7 @@ public class DatabaseTransactionMgr {
     }
 
     public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
-        Database db = globalStateMgr.getDb(transactionState.getDbId());
+        Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
             transactionState.writeLock();
             try {
@@ -1862,7 +1875,7 @@ public class DatabaseTransactionMgr {
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         Locker locker = new Locker();
         List<Long> tableIdList = transactionState.getTableIdList();
-        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         finishSpan.addEvent("db_lock");
         try {
             transactionState.writeLock();
@@ -1896,7 +1909,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1907,7 +1920,7 @@ public class DatabaseTransactionMgr {
     }
 
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
-        Database db = globalStateMgr.getDb(stateBatch.getDbId());
+        Database db = globalStateMgr.getLocalMetastore().getDb(stateBatch.getDbId());
         if (db == null) {
             stateBatch.writeLock();
             try {
@@ -1936,7 +1949,7 @@ public class DatabaseTransactionMgr {
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
             tableIds.addAll(transactionState.getTableIdList());
         }
-        locker.lockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), new ArrayList<>(tableIds), LockType.WRITE);
 
         try {
             boolean txnOperated = false;
@@ -1963,7 +1976,7 @@ public class DatabaseTransactionMgr {
                 stateBatch.writeUnlock();
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, new ArrayList<>(tableIds), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), new ArrayList<>(tableIds), LockType.WRITE);
         }
 
         // do after transaction finish in batch
@@ -1989,7 +2002,7 @@ public class DatabaseTransactionMgr {
             throws TransactionException {
         List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
-            Table table = database.getTable(tableId);
+            Table table = globalStateMgr.getLocalMetastore().getTable(database.getId(), tableId);
             if (table == null) {
                 // this can happen when tableId == -1 (tablet being dropping)
                 // or table really not exist.
@@ -2019,7 +2032,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void checkDatabaseDataQuota() throws AnalysisException {
-        Database db = globalStateMgr.getDb(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist");
         }
@@ -2039,5 +2052,26 @@ public class DatabaseTransactionMgr {
 
     public void updateDatabaseUsedQuotaData(long usedQuotaDataBytes) {
         this.usedQuotaDataBytes = usedQuotaDataBytes;
+    }
+
+    public List<Object> getSamplesForMemoryTracker() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.size() > 0) {
+                return idToRunningTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            if (idToFinalStatusTransactionState.size() > 0) {
+                return idToFinalStatusTransactionState.values()
+                        .stream()
+                        .limit(MEMORY_TXN_SAMPLES)
+                        .collect(Collectors.toList());
+            }
+            return new ArrayList<>();
+        } finally {
+            readUnlock();
+        }
     }
 }

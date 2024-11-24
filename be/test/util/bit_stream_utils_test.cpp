@@ -174,7 +174,7 @@ TEST(TestBitStreamUtil, TestMixed) {
             EXPECT_EQ(val, parity);
             parity = !parity;
         } else {
-            int val;
+            int val = 0;
             result = reader.GetValue(10, &val);
             EXPECT_EQ(val, i);
         }

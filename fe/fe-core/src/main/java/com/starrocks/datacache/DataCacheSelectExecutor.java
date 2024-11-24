@@ -51,6 +51,7 @@ public class DataCacheSelectExecutor {
         tmpSessionVariable.setDataCacheEvictProbability(100);
         tmpSessionVariable.setDataCachePriority(statement.getPriority());
         tmpSessionVariable.setDatacacheTTLSeconds(statement.getTTLSeconds());
+        tmpSessionVariable.setEnableCacheSelect(true);
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();
@@ -75,7 +76,7 @@ public class DataCacheSelectExecutor {
         DataCacheSelectMetrics metrics = null;
         Coordinator coordinator = stmtExecutor.getCoordinator();
         Preconditions.checkNotNull(coordinator, "Coordinator can't be null");
-        coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
+        coordinator.join(stmtExecutor.getExecTimeout());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
         }
@@ -83,8 +84,10 @@ public class DataCacheSelectExecutor {
         connectContext.setSessionVariable(sessionVariableBackup);
 
         Preconditions.checkNotNull(metrics, "Failed to retrieve cache select metrics");
+        // Don't update datacache metrics after cache select, because of datacache instance still not unified.
+        // Here update will display wrong metrics in show backends/compute nodes
         // update backend's datacache metrics after cache select
-        updateBackendDataCacheMetrics(metrics);
+        // updateBackendDataCacheMetrics(metrics);
         return metrics;
     }
 

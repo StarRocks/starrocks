@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # database
@@ -39,4 +39,4 @@ select database();
 
 ## See also
 
-[USE](../../sql-statements/data-definition/USE.md): Switches to a destination database.
+[USE](../../sql-statements/Database/USE.md): Switches to a destination database.

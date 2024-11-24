@@ -103,14 +103,14 @@ void ScanOperator::close(RuntimeState* state) {
 
     _default_buffer_capacity_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "DefaultChunkBufferCapacity",
                                                               TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-    COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
+    COUNTER_UPDATE(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
     _buffer_capacity_counter =
             ADD_COUNTER_SKIP_MERGE(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-    COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+    COUNTER_UPDATE(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
 
     _tablets_counter =
             ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
-    COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
+    COUNTER_UPDATE(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
     _merge_chunk_source_profiles(state);
 
@@ -203,7 +203,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
         return false;
     }
 
@@ -225,6 +225,16 @@ bool ScanOperator::is_finished() const {
 void ScanOperator::_detach_chunk_sources() {
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         detach_chunk_source(i);
+    }
+}
+
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+    if (ctx != nullptr && _bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+        int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+        ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
     }
 }
 
@@ -373,6 +383,7 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -395,7 +406,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup.get();
+    task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
@@ -408,7 +419,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -421,8 +431,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 #endif
 
             DeferOp timer_defer([chunk_source]() {
-                COUNTER_SET(chunk_source->scan_timer(),
-                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+                COUNTER_UPDATE(chunk_source->scan_timer(), chunk_source->io_task_wait_timer()->value() +
+                                                                   chunk_source->io_task_exec_timer()->value());
             });
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
@@ -430,7 +440,19 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
-            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
+            // kick start this chunk source
+            auto start_status = chunk_source->start(state);
+            if (!start_status.ok()) {
+                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
+                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                _set_scan_status(start_status);
+            }
+            Status status;
+
+            if (start_status.ok()) {
+                status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+            }
 
             if (!status.ok() && !status.is_end_of_file()) {
                 LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
@@ -571,14 +593,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     if (!query_ctx->enable_profile()) {
         return;
     }
-    std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
-    for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
-        profiles[i] = _chunk_source_profiles[i].get();
-    }
 
-    ObjectPool obj_pool;
-    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
-
+    RuntimeProfile* merged_profile = _chunk_source_profiles[0].get();
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
 

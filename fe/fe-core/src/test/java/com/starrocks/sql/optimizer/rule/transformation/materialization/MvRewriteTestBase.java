@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -123,8 +124,8 @@ public class MvRewriteTestBase {
     }
 
     public static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
         Assert.assertNotNull(table);
         return table;
     }
@@ -279,5 +280,20 @@ public class MvRewriteTestBase {
         } catch (Exception e) {
             Assert.fail("add partition failed:" + e);
         }
+    }
+
+    public static String getAggFunction(String funcName, String aggArg) {
+        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
+            funcName = String.format("array_agg(distinct %s)", aggArg);
+        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
+            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
+        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
+            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
+        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
+            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
+        } else {
+            funcName = String.format("%s(%s)", funcName, aggArg);
+        }
+        return funcName;
     }
 }

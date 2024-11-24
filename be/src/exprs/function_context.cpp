@@ -108,7 +108,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     return col && col->is_constant() && !col->is_null(0);
 }
 
-starrocks::ColumnPtr FunctionContext::get_constant_column(int i) const {
+ColumnPtr FunctionContext::get_constant_column(int i) const {
     if (i < 0 || i >= _constant_columns.size()) {
         return nullptr;
     }
@@ -169,6 +169,10 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
@@ -192,12 +196,8 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
-    if (_state != nullptr) {
-        return _state->log_error(ss.str());
-    } else {
-        std::cerr << ss.str() << std::endl;
-        return true;
-    }
+    std::cerr << ss.str() << std::endl;
+    return true;
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

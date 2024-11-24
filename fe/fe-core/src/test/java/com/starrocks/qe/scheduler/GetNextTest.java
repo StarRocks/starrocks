@@ -24,6 +24,7 @@ import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -292,7 +293,7 @@ public class GetNextTest extends SchedulerTestBase {
         }
         TResultBatch resultBatch = new TResultBatch(rows, false, 0);
 
-        TSerializer serializer = new TSerializer();
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
         return serializer.serialize(resultBatch);
     }
 

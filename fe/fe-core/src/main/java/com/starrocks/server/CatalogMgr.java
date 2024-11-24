@@ -20,7 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
@@ -29,7 +28,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
 import com.starrocks.common.proc.ExternalDbsProcDir;
@@ -44,7 +42,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -61,9 +59,6 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -98,6 +93,11 @@ public class CatalogMgr {
 
     public void createCatalog(CreateCatalogStmt stmt) throws DdlException {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
+    }
+
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
     }
 
     // please keep connector and catalog create together, they need keep in consistent asap.
@@ -160,6 +160,16 @@ public class CatalogMgr {
         }
     }
 
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
+        }
+    }
+
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
@@ -196,7 +206,7 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
 
-                if (serviceName.isEmpty()) {
+                if (Strings.isNullOrEmpty(serviceName)) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                     } else {
@@ -277,8 +287,7 @@ public class CatalogMgr {
                 readUnlock();
             }
 
-            Map<String, String> properties = catalog.getConfig();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            String serviceName = config.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -345,7 +354,7 @@ public class CatalogMgr {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (serviceName.isEmpty()) {
+            if (Strings.isNullOrEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {
@@ -360,29 +369,6 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
-    }
-
-    public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
-        int catalogCount = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null) {
-                if (data.catalogs != null) {
-                    for (Catalog catalog : data.catalogs.values()) {
-                        if (!isResourceMappingCatalog(catalog.getName())) {
-                            replayCreateCatalog(catalog);
-                        }
-                    }
-                    catalogCount = data.catalogs.size();
-                }
-            }
-            checksum ^= catalogCount;
-            LOG.info("finished replaying CatalogMgr from image");
-        } catch (EOFException e) {
-            LOG.info("no CatalogMgr to replay.");
-        }
-        return checksum;
     }
 
     public void loadResourceMappingCatalog() {
@@ -406,23 +392,6 @@ public class CatalogMgr {
             }
         }
         LOG.info("finished replaying resource mapping catalogs from resources");
-    }
-
-    public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.catalogs = catalogs.entrySet().stream()
-                .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-        checksum ^= data.catalogs.size();
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(dos, s);
-        return checksum;
-    }
-
-    private static class SerializeData {
-        @SerializedName("catalogs")
-        public Map<String, Catalog> catalogs;
     }
 
     public List<List<String>> getCatalogsInfo() {
@@ -532,15 +501,15 @@ public class CatalogMgr {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<String, Catalog> serializedCatalogs = catalogs.entrySet().stream()
                 .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         int numJson = 1 + serializedCatalogs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_MGR, numJson);
 
-        writer.writeJson(serializedCatalogs.size());
+        writer.writeInt(serializedCatalogs.size());
         for (Catalog catalog : serializedCatalogs.values()) {
             writer.writeJson(catalog);
         }
@@ -549,15 +518,14 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int serializedCatalogsSize = reader.readInt();
-        for (int i = 0; i < serializedCatalogsSize; ++i) {
-            Catalog catalog = reader.readJson(Catalog.class);
+        reader.readCollection(Catalog.class, catalog -> {
             try {
                 replayCreateCatalog(catalog);
             } catch (Exception e) {
                 LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
-        }
+        });
+
         loadResourceMappingCatalog();
     }
 }

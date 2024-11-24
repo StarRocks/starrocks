@@ -110,7 +110,8 @@ public class DatabaseTest {
         Assert.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "baseTable", baseIndex, new RandomDistributionInfo(10));
+        Partition partition = new Partition(20000L, 20001L,
+                "baseTable", baseIndex, new RandomDistributionInfo(10));
         List<Column> baseSchema = new LinkedList<Column>();
         OlapTable table = new OlapTable(2000, "baseTable", baseSchema, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
@@ -196,12 +197,23 @@ public class DatabaseTest {
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
         // Attempt to add the same UDF again
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
 
         List<Function> functions = db.getFunctions();
         Assert.assertEquals(functions.size(), 1);
         Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
     }
 }

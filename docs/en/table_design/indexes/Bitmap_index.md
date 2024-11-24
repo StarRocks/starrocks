@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+sidebar_position: 20
 ---
 
 # Bitmap indexes
@@ -87,18 +88,18 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
+    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../sql-reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
 
     Multiple bitmap indexes can be created for multiple columns, separated by commas (,).
 
     :::note
 
 
-    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
 
     :::
 
-- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
+- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md).
 
     ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
@@ -106,7 +107,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 
 ### Progress of creating an index
 
-Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
+Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
 
 ```SQL
 SHOW ALTER TABLE COLUMN;
@@ -120,7 +121,7 @@ Each table can only have one ongoing Schema Change task at a time. You cannot cr
 
 ### View an index
 
-View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md).
+View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../../sql-reference/sql-statements/table_bucket_part_index/SHOW_INDEX.md).
 
 ```SQL
 SHOW INDEXES FROM lineorder_partial;
@@ -134,7 +135,7 @@ Creating a bitmap index is an asynchronous process. Using the above statement, y
 
 ### Delete an index
 
-Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
+Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../../sql-reference/sql-statements/table_bucket_part_index/DROP_INDEX.md).
 
 ```SQL
 DROP INDEX lo_orderdate_index ON lineorder_partial;
@@ -245,7 +246,7 @@ SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 
 **Query performance analysis**: Since the table queried does not have bitmap index, all pages containing the `lo_shipmode` column data need to be read and then predicate filtering is applied.
 
-Total Time: Approximately 0.91 milliseconds, **with data loading taking 0.47 milliseconds**, decoding dictionary for low cardinality optimization taking 0.31 milliseconds, and predicate filtering taking 0.23 milliseconds.
+Total Time: Approximately 0.91 seconds, **with data loading taking 0.47 seconds**, decoding dictionary for low cardinality optimization taking 0.31 seconds, and predicate filtering taking 0.23 seconds.
 
 ```Bash
 PullRowNum: 20.566M (20566493) // Number of rows in the result set.
@@ -277,7 +278,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 
 **Query performance analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
 
-Total time: 2.7 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
+Total time: 2.077 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
 
 ```Bash
 PullRowNum: 20.566M (20566493) // Number of rows in the result set.
@@ -407,7 +408,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **Query performance analysis**: Since the table queried does not have a bitmap index, pages containing the `lo_partkey` column data are read and then predicate filtering is applied.
 
-Total time: approximately 0.43 ms, **including 0.39 ms for data loading** and 0.02 ms for predicate filtering.
+Total time: approximately 0.43 seconds, **including 0.39 seconds for data loading** and 0.02 seconds for predicate filtering.
 
 ```Bash
 PullRowNum: 255 // Number of rows in the result set.

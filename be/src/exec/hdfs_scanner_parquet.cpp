@@ -18,7 +18,6 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
-#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -28,14 +27,17 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
-                new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
-                                         scanner_params.materialize_slots, &_need_skip_rowids));
-        for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
-                    runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
-                    scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
-                    runtime_state, _mor_processor));
+        auto iceberg_delete_builder =
+                std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, runtime_state, scanner_params);
+        for (const auto& delete_file : scanner_params.deletes) {
+            if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+                RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
+            } else {
+                const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                                   delete_file->file_content);
+                LOG(WARNING) << s;
+                return Status::InternalError(s);
+            }
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     } else if (scanner_params.paimon_deletion_file != nullptr) {
@@ -157,7 +159,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
-                                                    _scanner_params.modification_time,
+                                                    _scanner_params.datacache_options,
                                                     _shared_buffered_input_stream.get(), &_need_skip_rowids);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));

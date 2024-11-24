@@ -43,6 +43,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -86,14 +87,14 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) " +
                 "duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl1");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -118,7 +119,7 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 
@@ -131,15 +132,15 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl2 add rollup r1(k1) " +
                 "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Assert.assertNotNull(db);
-        OlapTable tbl = (OlapTable) db.getTable("tbl2");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 
@@ -153,7 +154,7 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 }
