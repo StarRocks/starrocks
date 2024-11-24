@@ -1,0 +1,32 @@
+name: Check releasenote links
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "00 42 * * SUN"
+
+jobs:
+  linkChecker:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write # required for peter-evans/create-issue-from-file
+    steps:
+        # Get this repo
+      - uses: actions/checkout@v4
+
+      - name: Link Checker
+        id: lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >
+            --config lychee.toml
+            --exclude https://github.com/StarRocks/starrocks/.*
+            "docs/en/release_notes/*.md" "docs/zh/release_notes/*.md"
+
+      - name: Create Issue From File
+        if: steps.lychee.outputs.exit_code != 0
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: Link Checker Report
+          content-filepath: ./lychee/out.md
+          labels: doc-feedback

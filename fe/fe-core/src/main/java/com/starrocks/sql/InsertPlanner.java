@@ -345,6 +345,9 @@ public class InsertPlanner {
                 if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isDynamicOverwrite()) {
+                    Preconditions.checkState(CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 } else if (insertStmt.isSpecifyPartitionNames()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = false;
@@ -385,6 +388,9 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+                if (insertStmt.isDynamicOverwrite()) {
+                    ((OlapTableSink) dataSink).setDynamicOverwrite(true);
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
@@ -394,8 +400,7 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
                 } catch (UserException e) {
                     throw new SemanticException(e.getMessage());
@@ -1022,7 +1027,7 @@ public class InsertPlanner {
 
         List<String> targetColumnNames;
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumnNames = targetTable.getColumns().stream()
+            targetColumnNames = targetTable.getFullSchema().stream()
                     .map(Column::getName).collect(Collectors.toList());
         } else {
             targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());

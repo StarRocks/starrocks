@@ -128,8 +128,8 @@ public:
         if (offset0->size() != offset1->size()) {
             return false;
         }
-        auto data1 = offset0->get_data();
-        auto data2 = offset1->get_data();
+        const auto& data1 = offset0->get_data();
+        const auto& data2 = offset1->get_data();
         return std::equal(data1.begin(), data1.end(), data2.begin());
     }
 
@@ -266,6 +266,11 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
 
+    template <LogicalType Type>
+    static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+        return down_cast<const RunTimeColumnType<Type>*>(value);
+    }
+
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
@@ -382,6 +387,7 @@ public:
     //     which could reduce unnecessary calculations.
     //     Don't forget to resize the result constant columns if necessary.
     static std::pair<bool, size_t> num_packed_rows(const Columns& columns);
+    static std::pair<bool, size_t> num_packed_rows(const Column* column);
 
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);

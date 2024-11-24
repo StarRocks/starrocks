@@ -101,12 +101,12 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
-    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
-            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
         }
@@ -117,9 +117,14 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
-        return buildWithCache(ctx, table);
+        return buildWithCache(ctx, null, table);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
@@ -148,6 +153,11 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract String getDbName();
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -175,7 +185,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

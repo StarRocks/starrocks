@@ -49,15 +49,15 @@ public class OdpsTableTest {
     @Test
     public void testGetDbName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
-        when(odpsTable.getDbName()).thenReturn("dbName");
-        assertEquals("dbName", odpsTable.getDbName());
+        when(odpsTable.getCatalogDBName()).thenReturn("dbName");
+        assertEquals("dbName", odpsTable.getCatalogDBName());
     }
 
     @Test
     public void testGetTableName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
-        when(odpsTable.getTableName()).thenReturn("tableName");
-        assertEquals("tableName", odpsTable.getTableName());
+        when(odpsTable.getCatalogTableName()).thenReturn("tableName");
+        assertEquals("tableName", odpsTable.getCatalogTableName());
     }
 
     @Test

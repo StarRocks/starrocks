@@ -26,6 +26,7 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -401,12 +402,20 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
             segment_id_to_rowset[mutable_rowset->id() + j] = mutable_rowset;
         }
     }
+    // For test purpose, we can set recover flag to test recover mode.
+    Status test_status = Status::OK();
+    TEST_SYNC_POINT_CALLBACK("update_num_del_stat", &test_status);
+    if (!test_status.ok()) {
+        set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
+        return test_status;
+    }
     for (const auto& each : segment_id_to_add_dels) {
         if (segment_id_to_rowset.count(each.first) == 0) {
             // Maybe happen when primary index is in error state.
             std::string err_msg =
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
+            StarRocksMetrics::instance()->primary_key_table_error_state_total.increment(1);
             if (!config::experimental_lake_ignore_pk_consistency_check) {
                 set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);
@@ -486,13 +495,43 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     return Status::OK();
 }
 
+// This function cleans up the SSTable metadata after an alter operation that changes the persistent index type.
+void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
+    // Check if the persistent index type is LOCAL or if the persistent index is disabled,
+    // and there are SSTables present.
+    if ((_tablet_meta->persistent_index_type() == PersistentIndexTypePB::LOCAL ||
+         !_tablet_meta->enable_persistent_index()) &&
+        _tablet_meta->sstable_meta().sstables_size() > 0) {
+        // Iterate through all SSTables and move them to orphan files.
+        for (const auto& sstable : _tablet_meta->sstable_meta().sstables()) {
+            FileMetaPB file_meta;
+            file_meta.set_name(sstable.filename());
+            file_meta.set_size(sstable.filesize());
+            _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+        // Clear the SSTable metadata.
+        _tablet_meta->clear_sstable_meta();
+    }
+}
+
 Status MetaFileBuilder::finalize(int64_t txn_id) {
     auto version = _tablet_meta->version();
-    // finalize delvec
+
+    // Finalize delete vectors by updating their metadata and writing them to disk
     RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+
+    // Clean up SSTable metadata after an alter operation that changes the persistent index type
+    _sstable_meta_clean_after_alter_type();
+
+    // Persist the updated tablet metadata
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
+
+    // Update the primary index data version in the update manager
     _update_mgr->update_primary_index_data_version(_tablet, version);
+
+    // Fill the delete vector cache with the newly finalized delete vectors
     _fill_delvec_cache();
+
     return Status::OK();
 }
 

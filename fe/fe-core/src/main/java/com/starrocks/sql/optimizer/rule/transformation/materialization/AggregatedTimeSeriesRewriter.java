@@ -36,10 +36,11 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -133,7 +134,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isRangePartition()) {
             return false;
         }
-        Expr mvPartitionExpr = mv.getPartitionExpr();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return false;
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
         if (mvPartitionExpr == null || !(mvPartitionExpr instanceof FunctionCallExpr)) {
             return false;
         }
@@ -186,7 +191,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         // check mv's base table
         List<Table> baseTables = mvContext.getBaseTables();
         if (baseTables.size() != 1) {
-            logMVRewrite(optimizerContext, rule, "AggTimeSeriesRewriter: base table size is not 1, size=" + baseTables.size());
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: base table size is not 1, size=" + baseTables.size());
             return null;
         }
         Table refBaseTable = baseTables.get(0);
@@ -197,15 +202,20 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         }
         OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         if (!isEnableTimeGranularityRollup(refBaseTable, mv, queryExpression)) {
+            logMVRewrite(mvRewriteContext,
+                    "AggTimeSeriesRewriter: cannot enable time granularity rollup for mv: " + mv.getName());
             return null;
         }
         // split predicates for mv rewritten and non-mv-rewritten
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
-        Map<Table, Column> refBaseTablePartitionCols = mv.getRefBaseTablePartitionColumns();
+        Map<Table, List<Column>> refBaseTablePartitionCols = mv.getRefBaseTablePartitionColumns();
         if (refBaseTablePartitionCols == null || !refBaseTablePartitionCols.containsKey(refBaseTable)) {
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot find partition column for ref base table");
             return null;
         }
-        Column refPartitionCol = refBaseTablePartitionCols.get(refBaseTable);
+        List<Column> refPartitionCols = refBaseTablePartitionCols.get(refBaseTable);
+        Preconditions.checkArgument(refPartitionCols.size() == 1);
+        Column refPartitionCol = refPartitionCols.get(0);
         LogicalScanOperator scanOp = scanOperators.get(0);
         // get ref partition column ref from query's scan operator
         Optional<ColumnRefOperator> refPartitionColRefOpt = scanOp.getColRefToColumnMetaMap().keySet().stream()
@@ -213,14 +223,19 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .findFirst();
         // compensate nothing if there is no partition column predicate in the scan node.
         if (!refPartitionColRefOpt.isPresent()) {
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot find partition column ref in scan node");
             return null;
         }
         ColumnRefOperator refPartitionColRef = refPartitionColRefOpt.get();
 
         // split partition predicates into mv-rewritten predicates and non-rewritten predicates
+        ScalarOperator queryCompensatePedicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
+                mvContext, rule, optimizerContext.getColumnRefFactory(), queryExpression);
+        ScalarOperator queryScanPredicate = Utils.compoundAnd(queryCompensatePedicate, scanOp.getPredicate());
         Pair<ScalarOperator, ScalarOperator> splitPartitionPredicates = getSplitPartitionPredicates(mvContext,
-                mvPartitionExpr, scanOp, refPartitionColRef);
+                mvPartitionExpr, queryScanPredicate, refPartitionColRef);
         if (splitPartitionPredicates == null) {
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot split partition predicates");
             return null;
         }
 
@@ -233,12 +248,25 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         ctx.setAggregator(aggOp);
         OptExpression pdAggOptExpression = doPushDownAggregateRewrite(pdOptExpression, ctx, splitPartitionPredicates);
         if (pdAggOptExpression == null) {
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot rewrite push-down aggregate");
             return null;
         }
 
         // add final state aggregation above union opt
         OptExpression result = getPushDownRollupFinalAggregateOpt(mvRewriteContext, ctx, remapping,
                 queryExpression, Lists.newArrayList(pdAggOptExpression));
+
+        return result;
+    }
+
+    @Override
+    public OptExpression postRewrite(OptimizerContext optimizerContext,
+                                     MvRewriteContext mvRewriteContext,
+                                     OptExpression candidate) {
+        OptExpression result = super.postRewrite(optimizerContext, mvRewriteContext, candidate);
+        MvUtils.getScanOperator(result)
+                .stream()
+                .forEach(op -> op.resetOpRuleBit(OpRuleBit.OP_PARTITION_PRUNED));
         return result;
     }
 
@@ -246,7 +274,6 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                                                      AggregatePushDownContext ctx,
                                                      Pair<ScalarOperator, ScalarOperator> splitPartitionPredicates) {
         List<ColumnRefOperator> origOutputColumns = getOutputColumns(pdOptExpression);
-
         // get push down mv expression of an input query opt
         Pair<OptExpression, List<ColumnRefOperator>> mvRewrittenResult = getPushDownMVOptExpression(mvRewriteContext, ctx,
                 pdOptExpression, splitPartitionPredicates.first, origOutputColumns);
@@ -284,7 +311,6 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) queryExpression.getOp();
         Map<ColumnRefOperator, CallOperator>  aggregations = aggOperator.getAggregations();
         Map<CallOperator, ColumnRefOperator> uniqueAggregations = Maps.newHashMap();
-        // agg remappings
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
             ColumnRefOperator aggColRef = entry.getKey();
             CallOperator aggCall = entry.getValue();
@@ -326,6 +352,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (scanOperator instanceof LogicalOlapScanOperator) {
             newScanOperator = new LogicalOlapScanOperator.Builder()
                     .withOperator((LogicalOlapScanOperator) scanOperator)
+                    .setPrunedPartitionPredicates(Lists.newArrayList())
                     .build();
         } else if (scanOperator instanceof LogicalHiveScanOperator) {
             newScanOperator = new LogicalHiveScanOperator.Builder()
@@ -350,6 +377,16 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         } else {
             return null;
         }
+
+        // reset scan operator predicates
+        if (!(newScanOperator instanceof LogicalOlapScanOperator)) {
+            try {
+                newScanOperator.setScanOperatorPredicates(new ScanOperatorPredicates());
+            } catch (Exception e) {
+                logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot set scan operator predicates");
+                return null;
+            }
+        }
         return newScanOperator;
     }
 
@@ -367,15 +404,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         LogicalScanOperator scanOp = scanOperators.get(0);
         // reset scan operator's predicate
         scanOp.setPredicate(newPredicate);
-        // reset scan operator predicates
-        if (!(scanOp instanceof LogicalOlapScanOperator)) {
-            try {
-                scanOp.setScanOperatorPredicates(new ScanOperatorPredicates());
-            } catch (Exception e) {
-                logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot set scan operator predicates");
-                return null;
-            }
-        }
+
         // rewrite the input query by the mv context
         OptExpression rewritten = doRewritePushDownAgg(mvRewriteContext, ctx, queryExpression, rule);
         if (rewritten == null) {
@@ -389,7 +418,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         }
         List<LogicalScanOperator> rewrittenScanOperators = MvUtils.getScanOperator(rewritten);
         if (rewrittenScanOperators.size() == 1 && rewrittenScanOperators.get(0).isEmptyOutputRows()) {
-            logMVRewrite(optimizerContext, rule, "AggTimeSeriesRewriter: mv contains no rows after rewrite");
+            logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: mv contains no rows after rewrite");
             return null;
         }
 
@@ -450,7 +479,6 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         LogicalScanOperator logicalOlapScanOp = scanOperators.get(0);
         logicalOlapScanOp.setPredicate(newPredicate);
-        Utils.resetOpAppliedRule(logicalOlapScanOp, Operator.OP_PARTITION_PRUNE_BIT);
         LogicalAggregationOperator aggregateOp = (LogicalAggregationOperator) queryExpression.getOp();
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         Map<ColumnRefOperator, ColumnRefOperator> aggColRefMapping = Maps.newHashMap();
@@ -460,7 +488,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
             // use aggregate push down context to generate related push-down aggregation functions
             CallOperator newAggCall = getRollupPartialAggregate(mvRewriteContext, ctx, aggCall);
             if (newAggCall == null) {
-                logMVRewrite(optimizerContext, rule, "AggTimeSeriesRewriter: cannot find partial agg remapping for " + aggCall);
+                logMVRewrite(mvRewriteContext, "AggTimeSeriesRewriter: cannot find partial agg remapping for " + aggCall);
                 return null;
             }
             ColumnRefOperator newAggColRef = queryColumnRefFactory.create(newAggCall,
@@ -483,8 +511,6 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .collect(Collectors.toList());
         List<ColumnRefOperator> newQueryOutputCols = duplicator.getMappedColumns(newOrigOutputColumns);
 
-        Utils.setOptScanOpsBit(queryDuplicateOptExpression, Operator.OP_UNION_ALL_BIT);
-
         return Pair.create(queryDuplicateOptExpression, newQueryOutputCols);
     }
 
@@ -501,7 +527,11 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
         if (!partitionInfo.isExprRangePartitioned()) {
             return null;
         }
-        Expr partitionExpr = mv.getPartitionExpr();
+        Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (partitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr partitionExpr = partitionExprOpt.get();
         if (partitionExpr == null || !(partitionExpr instanceof FunctionCallExpr)) {
             return null;
         }
@@ -555,9 +585,9 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
      */
     public Pair<ScalarOperator, ScalarOperator> getSplitPartitionPredicates(MaterializationContext mvContext,
                                                                             FunctionCallExpr mvPartitionExpr,
-                                                                            LogicalScanOperator scanOperator,
+                                                                            ScalarOperator queryScanPredicate,
                                                                             ColumnRefOperator refPartitionColRef) {
-        ScalarOperator queryScanPredicate = scanOperator.getPredicate();
+        logMVRewrite(mvRewriteContext, "split predicate={}", queryScanPredicate);
         List<ScalarOperator> queryScanPredicates = Utils.extractConjuncts(queryScanPredicate);
 
         // part1 is used  for mv's rewrite, part2 is left for query's rewrite, part1 and part2 should be disjoint and union
@@ -628,7 +658,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
                 .collect(Collectors.toList());
         leftQueryPartitionPredicates.add(Utils.compoundOr(notQueryPartitionPredicates));
         leftQueryPartitionPredicates.addAll(queryPartitionPredicates);
-        logMVRewrite(optimizerContext, rule, "rewritten predicates={}, non-rewritten predicates:{}",
+        logMVRewrite(mvRewriteContext, "rewritten predicates={}, non-rewritten predicates:{}",
                 rewrittenPartitionPredicates, leftQueryPartitionPredicates);
 
         return Pair.create(Utils.compoundAnd(rewrittenPartitionPredicates), Utils.compoundAnd(leftQueryPartitionPredicates));

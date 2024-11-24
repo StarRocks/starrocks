@@ -70,6 +70,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,6 +80,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -86,7 +88,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, GsonPreProcessable {
+        implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse {
     private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
@@ -263,6 +265,21 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.streamLoadParams = null;
         this.streamLoadInfo = null;
         this.isCommitting = false;
+    }
+
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isFinalState();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return endTimeMs();
     }
 
     public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
@@ -767,7 +784,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
-        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(loadId, txnId, (int) timeoutMs / 1000, streamLoadParams);
+        streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
+                loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
         if (table == null) {
             getTable();
         }

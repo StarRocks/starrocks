@@ -36,8 +36,8 @@ public class IcebergEqualityDeleteScanImplementationRule extends ImplementationR
         LogicalIcebergEqualityDeleteScanOperator scan = (LogicalIcebergEqualityDeleteScanOperator) input.getOp();
         PhysicalIcebergEqualityDeleteScanOperator physicalIcebergScan = new PhysicalIcebergEqualityDeleteScanOperator(scan);
         physicalIcebergScan.setOriginPredicate(scan.getOriginPredicate());
-        physicalIcebergScan.setEqualityIds(scan.getEqualityIds());
-        physicalIcebergScan.setHitMutableIdentifierColumns(scan.isHitMutableIdentifierColumns());
+        physicalIcebergScan.setTableFullMORParams(scan.getTableFullMORParams());
+        physicalIcebergScan.setMORParams(scan.getMORParams());
         OptExpression result = new OptExpression(physicalIcebergScan);
         return Lists.newArrayList(result);
     }

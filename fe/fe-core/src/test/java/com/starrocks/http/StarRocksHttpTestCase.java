@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -89,11 +90,14 @@ import mockit.Mocked;
 import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -102,6 +106,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.assertNotNull;
 
 public abstract class StarRocksHttpTestCase {
 
@@ -129,6 +135,7 @@ public abstract class StarRocksHttpTestCase {
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
     protected static long testPartitionId = 201L;
+    protected static long testPhysicalPartitionId = 202L;
     public static long testIndexId = testTableId; // the base indexid == tableid
     protected static long tabletId = 400L;
 
@@ -171,9 +178,10 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -228,9 +236,10 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
-        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
-        partition.updateVisibleVersion(testStartVersion);
-        partition.setNextVersion(testStartVersion + 1);
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -605,5 +614,13 @@ public abstract class StarRocksHttpTestCase {
         }
 
         request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
+    }
+
+    protected static Map<String, Object> parseResponseBody(Response response) throws IOException {
+        assertNotNull(response);
+        ResponseBody body = response.body();
+        assertNotNull(body);
+        String bodyStr = body.string();
+        return objectMapper.readValue(bodyStr, new TypeReference<>() {});
     }
 }

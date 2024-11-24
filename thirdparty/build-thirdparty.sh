@@ -746,6 +746,7 @@ build_arrow() {
     -DARROW_BOOST_USE_SHARED=OFF \
     -DBoost_NO_BOOST_CMAKE=ON \
     -DARROW_FLIGHT=ON \
+    -DARROW_FLIGHT_SQL=ON \
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
@@ -1227,8 +1228,8 @@ build_datasketches() {
 build_async_profiler() {
     check_if_source_exist $ASYNC_PROFILER_SOURCE
     mkdir -p $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
-    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/bin $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/lib $TP_INSTALL_DIR/async-profiler
 }
 
 # fiu

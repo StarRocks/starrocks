@@ -105,8 +105,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
-        return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
+    public Map<String, PListCell> getPartitionList(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionNameWithList(table, partitionColumns, getPartitionNames());
     }
 
     @Override
@@ -161,8 +161,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : versionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
                 if (!latestPartitionInfo.containsKey(basePartitionName)) {
-                    // partitions deleted
-                    return latestPartitionInfo.keySet();
+                    // If this partition is dropped, ignore it.
+                    continue;
                 }
                 long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 

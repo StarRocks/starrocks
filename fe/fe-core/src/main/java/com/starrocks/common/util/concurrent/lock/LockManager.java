@@ -369,13 +369,13 @@ public class LockManager {
             Locker locker = owner.getLocker();
 
             JsonObject readerInfo = new JsonObject();
-            readerInfo.addProperty("id", owner.getLocker().getThreadID());
+            readerInfo.addProperty("id", owner.getLocker().getThreadId());
             readerInfo.addProperty("name", owner.getLocker().getThreadName());
+            readerInfo.addProperty("type", owner.getLockType().toString());
             readerInfo.addProperty("heldFor", nowMs - owner.getLockAcquireTimeMs());
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
-            readerInfo.addProperty("locker", locker.getLockerStackTrace());
             readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
-                    locker.getLockerThread(), 0, DEFAULT_STACK_RESERVE_LEVELS));
+                    locker.getLockerThread(), 0, Short.MAX_VALUE));
             ownerArray.add(readerInfo);
         }
         ownerInfo.add("owners", ownerArray);
@@ -386,11 +386,11 @@ public class LockManager {
             Locker locker = waiter.getLocker();
 
             JsonObject readerInfo = new JsonObject();
-            readerInfo.addProperty("id", locker.getThreadID());
-            readerInfo.addProperty("name", locker.getThreadName());
-            readerInfo.addProperty("heldFor", "");
+            readerInfo.addProperty("id", waiter.getLocker().getThreadId());
+            readerInfo.addProperty("name", waiter.getLocker().getThreadName());
+            readerInfo.addProperty("type", waiter.getLockType().toString());
             readerInfo.addProperty("waitTime", nowMs - locker.getLockRequestTimeMs());
-            readerInfo.addProperty("locker", locker.getLockerStackTrace());
+            readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(locker.getLockerThread(), 1));
             waiterArray.add(readerInfo);
         }
         ownerInfo.add("waiter", waiterArray);
@@ -594,8 +594,8 @@ public class LockManager {
         @Override
         public int compare(DeadLockChecker.CycleNode nc1, DeadLockChecker.CycleNode nc2) {
 
-            return (int) (nc1.getLocker().getThreadID() -
-                    nc2.getLocker().getThreadID());
+            return (int) (nc1.getLocker().getThreadId() -
+                    nc2.getLocker().getThreadId());
         }
     }
 }

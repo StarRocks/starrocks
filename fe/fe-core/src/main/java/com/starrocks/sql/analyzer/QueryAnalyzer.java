@@ -133,6 +133,9 @@ public class QueryAnalyzer {
         }
 
         public Void process(ParseNode node, Scope scope) {
+            if (session.getSessionVariable().isDisableGeneratedColumnRewrite()) {
+                return null;
+            }
             return node.accept(this, scope);
         }
 
@@ -657,10 +660,10 @@ public class QueryAnalyzer {
 
                 if (table.isHiveTable()) {
                     HiveTable hiveTable = (HiveTable) table;
-                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                            hiveTable.getTableName());
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getCatalogDBName(),
+                            hiveTable.getCatalogTableName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                            hiveTable.getResourceName(), hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
                     hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
                     hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                     Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
@@ -1406,7 +1409,7 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         // Add read lock to avoid concurrent problems.
-                        OlapTable mvOlapTable = new OlapTable();
+                        OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());

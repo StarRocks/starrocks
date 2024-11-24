@@ -46,6 +46,7 @@ template <typename T>
 using Buffer = std::vector<T, ColumnAllocator<T>>;
 
 class ArrayColumn;
+class ArrayViewColumn;
 class MapColumn;
 class StructColumn;
 class NullableColumn;

@@ -764,7 +764,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
@@ -808,7 +808,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+            // prevent excessive logging
+            if (partitionCommitInfo.getVersionTime() < 0 && 
+                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
+                return false;
+            }
+            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
         }

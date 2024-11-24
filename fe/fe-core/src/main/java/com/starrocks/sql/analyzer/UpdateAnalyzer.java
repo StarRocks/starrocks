@@ -65,6 +65,7 @@ public class UpdateAnalyzer {
         properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
                 String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
         properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {

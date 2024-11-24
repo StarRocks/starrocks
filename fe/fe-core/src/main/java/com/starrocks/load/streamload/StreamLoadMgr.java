@@ -43,6 +43,8 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +73,10 @@ public class StreamLoadMgr implements MemoryTrackable {
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
+
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
+
     private ReentrantReadWriteLock lock;
 
     private void writeLock() {
@@ -190,12 +196,12 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public StreamLoadTask createLoadTaskWithoutLock(Database db, String tableName, String label, String user, String clientIp,
-                                         long timeoutMillis, boolean isRoutineLoad, long warehouseId)
+                                                    long timeoutMillis, boolean isRoutineLoad, long warehouseId)
             throws UserException {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db,
-                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName),
                 label, user, clientIp, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
@@ -481,6 +487,8 @@ public class StreamLoadMgr implements MemoryTrackable {
                 dbToLabelToStreamLoadTask.remove(dbId);
             }
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(streamLoadTask);
     }
 
     /*
@@ -532,6 +540,15 @@ public class StreamLoadMgr implements MemoryTrackable {
                         .collect(Collectors.toList());
             }
             return result;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToStreamLoadTask.values());
         } finally {
             readUnlock();
         }

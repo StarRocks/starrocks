@@ -40,6 +40,7 @@ public class TablePruningTest extends TablePruningTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
+        ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)

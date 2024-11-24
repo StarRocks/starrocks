@@ -23,6 +23,7 @@ public class TrinoQueryTest extends TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @Test
@@ -1227,5 +1228,26 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
     }
 }

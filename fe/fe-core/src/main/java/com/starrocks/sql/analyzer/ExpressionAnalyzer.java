@@ -1233,6 +1233,7 @@ public class ExpressionAnalyzer {
                     break;
                 }
                 case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAY_CONTAINS_SEQ:
                 case FunctionSet.ARRAYS_OVERLAP: {
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have only two inputs", node.getPos());
@@ -1648,7 +1649,7 @@ public class ExpressionAnalyzer {
             dictQueryExpr.setTbl_name(tableName.getTbl());
 
             Map<Long, Long> partitionVersion = new HashMap<>();
-            dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+            dictTable.getAllPhysicalPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
             dictQueryExpr.setPartition_version(partitionVersion);
 
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());

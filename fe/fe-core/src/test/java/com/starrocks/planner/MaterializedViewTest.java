@@ -403,6 +403,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("emps");
         setTableStatistics(t7, 6000000);
+
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
@@ -2814,7 +2816,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
-        setTracLogModule("MV");
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;")
                 .match("  |  <slot 2> : 6: user_id\n" +
                         "  |  <slot 5> : 7: bitmap_union(to_bitmap(tag_id))");
@@ -2954,6 +2955,32 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testStrColumnCountDistinctToBitmapCount3() {
+        String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"a\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(false);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        testRewriteFail(mv, "select user_id, time, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(true);
+    }
+
+
+    @Test
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2979,6 +3006,28 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL3() {
+        connectContext.getSessionVariable().setCountDistinctImplementation("ndv");
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        connectContext.getSessionVariable().setCountDistinctImplementation("default");
+    }
+
+    @Test
+    public void testApproxCountToHLL4() {
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(false);
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteFail(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        connectContext.getSessionVariable().setEnableCountDistinctRewriteByHllBitmap(true);
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x, count(distinct tag_id) y " +
+                "from user_tags group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id, user_id) y " +
+                "from user_tags group by user_id;");
     }
 
     @Test
@@ -3297,7 +3346,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")");
 
         String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
-        setTracLogModule("MV");
         testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
                 "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
         starRocksAssert.dropTable("t_time_slice");
@@ -5727,6 +5775,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " REFRESH DEFERRED MANUAL " +
                 "as \n" +
                 "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;");
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2) t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "select k1, k2, avg_merge(v1) from (" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    " UNION ALL" +
+                    " SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1,k2 " +
+                    ") t " +
+                    "group by k1, k2;";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+
         {
             String query = "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from s1 where k1 != 'a' group by k1, k2;";
             String plan = UtFrameUtils.getFragmentPlan(connectContext, query);

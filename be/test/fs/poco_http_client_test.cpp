@@ -26,6 +26,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_s3.h"
 #include "fs/s3/poco_http_client_factory.h"
 #include "io/s3_input_stream.h"
 #include "testutil/assert.h"
@@ -79,7 +80,7 @@ void PocoHttpClientTest::TearDownTestCase() {
 }
 
 void PocoHttpClientTest::put_object(const std::string& object_content) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
 
@@ -99,7 +100,7 @@ void PocoHttpClientTest::put_object(const std::string& object_content) {
 }
 
 TEST_F(PocoHttpClientTest, TestNormalAccess) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
     // Create a custom retry strategy
@@ -123,7 +124,7 @@ TEST_F(PocoHttpClientTest, TestNormalAccess) {
 }
 
 TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = "http://127.0.0.1";
 
     // Create a custom retry strategy
@@ -146,7 +147,7 @@ TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
 }
 
 TEST_F(PocoHttpClientTest, TestErrorAkSk) {
-    Aws::Client::ClientConfiguration config;
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
 
@@ -168,6 +169,32 @@ TEST_F(PocoHttpClientTest, TestErrorAkSk) {
     char buf[6];
     auto r = stream->read(buf, sizeof(buf));
     EXPECT_TRUE(r.status().message().find("SdkResponseCode=403") != std::string::npos);
+}
+
+TEST_F(PocoHttpClientTest, TestNotFoundKey) {
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
+                                                                      : config::object_storage_endpoint;
+    // Create a custom retry strategy
+    int maxRetries = 2;
+    long scaleFactor = 25;
+    std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
+            std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);
+
+    // Create a client configuration object and set the custom retry strategy
+    config.retryStrategy = retryStrategy;
+
+    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
+
+    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
+                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
+
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, "not_found_key");
+    char buf[6];
+    auto r = stream->read(buf, sizeof(buf));
+    EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
+    // ErrorCode 16 means RESOURCE_NOT_FOUND
+    EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
 }
 
 } // namespace starrocks::poco

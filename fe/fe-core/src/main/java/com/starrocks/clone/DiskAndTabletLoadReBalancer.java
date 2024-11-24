@@ -514,11 +514,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // in the second round, we will migrate the tablet that will break the tablet distribution balance.
             for (int round = 1; round <= 2; round++) {
                 PARTITION:
-                for (Pair<Long, Long> partitionMVId : hState.sortedPartitions) {
-                    List<Long> hPartitionTablets = hState.partitionTablets.get(partitionMVId);
-                    List<Long> lPartitionTablets = lState.partitionTablets.computeIfAbsent(partitionMVId,
-                            pmId -> new LinkedList<>());
-                    int replicaTotalCnt = partitionReplicaCnt.getOrDefault(partitionMVId.first, 0);
+                for (Pair<Long, Long> physicalPartitionAndMaterializedIndexId : hState.sortedPartitions) {
+                    List<Long> hPartitionTablets = hState.partitionTablets.get(physicalPartitionAndMaterializedIndexId);
+                    List<Long> lPartitionTablets =
+                            lState.partitionTablets.computeIfAbsent(physicalPartitionAndMaterializedIndexId,
+                                    pmId -> new LinkedList<>());
+                    int replicaTotalCnt = partitionReplicaCnt.getOrDefault(physicalPartitionAndMaterializedIndexId.first, 0);
                     int slotOfHighBE = hPartitionTablets.size() - (replicaTotalCnt / beStats.size());
                     int slotOfLowBE = ((replicaTotalCnt + beStats.size() - 1) / beStats.size())
                             - lPartitionTablets.size();
@@ -548,9 +549,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         if (olapTable == null) {
                             continue;
                         }
+                        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+                        if (physicalPartition == null) {
+                            continue;
+                        }
 
                         if (isDestBackendLocationMismatch(olapTable, hBackend.getId(), lBackend.getId(),
-                                tabletMeta.getPartitionId(), tabletId)) {
+                                physicalPartition.getParentId(), tabletId)) {
                             continue;
                         }
 
@@ -588,7 +593,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         hState.minusUsedCapacity(replica.getPathHash(), replica.getDataSize());
 
                         TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
-                                tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                                tabletMeta.getDbId(), tabletMeta.getTableId(),
                                 tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(),
                                 tabletId, System.currentTimeMillis());
                         schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -790,7 +795,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     continue OUT;
                 }
 
-
                 OlapTable olapTable = getOlapTableById(tabletMeta.getDbId(), tabletMeta.getTableId());
                 if (olapTable == null) {
                     continue;
@@ -803,7 +807,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 // NOTICE: state has been changed, the tablet must be selected
                 destPathUsedCap += replica.getDataSize();
                 srcPathUsedCap -= replica.getDataSize();
-                Pair<Long, Long> p = Pair.create(tabletMeta.getPartitionId(), tabletMeta.getIndexId());
+                Pair<Long, Long> p = Pair.create(tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId());
                 // p: partition <physicalPartitionId, indexId>
                 // k: partition same to p
                 srcPathPartitionTablets.compute(p, (k, pTablets) -> {
@@ -822,7 +826,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                 TabletSchedCtx schedCtx =
                         new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, tabletMeta.getDbId(),
-                                tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                                tabletMeta.getTableId(),
                                 tabletMeta.getPhysicalPartitionId(),
                                 tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -956,7 +960,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     /**
-     * @return map : (partition, index) => tablets
+     * @return map : (physical partition id, index) => tablets
      */
     private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium, long pathHash) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = Maps.newHashMap();
@@ -1420,7 +1424,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
-                    tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                    tabletMeta.getDbId(), tabletMeta.getTableId(),
                     tabletMeta.getPhysicalPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -1544,13 +1548,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db.getId(), LockType.READ);
-            PhysicalPartition partition = globalStateMgr.getLocalMetastore()
+            PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
-            if (partition == null) {
+            if (physicalPartition == null) {
                 return true;
             }
 
-            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            MaterializedIndex index = physicalPartition.getIndex(tabletMeta.getIndexId());
             if (index == null) {
                 return true;
             }
@@ -1561,7 +1565,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             short replicaNum = globalStateMgr.getLocalMetastore()
-                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getParentId());
+                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), physicalPartition.getParentId());
             if (replicaNum == (short) -1) {
                 return true;
             }
@@ -1570,7 +1574,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     TabletChecker.getTabletHealthStatusWithPriority(
                             tablet,
                             globalStateMgr.getNodeMgr().getClusterInfo(),
-                            partition.getVisibleVersion(),
+                            physicalPartition.getVisibleVersion(),
                             replicaNum,
                             aliveBeIds,
                             olapTable.getLocation());
@@ -1735,8 +1739,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 }
 
                                 pStat.skew = maxNum - minNum;
-                                LOG.info("add partition stat: {} id: {}",
-                                        pStat, new Pair<>(physicalPartition.getId(), idx.getId()));
                             }
                         }
                     }
@@ -1805,7 +1807,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 *
                                 globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                         partition.getId());
-                        partitionReplicaCnt.put(partition.getId(), replicaTotalCnt);
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            partitionReplicaCnt.put(physicalPartition.getId(), replicaTotalCnt);
+                        }
                     }
                 }
             } finally {
@@ -1822,20 +1826,20 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                        Map<Long, Integer> partitionReplicaCnt,
                                                        int backendCnt,
                                                        boolean sortPartition) {
-        Map<Pair<Long, Long>, Set<Long>> partitionTablets = getPartitionTablets(backendId, medium, -1L);
+        Map<Pair<Long, Long>, Set<Long>> physicalPartitionTablets = getPartitionTablets(backendId, medium, -1L);
         Map<Pair<Long, Long>, List<Long>> partitionTabletList = new HashMap<>();
-        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
+        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : physicalPartitionTablets.entrySet()) {
             partitionTabletList.put(entry.getKey(), new LinkedList<>(entry.getValue()));
         }
-        Map<Pair<Long, Long>, Double> partitionAvgReplicaSize = getPartitionAvgReplicaSize(backendId, partitionTablets);
-        List<Pair<Long, Long>> partitions = new ArrayList<>(partitionTablets.keySet());
+        Map<Pair<Long, Long>, Double> partitionAvgReplicaSize = getPartitionAvgReplicaSize(backendId, physicalPartitionTablets);
+        List<Pair<Long, Long>> physicalPartitionAndMaterializedIndexId = new ArrayList<>(physicalPartitionTablets.keySet());
         if (sortPartition) {
-            partitions.sort((p1, p2) -> {
+            physicalPartitionAndMaterializedIndexId.sort((p1, p2) -> {
                 // skew is (tablet cnt on current BE - average tablet cnt on every BE)
                 // sort partitions by skew in desc order, if skew is same, sort by avgReplicaSize in desc order.
-                int skew1 = partitionTablets.get(p1).size()
+                int skew1 = physicalPartitionTablets.get(p1).size()
                         - partitionReplicaCnt.getOrDefault(p1.first, 0) / backendCnt;
-                int skew2 = partitionTablets.get(p2).size()
+                int skew2 = physicalPartitionTablets.get(p2).size()
                         - partitionReplicaCnt.getOrDefault(p2.first, 0) / backendCnt;
                 if (skew2 != skew1) {
                     return skew2 - skew1;
@@ -1862,7 +1866,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex(),
                 medium,
                 partitionTabletList,
-                partitions);
+                physicalPartitionAndMaterializedIndexId);
         backendBalanceState.init();
         return backendBalanceState;
     }
@@ -2009,13 +2013,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             TabletInvertedIndex tabletInvertedIndex,
                             TStorageMedium medium,
                             Map<Pair<Long, Long>, List<Long>> partitionTablets,
-                            List<Pair<Long, Long>> partitions) {
+                            List<Pair<Long, Long>> physicalPartitionAndMaterializedIndexId) {
             this.backendId = backendId;
             this.statistic = statistic;
             this.tabletInvertedIndex = tabletInvertedIndex;
             this.medium = medium;
             this.partitionTablets = partitionTablets;
-            this.sortedPartitions = partitions;
+            this.sortedPartitions = physicalPartitionAndMaterializedIndexId;
         }
 
         void init() {

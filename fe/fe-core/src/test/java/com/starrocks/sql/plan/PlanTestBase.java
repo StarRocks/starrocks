@@ -33,6 +33,7 @@ import org.junit.BeforeClass;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
 
@@ -65,6 +66,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `part_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY list(v4) ( partition p1 values in ('1'), partition p2 values in ('2')) \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -126,6 +138,26 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t7` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t8` (\n" +
+                "  `k1` string NULL COMMENT \"\",\n" +
+                "  `k2` string NULL COMMENT \"\",\n" +
+                "  `k3` string NULL\n" +
+                ") ENGINE=OLAP\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
@@ -988,6 +1020,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 scanRangeParams.addAll(x);
             }
         }
-        return scanRangeParams;
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
     }
 }

@@ -66,6 +66,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -259,6 +261,20 @@ public class ConnectContext {
 
     public static void remove() {
         threadLocalInfo.remove();
+    }
+
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
     }
 
     public boolean isSend() {
@@ -947,6 +963,18 @@ public class ConnectContext {
         }
     }
 
+    public int getExecTimeout() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
+    }
+
     public void checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
@@ -960,27 +988,36 @@ public class ConnectContext {
         if (executor != null) {
             sql = executor.getOriginStmtInString();
         }
+        String errMsg = "";
         if (command == MysqlCommand.COM_SLEEP) {
-            if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
                 LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS(), queryId, sql);
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, sql);
 
                 killFlag = true;
                 killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
             }
         } else {
-            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}, query id: {}, sql: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS(), queryId, sql);
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, sql);
 
                 // Only kill
                 killFlag = true;
+
+                String suggestedMsg = String.format("please increase the '%s' session variable",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
             }
         }
         if (killFlag) {
-            kill(killConnection, "query timeout");
+            kill(killConnection, errMsg);
         }
     }
 

@@ -101,6 +101,9 @@ public class InsertStmt extends DmlStmt {
     // column match by position or name
     private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
 
+    // create partition if not exists
+    private boolean isDynamicOverwrite = false;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
                       NodePosition pos) {
@@ -185,6 +188,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isVersionOverwrite() {
         return isVersionOverwrite;
+    }
+
+    public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {
+        this.isDynamicOverwrite = isDynamicOverwrite;
+    }
+
+    public boolean isDynamicOverwrite() {
+        return isDynamicOverwrite;
     }
 
     public QueryStatement getQueryStatement() {
@@ -325,7 +336,12 @@ public class InsertStmt extends DmlStmt {
     }
 
     public Table makeBlackHoleTable() {
-        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        // rename each column's name, assign unique name
+        for (int i = 0; i < columns.size(); i++) {
+            columns.get(i).setName(columns.get(i).getName() + "_blackhole_" + i);
+        }
+        return new BlackHoleTable(columns);
     }
 
     public Table makeTableFunctionTable(SessionVariable sessionVariable) {

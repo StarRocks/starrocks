@@ -92,7 +92,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_mInt32(drop_tablet_worker_count, "3");
+CONF_mInt32(drop_tablet_worker_count, "0");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -132,6 +132,10 @@ CONF_Int32(update_schema_worker_count, "3");
 CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
 CONF_mInt32(download_worker_count, "0");
+// The buffer size to upload.
+CONF_mInt32(upload_buffer_size, "4194304");
+// The buffer size to download.
+CONF_mInt32(download_buffer_size, "4194304");
 // The count of thread to make snapshot.
 CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
@@ -389,6 +393,8 @@ CONF_Alias(be_http_port, webserver_port);
 CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
+
+CONF_Int32(arrow_flight_port, "-1");
 
 // Used for mini Load. mini load data file will be removed after this time.
 CONF_Int64(load_data_reserve_hours, "4");
@@ -773,6 +779,9 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
+// pipeline poller timeout guard
+CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
@@ -1128,8 +1137,6 @@ CONF_mInt64(max_length_for_bitmap_function, "1000000");
 CONF_Bool(datacache_enable, "true");
 CONF_mString(datacache_mem_size, "0");
 CONF_mString(datacache_disk_size, "0");
-CONF_mString(datacache_disk_path, "");
-CONF_String(datacache_meta_path, "");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
 CONF_Bool(datacache_direct_io_enable, "false");
@@ -1156,6 +1163,8 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
 CONF_Bool(datacache_tiered_cache_enable, "true");
+// Whether to persist cached data
+CONF_Bool(datacache_persistence_enable, "true");
 // DataCache engines, alternatives: starcache.
 // `cachelib` is not support now.
 // Set the default value empty to indicate whether it is manully configured by users.
@@ -1171,11 +1180,11 @@ CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 // On the other hand, if the cache is full and the disk usage falls below the disk low level for a long time,
 // which is configured by `datacache_disk_idle_seconds_for_expansion`, the cache quota will be increased to keep the
 // disk usage around the disk safe level.
-CONF_mBool(datacache_auto_adjust_enable, "false");
+CONF_mBool(datacache_auto_adjust_enable, "true");
 // The high disk usage level, which trigger the cache eviction and quota decreased.
-CONF_mInt64(datacache_disk_high_level, "80");
+CONF_mInt64(datacache_disk_high_level, "90");
 // The safe disk usage level, the cache quota will be decreased to this level once it reach the high level.
-CONF_mInt64(datacache_disk_safe_level, "70");
+CONF_mInt64(datacache_disk_safe_level, "80");
 // The low disk usage level, which trigger the cache expansion and quota increased.
 CONF_mInt64(datacache_disk_low_level, "60");
 // The interval seconds to check the disk usage and trigger adjustment.
@@ -1187,6 +1196,17 @@ CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
 // Default: 100G
 CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
+// The maxmum inline cache item count in datacache.
+// When a cache item has a really small data size, we will try to cache it inline with its metadata
+// to optimize the io performance and reduce disk waste.
+// Set the parameter to `0` will turn off this optimization.
+CONF_Int32(datacache_inline_item_count_limit, "130172");
+// Whether use an unified datacache instance.
+CONF_Bool(datacache_unified_instance_enable, "true");
+// The eviction policy for datacache, alternatives: [lru, slru].
+// * lru: the typical `Least Recently Used` eviction policy.
+// * slru: segment lru eviction policies, which can better reduce cache pollution problem.
+CONF_String(datacache_eviction_policy, "slru");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1482,5 +1502,20 @@ CONF_mBool(skip_schema_in_rowset_meta, "true");
 CONF_mBool(enable_bit_unpack_simd, "true");
 
 CONF_mInt32(max_committed_without_schema_rowset, "1000");
+
+CONF_mInt32(apply_version_slow_log_sec, "30");
+
+CONF_Int32(batch_write_thread_pool_num_min, "0");
+CONF_Int32(batch_write_thread_pool_num_max, "512");
+CONF_Int32(batch_write_thread_pool_queue_size, "4096");
+CONF_mInt32(batch_write_default_timeout_ms, "600000");
+CONF_mInt32(batch_write_rpc_request_retry_num, "10");
+CONF_mInt32(batch_write_rpc_request_retry_interval_ms, "500");
+CONF_mInt32(batch_write_rpc_reqeust_timeout_ms, "10000");
+CONF_mInt32(batch_write_poll_load_status_interval_ms, "200");
+CONF_mBool(batch_write_trace_log_enable, "false");
+
+// ignore union type tag in avro kafka routine load
+CONF_mBool(avro_ignore_union_type_tag, "false");
 
 } // namespace starrocks::config

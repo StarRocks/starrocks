@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -115,15 +116,15 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
-        String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
+        String dbName = deltaLakeTable.getCatalogDBName();
+        String tableName = deltaLakeTable.getCatalogTableName();
         PredicateSearchKey key =
                 PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
 
@@ -153,8 +154,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
-        String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
+        String dbName = deltaLakeTable.getCatalogDBName();
+        String tableName = deltaLakeTable.getCatalogTableName();
         Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);

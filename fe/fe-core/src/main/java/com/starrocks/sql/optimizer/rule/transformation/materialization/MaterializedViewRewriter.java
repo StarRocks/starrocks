@@ -30,12 +30,10 @@ import com.google.common.graph.MutableGraph;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -81,6 +79,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,7 +96,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvTransparentPlan;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
@@ -732,7 +732,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final RewriteContext rewriteContext = new RewriteContext(
                 queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
-                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
+                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet,
+                optimizerContext);
         // add agg push down rewrite info
         rewriteContext.setAggregatePushDownContext(mvRewriteContext.getAggregatePushDownContext());
 
@@ -1298,9 +1299,15 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
-        // reset original partition predicates to prune partitions/tablets again
-        final LogicalOlapScanOperator newMvScanOperator = MVPartitionPruner.resetSelectedPartitions(mvScanOperator);
-        OptExpression mvScanOptExpression = OptExpression.create(newMvScanOperator);
+        // clone mv's scan operator to avoid changing its original variables
+        final LogicalOlapScanOperator cloned = new LogicalOlapScanOperator.Builder()
+                .withOperator(mvScanOperator)
+                .setSelectedPartitionId(null)
+                .setPrunedPartitionPredicates(Lists.newArrayList())
+                .setSelectedTabletId(Lists.newArrayList())
+                .build();
+        cloned.resetOpRuleBit(OP_PARTITION_PRUNED);
+        OptExpression mvScanOptExpression = OptExpression.create(cloned);
 
         // Rewrite original mv's predicates into query if needed.
         if (mvRewriteContext.getMvPruneConjunct() != null && !mvRewriteContext.getMvPruneConjunct().isTrue()) {
@@ -1321,7 +1328,11 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 rewriteContext.getQueryPredicateSplit(),
                 rewriteContext.getMvPredicateSplit(),
                 true);
-
+        // check mv context again if mv can be applied for rewrite.
+        if (materializationContext.isNoRewrite()) {
+            logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
+            return null;
+        }
         MVCompensation mvCompensation = materializationContext.getMvCompensation();
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",
@@ -1883,8 +1894,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
-        queryInput.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
-        viewInput.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
+        queryInput.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
+        viewInput.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union
@@ -1981,7 +1992,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return null;
             }
 
-            // TODO(fixme): Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
+            // Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
             // push-down predicates.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
@@ -1991,7 +2002,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 deriveLogicalProperty(newQueryExpr);
             }
             return newQueryExpr;
-
         }
         return null;
     }
@@ -2070,14 +2080,14 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     }
 
     private List<ScalarOperator> getPartitionRelatedPredicates(Set<ScalarOperator> conjuncts, MaterializedView mv) {
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+        List<Column> mvPartitionCols = mv.getPartitionColumns();
+        if (mvPartitionCols.isEmpty()) {
             return Lists.newArrayList();
         }
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
-        Preconditions.checkState(partitionColumns.size() == 1);
+        Set<String> mvPartitionColNames = mvPartitionCols.stream().map(Column::getName)
+                .collect(Collectors.toSet());
         List<ScalarOperator> partitionRelatedPredicates = conjuncts.stream()
-                .filter(p -> isRelatedPredicate(p, partitionColumns.get(0).getName()))
+                .filter(p -> isRelatedPredicate(p, mvPartitionColNames))
                 .collect(Collectors.toList());
         return partitionRelatedPredicates;
     }
@@ -2087,12 +2097,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
     // should add partition column is null predicate into queryCompensationPredicate to get null partition value related data
     private ScalarOperator processNullPartition(RewriteContext rewriteContext, ScalarOperator queryCompensationPredicate) {
         MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+        List<Column> mvPartitionCols = mv.getPartitionColumns();
+        if (CollectionUtils.isEmpty(mvPartitionCols)) {
             return queryCompensationPredicate;
         }
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
-        Preconditions.checkState(partitionColumns.size() == 1);
         ScalarOperator queryPredicate = rewriteContext.getQueryPredicateSplit().toScalarOperator();
         Set<ScalarOperator> queryPredicates = Utils.extractConjunctSet(queryPredicate);
         List<ScalarOperator> queryPartitionRelatedScalars = getPartitionRelatedPredicates(queryPredicates, mv);
@@ -2101,37 +2109,44 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         Set<ScalarOperator> mvPredicates = Utils.extractConjunctSet(mvPredicate);
         List<ScalarOperator> mvPartitionRelatedScalars = getPartitionRelatedPredicates(mvPredicates, mv);
         if (queryPartitionRelatedScalars.isEmpty() && !mvPartitionRelatedScalars.isEmpty()) {
-            // when query has no partition related predicates and mv has,
-            // we should consider to add null value predicate into compensation predicates
-            ColumnRefOperator partitionColumnRef =
-                    findQueryPartitionColumnRef(mvPredicate, partitionColumns.get(0), rewriteContext);
-            if (!partitionColumnRef.isNullable()) {
-                // only add null value into compensation predicate when partition column is nullable
-                return queryCompensationPredicate;
-            }
-            IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
-            IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
             List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
-            List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
-                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumnRef.getName()))
-                    .collect(Collectors.toList());
-            predicates.removeAll(partitionRelatedPredicates);
-            if (partitionRelatedPredicates.contains(isNullPredicateOperator)
-                    || partitionRelatedPredicates.contains(isNotNullPredicateOperator)) {
-                if (partitionRelatedPredicates.size() != 1) {
-                    // has other partition predicates except partition column is null
-                    // do not support now
-                    // can it happened?
-                    return null;
+            boolean hasChanged = false;
+            for (Column mvPartitionCol : mvPartitionCols) {
+                // when query has no partition related predicates and mv has,
+                // we should consider to add null value predicate into compensation predicates
+                ColumnRefOperator partitionColumnRef =
+                        findQueryPartitionColumnRef(mvPredicate, mvPartitionCol, rewriteContext);
+                if (!partitionColumnRef.isNullable()) {
+                    // only add null value into compensation predicate when partition column is nullable
+                    continue;
                 }
-                predicates.addAll(partitionRelatedPredicates);
-            } else {
-                // add partition column is null into compensation predicates
-                ScalarOperator partitionPredicate =
-                        Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
-                predicates.add(partitionPredicate);
+                IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
+                IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
+                Set<String> partitionColumnNames = Sets.newHashSet(partitionColumnRef.getName());
+                List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
+                        .filter(predicate -> isRelatedPredicate(predicate, partitionColumnNames))
+                        .collect(Collectors.toList());
+                predicates.removeAll(partitionRelatedPredicates);
+                hasChanged = true;
+                if (partitionRelatedPredicates.contains(isNullPredicateOperator)
+                        || partitionRelatedPredicates.contains(isNotNullPredicateOperator)) {
+                    if (partitionRelatedPredicates.size() != 1) {
+                        // has other partition predicates except partition column is null
+                        // do not support now
+                        // can it happened?
+                        return null;
+                    }
+                    predicates.addAll(partitionRelatedPredicates);
+                } else {
+                    // add partition column is null into compensation predicates
+                    ScalarOperator partitionPredicate =
+                            Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
+                    predicates.add(partitionPredicate);
+                }
             }
-            queryCompensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(predicates));
+            if (hasChanged) {
+                queryCompensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(predicates));
+            }
         }
         return queryCompensationPredicate;
     }
@@ -2162,7 +2177,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return partitionColumnRef;
     }
 
-    private boolean isRelatedPredicate(ScalarOperator scalarOperator, String name) {
+    private boolean isRelatedPredicate(ScalarOperator scalarOperator, Set<String> mvPartitionCols) {
         ScalarOperatorVisitor<Boolean, Void> visitor = new ScalarOperatorVisitor<Boolean, Void>() {
             @Override
             public Boolean visit(ScalarOperator scalarOperator, Void context) {
@@ -2177,7 +2192,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
             @Override
             public Boolean visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
-                return columnRefOperator.getName().equalsIgnoreCase(name);
+                return mvPartitionCols.contains(columnRefOperator.getName());
             }
         };
         return scalarOperator.accept(visitor, null);

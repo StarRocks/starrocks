@@ -30,6 +30,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -63,6 +67,8 @@ import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -100,6 +106,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -1194,6 +1205,45 @@ public class FrontendServiceImplTest {
         doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testRequestBatchWrite() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TMergeCommitRequest request = new TMergeCommitRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setPasswd("");
+        request.setBackend_id(10001);
+        request.setBackend_host("127.0.0.1");
+        request.putToParams(HTTP_ENABLE_BATCH_WRITE, "true");
+        request.putToParams(HTTP_BATCH_WRITE_ASYNC, "true");
+        request.putToParams(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+        request.putToParams(HTTP_BATCH_WRITE_PARALLEL, "4");
+
+        new MockUp<BatchWriteMgr>() {
+
+            @Mock
+            public RequestLoadResult requestLoad(
+                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
+            }
+        };
+
+        // test success request
+        {
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            assertEquals("test_label", result.getLabel());
+        }
+
+        // test authentication failure
+        {
+            request.setUser("fake_user");
+            TMergeCommitResult result = impl.requestMergeCommit(request);
+            assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
     }
 
     @Test

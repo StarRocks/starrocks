@@ -56,6 +56,7 @@ add_library(Formats STATIC
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
+        parquet/column_reader_factory.cpp
         parquet/scalar_column_reader.cpp
         parquet/complex_column_reader.cpp
         parquet/encoding.cpp

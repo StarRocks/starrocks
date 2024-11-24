@@ -22,6 +22,8 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -35,6 +37,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CatalogRef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
@@ -50,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class BackupRestoreAnalyzer {
     private static final Logger LOG = LogManager.getLogger(BackupRestoreAnalyzer.class);
@@ -75,14 +80,45 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext context) {
+            if (backupStmt.containsExternalCatalog()) {
+                analyzeBackupProperties(backupStmt);
+
+                if (backupStmt.allExternalCatalog()) {
+                    backupStmt.getExternalCatalogRefs().clear();
+                    // get all catalog from CatalogMgr
+                    backupStmt.getExternalCatalogRefs().addAll(
+                                GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(x -> !x.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+                                .map(x -> new CatalogRef(x)).collect(Collectors.toList()));
+                }
+
+                if (backupStmt.getExternalCatalogRefs().isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                                        "No external catalog can be backed up");
+                }
+
+                backupStmt.getExternalCatalogRefs().stream().forEach(x -> x.analyzeForBackup());
+                return null;
+            }
+
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
+
+            boolean withOnClause = backupStmt.withOnClause();
+            boolean allFunction = backupStmt.allFunction();
+            boolean allTable = backupStmt.allTable();
+            boolean allMV = backupStmt.allMV();
+            boolean allView = backupStmt.allView();
+
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
             List<TableRef> tableRefs = backupStmt.getTableRefs();
-            // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
-            // We should backup all table in current database.
-            if (tableRefs.size() == 0) {
+            // There are several cases:
+            // 1. Backup all table/mv/view without `ON` clause.
+            // 2. Backup all table if specify `ALL` for table.
+            // 3. Backup all MV if specify `ALL` for MV.
+            // 4. Backup all VIEW if specify `ALL` for VIEW.
+            if (!withOnClause || allTable || allMV || allView) {
                 for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!Config.enable_backup_materialized_view && tbl.isMaterializedView()) {
                         LOG.info("Skip backup materialized view: {} because " +
@@ -92,6 +128,16 @@ public class BackupRestoreAnalyzer {
                     if (tbl.isTemporaryTable()) {
                         continue;
                     }
+
+                    if (withOnClause && ((tbl.isOlapTable() && !allTable) || (tbl.isOlapMaterializedView() && !allMV) ||
+                                         (tbl.isOlapView() && !allView))) {
+                        continue;
+                    }
+
+                    if (tableRefs.stream().anyMatch(tableRef -> tableRef.getName().getTbl().equalsIgnoreCase(tbl.getName()))) {
+                        continue;
+                    }
+
                     TableName tableName = new TableName(dbName, tbl.getName());
                     TableRef tableRef = new TableRef(tableName, null, null);
                     tableRefs.add(tableRef);
@@ -132,6 +178,34 @@ public class BackupRestoreAnalyzer {
                 tableRefs.addAll(tblPartsMap.values());
             }
 
+            // analyze and get Function for stmt
+            List<FunctionRef> fnRefs = backupStmt.getFnRefs();
+            if (!withOnClause || allFunction) /* without `On` or contains `ALL` */ {
+                if (!fnRefs.isEmpty()) {
+                    fnRefs.stream().forEach(x -> x.analyzeForBackup(database));
+                }
+
+                for (Map.Entry<String, List<Function>> entry : database.getNameToFunction().entrySet()) {
+                    String fnName = entry.getKey();
+                    List<Function> fns = entry.getValue();
+
+                    if (fnRefs.stream().anyMatch(x -> x.getFunctions().get(0)
+                                                 .getFunctionName().getFunction().equalsIgnoreCase(fnName))) {
+                        continue;
+                    }
+
+                    fnRefs.add(new FunctionRef(fns));
+                }
+            } else {
+                backupStmt.getFnRefs().stream().forEach(x -> x.analyzeForBackup(database));
+            }
+
+            analyzeBackupProperties(backupStmt);
+
+            return null;
+        }
+
+        private void analyzeBackupProperties(BackupStmt backupStmt) {
             Map<String, String> properties = backupStmt.getProperties();
             long timeoutMs = Config.backup_job_default_timeout_ms;
             Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
@@ -167,8 +241,6 @@ public class BackupRestoreAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Unknown backup job properties: " + copiedProperties.keySet());
             }
-
-            return null;
         }
 
         private Map<String, TableRef> reorderTableRefsWithMaterializedView(Database database,
@@ -233,6 +305,9 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitCancelBackupStatement(CancelBackupStmt cancelBackupStmt, ConnectContext context) {
+            if (cancelBackupStmt.isExternalCatalog()) {
+                return null;
+            }
             String dbName = getDbName(cancelBackupStmt.getDbName(), context);
             cancelBackupStmt.setDbName(dbName);
             return null;

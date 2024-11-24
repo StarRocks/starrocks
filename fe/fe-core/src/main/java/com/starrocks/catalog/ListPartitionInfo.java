@@ -313,6 +313,10 @@ public class ListPartitionInfo extends PartitionInfo {
         super.isMultiColumnPartition = this.partitionColumnIds.size() > 1;
     }
 
+    public boolean isDeFactoMultiItemPartition() {
+        return MapUtils.isNotEmpty(idToMultiValues) || MapUtils.isNotEmpty(idToMultiLiteralExprValues);
+    }
+
     public Map<Long, List<List<String>>> getIdToMultiValues() {
         return idToMultiValues;
     }
@@ -328,7 +332,7 @@ public class ListPartitionInfo extends PartitionInfo {
      * @param id
      * @return true if the partition can be pruned
      */
-    public boolean pruneById(long id) {
+    public boolean isSingleValuePartition(long id) {
         List<String> values = getIdToValues().get(id);
         if (values != null && values.size() == 1) {
             return true;

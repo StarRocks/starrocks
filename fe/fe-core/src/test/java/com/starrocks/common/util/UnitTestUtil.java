@@ -131,7 +131,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100,  PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -208,7 +208,7 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+        Partition partition = new Partition(partitionId, partitionId + 100, PARTITION_NAME, index, distributionInfo);
 
         // columns
         List<Column> columns = new ArrayList<Column>();

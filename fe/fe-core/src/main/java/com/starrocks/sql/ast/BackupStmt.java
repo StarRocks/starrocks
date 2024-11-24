@@ -17,10 +17,12 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class BackupStmt extends AbstractBackupStmt {
     public enum BackupType {
@@ -29,13 +31,18 @@ public class BackupStmt extends AbstractBackupStmt {
 
     private BackupType type = BackupType.FULL;
 
-    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, properties, NodePosition.ZERO);
+    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
+                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                      boolean withOnClause, String originDbName, Map<String, String> properties) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, NodePosition.ZERO);
     }
 
-    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs,
-                      Map<String, String> properties, NodePosition pos) {
-        super(labelName, repoName, tblRefs, properties, pos);
+    public BackupStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, List<FunctionRef> fnRefs,
+                      List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                      boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
+        super(labelName, repoName, tblRefs, fnRefs, externalCatalogRefs,
+                allMarker, withOnClause, originDbName, properties, pos);
     }
 
     public long getTimeoutMs() {

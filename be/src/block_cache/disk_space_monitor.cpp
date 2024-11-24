@@ -253,14 +253,17 @@ bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
         // If the current available disk space is too small, cache quota will be reset to zero to avoid overly frequent
         // population and eviction.
         _reset_spaces();
-        total_cache_quota = 0;
         if (_total_cache_quota == 0) {
             // If the cache quata is already zero, skip adjusting it repeatedly.
+            VLOG(1) << "Skip updating the cache quota because the target quota is less than "
+                    << "`datacache_min_disk_quota_for_adjustment`, target cache quota: " << total_cache_quota;
+            total_cache_quota = 0;
             return false;
         } else {
             // This warning log only be printed when the cache disk quota is adjust from a non-zero integer to zero.
             LOG(WARNING) << "The current available disk space is too small, so disable the disk cache directly. If you "
                          << "still need it, you could reduce the value of `datacache_min_disk_quota_for_adjustment`";
+            total_cache_quota = 0;
         }
     }
     LOG(INFO) << "Adjusting datacache disk quota from " << _total_cache_quota << " to " << total_cache_quota;

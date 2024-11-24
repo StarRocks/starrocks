@@ -44,7 +44,6 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -294,6 +293,10 @@ public class CreateTableAnalyzer {
             } else {
                 int keyLength = 0;
                 for (ColumnDef columnDef : columnDefs) {
+                    // generated column should not be key
+                    if (columnDef.isGeneratedColumn()) {
+                        break;
+                    }
                     keyLength += columnDef.getType().getIndexSize();
                     if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
                             || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
@@ -472,6 +475,15 @@ public class CreateTableAnalyzer {
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
+                    if (partitionDesc instanceof ListPartitionDesc) {
+                        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                        if (listPartitionDesc.getPartitionExprs().size() > 0 &&
+                                (stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS
+                                || stmt.getKeysDesc().getKeysType() == KeysType.UNIQUE_KEYS)) {
+                            throw new SemanticException("expression partition base on generated column"
+                                    + " doest not support AGG_KEYS or UNIQUE_KEYS", partitionDesc.getPos());
+                        }
+                    }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
@@ -571,10 +583,6 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("Does not support generated column in shared data cluster yet");
-        }
-
         final TableName tableNameObject = stmt.getDbTbl();
 
         List<Column> columns = stmt.getColumns();
@@ -591,7 +599,7 @@ public class CreateTableAnalyzer {
 
             if (column.isGeneratedColumn()) {
                 if (keysDesc.containsCol(column.getName())) {
-                    throw new SemanticException("Generated Column can not be KEY");
+                    throw new SemanticException("Generated Column " + column.getName() + " can not be KEY");
                 }
 
                 Expr expr = column.getGeneratedColumnExpr(columns);

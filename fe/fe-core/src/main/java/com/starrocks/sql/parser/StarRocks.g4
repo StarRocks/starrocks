@@ -316,6 +316,7 @@ statement
     | showWarehousesStatement
     | showClustersStatement
     | showNodesStatement
+    | alterWarehouseStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -643,8 +644,13 @@ createMaterializedViewStatement
     AS queryStatement
     ;
 
+mvPartitionExprs:
+    primaryExpression
+    | '(' primaryExpression (',' primaryExpression)* ')'
+    ;
+
 materializedViewDesc
-    : (PARTITION BY primaryExpression)
+    : (PARTITION BY mvPartitionExprs)
     | distributionDesc
     | orderByDesc
     | refreshSchemeDesc
@@ -1708,33 +1714,32 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME
-        | PIPE )
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
-    : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
+    : CATALOG | DATABASE | MATERIALIZED VIEW | RESOURCE | RESOURCE GROUP | STORAGE VOLUME | SYSTEM | TABLE | VIEW | WAREHOUSE
     | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
-    : BACKUP SNAPSHOT qualifiedName
-    TO identifier
-    (ON '(' tableDesc (',' tableDesc) * ')')?
+    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
+    SNAPSHOT qualifiedName TO repoName=identifier
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelBackupStatement
-    : CANCEL BACKUP ((FROM | IN) identifier)?
+    : CANCEL BACKUP ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showBackupStatement
@@ -1743,13 +1748,15 @@ showBackupStatement
 
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
+    FROM repoName=identifier
+    (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
+    (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
 cancelRestoreStatement
-    : CANCEL RESTORE ((FROM | IN) identifier)?
+    : CANCEL RESTORE ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
     ;
 
 showRestoreStatement
@@ -2029,6 +2036,10 @@ showClustersStatement
 showNodesStatement
     : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
     | SHOW NODES FROM WAREHOUSE identifier
+    ;
+
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -2509,11 +2520,19 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+backupRestoreObjectDesc
+    : backupRestoreTableDesc
+    | (ALL (FUNCTION | FUNCTIONS) | (FUNCTION | FUNCTIONS) qualifiedName (AS identifier)?)
+    | (ALL (TABLE | TABLES) | (TABLE | TABLES) backupRestoreTableDesc)
+    | (ALL MATERIALIZED (VIEW | VIEWS) | MATERIALIZED (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    | (ALL (VIEW | VIEWS) | (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    ;
+
 tableDesc
     : qualifiedName partitionNames?
     ;
 
-restoreTableDesc
+backupRestoreTableDesc
     : qualifiedName partitionNames? (AS identifier)?
     ;
 
@@ -2525,6 +2544,11 @@ optimizerTrace
     : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
+partitionExpr
+    : identifier
+    | functionCall
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
@@ -2532,6 +2556,7 @@ partitionDesc
     | PARTITION BY LIST? identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
+    | PARTITION BY partitionExpr (',' partitionExpr)*
     ;
 
 listPartitionDesc
@@ -2794,6 +2819,14 @@ identifier
     | nonReserved            #unquotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
+    ;
+
+identifierWithAlias
+    : originalName=identifier (AS alias=identifier)?
+    ;
+
+identifierWithAliasList
+    : '(' identifierWithAlias (',' identifierWithAlias)* ')'
     ;
 
 identifierList

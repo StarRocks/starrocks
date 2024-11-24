@@ -59,6 +59,10 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         if (OperatorType.LOGICAL_PROJECT.equals(input.inputAt(constantIndex).getOp().getOpType())) {
+            LogicalProjectOperator project = input.inputAt(constantIndex).getOp().cast();
+            if (!project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
+                return false;
+            }
             OptExpression optExpression = input.inputAt(constantIndex);
             OptExpression valuesOpt = optExpression.inputAt(0);
             return checkValuesOptExpression(valuesOpt);
@@ -106,35 +110,38 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptExpression otherOpt,
                                        OptExpression constantOpt,
                                        OptimizerContext context) {
-        Map<ColumnRefOperator, ScalarOperator> outputs = Maps.newHashMap();
+
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
-        JoinOperator joinType = joinOperator.getJoinType();
-        ScalarOperator condition = joinOperator.getOnPredicate();
-        ScalarOperator predicate = otherOpt.getOp().getPredicate();
-        // rewrite join's on-predicate with constant column values
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) constantOpt.getOp();
+
+        ScalarOperator condition = joinOperator.getOnPredicate();
+        ScalarOperator predicate = joinOperator.getPredicate();
+
+        // rewrite join's on-predicate with constant column values
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOperator.getColumnRefMap());
         ScalarOperator rewrittenCondition = rewriter.rewrite(condition);
+        ScalarOperator rewrittenPredicate = rewriter.rewrite(predicate);
+
         // output join and constant opt's output columns
+        Map<ColumnRefOperator, ScalarOperator> outputs = Maps.newHashMap();
         joinOpt.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                 .forEach(ref -> outputs.put(ref, rewriter.rewrite(ref)));
         if (joinOperator.getJoinType().isOuterJoin()) {
             // transform join's on-predicate with case-when operator
-            constantOpt.getRowOutputInfo().getColumnRefMap().entrySet().stream()
-                    .forEach(entry -> {
-                        ScalarOperator transformed = transformOuterJoinOnPredicate(
-                                joinOperator, entry.getValue(), rewrittenCondition);
-                        outputs.put(entry.getKey(), transformed);
-                    });
+            constantOpt.getRowOutputInfo().getColumnRefMap().forEach((key, value) -> {
+                ScalarOperator t = transformOuterJoinOnPredicate(joinOperator, value, rewrittenCondition);
+                outputs.put(key, t);
+            });
         } else {
-            predicate = Utils.compoundAnd(predicate, rewrittenCondition);
+            rewrittenPredicate = Utils.compoundAnd(rewrittenPredicate, rewrittenCondition);
         }
+
         LogicalProjectOperator project = new LogicalProjectOperator(outputs);
         OptExpression result = OptExpression.create(project, otherOpt);
 
         // save predicate
-        if (predicate != null) {
-            result = OptExpression.create(new LogicalFilterOperator(predicate), result);
+        if (rewrittenPredicate != null) {
+            result = OptExpression.create(new LogicalFilterOperator(rewrittenPredicate), result);
         }
         return Lists.newArrayList(result);
     }

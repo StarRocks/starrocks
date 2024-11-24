@@ -302,9 +302,11 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
         }
     }
 
-    return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), scan_node, factory->get_chunk_buffer(),
-                                                  _enable_adaptive_io_tasks);
+    // Only use one chunk source profile, so we can see metrics on scan operator level.
+    // Since there is adaptive io tasks feature, chunk sources will be used unevenly,
+    // which leads to sort of "skewed" profile and makes harder to analysis.
+    return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[0].get(), std::move(morsel), scan_node,
+                                                  factory->get_chunk_buffer(), _enable_adaptive_io_tasks);
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
@@ -633,9 +635,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     TScanRange* scan_range = scan_morsel->get_scan_range();
     ScanSplitContext* split_context = scan_morsel->get_split_context();
 
-    if (scan_range->__isset.broker_scan_range) {
-        scan_range->broker_scan_range.params.__set_non_blocking_read(true);
-    }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
     _data_source->set_split_context(split_context);

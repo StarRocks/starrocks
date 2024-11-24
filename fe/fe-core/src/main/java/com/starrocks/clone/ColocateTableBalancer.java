@@ -789,10 +789,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         continue;
                     }
 
-                    long visibleVersion = partition.getVisibleVersion();
+                    long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
                     // Here we only get VISIBLE indexes. All other indexes are not queryable.
                     // So it does not matter if tablets of other indexes are not matched.
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index :
+                            partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE)) {
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                         int idx = 0;
@@ -824,7 +825,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 TabletSchedCtx.Type.REPAIR,
                                                 // physical partition id is same as partition id
                                                 // since colocate table should have only one physical partition
-                                                db.getId(), tableId, partition.getId(), partition.getId(),
+                                                db.getId(), tableId, partition.getId(),
                                                 index.getId(), tablet.getId(),
                                                 System.currentTimeMillis());
                                         // the tablet status will be checked and set again when being scheduled

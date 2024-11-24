@@ -1565,7 +1565,7 @@ public class ShowExecutor {
                 String dbName = null;
                 Long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String tableName = null;
-                Long partitionId = tabletMeta != null ? tabletMeta.getPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                Long partitionId = tabletMeta != null ? tabletMeta.getPhysicalPartitionId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String partitionName = null;
                 Long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 String indexName = null;
@@ -1604,6 +1604,10 @@ public class ShowExecutor {
                             break;
                         }
                         Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+                        if (partition == null) {
+                            isSync = false;
+                            break;
+                        }
                         partitionName = partition.getName();
 
                         MaterializedIndex index = physicalPartition.getIndex(indexId);
@@ -1808,6 +1812,15 @@ public class ShowExecutor {
                 List<String> info = backupJob.getInfo();
                 infos.add(info);
             }
+
+            // backup info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) jobI;
+                List<String> info = backupJob.getInfo();
+                infos.add(info);
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -1837,6 +1850,15 @@ public class ShowExecutor {
                 List<String> info = restoreJob.getInfo();
                 infos.add(info);
             }
+
+            // restore info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof RestoreJob) {  
+                RestoreJob restoreJob = (RestoreJob) jobI;
+                List<String> info = restoreJob.getInfo();
+                infos.add(info); 
+            }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -2155,7 +2177,11 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+            String catalogName = statement.getTableName().getCatalog();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, statement.getDbName());
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
             if (table == null) {
@@ -2845,7 +2871,7 @@ public class ShowExecutor {
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 Partition partition = olapTable.getPartitions().iterator().next();
-                MaterializedIndex index = partition.getIndex(mvId);
+                MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);

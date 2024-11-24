@@ -74,6 +74,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -93,6 +94,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -117,6 +119,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -1051,6 +1054,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException(
                         "Can not assign aggregation method on column in Primary data model table: " + newColName);
             }
+            // check reserved column for PK table
+            if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(newColName)) {
+                throw new DdlException("Column name '" + newColName + "' is reserved for primary key table");
+            }
             newColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (newColumn.isKey() && newColumn.getAggregationType() != null) {
@@ -1520,13 +1527,17 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 2. check compatible
+            Map<String, Column> originSchemaMap = buildSchemaMapFromList(originSchema, true,
+                    CaseSensibility.COLUMN.getCaseSensibility());
+
             for (Column alterColumn : alterSchema) {
                 if (modifyFieldColumns.contains(alterColumn.getName())) {
                     continue;
                 }
-                Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
-                if (col.isPresent() && !alterColumn.equals(col.get())) {
-                    col.get().checkSchemaChangeAllowed(alterColumn);
+                Column col = getColumnFromSchemaMap(originSchemaMap, alterColumn.getName(), true,
+                        CaseSensibility.COLUMN.getCaseSensibility());
+                if (col != null && !alterColumn.equals(col)) {
+                    col.checkSchemaChangeAllowed(alterColumn);
                 }
             }
 
@@ -1595,6 +1606,42 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for indices
 
         return dataBuilder.build();
+    }
+
+    protected static Map<String, Column> buildSchemaMapFromList(List<Column> schema, boolean ignorePrefix,
+                                                                boolean caseSensibility) {
+        Map<String, Column> schemaMap = Maps.newHashMap();
+        if (ignorePrefix) {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(Column.removeNamePrefix(col.getName()).toLowerCase(), col));
+            }
+        } else {
+            if (caseSensibility) {
+                schema.forEach(col -> schemaMap.put(col.getName(), col));
+            } else {
+                schema.forEach(col -> schemaMap.put(col.getName().toLowerCase(), col));
+            }
+        }
+        return schemaMap;
+    }
+
+    protected static Column getColumnFromSchemaMap(Map<String, Column> originSchemaMap, String col,
+                                                   boolean ignorePrefix, boolean caseSensibility) {
+        if (caseSensibility) {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col));
+            } else {
+                return originSchemaMap.get(col);
+            }
+        } else {
+            if (ignorePrefix) {
+                return originSchemaMap.get(Column.removeNamePrefix(col).toLowerCase());
+            } else {
+                return originSchemaMap.get(col.toLowerCase());
+            }
+        }
     }
 
     private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexId)
@@ -2012,13 +2059,38 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             boolean enablePersistentIndex = false;
+            String persistentIndexType = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
-                if (oldEnablePersistentIndex == enablePersistentIndex) {
-                    LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
-                            olapTable.getName(), enablePersistentIndex));
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                if (oldEnablePersistentIndex == enablePersistentIndex
+                        && persistentIndexType == oldPersistentIndexType) {
+                    LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
+                            +  "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
+                    return null;
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                        && !enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+                // only support set persistent_index_type when enable_persistent_index is true
+                enablePersistentIndex = olapTable.enablePersistentIndex();
+                if (!enablePersistentIndex) {
+                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
+                }
+                String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
+                        TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
+                persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                        TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                if (oldPersistentIndexType.equals(persistentIndexType)) {
+                    LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
+                            olapTable.getName(), persistentIndexType));
                     return null;
                 }
             } else {
@@ -2030,7 +2102,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex, persistentIndexType);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2572,6 +2644,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.OPTIMIZE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
                 throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }

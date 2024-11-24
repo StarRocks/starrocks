@@ -46,8 +46,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -155,6 +157,11 @@ public class BackupJob extends AbstractJob {
 
     private boolean testPrimaryKey = false;
 
+    @SerializedName(value = "backupFunctions")
+    private List<Function> backupFunctions = Lists.newArrayList();
+    @SerializedName(value = "backupCatalogs")
+    private List<Catalog> backupCatalogs = Lists.newArrayList();
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -196,6 +203,14 @@ public class BackupJob extends AbstractJob {
 
     public List<TableRef> getTableRef() {
         return tableRefs;
+    }
+
+    public void setBackupFunctions(List<Function> functions) {
+        this.backupFunctions = functions;
+    }
+
+    public void setBackupCatalogs(List<Catalog> backupCatalogs) {
+        this.backupCatalogs = backupCatalogs;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -455,6 +470,14 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+        if (!backupCatalogs.isEmpty()) {
+            // short cut for external catalogs backup
+            backupMeta = new BackupMeta(Lists.newArrayList());
+            backupMeta.setCatalogs(backupCatalogs);
+            state = BackupJobState.SAVE_META;
+
+            return;
+        }
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -541,6 +564,7 @@ public class BackupJob extends AbstractJob {
                 copiedTables.add(copiedTbl);
             }
             backupMeta = new BackupMeta(copiedTables);
+            backupMeta.setFunctions(backupFunctions);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -707,11 +731,9 @@ public class BackupJob extends AbstractJob {
             localMetaInfoFilePath = metaInfoFile.getAbsolutePath();
 
             // 3. save job info file
-            // save table info into BackupJobInfo only for OlapTable or MV
-            List<Table> olapTbls = backupMeta.getTables().values().stream()
-                                   .filter(Table::isOlapTableOrMaterializedView).collect(Collectors.toList());
-            jobInfo = BackupJobInfo.fromCatalog(createTime, label, dbName, dbId, olapTbls, snapshotInfos);
-            LOG.warn("job info: {}. {}", jobInfo, this);
+            jobInfo = BackupJobInfo.fromCatalog(createTime, label, dbName, dbId, backupMeta.getTables().values(),
+                    snapshotInfos);
+            LOG.debug("job info: {}. {}", jobInfo, this);
             File jobInfoFile = new File(jobDir, Repository.PREFIX_JOB_INFO + createTimeStr);
             if (!jobInfoFile.createNewFile()) {
                 status = new Status(ErrCode.COMMON_ERROR, "Failed to create job info file: " + jobInfoFile.toString());

@@ -37,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -275,8 +276,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Table actual = metadata.getTable("DB", "TBL");
         Assert.assertTrue(actual instanceof IcebergTable);
         IcebergTable icebergTable = (IcebergTable) actual;
-        Assert.assertEquals("db", icebergTable.getRemoteDbName());
-        Assert.assertEquals("tbl", icebergTable.getRemoteTableName());
+        Assert.assertEquals("db", icebergTable.getCatalogDBName());
+        Assert.assertEquals("tbl", icebergTable.getCatalogTableName());
         Assert.assertEquals(ICEBERG, icebergTable.getType());
     }
 
@@ -756,9 +757,9 @@ public class IcebergMetadataTest extends TableTestBase {
         List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
-        IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
-        Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
-                .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
+        Assert.assertEquals(7, res.stream()
+                .map(f -> (IcebergRemoteFileInfo) f)
+                .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.getCtx().getSessionVariable().setEnablePruneIcebergManifest(true);
@@ -769,9 +770,8 @@ public class IcebergMetadataTest extends TableTestBase {
         res = metadata.getRemoteFiles(icebergTable,
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.withEnd(Optional.of(snapshotId)))
                         .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
-        fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
-        Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());
-        Assert.assertEquals(3, fileDesc.getIcebergScanTasks().get(0).file().recordCount());
+        Assert.assertEquals(1, res.size());
+        Assert.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
         Assert.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
@@ -1063,7 +1063,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         TableVersionRange version = TableVersionRange.withEnd(Optional.of(
                 mockedNativeTableB.currentSnapshot().snapshotId()));
-        List<String> partitionNames = metadata.listPartitionNames("db", "table", version);
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setTableVersionRange(version);
+        List<String> partitionNames = metadata.listPartitionNames("db", "table", requestContext);
         Assert.assertEquals(2, partitionNames.size());
         Assert.assertTrue(partitionNames.contains("k2=2"));
         Assert.assertTrue(partitionNames.contains("k2=3"));
@@ -1072,6 +1074,12 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions1() {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1090,6 +1098,13 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test
     public void testGetPartitions2() {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableG;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
@@ -1113,6 +1128,13 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.refresh();
         mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
         mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(

@@ -415,7 +415,7 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+    public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
@@ -425,6 +425,7 @@ public class StarOSAgent {
                     .putLabels("dbId", String.valueOf(dbId))
                     .putLabels("tableId", String.valueOf(tableId))
                     .putLabels("partitionId", String.valueOf(partitionId))
+                    .putLabels("indexId", String.valueOf(indexId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
@@ -733,7 +734,7 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size) throws DdlException {
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -743,12 +744,22 @@ public class StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
+                    Collections.emptyMap(), replicaNumber);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
         }
         return result.getGroupId();
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
     }
 
     public void deleteWorkerGroup(long groupId) throws DdlException {
@@ -782,8 +793,8 @@ public class StarOSAgent {
         return shardInfos.get(0);
     }
 
-    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
-        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
-        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
     }
 }

@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
@@ -32,6 +33,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -119,6 +121,12 @@ public class WarehouseManager implements Writable {
     public boolean warehouseExists(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return nameToWh.containsKey(warehouseName);
+        }
+    }
+
+    public boolean warehouseExists(long warehouseId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToWh.containsKey(warehouseId);
         }
     }
 
@@ -314,6 +322,14 @@ public class WarehouseManager implements Writable {
 
     public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
         throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+    public Set<String> getAllWarehouseNames() {
+        return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
     }
 
     public void replayCreateWarehouse(Warehouse warehouse) {

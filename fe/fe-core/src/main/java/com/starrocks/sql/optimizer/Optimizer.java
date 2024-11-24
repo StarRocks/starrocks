@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
 import com.starrocks.sql.optimizer.rule.transformation.SchemaTableEvaluateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
@@ -128,6 +130,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_REWRITE;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
 /**
@@ -362,6 +367,12 @@ public class Optimizer {
         // initialize mv rewrite strategy finally
         mvRewriteStrategy = MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, logicOperatorTree);
         OptimizerTraceUtil.logMVPrepare("MV rewrite strategy: {}", mvRewriteStrategy);
+
+        // TODO(stephen): enable agg push down when query exists related mvs.
+        if (context.getQueryMaterializationContext() != null &&
+                !context.getQueryMaterializationContext().getValidCandidateMVs().isEmpty()) {
+            context.getSessionVariable().setCboPushDownAggregateMode(-1);
+        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -406,7 +417,7 @@ public class Optimizer {
      */
     private OptExpression transparentMVRewrite(OptExpression tree, TaskContext rootTaskContext) {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
-        if (Utils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
+        if (Utils.isOptHasAppliedRule(tree, OP_MV_TRANSPARENT_REWRITE)) {
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
         }
         return tree;
@@ -425,13 +436,19 @@ public class Optimizer {
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
         // TODO: Do it in CBO if needed later.
-        if (MvUtils.isAppliedMVUnionRewrite(tree)) {
+        boolean isNeedFurtherPartitionPrune = Utils.isOptHasAppliedRule(tree, op -> op.isOpRuleBitSet(OP_MV_UNION_REWRITE));
+        if (isNeedFurtherPartitionPrune && context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            // reset partition prune bit to do partition prune again.
+            MvUtils.getScanOperator(tree).forEach(scan -> {
+                scan.resetOpRuleBit(OP_PARTITION_PRUNED);
+            });
             // Do predicate push down if union rewrite successes.
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         }
     }
@@ -520,14 +537,14 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, SchemaTableEvaluateRule.getInstance());
 
-
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_OP_WITH_CONSTANT);
-        ruleRewriteOnlyOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        // Put EliminateAggRule after PRUNE_COLUMNS to give a chance to prune group bys before eliminate aggregations.
+        ruleRewriteOnlyOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
 
@@ -638,11 +655,15 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.META_SCAN_REWRITE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
+        // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
+        ruleRewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
+        // intersect rewrite depend on statistics
+        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
@@ -761,6 +782,20 @@ public class Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
+            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+                // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
+                // For example, do not push down a not very efficient aggregator below a very small broadcast join.
+                ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+                ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+                ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+                CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+                deriveLogicalProperty(tree);
+                tree = new ReorderJoinRule().rewrite(tree, JoinReorderFactory.createJoinReorderAdaptive(), context);
+                tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+                deriveLogicalProperty(tree);
+                Utils.calculateStatistics(tree, context);
+            }
+
             PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
             rule.getRewriter().collectRewriteContext(tree);
             if (rule.getRewriter().isNeedRewrite()) {
@@ -773,6 +808,7 @@ public class Optimizer {
             deriveLogicalProperty(tree);
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
         }
 
         return tree;

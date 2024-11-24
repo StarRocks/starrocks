@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -221,7 +222,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
         List<Partition> partitions = get(partitionCache, odpsTableName);
@@ -292,7 +293,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
         OdpsTable odpsTable = (OdpsTable) table;
         List<Partition> partitions = get(partitionCache,
-                OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
+                OdpsTableName.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()));
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
@@ -340,10 +341,10 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         try {
-            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getDbName(),
-                    odpsTable.getTableName(), params.getFieldNames());
+            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getCatalogDBName(),
+                    odpsTable.getCatalogTableName(), params.getFieldNames());
             TableReadSessionBuilder tableReadSessionBuilder =
-                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getDbName(), odpsTable.getTableName()))
+                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
                             .requiredPartitions(partitionSpecs);

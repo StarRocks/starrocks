@@ -64,6 +64,11 @@ public class RemoteFileInfo {
         this.attachment = attachment;
     }
 
+    @SuppressWarnings("unchecked")
+    public  <T extends RemoteFileInfo> T cast() {
+        return (T) this;
+    }
+
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("RemoteFileInfo{");

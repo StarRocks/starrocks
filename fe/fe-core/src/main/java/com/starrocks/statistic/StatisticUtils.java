@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
@@ -25,7 +27,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -71,11 +72,16 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Maps.immutableEntry;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
@@ -96,6 +102,7 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+        context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
@@ -201,7 +208,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     return false;
                 }
@@ -213,7 +220,7 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
@@ -238,7 +245,7 @@ public class StatisticUtils {
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
-        long time = partition.getVisibleVersionTime();
+        long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
     }
 
@@ -323,7 +330,7 @@ public class StatisticUtils {
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
@@ -469,17 +476,16 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
-                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
-                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
                     table.getType().name());
@@ -547,5 +553,86 @@ public class StatisticUtils {
             }
         }
         return baseColumnType;
+    }
+
+    // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
+    // and return an ordered list of partitionNames.
+    // In order to ensure more accurate sampling, put min and max in the sampled result.
+    public static List<String> getRandomPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        List<String> result = new ArrayList<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        result.add(min);
+        left--;
+        if (left > 0) {
+            result.add(max);
+            left--;
+        }
+
+        if (left > 0) {
+            HashFunction hashFunction = Hashing.murmur3_128();
+            Comparator<Map.Entry<String, Long>> hashComparator = Map.Entry.<String, Long>comparingByValue()
+                    .thenComparing(Map.Entry::getKey);
+
+            partitions.stream()
+                    .filter(partition -> !result.contains(partition))
+                    .map(partition -> immutableEntry(partition, hashFunction.hashUnencodedChars(partition).asLong()))
+                    .sorted(hashComparator)
+                    .limit(left)
+                    .forEachOrdered(entry -> result.add(entry.getKey()));
+        }
+        return Lists.newArrayList(result);
+    }
+
+    public static List<String> getLatestPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        LinkedHashSet<String> sortedSet = new LinkedHashSet<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        sortedSet.add(max);
+        left--;
+        if (left > 0) {
+            sortedSet.add(min);
+            left--;
+        }
+
+        if (left > 0) {
+            partitions.stream()
+                    .filter(partition -> !sortedSet.contains(partition))
+                    .sorted(Comparator.reverseOrder())
+                    .limit(left)
+                    .forEachOrdered(sortedSet::add);
+        }
+
+        return new ArrayList<>(sortedSet);
     }
 }

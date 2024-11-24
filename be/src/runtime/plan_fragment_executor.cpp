@@ -80,9 +80,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
     _query_id = params.query_id;
 
-    LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
-              << " backend_num=" << request.backend_num;
+    VLOG(1) << "Prepare(): query_id=" << print_id(_query_id)
+            << " fragment_instance_id=" << print_id(params.fragment_instance_id)
+            << " backend_num=" << request.backend_num;
 
     DCHECK(_runtime_state->chunk_size() > 0);
 
@@ -189,7 +189,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 }
 
 Status PlanFragmentExecutor::open() {
-    LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
+    VLOG(1) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     tls_thread_status.set_query_id(_runtime_state->query_id());
 
     // Only register profile report worker for broker load and insert into here,
@@ -511,30 +511,7 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
     if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
-    _channel_stream_load = true;
-    for (; iter != scan_range_map.end(); iter++) {
-        for (const auto& scan_range : iter->second) {
-            const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
-            int channel_id = broker_scan_range.channel_id;
-            const string& label = broker_scan_range.params.label;
-            const string& db_name = broker_scan_range.params.db_name;
-            const string& table_name = broker_scan_range.params.table_name;
-            TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
-            TUniqueId load_id = broker_scan_range.ranges[0].load_id;
-            long txn_id = broker_scan_range.params.txn_id;
-            StreamLoadContext* ctx = nullptr;
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->create_channel_context(
-                    _exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
-            DeferOp op([&] {
-                if (ctx->unref()) {
-                    delete ctx;
-                }
-            });
-            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
-            _stream_load_contexts.push_back(ctx);
-        }
-    }
-    return Status::OK();
+    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
 }
 
 } // namespace starrocks
