@@ -126,28 +126,36 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
                         long lastSucessVersion = replica.getLastSuccessVersion();
-                        if ((!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
-                                replica.getState()) && !txnState.
-                                checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum))
+                        if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
+                                replica.getState())
                                 || errorReplicaIds.contains(replica.getId())) {
-                            // There are 2 cases that we can't update version to visible version and need to 
-                            // set lastFailedVersion.
-                            // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent 
-                            //    with data loading.
-                            // 2. this replica has data loading failure.
-                            //
-                            // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
-                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
-                            // by clone, it is very inefficient and may lose data.
-                            // Using this method, B,C will publish failed, and fe will publish again,
-                            // not update their last failed version.
-                            // if B is published successfully in next turn, then B is normal and C will be set
-                            // abnormal so that quorum is maintained and loading will go on.
-                            LOG.warn("skip update replica[{}.{}] to visible version", tablet.getId(), replica.getBackendId());
-                            newVersion = replica.getVersion();
-                            if (version > lastFailedVersion) {
-                                lastFailedVersion = version;
-                                hasFailedVersion = true;
+                            if (txnState.
+                                    checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum)
+                                    && replica.getVersion() >= version
+                                    && replica.getState() == Replica.ReplicaState.DECOMMISSION) {
+                                // this means the replica is a normal replica
+                                // success version always move forward
+                                lastSucessVersion = version;
+                            } else {
+                                // There are 2 cases that we can't update version to visible version and need to
+                                // set lastFailedVersion.
+                                // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent
+                                //    with data loading.
+                                // 2. this replica has data loading failure.
+                                //
+                                // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
+                                // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
+                                // by clone, it is very inefficient and may lose data.
+                                // Using this method, B,C will publish failed, and fe will publish again,
+                                // not update their last failed version.
+                                // if B is published successfully in next turn, then B is normal and C will be set
+                                // abnormal so that quorum is maintained and loading will go on.
+                                LOG.warn("skip update replica[{}.{}] to visible version", tablet.getId(), replica.getBackendId());
+                                newVersion = replica.getVersion();
+                                if (version > lastFailedVersion) {
+                                    lastFailedVersion = version;
+                                    hasFailedVersion = true;
+                                }
                             }
                         } else {
                             if (replica.getLastFailedVersion() > 0) {
