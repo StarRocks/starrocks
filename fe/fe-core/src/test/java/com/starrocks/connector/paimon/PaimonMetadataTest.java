@@ -20,12 +20,12 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.MetadataMgr;
@@ -254,7 +254,7 @@ public class PaimonMetadataTest {
                 result = mockRecordReader;
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1", TableVersionRange.empty());
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(2, result.size());
         List<String> expections = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expections);

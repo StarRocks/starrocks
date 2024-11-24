@@ -34,6 +34,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -478,7 +479,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, TableVersionRange version) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
@@ -486,6 +487,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
+        TableVersionRange version = requestContext.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
         return icebergCatalog.listPartitionNames(dbName, tblName, snapshotId, jobPlanningExecutor);
     }

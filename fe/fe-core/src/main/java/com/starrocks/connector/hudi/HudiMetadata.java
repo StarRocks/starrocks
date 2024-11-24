@@ -23,6 +23,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -100,7 +101,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, TableVersionRange version) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 

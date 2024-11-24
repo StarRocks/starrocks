@@ -8,11 +8,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.CachingDeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -60,7 +60,7 @@ public class DeltaUnityMetadataTest {
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment);
         UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore = new UnityBackedDeltaLakeMetastore("databricks0",
-                databricksUnityMetastore, hdfsEnvironment.getConfiguration(), 
+                databricksUnityMetastore, hdfsEnvironment.getConfiguration(),
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(
@@ -200,7 +200,8 @@ public class DeltaUnityMetadataTest {
                 minTimes = 0;
             }
         };
-        List<String> partitionNames = deltaLakeUnityMetadata.listPartitionNames("db1", "table1", TableVersionRange.empty());
+        List<String> partitionNames = deltaLakeUnityMetadata.listPartitionNames("db1", "table1",
+                ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(3, partitionNames.size());
         Assert.assertEquals("ts=1999", partitionNames.get(0));
         Assert.assertEquals("ts=2000", partitionNames.get(1));

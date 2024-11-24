@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -115,7 +116,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
