@@ -119,6 +119,8 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 for (Tablet tablet : index.getTablets()) {
                     boolean hasFailedVersion = false;
                     List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    boolean isDependencyReplicasNotCommited = txnState.
+                            checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum);
                     for (Replica replica : replicas) {
                         if (txnState.isNewFinish()) {
                             updateReplicaVersion(version, replica, txnState.getFinishState());
@@ -130,9 +132,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
                                 replica.getState())
                                 || errorReplicaIds.contains(replica.getId())) {
-                            if (txnState.
-                                    checkTransactionDependencyReplicasNotCommited((LocalTablet) tablet, quorumReplicaNum)
-                                    && replica.getVersion() >= version
+                            if (isDependencyReplicasNotCommited && replica.getVersion() >= version
                                     && replica.getState() == Replica.ReplicaState.DECOMMISSION) {
                                 // this means the replica is a normal replica
                                 // success version always move forward
