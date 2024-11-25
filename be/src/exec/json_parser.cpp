@@ -149,7 +149,7 @@ Status JsonDocumentStreamParser::advance() noexcept {
          * batch_size until _len - _last_begin_offset to check if the
          * iterator failure because of the batch_size.
          * 
-         * If the iterator reach the end with any exception, this function
+         * If the iterator reach the end without any exception, this function
          * will reset the batch_size to _len - _last_begin_offset = length of last record + 64,
          * This cost is very small compared to allocating large memory before.
         */
