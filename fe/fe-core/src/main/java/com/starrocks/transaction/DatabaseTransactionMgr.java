@@ -1801,13 +1801,8 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
         writeLock();
         try {
-<<<<<<< HEAD
-            LOG.info("replay a transaction state batch{}", transactionStateBatch);
-            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
-=======
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
-            Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
->>>>>>> 9fe4708d8d ([Refactor] Refactor Starrocks LOG to reduce the log file size(part3) (#52128))
+            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
             unprotectSetTransactionStateBatch(transactionStateBatch, true);
