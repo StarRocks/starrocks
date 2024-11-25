@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## Introduction
 
-BladePipe is a **real-time end-to-end data replication tool**, moving data between **30+** databases, message queues, search engines, caching, real-time data warehouses, data lakes and more, with **ultra-low latency** less than 3 seconds. It features efficiency, stability and scalability, compatibility with diverse database engines, one-stop management, enhanced security, and complex data transformation. BladePipe helps to break down data silos, increasing the value of data.
+BladePipe is a **real-time end-to-end data replication tool**, moving data between **30+** databases, message queues, search engines, caching, real-time data warehouses, data lakes and more, with **ultra-low latency**. It features efficiency, stability and scalability, compatibility with diverse database engines, one-stop management, enhanced security, and complex data transformation. BladePipe helps to break down data silos, increasing the value of data.
 
 ![image.png](../../_assets/3.11-1.png)
 
@@ -72,7 +72,7 @@ Taking a MySQL instance as an example, the following part describes how to move 
 7. The DataJob runs automatically. BladePipe will automatically run the following DataTasks:
    - **Schema Migration**: The schemas of the source tables will be migrated to the target instance.
    - **Full Data**: All existing data of the source tables will be fully migrated to the target instance.
-   - **Incremental**: Ongoing data changes will be continuously synchronized to the target instance.
+   - **Incremental**: Ongoing data changes will be continuously synchronized to the target instance (with latency less than a minute).
 
 ![image.png](../../_assets/3.11-8.png)
 
