@@ -13,7 +13,7 @@
     <properties>
         <guava.version>32.0.1-jre</guava.version>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <avro.version>1.11.3</avro.version>
+        <avro.version>1.11.4</avro.version>
     </properties>
 
     <dependencies>
@@ -30,6 +30,12 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>dnsjava</groupId>
+                    <artifactId>dnsjava</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
