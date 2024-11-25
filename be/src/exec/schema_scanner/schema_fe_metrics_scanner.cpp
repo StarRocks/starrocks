@@ -53,7 +53,7 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             return Status::OK();
         };
         RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, mmetrics_cb));
-        VLOG(1) << "metrics: " << metrics;
+        VLOG(2) << "metrics: " << metrics;
 
         simdjson::ondemand::parser parser;
         simdjson::padded_string json_metrics(metrics);
@@ -66,7 +66,7 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             std::ostringstream oss;
             oss << simdjson::to_json_string(json_metric["tags"]);
             info.labels = oss.str();
-            VLOG(1) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+            VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
                     << ", value: " << info.value;
         }
     }

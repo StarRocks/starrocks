@@ -114,7 +114,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     bool has_remain = _source_paths.size() != _flat_iters.size();
-    VLOG(1) << "JsonFlatColumnIterator init, target: "
+    VLOG(2) << "JsonFlatColumnIterator init, target: "
             << JsonFlatPath::debug_flat_json(_target_paths, _target_types, _need_remain)
             << ", source: " << JsonFlatPath::debug_flat_json(_source_paths, _source_types, has_remain);
 
@@ -349,7 +349,7 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
 
     SCOPED_RAW_TIMER(&_opts.stats->json_init_ns);
     _flattener = std::make_unique<JsonFlattener>(_target_paths, _target_types, _need_remain);
-    VLOG(1) << "JsonDynamicFlatIterator init, target: "
+    VLOG(2) << "JsonDynamicFlatIterator init, target: "
             << JsonFlatPath::debug_flat_json(_target_paths, _target_types, _need_remain);
     return Status::OK();
 }
@@ -481,7 +481,7 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     bool has_remain = _all_iter.size() != _src_paths.size();
-    VLOG(1) << "JsonMergeIterator init, source: " << JsonFlatPath::debug_flat_json(_src_paths, _src_types, has_remain);
+    VLOG(2) << "JsonMergeIterator init, source: " << JsonFlatPath::debug_flat_json(_src_paths, _src_types, has_remain);
     DCHECK(_all_iter.size() == _src_paths.size() || _all_iter.size() == _src_paths.size() + 1);
     for (int i = 0; i < _src_paths.size(); i++) {
         auto column = ColumnHelper::create_column(TypeDescriptor(_src_types[i]), true);

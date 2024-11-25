@@ -421,8 +421,8 @@ Status OlapTableSink::_automatic_create_partition() {
     do {
         if (retry_times++ > 1) {
             SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
-            VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
-                    << "automatic partition rpc retry " << retry_times;
+            VLOG(2) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+                    << " automatic partition rpc retry " << retry_times;
         }
         RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
                 master_addr.hostname, master_addr.port,
