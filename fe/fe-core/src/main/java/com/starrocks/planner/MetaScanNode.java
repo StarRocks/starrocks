@@ -175,4 +175,9 @@ public class MetaScanNode extends ScanNode {
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
+    }
 }

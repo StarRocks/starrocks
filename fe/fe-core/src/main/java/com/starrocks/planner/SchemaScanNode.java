@@ -379,4 +379,9 @@ public class SchemaScanNode extends ScanNode {
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
     }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
+    }
 }

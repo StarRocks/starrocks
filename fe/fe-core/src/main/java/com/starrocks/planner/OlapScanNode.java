@@ -700,7 +700,8 @@ public class OlapScanNode extends ScanNode {
             long freeMemory = runtime.freeMemory();
             if (totalScanRangeBytes > freeMemory / 2) {
                 LOG.warn(
-                        "Try to allocate too many scan ranges for table {}, which may cause FE OOM, Partition Num:{}, tablet Num:{}, Scan Range Total Bytes:{}",
+                        "Try to allocate too many scan ranges for table {}, which may cause FE OOM, Partition Num:{}, tablet " +
+                                "Num:{}, Scan Range Total Bytes:{}",
                         olapTable.getName(), totalPartitionNum, totalTabletsNum, totalScanRangeBytes);
             }
         }
@@ -1379,5 +1380,10 @@ public class OlapScanNode extends ScanNode {
         bucketExprs.clear();
         bucketColumns.clear();
         rowStoreKeyLiterals = Lists.newArrayList();
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }
