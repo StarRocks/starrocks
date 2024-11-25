@@ -15,6 +15,7 @@
 package com.starrocks.sql.automv.lattice;
 
 import com.google.api.client.util.Lists;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -30,11 +31,14 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.automv.generator.QueryGenerateContext;
+import com.starrocks.sql.automv.generator.QueryGenerator;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.qe.CollectAstVisitor;
+import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.MetaUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -57,6 +61,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -264,6 +269,62 @@ public class QueryDumpMVRecommender {
             }
             return null;
         });
+        if (rewritableMVs.isEmpty()) {
+            List<PlanPiece> pieces = RboOptimizer.getPlanPieces(query, starRocksAssert.getCtx());
+            if (!pieces.isEmpty()) {
+                Function<PlanPiece, PrettyPrinter> planPieceToQuery = piece -> {
+                    QueryGenerateContext generateContext = QueryGenerateContext.of(false, true, true);
+                    piece = piece.cast(AggregatePiece.class)
+                            .map(AggregatePiece::toPerfect)
+                            .map(aggPiece -> (PlanPiece) aggPiece).orElse(piece);
+                    return QueryGenerator.generate(piece, generateContext).getSubquery();
+                };
+                List<PrettyPrinter> subQueryList = pieces.stream().map(planPieceToQuery).collect(Collectors.toList());
+                PrettyPrinter printer = new PrettyPrinter();
+                printer.add("Succeeds in extracting SPJG sub-query but fails to recommend MV").newLine();
+                List<String> hints = ImmutableList.of(
+                        "use_array_agg_count_distinct <arg>                   " +
+                                "(default false)Use array_agg to compute count distinct",
+                        "use_bitmap_count_distinct <arg>                      " +
+                                "(default true)Use bitmap to compute count distinct",
+                        "use_hll_count_distinct <arg>                         " +
+                                "(default false)Use hll to compute count distinct",
+                        "enable_complex_derived_dimensions <arg>              " +
+                                "(default true)Allow derived dimensions",
+                        "enable_complex_derived_metrics <arg>                 " +
+                                "(default false)Allow derived metrics",
+                        "prune_rollup_unable_aggregate_with_conjuncts <arg>   " +
+                                "(default true)Do not recommend MV if the sub-plan " +
+                                "contains rollup-unable aggregations and predicates",
+                        "push_down_agg_below_semi_anti_join <arg>             " +
+                                "(default true)Recommend MV after eliminate semi/anti join in the sub-plan",
+                        "disable_semi_anti_join <arg>                         " +
+                                "(default true)Do not recommend MV if sub-plan contains semi/anti join"
+                );
+                printer.add("Please toggle parameters as follows to re-try:").newLine();
+                printer.indentEnclose(() -> printer.addItemsWithDelNl(";", hints));
+                printer.newLine();
+                printer.newLine();
+                printer.add("SPJG sub-queries extracted").newLine();
+                Supplier<String> ordinal = Util.nextStringGenerator("Sub-query#", ":");
+                List<PrettyPrinter> subQueryList2 = subQueryList.stream().map(subQuery -> {
+                    PrettyPrinter p = new PrettyPrinter();
+                    p.add(ordinal.get()).newLine();
+                    p.indentEnclose(2, () -> p.addSuperStep(subQuery));
+                    p.newLine();
+                    return p;
+                }).collect(Collectors.toList());
+                printer.indentEnclose(2, () -> printer.addSuperStepsWithDelNl("", subQueryList2));
+                MVResultWithRewriteTraceInfo info = new MVResultWithRewriteTraceInfo(null, printer.getResult(), null);
+                return Collections.singletonList(info);
+            } else {
+                PrettyPrinter printer = new PrettyPrinter();
+                printer.add("Fail to extract SPJG sub-queries from the query").newLine();
+                printer.add(RboOptimizer.getLogicalPlan(query, starRocksAssert.getCtx()));
+                MVResultWithRewriteTraceInfo info = new MVResultWithRewriteTraceInfo(null, printer.getResult(), null);
+                return Collections.singletonList(info);
+            }
+        }
         return rewritableMVs;
     }
 
@@ -286,10 +347,11 @@ public class QueryDumpMVRecommender {
             throws Exception {
         dumpJson = rectifyQueryDump(starRocksAssert, dumpJson);
         QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpJson);
-        System.out.println(dumpInfo.getOriginStmt());
+        //System.out.println(dumpInfo.getOriginStmt());
         return UtFrameUtils.execInMockedEnv(starRocksAssert, dumpInfo, svSetter, this::recommendMV)
                 .stream()
-                .filter(mvResult -> mvResult.rewriteFailReason == null && mvResult.rewriteFailVerboseLogs == null)
+                .filter(mvResult -> mvResult.mvResult != null /*&& mvResult.rewriteFailReason == null &&
+                        mvResult.rewriteFailVerboseLogs == null*/)
                 .map(mvResult -> mvResult.mvResult.get(2))
                 .collect(Collectors.toList());
     }
@@ -297,7 +359,11 @@ public class QueryDumpMVRecommender {
     public String recommendAndFormatOutput(String dumpJson, Consumer<SessionVariable> svSetter) throws Exception {
         Supplier<String> mvIdGen = Util.nextStringGenerator("Recommend MV ", "");
         PrettyPrinter printer = new PrettyPrinter();
-        recommend(dumpJson, svSetter).forEach(mvResult -> {
+        List<MVResultWithRewriteTraceInfo> mvResultList = recommend(dumpJson, svSetter);
+        if (mvResultList.size() == 1 && mvResultList.get(0).mvResult == null) {
+            return mvResultList.get(0).rewriteFailReason;
+        }
+        mvResultList.forEach(mvResult -> {
             boolean rewriteOK = mvResult.rewriteFailReason == null && mvResult.rewriteFailVerboseLogs == null;
             String rewriteStatus = rewriteOK ? "OK" : "FAIL";
             printer.add(mvIdGen.get())

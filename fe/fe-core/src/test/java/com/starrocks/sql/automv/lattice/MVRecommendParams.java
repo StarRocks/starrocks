@@ -260,6 +260,7 @@ public class MVRecommendParams {
         sv.setAutoMVPushDownAggBelowSemiAntiJoin(pushDownAggBelowSemiAntiJoin);
         sv.setAutoMVMaxOrderByColumns(maxOrderByColumns);
         sv.setAutoMVUseCardinalityEstimation(false);
+        sv.setScanOrToUnionLimit(-1);
         GlobalVariable.setAutoMVPreferRangePartition(preferRangePartition);
         GlobalVariable.setAutoMVStringTimeFormats(stringTimeFormats);
         GlobalVariable.setAutoMVColocateMVDimensionsLimit(colocateMVDimensionsLimit);

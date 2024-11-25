@@ -43,6 +43,7 @@ import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -119,6 +120,12 @@ public class RboOptimizer {
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
         RboOptimizer optimizer = new RboOptimizer(logicalPlan, columnRefFactory, connectContext);
         return optimizer.optimize();
+    }
+
+    public static String getLogicalPlan(String query, ConnectContext ctx) {
+        OptExpression plan =
+                RboOptimizer.getLogicalPlan(RboOptimizer.getQueryStatement(ctx, query).getQueryStatement(), ctx);
+        return LogicalPlanPrinter.print(plan, true);
     }
 
     public static List<OptExpression> getSubPlans(QueryStatement queryStmt, ConnectContext connectContext,
