@@ -616,7 +616,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
-        VLOG(1) << "tablet: " << tablet_id()
+        VLOG(2) << "tablet: " << tablet_id()
                 << " too many committed without schema rowset : " << _committed_rs_map.size();
         return false;
     }
@@ -1414,7 +1414,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with "
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with "
                        "tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
@@ -1429,7 +1429,7 @@ void Tablet::do_tablet_meta_checkpoint() {
         }
         if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id())) {
             (void)RowsetMetaManager::remove(_data_dir->get_meta(), tablet_uid(), rs_meta->rowset_id());
-            VLOG(1) << "remove rowset id from meta store because it is already persistent with tablet meta"
+            VLOG(2) << "remove rowset id from meta store because it is already persistent with tablet meta"
                     << ", rowset_id=" << rs_meta->rowset_id();
         }
         rs_meta->set_remove_from_rowset_meta();
@@ -1716,20 +1716,20 @@ int64_t Tablet::in_writing_data_size() {
     for (auto& [k, v] : _in_writing_txn_size) {
         size += v;
     }
-    VLOG(1) << "tablet " << tablet_id() << " in writing data size: " << size;
+    VLOG(2) << "tablet " << tablet_id() << " in writing data size: " << size;
     return size;
 }
 
 void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
             << " delta: " << delta << " txn_id: " << txn_id;
     _in_writing_txn_size[txn_id] += delta;
 }
 
 void Tablet::remove_in_writing_data_size(int64_t txn_id) {
     std::unique_lock wrlock(_meta_lock);
-    VLOG(1) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
+    VLOG(2) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
             << " txn_id: " << txn_id;
     _in_writing_txn_size.erase(txn_id);
 }
