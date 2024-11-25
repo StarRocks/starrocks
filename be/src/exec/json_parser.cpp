@@ -48,7 +48,7 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
 }
 
 bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
-    size_t cur_left_len = _len - _last_begin_offset;
+    size_t cur_left_len = _first_object_parsed ? _len - _last_begin_offset : _len;
     if (_batch_size >= cur_left_len) {
         // nothing can do for the batch_size
         return false;
