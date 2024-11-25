@@ -68,7 +68,7 @@ bool JsonDocumentStreamParser::_check_and_new_doc_stream_iterator() {
     } while (_batch_size < cur_left_len &&
              _doc_stream_itr.error() != simdjson::SUCCESS); /* make sure get a valid iterator after ++ */
 
-    if (_doc_stream_itr.error() != simdjson::SUCCESS) { 
+    if (_doc_stream_itr.error() != simdjson::SUCCESS) {
         return false;
     }
 
@@ -84,7 +84,8 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                 // TODO: add value in error message
                 if (doc.type() == simdjson::ondemand::json_type::array) {
                     return Status::DataQualityError(
-                            "The value is array type in json document stream, you can set strip_outer_array=true to parse "
+                            "The value is array type in json document stream, you can set strip_outer_array=true to "
+                            "parse "
                             "each element of the array as individual rows");
                 } else if (doc.type() != simdjson::ondemand::json_type::object) {
                     return Status::DataQualityError("The value should be object type in json document stream");
