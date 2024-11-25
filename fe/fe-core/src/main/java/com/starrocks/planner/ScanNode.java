@@ -142,18 +142,10 @@ public abstract class ScanNode extends PlanNode {
     protected boolean supportTopNRuntimeFilter() {
         return false;
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public boolean needCollectExecStats() {
-        return true;
-    }
 
     // We use this flag to know how many connector scan nodes at BE side, and connector framework
     // will use this number to fair share memory usage between those scan nodes.
     public boolean isRunningAsConnectorOperator() {
         return true;
     }
->>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
 }

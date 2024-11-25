@@ -109,13 +109,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-<<<<<<< HEAD
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
-=======
-                    ComputeNode node =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                                    .getBackendOrComputeNode(replica.getBackendId());
->>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
                     if (node == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
