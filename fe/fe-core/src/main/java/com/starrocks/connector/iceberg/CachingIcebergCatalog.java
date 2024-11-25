@@ -216,7 +216,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                executorService.submit(() -> partitionCache.refresh(key));
+                backgroundExecutor.submit(() -> partitionCache.refresh(key));
                 return null;
             }
         }
