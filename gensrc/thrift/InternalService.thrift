@@ -405,7 +405,7 @@ struct TQueryGlobals {
 
   31: optional i64 timestamp_us
 
-  32: optional i64 scan_node_number
+  32: optional i64 connector_scan_node_number
 }
 
 
