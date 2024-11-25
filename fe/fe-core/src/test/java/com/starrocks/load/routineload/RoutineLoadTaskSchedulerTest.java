@@ -97,7 +97,7 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
-                routineLoadManager.checkTaskInJob((UUID) any);
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
                 minTimes = 0;
                 result = true;
 
@@ -157,7 +157,7 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
-                routineLoadManager.checkTaskInJob((UUID) any);
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
                 minTimes = 0;
                 result = true;
 
@@ -239,7 +239,7 @@ public class RoutineLoadTaskSchedulerTest {
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
-                routineLoadManager.checkTaskInJob((UUID) any);
+                routineLoadManager.checkTaskInJob(anyLong, (UUID) any);
                 minTimes = 0;
                 result = true;
 
