@@ -504,7 +504,6 @@ public class OlapScanNode extends ScanNode {
         return newLocations;
     }
 
-
     private void checkSomeAliveComputeNode() throws ErrorReportException {
         // Note that it's theoretically possible that there were some living CN earlier in this query's execution, and then
         // they all died, but in that case, the problem this will be surfaced later anyway.
@@ -764,7 +763,8 @@ public class OlapScanNode extends ScanNode {
             long freeMemory = runtime.freeMemory();
             if (totalScanRangeBytes > freeMemory / 2) {
                 LOG.warn(
-                        "Try to allocate too many scan ranges for table {}, which may cause FE OOM, Partition Num:{}, tablet Num:{}, Scan Range Total Bytes:{}",
+                        "Try to allocate too many scan ranges for table {}, which may cause FE OOM, Partition Num:{}, tablet " +
+                                "Num:{}, Scan Range Total Bytes:{}",
                         olapTable.getName(), totalPartitionNum, totalTabletsNum, totalScanRangeBytes);
             }
         }
@@ -912,11 +912,14 @@ public class OlapScanNode extends ScanNode {
         return output.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return result.size();
     }
 
+=======
+>>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
     private void assignOrderByHints(List<String> keyColumnNames) {
         // assign order by hint
         for (RuntimeFilterDescription probeRuntimeFilter : probeRuntimeFilters) {
@@ -1449,5 +1452,10 @@ public class OlapScanNode extends ScanNode {
         bucketExprs.clear();
         bucketColumns.clear();
         rowStoreKeyLiterals = Lists.newArrayList();
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }
