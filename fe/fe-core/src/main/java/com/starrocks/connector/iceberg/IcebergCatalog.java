@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -244,9 +245,10 @@ public interface IcebergCatalog extends MemoryTrackable {
         return getPartitions(icebergTable, snapshotId, executorService);
     }
 
-    default List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
+    default List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext,
+                                            ExecutorService executorService) {
         Table icebergTable = getTable(dbName, tableName);
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (icebergTable.spec().isUnpartitioned()) {
             return List.of();
         } else {

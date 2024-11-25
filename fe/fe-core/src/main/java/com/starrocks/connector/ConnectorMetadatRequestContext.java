@@ -34,5 +34,9 @@ public class ConnectorMetadatRequestContext {
     public boolean isQueryMVRewrite() {
         return queryMVRewrite;
     }
+
+    public long getSnapshotId() {
+        return tableVersionRange.end().isPresent() ? tableVersionRange.end().get() : -1;
+    }
 }
 

@@ -488,9 +488,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        TableVersionRange version = requestContext.getTableVersionRange();
-        long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return icebergCatalog.listPartitionNames(dbName, tblName, snapshotId, jobPlanningExecutor);
+        return icebergCatalog.listPartitionNames(dbName, tblName, requestContext, jobPlanningExecutor);
     }
 
     @Override

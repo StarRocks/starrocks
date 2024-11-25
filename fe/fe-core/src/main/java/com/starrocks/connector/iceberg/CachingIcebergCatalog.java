@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -202,6 +203,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                                 ExecutorService executorService) {
         IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
         return partitionCache.getUnchecked(key);
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext,
+                                           ExecutorService executorService) {
+        // optimization for query mv rewrite, we can optionally return null to bypass it.
+        // if we don't have cache right now, which means it probably takes time to load it during query,
+        // so we can do load in background while return null to bypass this synchronous process.
+        if (requestContext.isQueryMVRewrite()) {
+            long snapshotId = requestContext.getSnapshotId();
+            IcebergTableName key = new IcebergTableName(dbName, tableName, snapshotId);
+            Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
+            if (cacheValue == null) {
+                partitionCache.refresh(key);
+                return null;
+            }
+        }
+        return IcebergCatalog.super.listPartitionNames(dbName, tableName, requestContext, executorService);
     }
 
     @Override
