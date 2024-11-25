@@ -912,14 +912,11 @@ public class OlapScanNode extends ScanNode {
         return output.toString();
     }
 
-<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return result.size();
     }
 
-=======
->>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
     private void assignOrderByHints(List<String> keyColumnNames) {
         // assign order by hint
         for (RuntimeFilterDescription probeRuntimeFilter : probeRuntimeFilters) {

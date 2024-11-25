@@ -371,14 +371,11 @@ public class SchemaScanNode extends ScanNode {
         return beScanRanges;
     }
 
-<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return beScanRanges == null ? 1 : beScanRanges.size();
     }
 
-=======
->>>>>>> 14ccfcc047 ([Enhancement] fix connector mem scan limit adjustment when no chunk source (#53112))
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
