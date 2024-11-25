@@ -30,3 +30,9 @@ None
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
 -- result:
 -- !result
+
+SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
+-- result:
+100
+300
+-- !result
